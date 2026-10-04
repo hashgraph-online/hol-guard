@@ -122,6 +122,17 @@ def _configure_guard_local_parsers(
         app_parser.add_argument("--surface", choices=("editor", "cli", "auto", "hooks", "plugin", "all"))
         if app_command in {"connect", "repair"}:
             app_parser.add_argument("--dry-run", action="store_true")
+        if app_command == "repair":
+            app_parser.add_argument("--restore-authority", action="store_true",
+                                   help="Restore missing signed Codex hook authority with exact local approval")
+            app_parser.add_argument("--authority-request",
+                                   help="Private plan file; --dry-run creates it in an existing private directory")
+            app_parser.add_argument("--authority-request-sha256",
+                                   help="Exact reviewed request digest required when applying a captured plan")
+            app_parser.add_argument("--authority-deadline-epoch", type=float,
+                                   help="Controlling process deadline for explicit authority repair")
+            app_parser.add_argument("--authority-verification-workspace",
+                                   help="Native verification workspace; retains signed installation context")
         if app_command == "disconnect":
             app_parser.add_argument("--confirm")
 

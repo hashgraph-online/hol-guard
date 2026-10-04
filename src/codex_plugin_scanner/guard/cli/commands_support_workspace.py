@@ -483,6 +483,17 @@ def _resolve_guard_workspace(
         return Path.cwd().resolve()
     if guard_command != "apps":
         return None
+    if getattr(args, "apps_command", None) == "repair" and (
+        bool(getattr(args, "restore_authority", False)) or getattr(args, "authority_request", None)
+        or getattr(args, "authority_request_sha256", None)
+        or getattr(args, "authority_deadline_epoch", None) is not None
+        or getattr(args, "authority_verification_workspace", None) is not None
+    ):
+        # Missing-authority repair derives its global target from authenticated
+        # retained bytes. Autodetection requires the absent live manifest and
+        # must not precede that read-only preparation. Explicit workspace
+        # overrides were already normalized above and remain in the plan.
+        return None
     if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
         return None
     harness = str(getattr(args, "harness", "")).strip()

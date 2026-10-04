@@ -29,6 +29,7 @@ from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..approvals import approval_prompt_flow, build_approval_browser_url, first_approval_url, queue_blocked_approvals
+from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
@@ -1355,7 +1356,7 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
                 )
                 return response, package_event
-            if self._allow_after_native_prompt(decision):
+            if asks_for_approval(self.config) and self._allow_after_native_prompt(decision):
                 response, package_event = self._handle_package_request(
                     message=message,
                     child_stdin=child_stdin,
@@ -1375,7 +1376,7 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
                 )
                 return response, package_event
-            if self._inline_prompt_available and approval_callback is not None:
+            if asks_for_approval(self.config) and self._inline_prompt_available and approval_callback is not None:
                 approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
                 if _approval_allows(approval_result):
                     try:
@@ -1487,7 +1488,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_state=authority.catalog_state,
                 expected_catalog_fingerprint=authority.catalog_fingerprint,
             )
-        if self._allow_after_native_prompt(decision):
+        if asks_for_approval(self.config) and self._allow_after_native_prompt(decision):
             return self._allow_and_forward(
                 message=message,
                 child_stdin=child_stdin,
@@ -1506,7 +1507,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_state=authority.catalog_state,
                 expected_catalog_fingerprint=authority.catalog_fingerprint,
             )
-        if self._inline_prompt_available and approval_callback is not None:
+        if asks_for_approval(self.config) and self._inline_prompt_available and approval_callback is not None:
             approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
             if _approval_allows(approval_result):
                 return self._allow_and_forward(
@@ -2433,9 +2434,33 @@ class RuntimeMcpGuardProxy:
         policy_action: GuardAction,
         scanner_evidence: tuple[dict[str, object], ...],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        approval_center_url = ensure_guard_daemon(self.context.guard_home)
         decision_v2_payload = self._package_decision_v2(package_evaluation, policy_action)
         risk_signals = tuple(str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons)
+        if not asks_for_approval(self.config):
+            response, event = self._queue_approval_center_response(
+                message_id=message_id,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                tool_name=tool_name,
+                params=params,
+                signals=(package_evaluation.risk_summary, *risk_signals),
+                scanner_evidence=scanner_evidence,
+                policy_action=policy_action,
+            )
+            evaluation_payload = deepcopy(package_evaluation.to_dict())
+            evaluation_payload["decision"] = "block"
+            evaluation_payload["policy_action"] = "block"
+            user_copy = evaluation_payload.setdefault("user_copy", {})
+            user_copy.update(
+                title="Package request blocked",
+                summary=package_evaluation.risk_summary,
+                dashboard_url=None,
+                next_step=response["error"]["message"],
+                harness_message=response["error"]["message"],
+            )
+            response["error"]["data"]["supplyChainEvaluation"] = evaluation_payload
+            return response, event
+        approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
             redaction_level=self.config.receipt_redaction_level,
             detection=HarnessDetection(
@@ -3441,6 +3466,35 @@ class RuntimeMcpGuardProxy:
         scanner_evidence: tuple[dict[str, object], ...] = (),
         policy_action: GuardAction = "require-reapproval",
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        if not asks_for_approval(self.config):
+            block_tool_call(
+                store=self.store,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                decision_source="policy-safe-alternative",
+                now=_now(),
+                signals=signals,
+                risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
+                arguments=_safe_mcp_arguments(params.get("arguments")),
+                additional_scanner_evidence=scanner_evidence,
+                policy_action=policy_action,
+            )
+            return _blocked_tool_response(
+                message_id,
+                tool_name,
+                safe_alternative_reason(
+                    f"HOL Guard blocked tool call {tool_name} from {self.server_name}. " + " ".join(signals)
+                ),
+                {"approvalRequests": [], "guardPolicyAction": "block", "transportOutcome": "not-forwarded"},
+            ), {
+                "method": "tools/call",
+                "tool_name": tool_name,
+                "decision": "safe-alternative",
+                "policy_action": policy_action,
+                "approval_requests": [],
+                "prompted": False,
+                "redacted_params": _safe_mcp_params(params),
+            }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
             redaction_level=self.config.receipt_redaction_level,

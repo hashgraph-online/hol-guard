@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.adapters import codex as adapter_module
 from codex_plugin_scanner.guard.adapters import codex_lifecycle_lock as locks
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
 
 
@@ -48,7 +49,7 @@ def test_config_edit_during_failed_write_survives_rollback(
         original_write(path, text, mode=mode, on_publish=on_publish)
 
     monkeypatch.setattr(adapter_module, "atomic_write_text", interrupted_write)
-    with pytest.raises(RuntimeError, match="codex_hook_rollback_conflict"):
+    with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
 
     assert injected
@@ -90,7 +91,7 @@ def test_deleted_config_after_publish_preserves_pending_manifest_and_secret(
         return original_readback(path, label=label)
 
     monkeypatch.setattr(adapter_module, "_strict_toml_object", deleting_readback)
-    with pytest.raises(RuntimeError, match="codex_hook_rollback_conflict"):
+    with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
 
     assert injected
@@ -136,7 +137,7 @@ def test_failed_write_preserves_substituted_config_targets(
         original_write(path, text, mode=mode, on_publish=on_publish)
 
     monkeypatch.setattr(adapter_module, "atomic_write_text", interrupted_write)
-    with pytest.raises(RuntimeError, match="codex_hook_rollback_conflict"):
+    with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
 
     assert injected
@@ -201,7 +202,7 @@ def test_matching_replacement_is_not_owned_by_the_failed_transaction(
         return original_write(path, text, mode=mode, on_publish=on_publish)
 
     monkeypatch.setattr(adapter_module, "atomic_write_text", interrupted_write)
-    with pytest.raises(RuntimeError, match="codex_hook_rollback_conflict"):
+    with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
     assert replacement is not None
     assert config_path.read_bytes() == replacement
@@ -236,7 +237,7 @@ def test_matching_replacement_after_completed_write_is_preserved(
         return original_readback(path, label=label)
 
     monkeypatch.setattr(adapter_module, "_strict_toml_object", replaced_readback)
-    with pytest.raises(RuntimeError, match="codex_hook_rollback_conflict"):
+    with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
     assert replacement is not None
     assert config_path.read_bytes() == replacement
@@ -307,9 +308,7 @@ def test_substituted_target_during_snapshot_is_reported_as_invalid_not_conflict(
 
     monkeypatch.setattr(adapter_module, "rollback_file_identity", first_then_substitute)
     with pytest.raises(RuntimeError, match="codex_hook_config_invalid"):
-        adapter._write_authenticated_hook_config(
-            context, config_path=config_path, payload={}, previous_manifest=None
-        )
+        adapter._write_authenticated_hook_config(context, config_path=config_path, payload={}, previous_manifest=None)
     assert config_path.stat().st_ino == target.stat().st_ino
     assert config_path.stat().st_nlink == 2
     assert target.read_bytes() == b'owner = "other-writer"\n'

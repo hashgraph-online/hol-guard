@@ -52,6 +52,77 @@ def required_profile() -> dict[str, object]:
     }
 
 
+def test_execution_authority_uses_the_prepared_test_working_directory(tmp_path, monkeypatch):
+    import argparse
+
+    from codex_plugin_scanner.guard.cli import commands_dispatch_local as cli
+    from codex_plugin_scanner.guard.cli import commands_hook_native_authority as authority
+
+    target = tmp_path / "selected"
+    target.mkdir()
+    calls = []
+    original = {**payload(), "cwd": str(tmp_path)}
+    monkeypatch.setattr(sink, "read_contained_test_request", lambda *args, **kwargs: original)
+    monkeypatch.setattr(
+        authority, "try_native_hook_authority", lambda **kwargs: calls.append(kwargs) or required_profile()
+    )
+
+    def execute(request, *, authorize, **kwargs):
+        authorize(request)
+        authorize({**request, "cwd": str(target)})
+        return 0
+
+    monkeypatch.setattr(sink, "run_authorized_contained_test", execute)
+    args = argparse.Namespace(request_file="unused", request_sha256="unused", timeout_seconds=20, harness="omp")
+    assert (
+        cli._run_guard_execute_contained_test_command(
+            args, guard_home=tmp_path, workspace=tmp_path, context=SimpleNamespace(home_dir=tmp_path), store=object()
+        )
+        == 0
+    )
+    assert [call["workspace"] for call in calls] == [tmp_path.resolve(), target.resolve()]
+
+
+def test_snapshot_cannot_substitute_its_original_hook_working_directory(tmp_path):
+    directory = tmp_path / "hol-guard-contained-test-cwd"
+    directory.mkdir(mode=0o700)
+    request = directory / "request.json"
+    raw = json.dumps(
+        {
+            "schema": "guard-contained-test-request.v1",
+            "workspace": str(tmp_path),
+            "payload": {**payload(), "cwd": str(tmp_path.parent)},
+        }
+    ).encode()
+    request.write_bytes(raw)
+    request.chmod(0o600)
+    with pytest.raises(RestrictedPytestError):
+        sink.read_contained_test_request(request, hashlib.sha256(raw).hexdigest(), workspace=tmp_path)
+
+
+def test_disappearing_execution_directory_rejects_cleanly(tmp_path, monkeypatch, capsys):
+    import argparse
+
+    from codex_plugin_scanner.guard.cli import commands_dispatch_local as cli
+
+    original = {**payload(), "cwd": str(tmp_path)}
+    monkeypatch.setattr(sink, "read_contained_test_request", lambda *args, **kwargs: original)
+
+    def execute(request, *, authorize, **kwargs):
+        authorize({**request, "cwd": str(tmp_path / "missing")})
+        pytest.fail("missing directory must never execute")
+
+    monkeypatch.setattr(sink, "run_authorized_contained_test", execute)
+    args = argparse.Namespace(request_file="unused", request_sha256="unused", timeout_seconds=20, harness="omp")
+    assert (
+        cli._run_guard_execute_contained_test_command(
+            args, guard_home=tmp_path, workspace=tmp_path, context=SimpleNamespace(home_dir=tmp_path), store=object()
+        )
+        == 126
+    )
+    assert "Execution directory is unavailable" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("failure", ("missing", "allow", "block", "review", "profile", "reason", "watch"))
 def test_changed_or_missing_authority_never_starts_tests(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str

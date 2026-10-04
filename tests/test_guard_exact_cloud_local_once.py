@@ -275,10 +275,7 @@ def test_live_completion_fails_closed_when_authority_revision_changes_before_cla
 
     assert result == {"completed": False, "error": "continuation_not_recorded"}
     assert (
-        store.peek_exact_cloud_local_once_approval(
-            request_id="exact-live-revision-race", now=resolved_at
-        )
-        is not None
+        store.peek_exact_cloud_local_once_approval(request_id="exact-live-revision-race", now=resolved_at) is not None
     )
     resume = store.get_request_resume("exact-live-revision-race")
     assert resume is not None and resume["status"] == "pending"

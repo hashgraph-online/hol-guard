@@ -137,7 +137,7 @@ def test_sonar_starts_independently_and_keeps_coverage_and_quality_gates() -> No
     assert job["if"] == "vars.SONAR_CI_ENABLED == 'true'"
     assert all("steps.token-presence.outputs.has-token == 'true'" in step["if"] for step in job["steps"][1:])
     commands = "\n".join(step.get("run", "") for step in job["steps"])
-    assert "wait_for_pytest_shards.py" in commands
+    assert "select_pytest_coverage.py" in commands
     assert "prepare_sonar_analysis.sh" in commands
     assert any("sonarqube-quality-gate-action@" in step.get("uses", "") for step in job["steps"])
 

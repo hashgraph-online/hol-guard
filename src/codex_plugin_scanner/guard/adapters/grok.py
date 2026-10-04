@@ -8,14 +8,16 @@ import shutil
 import sys
 from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..codex_config import read_toml_payload
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
+from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
     HarnessContext,
+    PreparedHarnessInstall,
     _ensure_path_within_root,
     _json_payload,
     _run_command_probe,
@@ -56,6 +58,10 @@ from .grok_executable import (
 
 _GROK_HOME_ENV_VAR = "GROK_HOME"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = GROK_HOOK_INTERNAL_TIMEOUT_SECONDS
+
+
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionFile
 
 
 class GrokHarnessAdapter(HarnessAdapter):
@@ -338,7 +344,9 @@ class GrokHarnessAdapter(HarnessAdapter):
         return False
 
     @staticmethod
-    def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    def _hook_command_parts(
+        context: HarnessContext, *, prepared_files: list[TransitionFile] | None = None
+    ) -> tuple[str, ...]:
         guard_args = [
             "guard",
             "hook",
@@ -359,65 +367,81 @@ class GrokHarnessAdapter(HarnessAdapter):
             cli_args=guard_args,
             harness="grok",
             timeout_seconds=_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS,
+            prepared_files=prepared_files,
         )
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = install_guard_shim(
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        prepared_shim = prepare_guard_shim(
             self.harness,
             context,
             launcher_name=self.launcher_name,
             display_name="grok",
         )
-        grok_root = self._grok_root(context)
+        shim_manifest = prepared_shim.manifest
         managed_config_path = self._managed_config_path(context)
         hooks_dir = self._hooks_dir(context)
         _ensure_path_within_root(self._grok_home_dir(context), managed_config_path, label="Grok")
-        grok_root.mkdir(parents=True, exist_ok=True)
-        hooks_dir.mkdir(parents=True, exist_ok=True)
-        state_dir = self._managed_state_dir(context)
-        state_dir.mkdir(parents=True, exist_ok=True)
-
-        if managed_config_path.is_file() and not self._backup_path(context, "managed_config.toml").exists():
-            shutil.copy2(managed_config_path, self._backup_path(context, "managed_config.toml"))
-
-        hook_command = _shell_command(self._hook_command_parts(context))
+        hook_files: list[TransitionFile] = []
+        hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
         pretool_path = hooks_dir / GUARD_HOOK_PRETOOL_FILE
         prompt_path = hooks_dir / GUARD_HOOK_PROMPT_FILE
-        for hook_path in (pretool_path, prompt_path):
-            if hook_path.is_file() and not self._backup_path(context, hook_path.name).exists():
-                shutil.copy2(hook_path, self._backup_path(context, hook_path.name))
-
-        pretool_payload = build_pretool_hook_json(hook_command)
-        pretool_path.write_text(json.dumps(pretool_payload, indent=2) + "\n", encoding="utf-8")
-        prompt_path.write_text(json.dumps(build_observe_hook_json(hook_command), indent=2) + "\n", encoding="utf-8")
-
-        existing_text = managed_config_path.read_text(encoding="utf-8") if managed_config_path.is_file() else ""
+        paths = (managed_config_path, pretool_path, prompt_path, self._state_path(context))
+        snapshots = {path: _snapshot(path) for path in paths}
+        config_before = snapshots[managed_config_path]
+        existing_text = config_before.decode("utf-8") if config_before is not None else ""
+        state_before = snapshots[self._state_path(context)]
+        state_payload = json.loads(state_before.decode("utf-8")) if state_before is not None else {}
+        if not isinstance(state_payload, dict):
+            raise ValueError("Grok managed state must be a JSON object.")
         merged_text, prior_compat_hooks = prepare_managed_config_text(
             existing_text,
             hook_command,
-            saved_prior_hooks=_prior_compat_hooks_from_state(self._state_path(context)),
+            saved_prior_hooks=_prior_compat_hooks_from_state(self._state_path(context), payload=state_payload),
         )
-        managed_config_path.write_text(merged_text, encoding="utf-8")
-
-        self._state_path(context).write_text(
-            json.dumps(
-                {
-                    "managed_config_path": str(managed_config_path),
-                    "pretool_hook_path": str(pretool_path),
-                    "prompt_hook_path": str(prompt_path),
-                    "prior_compat_hooks": prior_compat_hooks,
-                },
-                indent=2,
+        state = {
+            "managed_config_path": str(managed_config_path),
+            "pretool_hook_path": str(pretool_path),
+            "prompt_hook_path": str(prompt_path),
+            "prior_compat_hooks": prior_compat_hooks,
+        }
+        after = {
+            managed_config_path: merged_text.encode("utf-8"),
+            pretool_path: (json.dumps(build_pretool_hook_json(hook_command), indent=2) + "\n").encode("utf-8"),
+            prompt_path: (json.dumps(build_observe_hook_json(hook_command), indent=2) + "\n").encode("utf-8"),
+            self._state_path(context): (json.dumps(state, indent=2) + "\n").encode("utf-8"),
+        }
+        files = [*prepared_shim.files, *hook_files]
+        for path in paths[:3]:
+            backup = self._backup_path(context, "managed_config.toml" if path == managed_config_path else path.name)
+            before = _snapshot(backup)
+            mode = backup.stat().st_mode & 0o777 if before is not None else 0o644
+            source = snapshots[path]
+            after_mode = path.stat().st_mode & 0o777 if before is None and source is not None else mode
+            change = TransitionFile(
+                backup.resolve(strict=False),
+                before,
+                before if before is not None else source,
+                before_mode=mode,
+                after_mode=after_mode,
             )
-            + "\n",
-            encoding="utf-8",
-        )
+            change.payload()
+            files.append(change)
+        for path in paths:
+            mode = path.stat().st_mode & 0o777 if snapshots[path] is not None else 0o644
+            change = TransitionFile(
+                path.resolve(strict=False), snapshots[path], after[path], before_mode=mode, after_mode=mode
+            )
+            change.payload()
+            files.append(change)
 
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
         )
-        return {
+        manifest: dict[str, object] = {
             "harness": self.harness,
             "active": True,
             **shim_manifest,
@@ -433,6 +457,10 @@ class GrokHarnessAdapter(HarnessAdapter):
                 *shim_notes,
             ],
         }
+        return PreparedHarnessInstall(tuple(files), manifest)
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(
@@ -481,13 +509,18 @@ class GrokHarnessAdapter(HarnessAdapter):
         }
 
 
-def _prior_compat_hooks_from_state(state_path: Path) -> dict[str, str | None]:
-    if not state_path.is_file():
-        return {}
-    try:
-        payload = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+def _prior_compat_hooks_from_state(
+    state_path: Path,
+    *,
+    payload: dict[str, object] | None = None,
+) -> dict[str, str | None]:
+    if payload is None:
+        if not state_path.is_file():
+            return {}
+        try:
+            payload = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
     raw = payload.get("prior_compat_hooks") if isinstance(payload, dict) else None
     if not isinstance(raw, dict):
         return {}

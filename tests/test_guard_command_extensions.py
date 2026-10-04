@@ -684,7 +684,7 @@ def test_explicit_github_merge_permission_allows_exact_merge_through_runtime_art
             "action_floor": "allow",
             "segment_ref": None,
             "operation_ref": None,
-        }
+        },
     ]
 
 
