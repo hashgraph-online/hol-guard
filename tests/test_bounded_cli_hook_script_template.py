@@ -4,6 +4,8 @@ import importlib.util
 import io
 import json
 import socket
+import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -149,6 +151,62 @@ def test_generated_client_keeps_empty_grok_observe_response(tmp_path: Path, even
     assert code == 0
 
 
+@pytest.mark.parametrize("event_name", ["SessionStart", "UserPromptSubmit", "PreToolUse"])
+def test_generated_client_runs_under_macos_system_python(tmp_path: Path, event_name: str) -> None:
+    if sys.platform != "darwin" or not Path("/usr/bin/python3").is_file():
+        pytest.skip("macOS system Python compatibility")
+    module = _load_script(tmp_path, harness="grok")
+    completed = subprocess.run(
+        ["/usr/bin/python3", "-I", module.__file__],
+        input=json.dumps({"hook_event_name": event_name}),
+        text=True,
+        capture_output=True,
+        timeout=5,
+    )
+    response = json.loads(completed.stdout)
+    assert "Traceback" not in completed.stderr
+    if event_name == "PreToolUse":
+        assert response["decision"] == "deny"
+    else:
+        assert response == {}
+        assert completed.returncode == 0
+
+
+@pytest.mark.parametrize("events", [("post_tool_use", "PreToolUse"), ("pre_tool_use", "PostToolUse")])
+def test_generated_grok_client_denies_conflicting_pretool_labels(tmp_path: Path, events) -> None:
+    module = _load_script(tmp_path, harness="grok")
+    system_python = sys.platform == "darwin" and Path("/usr/bin/python3").is_file()
+    interpreter = "/usr/bin/python3" if system_python else sys.executable
+    completed = subprocess.run(
+        [interpreter, "-I", module.__file__],
+        input=json.dumps({"hookEventName": events[0], "hook_event_name": events[1]}),
+        text=True,
+        capture_output=True,
+        timeout=5,
+    )
+    assert json.loads(completed.stdout)["decision"] == "deny"
+    assert "conflict" in completed.stdout
+
+
+@pytest.mark.parametrize("event_name", ["SessionStart", "UserPromptSubmit", "PreToolUse"])
+def test_generated_grok_observer_has_short_transport_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    event_name: str,
+) -> None:
+    module = _load_script(tmp_path, harness="grok", timeout_seconds=85)
+    monkeypatch.setattr(module, "_daemon_auth", lambda: ("127.0.0.1", 9, "fixture"))
+    budgets = []
+
+    def unavailable(*args, **kwargs):
+        budgets.append(kwargs["timeout"])
+        return None
+
+    monkeypatch.setattr(module, "_http_json", unavailable)
+    assert module._post_hook(json.dumps({"hook_event_name": event_name})) is None
+    assert budgets == ([5.0] if event_name == "PreToolUse" else [1.0])
+
+
 def test_generated_client_copies_grok_approval_metadata(tmp_path: Path) -> None:
     module = _load_script(tmp_path, harness="grok")
     stdout, _stderr, code = module._to_native(
@@ -215,7 +273,7 @@ def test_generated_client_defaults_missing_policy_action_closed(tmp_path: Path) 
         ("zcode", "PreToolUse", None, 2),
         ("kimi", "PreToolUse", None, 2),
         ("devin", "PreToolUse", None, 2),
-        ("grok", "PostToolUse", "allow", 0),
+        ("grok", "PostToolUse", None, 0),
         ("copilot", "permissionRequestV2", None, 0),
     ],
 )
@@ -231,6 +289,8 @@ def test_generated_client_unavailable_payload_matches_harness(
         module._event_name(json.dumps({"hook_event_name": event_name})), "down"
     )
     assert exit_code == code
+    if harness == "grok" and event_name == "PostToolUse":
+        assert payload == {}
     if decision is not None:
         assert payload["decision"] == decision
     if harness == "copilot" and event_name == "permissionRequestV2":
@@ -311,7 +371,7 @@ def test_generated_client_main_uses_unavailable_matrix(tmp_path: Path, monkeypat
     stdout = io.StringIO()
     monkeypatch.setattr(module.sys, "stdout", stdout)
     assert module.main() == 0
-    assert json.loads(stdout.getvalue())["decision"] == "allow"
+    assert json.loads(stdout.getvalue()) == {}
 
 
 def test_generated_zcode_review_pretool_exits_zero_with_ask(tmp_path: Path) -> None:
