@@ -27,6 +27,7 @@ license = "Apache-2.0"
 rust-version = "1.88"
 
 [workspace.dependencies]
+base64 = "=0.22.1"
 hex = "0.4.3"
 fs2 = "0.4.3"
 ring = "0.17.14"
