@@ -262,8 +262,10 @@ def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
     "approval_delivery",
+    "approval_queue_unavailable",
     "approval_requests",
     "approval_wait",
+    "daemon_queue_unavailable",
     "review_hint",
 )
 

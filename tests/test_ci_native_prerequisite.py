@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from scripts.ci import wait_for_pytest_shards as barrier
+from tests.support.ci_workflow import expand_ci_job_actions
 from tests.test_ci_wait_for_pytest_shards import _RUN_ID, _job, _jobs, _run
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_barrier_tracks_every_coverage_prerequisite() -> None:
     """Keep the barrier prerequisite names aligned with the coverage dependency graph."""
-    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
     assert set(barrier._PREREQUISITE_LABELS) == set(jobs["coverage"]["needs"])
 
 
@@ -93,7 +94,7 @@ def test_duplicate_native_build_is_rejected() -> None:
 def test_native_build_from_another_execution_is_rejected(field: str, value: int) -> None:
     """Reject prerequisite records from another run or attempt."""
     native = dict(_job(1000), name="native-command-evaluators", **{field: value})
-    with pytest.raises(barrier.ShardWaitError, match="another (run|attempt)"):
+    with pytest.raises(barrier.ShardWaitError, match=r"another (run|attempt)"):
         _run([[native, *_jobs()]])
 
 

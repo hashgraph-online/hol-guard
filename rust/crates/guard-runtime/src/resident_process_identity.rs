@@ -9,6 +9,12 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
 
+#[cfg(not(windows))]
+pub(crate) fn executable_missing(path: &Path) -> bool {
+    path.metadata()
+        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+}
+
 #[cfg(windows)]
 pub(crate) fn process_start_marker(process_id: u32) -> Result<String, String> {
     guard_runtime_windows_process::process_start_marker(process_id)
@@ -59,6 +65,35 @@ pub(crate) fn process_start_marker(process_id: u32) -> Result<String, String> {
     Ok(format!("posix:{}", process.start_time()))
 }
 
+/// Prove that a process no longer exists without treating identity lookup
+/// errors as proof of death.
+#[cfg(unix)]
+pub(crate) fn process_is_definitively_gone(process_id: u32) -> Result<bool, String> {
+    use nix::errno::Errno;
+    use nix::sys::signal::kill;
+    use nix::unistd::Pid;
+
+    if process_id == 0 || process_id > i32::MAX as u32 {
+        return Ok(true);
+    }
+    match kill(Pid::from_raw(process_id as i32), None) {
+        Ok(()) | Err(Errno::EPERM) | Err(Errno::EACCES) => Ok(false),
+        Err(Errno::ESRCH) => Ok(true),
+        Err(_) => Err("native_resident_process_identity_unavailable".to_owned()),
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn process_is_definitively_gone(process_id: u32) -> Result<bool, String> {
+    guard_runtime_windows_process::wait_for_process_exit(process_id, std::time::Duration::ZERO)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
+}
+
+#[cfg(not(any(unix, windows)))]
+pub(crate) fn process_is_definitively_gone(_process_id: u32) -> Result<bool, String> {
+    Err("native_resident_process_identity_unavailable".to_owned())
+}
+
 #[cfg(target_os = "macos")]
 fn darwin_process_start_marker(process_id: u32) -> Option<String> {
     let info =
@@ -86,7 +121,11 @@ pub(crate) fn validate_package_process_identity(
         .and_then(fs::canonicalize)
         .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
     if process_path != expected_path {
-        return Err("native_resident_process_identity_mismatch".to_owned());
+        // Onefile launchers extract identical signed runtimes into distinct
+        // directories. Bind to the runtime bytes, not that temporary path.
+        if executable_digest(&process_path)? != crate::resident_state::runtime_digest()? {
+            return Err("native_resident_process_identity_mismatch".to_owned());
+        }
     }
     validate_process_start_marker(process_id, expected_start_marker)
 }

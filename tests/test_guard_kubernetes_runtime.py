@@ -17,6 +17,8 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _c
 from codex_plugin_scanner.guard.runtime.kubernetes_commands import kubernetes_secret_read_source
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

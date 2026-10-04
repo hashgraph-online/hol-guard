@@ -41,7 +41,15 @@ def _configure_guard_local_parsers(
     pytest_contained_parser.add_argument("--workspace", required=True)
     pytest_contained_parser.add_argument("--cwd")
     pytest_contained_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
+    pytest_contained_parser.add_argument("--read-only-workspace", action="store_true")
     pytest_contained_parser.add_argument("pytest_command", nargs=argparse.REMAINDER)
+
+    contained_hook_parser = guard_subparsers.add_parser("execute-contained-test", help=argparse.SUPPRESS)
+    _add_guard_common_args(contained_hook_parser)
+    contained_hook_parser.add_argument("--harness", choices=("omp", "zcode"), default="omp")
+    contained_hook_parser.add_argument("--request-file", required=True)
+    contained_hook_parser.add_argument("--request-sha256", required=True)
+    contained_hook_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
 
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
     _add_guard_common_args(start_parser)
@@ -114,6 +122,17 @@ def _configure_guard_local_parsers(
         app_parser.add_argument("--surface", choices=("editor", "cli", "auto", "hooks", "plugin", "all"))
         if app_command in {"connect", "repair"}:
             app_parser.add_argument("--dry-run", action="store_true")
+        if app_command == "repair":
+            app_parser.add_argument("--restore-authority", action="store_true",
+                                   help="Restore missing signed Codex hook authority with exact local approval")
+            app_parser.add_argument("--authority-request",
+                                   help="Private plan file; --dry-run creates it in an existing private directory")
+            app_parser.add_argument("--authority-request-sha256",
+                                   help="Exact reviewed request digest required when applying a captured plan")
+            app_parser.add_argument("--authority-deadline-epoch", type=float,
+                                   help="Controlling process deadline for explicit authority repair")
+            app_parser.add_argument("--authority-verification-workspace",
+                                   help="Native verification workspace; retains signed installation context")
         if app_command == "disconnect":
             app_parser.add_argument("--confirm")
 

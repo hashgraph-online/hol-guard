@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 from ..action_lattice import most_restrictive_guard_action, normalize_guard_action
 from ..mcp_tool_calls import resolve_tool_call_policy_action
 from ..models import GuardAction
+from ..retry_lineage import capture_retry_lineage
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _copilot_tool_decision_scanner_evidence
 from ._commands_shared import *
@@ -58,6 +59,7 @@ def _record_copilot_pre_activity(
     receipt_id: str,
     decision: ToolCallDecision,
     runtime_workspace: Path | None,
+    prompted: bool | None = None,
 ) -> None:
     raw_reuse_status = decision.approval_reuse_status
     reuse_status = (
@@ -73,7 +75,11 @@ def _record_copilot_pre_activity(
         payload=payload,
         policy_action=policy_action,
         receipt_id=receipt_id,
-        prompted=command_activity_was_prompted(decision.current_action or policy_action, reuse_status),
+        prompted=(
+            prompted
+            if prompted is not None
+            else command_activity_was_prompted(decision.current_action or policy_action, reuse_status)
+        ),
         approval_reuse_status=reuse_status,
         cwd=runtime_workspace,
         home_dir=context.home_dir,
@@ -172,6 +178,11 @@ def run_native_copilot_pretool(
             scanner_evidence=decision_scanner_evidence,
             store=store,
         )
+    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+
+    safe_alternative = policy_action in {"review", "require-reapproval"} and not asks_for_approval(config)
+    if safe_alternative:
+        policy_action = "block"
     # Copilot review/reapproval continues to PermissionRequest, which owns that
     # activity. PreToolUse records only decisions that terminate at this stage.
     if policy_action in {"allow", "warn"}:
@@ -198,6 +209,7 @@ def run_native_copilot_pretool(
                 receipt_id=receipt.receipt_id,
                 decision=decision,
                 runtime_workspace=runtime_workspace,
+                prompted=False if safe_alternative else None,
             )
             _record_harness_usage_for_hook(
                 store=store,
@@ -238,6 +250,7 @@ def run_native_copilot_pretool(
                     receipt_id=receipt.receipt_id,
                     decision=decision,
                     runtime_workspace=runtime_workspace,
+                    prompted=False if safe_alternative else None,
                 )
         if args.harness == "copilot":
             _record_harness_usage_for_hook(
@@ -246,14 +259,16 @@ def run_native_copilot_pretool(
                 payload=payload,
                 policy_action=policy_action,
             )
+            if safe_alternative:
+                denial_reason = safe_alternative_reason(decision.summary)
+            elif saved_policy_blocks:
+                denial_reason = f"HOL Guard blocked {runtime_artifact.name}. {decision.summary}"
+            else:
+                denial_reason = _copilot_hook_reason(decision.summary, runtime_artifact.name)
             _emit_copilot_pretool_response(
                 args,
                 policy_action=policy_action,
-                reason=(
-                    f"HOL Guard blocked {runtime_artifact.name}. {decision.summary}"
-                    if saved_policy_blocks
-                    else _copilot_hook_reason(decision.summary, runtime_artifact.name)
-                ),
+                reason=denial_reason,
                 approval_reuse=approval_reuse,
                 scanner_evidence=decision_scanner_evidence,
                 output_stream=output_stream,
@@ -336,6 +351,13 @@ def run_native_copilot_permission_request(
     policy_action = resolve_tool_call_policy_action(decision)
     approval_reuse = _copilot_approval_reuse_evidence(decision)
     decision_scanner_evidence = _copilot_tool_decision_scanner_evidence(decision)
+    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+
+    safe_alternative = (
+        config.mode != "observe" and policy_action in {"review", "require-reapproval"} and not asks_for_approval(config)
+    )
+    if safe_alternative:
+        policy_action = "block"
     terminal_action = policy_action in {"block", "sandbox-required"}
     runtime_detection = _runtime_detection(args.harness, runtime_artifact)
     evaluation_payload: dict[str, object] = {
@@ -427,6 +449,7 @@ def run_native_copilot_permission_request(
             receipt_id=receipt.receipt_id,
             decision=decision,
             runtime_workspace=runtime_workspace,
+            prompted=False if safe_alternative else None,
         )
         _record_harness_usage_for_hook(
             store=store,
@@ -462,6 +485,7 @@ def run_native_copilot_permission_request(
         receipt_id=receipt.receipt_id,
         decision=decision,
         runtime_workspace=runtime_workspace,
+        prompted=False if safe_alternative else None,
     )
     if terminal_action:
         response_payload["approval_requests"] = []
@@ -475,7 +499,11 @@ def run_native_copilot_permission_request(
         )
         _emit_copilot_permission_request_response(
             behavior="deny",
-            message=f"HOL Guard blocked {artifact_name}. {decision.summary}",
+            message=(
+                safe_alternative_reason(decision.summary)
+                if safe_alternative
+                else f"HOL Guard blocked {artifact_name}. {decision.summary}"
+            ),
             interrupt=True,
             approval_reuse=approval_reuse,
             scanner_evidence=decision_scanner_evidence,
@@ -487,6 +515,28 @@ def run_native_copilot_permission_request(
         home_dir=context.home_dir,
     )
     approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
+    hook_metadata: dict[str, object] = {
+        "tool_name": str(payload.get("tool_name", "")),
+        "hook_name": "permissionRequest",
+        "hook_event_name": "PermissionRequest",
+        **_codex_browser_wait_metadata(
+            args=args,
+            event_name="PermissionRequest",
+            policy_action=policy_action,
+            config=config,
+            payload=payload,
+        ),
+        "command_text": _hook_command_text(payload),
+        "workspace": str(runtime_workspace) if runtime_workspace else None,
+    }
+    retry_lineage = capture_retry_lineage(
+        payload,
+        harness=str(args.harness),
+        workspace=str(runtime_workspace) if runtime_workspace else None,
+        action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
+    )
+    if retry_lineage is not None:
+        hook_metadata["retry_lineage"] = retry_lineage
     try:
         daemon_client = load_guard_surface_daemon_client(guard_home)
         session = daemon_client.start_session(
@@ -502,20 +552,7 @@ def run_native_copilot_permission_request(
             session_id=str(session["session_id"]),
             operation_type="tool_call",
             harness=args.harness,
-            metadata={
-                "tool_name": str(payload.get("tool_name", "")),
-                "hook_name": "permissionRequest",
-                "hook_event_name": "PermissionRequest",
-                **_codex_browser_wait_metadata(
-                    args=args,
-                    event_name="PermissionRequest",
-                    policy_action=policy_action,
-                    config=config,
-                    payload=payload,
-                ),
-                "command_text": _hook_command_text(payload),
-                "workspace": str(runtime_workspace) if runtime_workspace else None,
-            },
+            metadata=hook_metadata,
             detection=runtime_detection.to_dict(),
             evaluation=evaluation_payload,
             approval_center_url=approval_center_url,
@@ -534,6 +571,13 @@ def run_native_copilot_permission_request(
             store=store,
             approval_center_url=approval_center_url,
             now=now,
+            continuation_operation={
+                "created_at": now,
+                "harness": args.harness,
+                "metadata": hook_metadata,
+                "status": "waiting_on_approval",
+                "updated_at": now,
+            },
         )
         _bind_hook_blocked_operation_queue(
             harness=args.harness,
