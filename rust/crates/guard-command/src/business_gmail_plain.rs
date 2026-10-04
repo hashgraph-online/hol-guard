@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Private extraction for a deliberately narrow, unencoded plain-text send.
+//! Private extraction for a deliberately narrow, single-part plain-text send.
 //! Success supplies syntax only: mailbox/group resolution, principal ownership,
 //! content inspection, policy, approval and dispatch remain separate authorities.
 
@@ -9,6 +9,10 @@ use guard_contracts::{BusinessRecipientKindV1, MAX_BUSINESS_ACTION_ITEMS};
 use mailparse::{addrparse_header, parse_headers, MailAddr, MailHeader};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
+
+#[path = "business_gmail_transfer.rs"]
+mod transfer;
+use transfer::TransferEncoding;
 
 const MAX_HEADERS_BYTES: usize = 32 * 1024;
 const MAX_HEADER_LINE_BYTES: usize = 998;
@@ -50,6 +54,7 @@ pub struct GmailPlainInputV1 {
     sender: String,
     recipients: Vec<GmailPlainRecipientV1>,
     body_offset: usize,
+    decoded_body: Option<Box<[u8]>>,
     binding: String,
 }
 
@@ -113,7 +118,7 @@ impl GmailPlainInputV1 {
         let mut sender = None;
         let mut recipients = Vec::new();
         let mut utf8 = false;
-        let mut eight_bit = false;
+        let mut encoding = TransferEncoding::SevenBit;
         for header in &headers {
             let key = header.get_key().to_ascii_lowercase();
             let value = std::str::from_utf8(header.get_value_raw())
@@ -158,10 +163,7 @@ impl GmailPlainInputV1 {
                     }
                 }
                 "content-transfer-encoding" => {
-                    eight_bit = value.eq_ignore_ascii_case("8bit");
-                    if !eight_bit && !value.eq_ignore_ascii_case("7bit") {
-                        return Err(Error::Unsupported);
-                    }
+                    encoding = TransferEncoding::from_header(value)?;
                 }
                 "mime-version" if value != "1.0" => return Err(Error::Unsupported),
                 _ => {}
@@ -171,7 +173,8 @@ impl GmailPlainInputV1 {
         if recipients.is_empty() {
             return Err(Error::Invalid);
         }
-        let body = &mime[body_offset..];
+        let decoded_body = encoding.decode(&mime[body_offset..])?;
+        let body = decoded_body.as_deref().unwrap_or(&mime[body_offset..]);
         if body.contains(&0) {
             return Err(Error::Invalid);
         }
@@ -198,7 +201,7 @@ impl GmailPlainInputV1 {
         {
             return Err(Error::BoundsExceeded);
         }
-        if !(body.is_ascii() || utf8 && eight_bit) {
+        if !(body.is_ascii() || utf8 && encoding != TransferEncoding::SevenBit) {
             return Err(Error::Unsupported);
         }
         let mut hash = Sha256::new();
@@ -210,6 +213,7 @@ impl GmailPlainInputV1 {
             sender,
             recipients,
             body_offset,
+            decoded_body,
             binding,
         })
     }
@@ -229,9 +233,12 @@ impl GmailPlainInputV1 {
         &self.recipients
     }
 
-    /// Exact unencoded body bytes. No public/confidential/secret label is inferred.
+    /// Exact decoded body bytes. Inspect these AND all original private MIME
+    /// bytes; no public/confidential/secret label is inferred from decoding.
     pub fn body_bytes(&self) -> &[u8] {
-        &self.wire.mime_bytes()[self.body_offset..]
+        self.decoded_body
+            .as_deref()
+            .unwrap_or(&self.wire.mime_bytes()[self.body_offset..])
     }
 
     /// Profile-version commitment to the entire retained wire, not a capability.
