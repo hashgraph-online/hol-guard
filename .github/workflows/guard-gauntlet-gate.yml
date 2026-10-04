@@ -1,4 +1,4 @@
-name: Guard Gauntlet gate
+name: Guard Gauntlet optional
 
 on:
   pull_request:
@@ -41,6 +41,7 @@ jobs:
       - run: uv run --no-sync pytest -q tests/test_guard_gauntlet_ci.py
 
   initialize:
+    name: Optional live-agent qualification
     env:
       GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA: ${{ github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3' && github.sha || '' }}
     if: >-
@@ -65,7 +66,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.12.14'
-      - name: Require fresh live evidence when enforcement changes
+      - name: Inspect fresh live evidence when enforcement changes
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -74,3 +75,8 @@ jobs:
             exit 0
           fi
           python -m ci.gauntlet.github_ci initialize
+      - name: Check live-agent qualification (optional)
+        if: github.event_name == 'pull_request_target' && hashFiles('ci/gauntlet/pr_requirement.py') != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m ci.gauntlet.github_ci require
