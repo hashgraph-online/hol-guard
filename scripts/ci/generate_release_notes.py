@@ -458,6 +458,7 @@ def render_notes(
     previous_tag: str | None,
     source_sha: str,
     previous_release: PreviousRelease | None = None,
+    pypi_deferred: bool = False,
 ) -> str:
     """Render the full release-notes body for one Guard release.
 
@@ -520,11 +521,21 @@ def render_notes(
 
     lines.append("## Install")
     lines.append("")
-    lines.append("Install this release:")
-    lines.append("")
-    lines.append("```bash")
-    lines.append(f'uv tool install "hol-guard[cisco]=={version}"')
-    lines.append("```")
+    if pypi_deferred:
+        lines.append(
+            "PyPI publication is pending quota availability. Download the verified wheel "
+            f"from the [GitHub release assets](https://github.com/{repo}/releases/tag/{tag}) and install it locally:"
+        )
+        lines.append("")
+        lines.append("```bash")
+        lines.append(f'uv tool install "./hol_guard-{version}-py3-none-any.whl[cisco]"')
+        lines.append("```")
+    else:
+        lines.append("Install this release:")
+        lines.append("")
+        lines.append("```bash")
+        lines.append(f'uv tool install "hol-guard[cisco]=={version}"')
+        lines.append("```")
     lines.append("")
     if previous_tag:
         comparison = f"[{previous_tag}...{tag}](https://github.com/{repo}/compare/{previous_tag}...{tag})"
@@ -560,6 +571,11 @@ def main() -> int:
     parser.add_argument("--source-sha", default=None, help="Release commit; defaults to resolving --tag")
     parser.add_argument("--end-ref", default=None, help="Git ref covering the release commits (default: tag/sha)")
     parser.add_argument("--output", default=None, help="Write notes here instead of stdout")
+    parser.add_argument(
+        "--pypi-deferred",
+        action="store_true",
+        help="Render local GitHub-asset installation instructions while PyPI publication is pending",
+    )
     parser.add_argument(
         "--skip-pr-metadata",
         action="store_true",
@@ -613,6 +629,7 @@ def main() -> int:
         previous_tag=previous_tag,
         source_sha=source_sha,
         previous_release=previous_release,
+        pypi_deferred=args.pypi_deferred,
     )
     if args.output:
         with open(args.output, "w", encoding="utf-8") as handle:
