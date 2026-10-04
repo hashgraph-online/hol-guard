@@ -1,11 +1,90 @@
 """Desktop Python data and native code must come from the same attested wheel."""
 
+import json
+import runpy
+import shutil
+import stat
+import sys
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    generator = runpy.run_path(str(ROOT / "scripts/build_native_command_program.py"))
+    stage = runpy.run_path(str(ROOT / "scripts/release/stage_guard_cloud_review_artifacts.py"))
+    source_root = tmp_path / "source"
+    (source_root / "contributions/command-sources").mkdir(parents=True)
+    (source_root / "contracts/extensions").mkdir(parents=True)
+    shutil.copyfile(
+        ROOT / "contributions/command-sources/command.blitcp.json",
+        source_root / "contributions/command-sources/command.blitcp.json",
+    )
+    shutil.copyfile(
+        ROOT / "contracts/extensions/trust-class-map.v1.json",
+        source_root / "contracts/extensions/trust-class-map.v1.json",
+    )
+    for source_name in stage["_ARTIFACTS"]:
+        if source_name == "contracts/extensions/native-command-program.v1.json":
+            continue
+        source = ROOT / source_name
+        destination = source_root / source_name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+
+    implementation_digest = "i" * 64
+    compiled = {
+        "catalog": [],
+        "descriptors": [],
+        "program": {
+            "catalog_digest": "c" * 64,
+            "program_digest": "p" * 64,
+        },
+        "source_digest": "s" * 64,
+        "implementation_digest": implementation_digest,
+        "catalog_projection_kind": "complete",
+    }
+    compiler = tmp_path / "guard-command-source"
+    compiler.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "import sys\n"
+        "sys.stdin.read()\n"
+        f"payload = {compiled!r}\n"
+        "print(json.dumps(payload, sort_keys=True, separators=(',', ':')))\n",
+        encoding="utf-8",
+    )
+    compiler.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    wheel = tmp_path / "attested-platform.whl"
+    member = "codex_plugin_scanner/_native/guard-command-source"
+    with ZipFile(wheel, "w") as archive:
+        archive.write(compiler, member)
+    extracted_compiler = tmp_path / "extracted-guard-command-source"
+    with ZipFile(wheel) as archive:
+        extracted_compiler.write_bytes(archive.read(member))
+    extracted_compiler.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+
+    generator_globals = generator["main"].__globals__
+    generator_globals["ROOT"] = source_root
+    generator_globals["ARTIFACT"] = source_root / "contracts/extensions/native-command-program.v1.json"
+    generator_globals["implementation_digest"] = lambda: implementation_digest
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["build_native_command_program.py", "--projections-only", "--compiler", str(extracted_compiler)],
+    )
+    assert generator["main"]() == 0
+
+    staged_root = tmp_path / "staged"
+    stage["stage_artifacts"](source_root, destination_root=staged_root)
+    generated = source_root / "contracts/extensions/native-command-program.v1.json"
+    staged = staged_root / "extensions/native-command-program.v1.json"
+    assert json.loads(generated.read_text(encoding="utf-8"))["program_digest"] == "p" * 64
+    assert staged.read_bytes() == generated.read_bytes()
 
 
 @pytest.mark.parametrize(
