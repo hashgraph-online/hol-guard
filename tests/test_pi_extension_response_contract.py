@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
     harness_json_from_native_pre_tool,
     observe_lifecycle_fail_safe_response,
 )
-from tests.pi_extension_response_callback_support import _run_generated_callback_payload
+from tests.pi_extension_response_callback_support import (
+    _run_generated_callback_payload,
+    _run_generated_source_ref_fixture,
+)
 from tests.pi_extension_response_runtime_support import (
     _run_generated_fixture,
     _run_generated_tool_result_fixture,
@@ -152,6 +156,123 @@ def test_generated_omp_tool_result_preserves_daemon_allow_without_hash(tmp_path:
     assert result["reviewed_excerpt"]["content"][0]["text"] == "reviewed-long"
     assert result["reviewed_excerpt"].get("isError") is not True
     assert result["observe_mode"] is True
+
+
+def test_generated_omp_directory_result_stays_inline_not_source_ref(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content_text = "workspace/\n.env\n"
+    content = [{"type": "text", "text": content_text}]
+    digest = hashlib.sha256(content_text.encode()).hexdigest()
+
+    regular = _run_generated_source_ref_fixture(source, content, tmp_path / "example.py")
+    directory = _run_generated_source_ref_fixture(
+        source,
+        content,
+        tmp_path / "workspace",
+        details={"isDirectory": True, "resolvedPath": str(tmp_path / "workspace")},
+    )
+
+    assert regular["sourceRef"] is not None
+    assert directory["sourceRef"] is None
+
+    directory_handler = _run_generated_callback_payload(
+        source,
+        content,
+        {
+            "decision": "allow",
+            "model_output_action": "allow_original",
+            "reviewed_output_sha256": digest,
+        },
+        tool_name="read",
+        tool_input={"path": str(tmp_path / "workspace")},
+        details={
+            "isDirectory": True,
+            "resolvedPath": str(tmp_path / "workspace"),
+            "meta": {"source": {"type": "path", "value": str(tmp_path / "workspace")}},
+        },
+    )
+    regular_handler = _run_generated_callback_payload(
+        source,
+        content,
+        {
+            "decision": "allow",
+            "model_output_action": "allow_original",
+            "reviewed_output_sha256": digest,
+        },
+        tool_name="read",
+        tool_input={"path": str(tmp_path / "workspace")},
+        details={"source": "fixture"},
+    )
+
+    assert directory_handler["preserved"] is True
+    assert "guard_source_ref" not in directory_handler["payload"]
+    assert directory_handler["payload"]["tool_input"] == {"path": str(tmp_path / "workspace")}
+    assert directory_handler["payload"]["resolved_directory_target"] == str(tmp_path / "workspace")
+
+    selector_directory_handler = _run_generated_callback_payload(
+        source,
+        content,
+        {
+            "decision": "allow",
+            "model_output_action": "allow_original",
+            "reviewed_output_sha256": digest,
+        },
+        tool_name="read",
+        tool_input={"path": f"{tmp_path / 'workspace'}:1-5"},
+        details={
+            "isDirectory": True,
+            "resolvedPath": str(tmp_path / "workspace"),
+            "meta": {"source": {"type": "path", "value": str(tmp_path / "workspace")}},
+        },
+    )
+    assert selector_directory_handler["preserved"] is True
+    assert selector_directory_handler["payload"]["tool_input"] == {"path": f"{tmp_path / 'workspace'}:1-5"}
+    assert selector_directory_handler["payload"]["resolved_directory_target"] == str(tmp_path / "workspace")
+
+    assert regular_handler["preserved"] is True
+    assert "resolved_directory_target" not in regular_handler["payload"]
+    assert regular_handler["payload"]["guard_source_ref"]["kind"] == "source_file"
+
+    # A resolved path without the explicit directory flag can also describe a
+    # file result. Keep the source-file re-read path for that ambiguous shape.
+    legacy_file_text = "print(1)\n"
+    legacy_file_digest = hashlib.sha256(legacy_file_text.encode()).hexdigest()
+    legacy_file_handler = _run_generated_callback_payload(
+        source,
+        [{"type": "text", "text": legacy_file_text}],
+        {
+            "decision": "allow",
+            "model_output_action": "allow_original",
+            "reviewed_output_sha256": legacy_file_digest,
+        },
+        tool_name="read",
+        tool_input={"path": str(tmp_path / "legacy.py")},
+        details={
+            "resolvedPath": str(tmp_path / "legacy.py"),
+            "meta": {"source": {"type": "path", "value": str(tmp_path / "legacy.py")}},
+        },
+    )
+    assert legacy_file_handler["preserved"] is True
+    assert legacy_file_handler["payload"]["guard_source_ref"]["kind"] == "source_file"
+    assert legacy_file_handler["payload"]["guard_source_ref"]["path"] == str(tmp_path / "legacy.py")
+
+
+def test_generated_omp_selector_review_uses_host_resolved_source_path(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    result = _run_generated_callback_payload(
+        source,
+        [{"type": "text", "text": "selected source"}],
+        {"decision": "allow", "notice": "reviewed"},
+        tool_name="read",
+        tool_input={"path": "/tmp/project/src/example.ts:1-5"},
+        details={
+            "isDirectory": False,
+            "meta": {"source": {"value": "/tmp/project/src/example.ts"}},
+        },
+    )
+
+    assert result["payload"]["tool_input"] == {"path": "/tmp/project/src/example.ts"}
+    assert result["preserved"] is True
 
 
 def test_generated_tool_result_keeps_checked_excerpt_after_local_content_cap(tmp_path: Path) -> None:

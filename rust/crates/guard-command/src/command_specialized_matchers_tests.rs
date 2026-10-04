@@ -64,6 +64,7 @@ fn model(segments: &[(Option<String>, Vec<String>)], raw: Option<&str>) -> Canon
         uncertainty_reason: None,
         path_overridden: false,
         parser_profile: "remaining-matchers-oracle".to_owned(),
+        security_identity: String::new(),
     }
 }
 fn shell(source: &str) -> CanonicalCommandV1 {

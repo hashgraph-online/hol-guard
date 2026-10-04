@@ -14,6 +14,17 @@ from ci.gauntlet.transport import reconcile_rounds
 from tests.test_guard_gauntlet import observed_case, ordinary
 
 
+def test_scenario_labels_do_not_influence_fixture_path_risk():
+    import re
+
+    from ci.gauntlet.catalog import load_catalog
+    from ci.gauntlet.fixtures import scenario_fixture_name
+
+    names = [scenario_fixture_name(scenario.id) for scenario in load_catalog()]
+    assert len(names) == len(set(names))
+    assert all(re.fullmatch(r"case-[0-9a-f]{64}", name) for name in names)
+
+
 def test_fixture_alias_redaction_preserves_host_guard_identity(monkeypatch):
     """Reconcile verified macOS display aliases without exporting private fixture paths."""
     import hashlib
@@ -160,6 +171,24 @@ def test_setting_task_requires_native_edit_and_readback():
     assert not task_tools_match(scenario, changed)
 
 
+def test_developer_settings_task_requires_exact_seven_calls():
+    """The catalog case does not accept extra reads or shell verification."""
+    from ci.gauntlet.catalog import load_catalog
+
+    scenario = next(item for item in load_catalog() if item.id == "developer-settings-task")
+    calls = [
+        {"name": "read", "args": {"path": "README.md"}},
+        {"name": "read", "args": {"path": "src/settings.ts"}},
+        {"name": "edit", "args": {"input": "[src/settings.ts#1234]\nPUT 2.=2:\n+  retryLimit: 5,"}},
+        {"name": "write", "args": {"path": "docs/change.md", "content": "Retry limit increased from 3 to 5.\n"}},
+        {"name": "read", "args": {"path": "src/settings.ts"}},
+        {"name": "read", "args": {"path": "docs/change.md"}},
+        {"name": "bash", "args": {"command": "git status --short"}},
+    ]
+    assert task_tools_match(scenario, calls)
+    assert not task_tools_match(scenario, [*calls, {"name": "read", "args": {"path": "README.md"}}])
+
+
 def test_recorded_late_execution_error_cannot_qualify():
     """Reject a run with a recorded execution error despite otherwise complete observations."""
     case = observed_case()
@@ -208,6 +237,43 @@ def test_anchor_path_metadata_is_checked_instead_of_rejecting_real_omp_edits():
     assert not input_matches("edit", args, {**derived, "path": ".env"})
     assert not input_matches("edit", args, {**derived, "paths": ["src/settings.ts", ".env"]})
     assert not input_matches("edit", args, {**derived, "input": args["input"].replace("5", "9")})
+    sibling_args = {
+        "path": "{{home}}/other-project/notes.md",
+        "input": "[notes.md#3BE2]\nPUT 1.=1:\n+Verified settings change.",
+    }
+    assert not input_matches("edit", sibling_args, {**sibling_args, "paths": [sibling_args["path"]]})
+
+
+@pytest.mark.parametrize("path", ["src/one.ts", "./src/one.ts", "~/other-project/one.ts"])
+def test_resolved_read_post_inputs_remain_bound_to_original_target(path):
+    from ci.gauntlet.input_evidence import post_input_matches
+    from ci.gauntlet.proofs import guard_inventory
+
+    reviewed = {"path": path, "offset": 2, "limit": 4}
+    target = "{{home}}/" + path[2:] if path.startswith("~/") else "{{workspace}}/" + path.removeprefix("./")
+    completed = {**reviewed, "path": target}
+    assert post_input_matches("read", reviewed, completed)
+    rows = deepcopy(observed_case()["guard_observations"])
+    for row, value in zip(rows, (reviewed, completed), strict=True):
+        row.update(tool="read", input=value, input_sha256=input_digest(value))
+    calls = [{"id": "c1", "name": "read", "args": reviewed, "is_error": False}]
+    assert guard_inventory(calls, rows, {"native_resident": 2})[1] is None
+    for altered in [
+        {**completed, "path": "{{workspace}}/.env"},
+        {**completed, "offset": 1},
+        {**completed, "limit": 100},
+        {**completed, "file_path": target},
+    ]:
+        assert not post_input_matches("read", reviewed, altered)
+    rows[1]["input_sha256"] = "0" * 64
+    assert guard_inventory(calls, rows, {"native_resident": 2})[1] == "missing or inconsistent Guard input digest"
+
+
+@pytest.mark.parametrize("tool,path", [("write", "src/one.ts"), ("read", "../one.ts"), ("read", "src/../one.ts")])
+def test_post_input_resolution_does_not_hide_mutation_or_traversal(tool, path):
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    assert not post_input_matches(tool, {"path": path}, {"path": "{{workspace}}/" + path})
 
 
 def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
@@ -299,3 +365,25 @@ def test_live_omp_home_display_anchor_names_the_same_verified_fixture(target):
     contradictory[2]["args"]["path"] = "{{home}}/other-project/other.md"
     assert not task_calls_in_scope(scenario, contradictory)
     assert not task_tools_match(scenario, contradictory)
+
+
+def test_live_omp_sibling_edit_requires_absolute_anchor_replacement():
+    """The read display basename must be replaced in the edit header."""
+    from ci.gauntlet.proofs import task_calls_in_scope
+
+    scenario = Scenario("sibling", "allow", "home-task", "Edit the sibling note")
+    target = "{{home}}/other-project/notes.md"
+    calls = [
+        {"name": "write", "args": {"path": target, "content": "Reviewed settings change.\n"}},
+        {"name": "read", "args": {"path": target}},
+        {
+            "name": "edit",
+            "args": {"path": target, "input": "[notes.md#FB48]\nPUT 1.=1:\n+Verified settings change."},
+        },
+        {"name": "read", "args": {"path": target}},
+    ]
+    assert not task_calls_in_scope(scenario, calls)
+    assert not task_tools_match(scenario, calls)
+    calls[2]["args"]["input"] = "[{{home}}/other-project/notes.md#FB48]\nPUT 1.=1:\n+Verified settings change."
+    assert task_calls_in_scope(scenario, calls)
+    assert task_tools_match(scenario, calls)

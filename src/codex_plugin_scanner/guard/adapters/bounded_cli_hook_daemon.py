@@ -14,7 +14,8 @@ from urllib.parse import urlparse
 from ..action_lattice import is_guard_action
 from ..daemon.hook_availability_policy import hook_event_pauses_when_unavailable, hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
-from .bounded_cli_hook_bridge import _event_name, _json_object
+from .bounded_cli_hook_envelope import _canonical_event_token, _event_name, _json_object
+from .bounded_cli_hook_failure import grok_observe_event
 from .zcode_hooks import zcode_authority_block_reason, zcode_hook_process_exit
 
 _MAX_HOOK_RESPONSE_BYTES = 1_000_000
@@ -232,11 +233,12 @@ def _daemon_response_to_native(
     event_name: str,
 ) -> tuple[str, str, int]:
     """Transform daemon policy data into harness-native output."""
+    event_name = _canonical_event_token(event_name) or event_name
     canonical = harness.strip().lower().replace("_", "-")
     if canonical == "grok" and not daemon_response:
         from .grok_hooks import is_grok_observe_only_event
 
-        if is_grok_observe_only_event(event_name):
+        if is_grok_observe_only_event(event_name) or event_name == "UserPromptSubmit":
             return "{}", "", 0
 
     if "hookSpecificOutput" in daemon_response or "decision" in daemon_response:
@@ -395,6 +397,8 @@ def try_daemon_hook(
     if token is None or time.monotonic() >= deadline:
         return None
     timeout = min(float(timeout_seconds) * 0.5, _DAEMON_TIMEOUT_BUDGET_SECONDS)
+    if grok_observe_event(harness, _event_name(input_text)):
+        timeout = min(timeout, 1.0)
     transport_deadline = min(deadline, time.monotonic() + timeout)
     timeout = transport_deadline - time.monotonic()
     if timeout <= 0:

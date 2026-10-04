@@ -876,6 +876,45 @@ def test_ensure_guard_daemon_quarantines_unsigned_legacy_state_before_adoption(t
     assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="exercises the POSIX daemon-retirement workflow")
+def test_ensure_guard_daemon_retires_authenticated_state_without_identity_before_adoption(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    daemon_manager_module.write_guard_daemon_state(
+        guard_home,
+        4781,
+        "old-token",
+        pid=12345,
+        state_id="old-state",
+    )
+    discovery_key = load_daemon_discovery_key(guard_home)
+    assert discovery_key is not None
+    state_path = daemon_manager_module._state_path(guard_home)
+    state_payload = json.loads(state_path.read_text(encoding="utf-8"))
+    state_payload.pop("state_id")
+    state_payload.pop("state_signature")
+    state_path.write_text(
+        json.dumps(authenticate_daemon_state(state_payload, discovery_key=discovery_key)),
+        encoding="utf-8",
+    )
+    retired: list[dict[str, object]] = []
+    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_retire_guard_daemon_pid",
+        lambda pid, **_kwargs: retired.append({"pid": pid}) or True,
+    )
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda _home, **_kwargs: "http://127.0.0.1:4782")
+    monkeypatch.setattr(daemon_manager_module, "_retire_duplicate_guard_daemons", lambda *_args, **_kwargs: None)
+
+    assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"
+    assert [payload["pid"] for payload in retired] == [12345]
+    assert json.loads(state_path.read_text(encoding="utf-8")) == {}
+
+
 def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:
     payload = json.dumps(
         {
@@ -3610,7 +3649,8 @@ def test_guard_daemon_retirement_completeness_accepts_explicitly_empty_state(tmp
 
 
 @pytest.mark.parametrize("source", ["pending", "state", "inventory"])
-def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, source):
+@pytest.mark.parametrize("platform", ["posix", "nt"])
+def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, source, platform):
     from types import SimpleNamespace
 
     guard_home = tmp_path / "guard-home"
@@ -3639,7 +3679,16 @@ def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, 
     )
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
-    monkeypatch.setattr(daemon_manager_module.os, "kill", lambda _pid, sig: signals.append(sig))
+    # Isolate platform dispatch without mutating the interpreter's global os.
+    monkeypatch.setattr(
+        daemon_manager_module, "os", SimpleNamespace(name=platform, kill=lambda _pid, sig: signals.append(sig))
+    )
+    native_terminations = []
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "windows_terminate_process_if_creation_time",
+        lambda process_id, creation_time: native_terminations.append((process_id, creation_time)) or False,
+    )
     monkeypatch.setattr(daemon_manager_module, "record_daemon_lifecycle_event", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         daemon_manager_module, "reap_orphaned_daemon_workers", lambda *, deadline: reaper_deadlines.append(deadline)
@@ -3654,6 +3703,14 @@ def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, 
 
     assert daemon_manager_module.retire_all_guard_daemons_for_home(guard_home, deadline=deadline) == []
     assert now[0] <= deadline
-    assert waits == [pytest.approx(0.05)]
-    assert signals == [signal.SIGTERM]
+    if platform == "nt":
+        # Windows retirement is creation-time-bound native termination, not a
+        # POSIX signal/wait sequence. The shared reaper still uses the original deadline.
+        assert native_terminations == [(pid, 1234)]
+        assert waits == []
+        assert signals == []
+    else:
+        assert waits == [pytest.approx(0.05)]
+        assert signals == [signal.SIGTERM]
+        assert native_terminations == []
     assert reaper_deadlines == [deadline]

@@ -81,6 +81,7 @@
       "command.blitcp",
       "command.cloudg",
       "command.cogext",
+      "command.cs",
       "command.ctty",
       "command.digline",
       "command.errand",
@@ -98,10 +99,11 @@
       "command.repo2nb",
       "command.skill-base",
       "command.skill-sunset",
+      "command.snoboard",
       "command.syngraphe",
       "command.tui-runner",
       "command.uivoid",
-      "command.xrpl-muse-skill"
+      "command.vttforge"
     ]
   }
 }

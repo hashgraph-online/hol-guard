@@ -434,6 +434,12 @@ pub(crate) fn verify_and_claim_request(
             state_base,
             &snapshot.scope_contract.scope_digest,
         )?;
+        let request = super::workspace_review_request::load(policy_store, request_id)?;
+        // This legacy response returns bindings, not owned provider bytes.
+        // Never consume a business grant through a mutable-command retry path.
+        if request.business_input.is_some() {
+            return Err("native_workspace_review_business_dispatch_unavailable".to_owned());
+        }
         let authority =
             super::workspace_review_authority::read_installed_record_without_time(state_base)?
                 .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
@@ -442,7 +448,6 @@ pub(crate) fn verify_and_claim_request(
             &workspace_binding,
             &scope_binding,
         )?;
-        let request = super::workspace_review_request::load(policy_store, request_id)?;
         let context = WorkspaceReviewDecisionContext {
             workspace_binding: &workspace_binding,
             device_binding: &authority.device_binding,
