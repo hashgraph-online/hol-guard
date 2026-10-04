@@ -123,7 +123,11 @@ pub(super) fn safe_copy_arguments(arguments: &[String], context: super::PathCont
         && paths.0.trim() == paths.0
         && bounded_file_read_target(paths.0, context.home_dir, context.cwd)
         && (bounded_file_write_target(destination_text, context.home_dir, context.cwd)
-            || bounded_temporary_copy_target(destination_text, context))
+            // The temporary carve-out is only for destinations the user
+            // spelled absolutely. A relative destination joined onto a /tmp
+            // workspace must not sidestep the workspace boundary check above.
+            || (std::path::Path::new(&expanded).is_absolute()
+                && bounded_temporary_copy_target(destination_text, context)))
 }
 
 pub(super) fn safe_file_mutation_arguments(
@@ -232,6 +236,21 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
     let Some(target) = path.file_name().map(|name| parent.join(name)) else {
         return false;
     };
+    // The temporary carve-out must never sidestep the ordinary home or
+    // workspace boundaries when either happens to live under a temporary
+    // root (ephemeral runners, tests, installer sandboxes).
+    let inside_home = context
+        .home_dir
+        .and_then(|home| std::fs::canonicalize(home).ok())
+        .is_some_and(|home| target.starts_with(home));
+    let inside_workspace = context
+        .cwd
+        .map(|cwd| expand_home_read_path(cwd, context.home_dir).unwrap_or_else(|| cwd.to_owned()))
+        .and_then(|cwd| std::fs::canonicalize(cwd).ok())
+        .is_some_and(|workspace| target.starts_with(workspace));
+    if inside_home || inside_workspace {
+        return false;
+    }
     resolved_path_allowed_in_scope(&target, context.home_dir, context.cwd, true)
         && guard_secure_fs::hidden_read_parts_allowed(&target)
         && !autostart_write_target(&target)

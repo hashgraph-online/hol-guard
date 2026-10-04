@@ -13,8 +13,6 @@ _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
 def grok_observe_event(harness: str, event_name: str) -> bool:
     compact = event_name.strip().lower().replace("_", "").replace("-", "")
     return harness == "grok" and compact in {
-        "userpromptsubmit",
-        "userpromptsubmitted",
         "sessionstart",
         "sessionend",
         "subagentstart",

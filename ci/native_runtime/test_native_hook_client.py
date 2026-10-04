@@ -57,7 +57,7 @@ def test_same_runtime_in_distinct_frozen_extractions_reuses_resident(
     second.parent.mkdir()
     shutil.copy2(runtime, first)
     shutil.copy2(runtime, second)
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, state_dir.parent)
     if event == "UserPromptSubmit":
         envelope = json.loads(request)
         envelope["harness"] = "zcode"
@@ -82,7 +82,7 @@ def test_removed_frozen_extraction_releases_owner_even_with_live_client(
     extracted = tmp_path / "extraction" / runtime.name
     extracted.parent.mkdir()
     shutil.copy2(runtime, extracted)
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, state_dir.parent)
     assert _result(_invoke(extracted, state_dir, request))["minimum_action"] == "allow"
     state = json.loads(_state_files(state_dir)[0].read_text())
     # Keep a real client lease alive while its resident's onefile extraction disappears.
@@ -113,7 +113,7 @@ def test_native_hook_client_reuses_one_authenticated_generation(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, state_dir.parent)
     first = _invoke(runtime, state_dir, request)
     second = _invoke(runtime, state_dir, request)
     assert first["schema"] == "guard-hook-edge-result.v2"
@@ -130,7 +130,7 @@ def test_native_hook_client_stop_reaps_managed_processes(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    _invoke(runtime, state_dir, _request(runtime, tmp_path))
+    _invoke(runtime, state_dir, _request(runtime, state_dir.parent))
     state_files = _state_files(state_dir)
     assert len(state_files) == 1
     state = json.loads(state_files[0].read_text(encoding="utf-8"))
@@ -160,7 +160,7 @@ def test_release_resident_starts_without_authority_and_rejects_approval(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path, default_action="review")
+    request = _request(runtime, state_dir.parent, default_action="review")
     ordinary = _invoke(runtime, state_dir, request)
     assert ordinary["authority"] == "rust"
     assert _result(ordinary)["minimum_action"] == "review"
@@ -195,7 +195,7 @@ def test_native_hook_client_rejects_self_authenticated_forged_state(
 ) -> None:
     runtime, state_dir = native_runtime
     _write_forged_state(runtime, state_dir)
-    response = _invoke(runtime, state_dir, _request(runtime, tmp_path))
+    response = _invoke(runtime, state_dir, _request(runtime, state_dir.parent))
     assert response["authority"] == "rust"
     assert _result(response)["minimum_action"] == "allow"
     assert len(_state_files(state_dir)) == 1
@@ -206,7 +206,7 @@ def test_native_hook_client_recovers_after_exact_managed_process_exit(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path, deadline_budget_ms=2_500)
+    request = _request(runtime, state_dir.parent, deadline_budget_ms=2_500)
     _invoke(runtime, state_dir, request)
     initial_state = _state_files(state_dir)[0]
     _terminate_state_process(initial_state)
@@ -221,7 +221,7 @@ def test_native_hook_client_recovers_after_supervisor_exit(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, state_dir.parent)
     _invoke(runtime, state_dir, request)
     initial_state = _state_files(state_dir)[0]
     state = json.loads(initial_state.read_text(encoding="utf-8"))
@@ -240,7 +240,7 @@ def test_native_hook_client_restart_budget_opens_circuit(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, state_dir.parent)
     observed_generations: set[int] = set()
     for generation_index in range(3):
         response = _invoke(runtime, state_dir, request)

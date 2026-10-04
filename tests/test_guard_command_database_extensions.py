@@ -13,8 +13,8 @@ from codex_plugin_scanner.guard.runtime.command_database_matchers import (
     database_matcher_index_hints,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_rules import ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.command_rules import ExecutableMatcher
 from tests.command_extension_contracts import (
     assert_review_required_cases,
     assert_reviewed_command_cases,

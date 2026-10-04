@@ -102,11 +102,7 @@ def build_pretool_hook_json(hook_command: str) -> dict[str, object]:
 
 
 def build_observe_hook_json(hook_command: str) -> dict[str, object]:
-    """Install observe-only lifecycle hooks.
-
-    Grok ignores deny/stdout on these events. Guard still records prompt and
-    subagent inventory; enforcement stays on PreToolUse.
-    """
+    """Install the prompt gate alongside passive session and subagent hooks."""
 
     return {
         "hooks": {event_name: [_command_hook_entry(hook_command, timeout=15)] for event_name in OBSERVE_HOOK_EVENTS}

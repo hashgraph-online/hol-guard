@@ -33,7 +33,7 @@ class _FileAttributeTagInfo(ctypes.Structure):
 
 
 class _FileRenameMode(ctypes.Union):
-    _fields_ = [("replace_if_exists", ctypes.c_ubyte), ("flags", ctypes.c_uint32)]  # noqa: RUF012
+    _fields_ = (("replace_if_exists", ctypes.c_ubyte), ("flags", ctypes.c_uint32))
 
 
 class _FileRenameInfo(ctypes.Structure):
@@ -47,7 +47,7 @@ class _FileRenameInfo(ctypes.Structure):
 
 
 class _IoStatusValue(ctypes.Union):
-    _fields_ = [("status", ctypes.c_long), ("pointer", ctypes.c_void_p)]  # noqa: RUF012
+    _fields_ = (("status", ctypes.c_long), ("pointer", ctypes.c_void_p))
 
 
 class _IoStatusBlock(ctypes.Structure):

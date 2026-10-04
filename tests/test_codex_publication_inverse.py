@@ -377,7 +377,7 @@ def test_real_configured_native_protection_before_inverse_retirement(
     inverse,
     monkeypatch,
     tmp_path,
-    boundary,  # noqa: F811
+    boundary,
 ):
     from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
@@ -404,7 +404,6 @@ def test_real_configured_native_protection_before_inverse_retirement(
     original_remove = publication._remove_record
     try:
         with codex_install_transaction(context.guard_home, config, actor=PUBLICATION_INVERSE_ACTION) as owner:
-            pending = publication.publish_codex_publication_inverse(authorize(context, plan, owner))
             store.set_managed_install(
                 "codex",
                 boundary != "inactive-enrollment",
@@ -412,6 +411,7 @@ def test_real_configured_native_protection_before_inverse_retirement(
                 codex_native_hook_state(context),
                 "isolated-publication-inverse",
             )
+            pending = publication.publish_codex_publication_inverse(authorize(context, plan, owner))
             daemon.start(pending.authorization.deadline_monotonic)
             journal = context.guard_home / "managed/codex/pending-hook-publication.json"
             before = participant_digests(context, config, manifest)

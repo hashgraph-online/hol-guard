@@ -33,6 +33,8 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 @pytest.fixture(autouse=True)
 def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:

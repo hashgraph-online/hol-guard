@@ -34,7 +34,7 @@ def test_read_missing_manifest_receipt_is_exact_and_read_only(installed):  # noq
 @pytest.mark.parametrize("failure", ["tamper", "config", "symlink", "public", "oversized", "invalid_json", "nested"])
 def test_receipt_refuses_changed_authority_or_config_without_mutation(
     installed,
-    failure,  # noqa: F811 -- shared pytest fixture
+    failure,
 ):
     context, config, manifest = installed
     receipt = recovery.hook_authority_receipt_path(context.guard_home, config)
@@ -94,7 +94,7 @@ def test_expired_receipt_read_refuses_before_file_access(tmp_path: Path, monkeyp
 @pytest.mark.parametrize("failure", ["inner_mac", "inner_target", "outer_target"])
 def test_signed_receipt_does_not_authenticate_inconsistent_manifest(
     installed,
-    failure,  # noqa: F811 -- shared pytest fixture
+    failure,
 ):
     from codex_plugin_scanner.guard.codex_hook_integrity import (
         canonical_manifest_bytes,
@@ -127,7 +127,7 @@ def test_signed_receipt_does_not_authenticate_inconsistent_manifest(
 def test_key_replacement_during_receipt_read_is_preserved_and_refused(
     installed,
     monkeypatch,
-    tmp_path,  # noqa: F811 -- shared pytest fixture
+    tmp_path,
 ):
     from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path, load_or_create_hook_secret
 
@@ -152,7 +152,7 @@ def test_key_replacement_during_receipt_read_is_preserved_and_refused(
 
 def test_missing_manifest_repair_preparation_pins_authority_without_publication(
     installed,
-    tmp_path,  # noqa: F811 -- shared pytest fixture
+    tmp_path,
 ):
     context, config, manifest = installed
     expected = manifest.read_bytes()
@@ -175,7 +175,7 @@ def test_repair_plan_refuses_changed_or_incompatible_generation(
     installed,
     tmp_path,
     monkeypatch,
-    failure,  # noqa: F811 -- shared pytest fixture
+    failure,
 ):
     from dataclasses import replace
 

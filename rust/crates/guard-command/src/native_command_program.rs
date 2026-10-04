@@ -220,6 +220,18 @@ pub fn packaged_command_program() -> Result<Arc<NativeCommandProgram>, &'static 
         .clone()
 }
 
+pub fn packaged_program_digests() -> (String, String, String) {
+    packaged_command_program()
+        .map(|program| {
+            (
+                program.program_digest.clone(),
+                program.catalog_digest.clone(),
+                program.trust_digest.clone(),
+            )
+        })
+        .unwrap_or_default()
+}
+
 pub fn digest_value(domain: &[u8], value: &impl serde::Serialize) -> Result<String, &'static str> {
     let canonical = serde_json::to_value(value).map_err(|_| "native_command_encoding_failed")?;
     digest_json_value(domain, &canonical)
