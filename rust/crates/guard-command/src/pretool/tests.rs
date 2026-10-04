@@ -102,6 +102,25 @@ fn stderr_null_sink_preserves_each_compound_command_risk() {
 }
 
 #[test]
+fn encoded_github_reads_remain_benign_in_compounds() {
+    for command in [
+        "gh api 'repos/owner/repo/contents/app/%28group%29/file.ts?ref=main'",
+        "echo ready && gh api 'repos/owner/repo/commits?path=app/%28group%29/file.ts' --jq '.[].sha' | head -1",
+    ] {
+        let result = evaluate_pre_tool(&request(command)).unwrap();
+        assert_eq!(result.minimum_action, "allow", "{command}: {}", result.reason_code);
+    }
+    for command in [
+        "gh api 'repos/owner/repo/contents/app/%28group%29/file.ts'; cat .env",
+        "gh api -X DELETE 'repos/owner/repo/contents/app/%28group%29/file.ts'",
+        "gh api 'repos/owner/repo/contents/app/%28group%29/file.ts' && rm -rf src",
+    ] {
+        let result = evaluate_pre_tool(&request(command)).unwrap();
+        assert_ne!(result.minimum_action, "allow", "{command}");
+    }
+}
+
+#[test]
 fn git_c_inspections_require_verified_repository_scope() {
     let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")

