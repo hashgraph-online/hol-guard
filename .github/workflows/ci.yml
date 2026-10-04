@@ -49,6 +49,33 @@ jobs:
           path: .
       - uses: ./.github/actions/ci-job-quality
 
+  # Rust validation is required, but is not on the artifact/Python fan-out critical path.
+  native-workspace:
+    name: Rust workspace (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [clippy, test]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-workspace-${{ matrix.check }}
+          components: clippy
+      - name: Validate the locked Rust workspace
+        env:
+          CARGO_CHECK: ${{ matrix.check }}
+        run: |
+          case "$CARGO_CHECK" in
+            clippy) cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings ;;
+            test) cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets ;;
+            *) echo "Unsupported workspace check" >&2; exit 64 ;;
+          esac
+
   native-command-evaluators:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -372,7 +399,7 @@ jobs:
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
+    needs: [native-workspace, quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -383,12 +410,14 @@ jobs:
     steps:
       - name: Verify Python CI dependencies
         env:
+          NATIVE_WORKSPACE_RESULT: ${{ needs.native-workspace.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           COVERAGE_PLAN_RESULT: ${{ needs.coverage-plan.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
           SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
         run: |
+          test "$NATIVE_WORKSPACE_RESULT" = "success"
           test "$QUALITY_RESULT" = "success"
           test "$COVERAGE_PLAN_RESULT" = "success"
           test "$COVERAGE_RESULT" = "success"

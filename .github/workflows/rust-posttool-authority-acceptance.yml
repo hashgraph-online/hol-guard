@@ -66,13 +66,20 @@ jobs:
           if 'PolicySnapshot' not in runtime and 'policy_snapshot' not in runtime:
               raise SystemExit('policy snapshot runtime use missing')
           PY
+      # Retain standalone qualification unless the required main CI already runs this proof.
       - name: Build and lint
+        if: >-
+          !((github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
           cargo fmt --manifest-path rust/Cargo.toml --all --check
           cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
           cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - name: Build native PostToolUse runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
