@@ -8,14 +8,18 @@ from .models import SEVERITY_ORDER, Finding, ScanResult
 from .version import __version__
 
 REVIEW_STEPS = (
-    "Keep the full scan report, scanner version, source revision and centralized scan run together.",
-    "In the existing submission PR, give the rule, location, intended behavior and a minimal reproducer. "
+    "Keep the full scan report, scanner version, source revision and scan run together.",
+    "Report suspected false positives to the scanner project with the rule, location, "
+    "intended behavior and a reproducer. "
+    "For catalog submissions, use the existing submission PR. "
     "Do not publish real secrets or private source.",
     "A maintainer must distinguish a detector defect from a source problem, "
     "a risky capability or an infrastructure failure.",
-    "HOL owns fixes to its detectors and release/pin propagation. Contributors need not maintain a scanner fork.",
+    "Scanner maintainers own detector fixes and releases; catalog operators own their pinned scanner updates. "
+    "Contributors need not maintain a scanner fork.",
     "Keep the score and severity gates unchanged; do not disable rules or trust a submitter-provided baseline.",
-    "Rerun the centralized scan on the exact source revision after the reviewed scanner fix is released.",
+    "Repeat the scan on the exact source revision with the reviewed scanner release and unchanged policy. "
+    "Catalog submissions require a new centralized scan.",
 )
 
 
@@ -75,6 +79,10 @@ def build_contributor_review(result: ScanResult) -> dict[str, object]:
                 "filePath": finding.file_path,
                 "lineNumber": finding.line_number,
                 "source": finding.source,
+                "category": finding.category,
+                "title": finding.title,
+                "description": finding.description,
+                "remediation": finding.remediation,
                 "occurrences": counts[finding],
                 "disposition": "not-adjudicated",
             }

@@ -60,6 +60,8 @@ FIELD_NAME_MAP_RE = re.compile(
 FIELD_NAME_ENTRY_RE = re.compile(r"""\s*([A-Za-z][A-Za-z0-9_]*)\s*:\s*(["'])([A-Za-z][A-Za-z0-9_]*)\2\s*""")
 GENERATED_TOKEN_RE = re.compile(r'\$\(openssl rand -(?:hex|base64) [1-9][0-9]{0,3}\)"(?=$|[\s;])')
 SYMBOLIC_REFERENCE_RE = re.compile(r"\$[A-Z_][A-Z0-9_]*")
+KNOWN_TEMPLATE_MARKERS = frozenset({"$ARGUMENTS"})
+PASSWORD_NAVIGATION_KEYS = frozenset({"ForgotPassword", "ResetPassword", "ChangePassword"})
 LITERAL_END_RE = re.compile(r"[ \t]*(?=$|[;\r\n])")
 TRAILING_WHITESPACE_RE = re.compile(r"\s*\Z")
 SHELL_OPTION_PREFIX_RE = re.compile(
@@ -71,7 +73,7 @@ SCREEN_ROUTE_ENTRY_RE = re.compile(r"""\s*([A-Z][A-Za-z]*)\s*:\s*(["'])([a-z]+(?
 
 def _python_symbolic_reference_spans(relative_path: Path, content: str) -> frozenset[tuple[int, int]]:
     """Prove complete Python assignment values before allowing newline termination."""
-    if relative_path.suffix.lower() != ".py" or "$" not in content or len(content) > 1_048_576:
+    if relative_path.suffix.lower() != ".py" or "$ARGUMENTS" not in content or len(content) > 1_048_576:
         return frozenset()
     try:
         tree = ast.parse(content)
@@ -88,7 +90,7 @@ def _python_symbolic_reference_spans(relative_path: Path, content: str) -> froze
         if not (
             isinstance(value, ast.Constant)
             and isinstance(value.value, str)
-            and SYMBOLIC_REFERENCE_RE.fullmatch(value.value)
+            and value.value in KNOWN_TEMPLATE_MARKERS
             and value.lineno == value.end_lineno
             and value.end_col_offset is not None
         ):
@@ -115,7 +117,7 @@ def _is_symbolic_reference_literal(
     match: re.Match[str],
     python_reference_spans: frozenset[tuple[int, int]] = frozenset(),
 ) -> bool:
-    """Recognize a complete uppercase $NAME marker, never a partial literal."""
+    """Recognize shell expansions or a reserved template marker, never arbitrary passwords."""
     start = match.start(1)
     if start == 0 or content[start - 1] not in "\"'":
         return False
@@ -125,7 +127,16 @@ def _is_symbolic_reference_literal(
     end = content.find(quote, start)
     if end == -1 or match.end(1) > end or not SYMBOLIC_REFERENCE_RE.fullmatch(content, start, end):
         return False
-    if relative_path.suffix.lower() == ".py":
+    suffix = relative_path.suffix.lower()
+    line_start = content.rfind("\n", 0, match.start()) + 1
+    shell_option = SHELL_OPTION_PREFIX_RE.fullmatch(content, line_start, match.start()) is not None
+    if (
+        content[start:end] not in KNOWN_TEMPLATE_MARKERS
+        and suffix not in {".sh", ".bash"}
+        and not (suffix in DOCUMENTATION_EXTS and shell_option)
+    ):
+        return False
+    if suffix == ".py":
         return (start - 1, end + 1) in python_reference_spans
     after = end + 1
     terminator = LITERAL_END_RE.match(content, after)
@@ -145,7 +156,7 @@ def _is_symbolic_reference_literal(
 
 
 def _screen_route_map_spans(relative_path: Path, content: str) -> tuple[tuple[int, int], ...]:
-    """Recognize bounded navigation maps whose values are entirely key-derived."""
+    """Exempt known password-navigation entries, never an entire credential-shaped map."""
     if relative_path.suffix.lower() not in DOCUMENTATION_EXTS | {".js", ".jsx", ".ts", ".tsx"}:
         return ()
     spans = []
@@ -161,7 +172,10 @@ def _screen_route_map_spans(relative_path: Path, content: str) -> tuple[tuple[in
             if value != re.sub(r"([a-z])([A-Z])", r"\1-\2", key).lower():
                 break
         else:
-            spans.append(mapping.span("body"))
+            for pair in SCREEN_ROUTE_ENTRY_RE.finditer(mapping.group("body")):
+                if pair.group(1) in PASSWORD_NAVIGATION_KEYS:
+                    origin = mapping.start("body")
+                    spans.append((origin + pair.start(), origin + pair.end()))
     return tuple(spans)
 
 

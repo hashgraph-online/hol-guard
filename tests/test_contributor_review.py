@@ -103,7 +103,7 @@ def test_no_findings_is_not_an_approval_or_attestation() -> None:
 def test_markdown_exposes_the_maintainer_review_pathway() -> None:
     output = format_markdown(_result((_finding(),)))
     assert "Contributor review pathway" in output
-    assert "HOL owns fixes" in output
+    assert "Scanner maintainers own detector fixes" in output
     assert "keep" in output.lower()
 
 
@@ -111,3 +111,12 @@ def test_optional_metadata_ties_have_deterministic_group_order() -> None:
     """Missing metadata is distinct from an explicitly empty value."""
     findings = (_finding(file_path=None), _finding(file_path=""), _finding(line_number=None), _finding(line_number=0))
     assert build_contributor_review(_result(findings)) == build_contributor_review(_result(tuple(reversed(findings))))
+
+
+def test_groups_identify_different_evidence_at_the_same_location() -> None:
+    """Every field used to distinguish groups is visible with its evidence."""
+    findings = (_finding(description="First evidence"), _finding(description="Second evidence"))
+    groups = build_contributor_review(_result(findings))["groups"]
+    assert {group["description"] for group in groups} == {"First evidence", "Second evidence"}
+    assert all(group["category"] == "security" and group["title"] == "Secret candidate" for group in groups)
+    assert all(group["remediation"] == findings[0].remediation for group in groups)

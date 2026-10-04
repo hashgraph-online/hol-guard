@@ -26,8 +26,8 @@ Recognize narrowly demonstrated benign syntax. Every new accepted form needs nea
 | Complete fenced literal curl GET/HEAD | No upload finding for the supported retrieval syntax; not a remote-safety guarantee | Uploads, headers, userinfo, executable pipelines, substitutions, output files, config files and unknown options retain findings |
 | URL authority | Explicit host, IPv6, zone and port validation | Host ranges, braces, malformed brackets, control characters and ambiguous authorities retain findings even with older Python parsers |
 | URL query | Only a bounded grammar for numeric pagination and representation values | Credential keys, encoded or duplicate keys, arbitrary values and unknown query semantics retain findings |
-| Complete symbolic reference | Exempt only the exact reference at a proven expression boundary | Mixed-case password-like values, appended literals, casts, concatenation, member access and adjacent provider credentials retain findings |
-| Navigation metadata | Bounded, flat maps whose values are mechanically derived from their keys | One unrelated or credential-like value invalidates the metadata exemption |
+| Complete symbolic reference | Exempt shell expansions or the reserved `$ARGUMENTS` marker at a proven expression boundary | Mixed-case password-like values, appended literals, casts, concatenation, member access and adjacent provider credentials retain findings |
+| Navigation metadata | Only known password-navigation entries in bounded, flat maps whose values are mechanically key-derived | One unrelated or credential-like value invalidates the metadata exemption |
 | Python inference/documentation | Pursue existing #2805 with AST-based evidence, rather than overlapping regex patches | Bare or aliased builtin eval, eval with arguments, nested calls and parse failures remain conservative |
 | Synthetic credential examples | Review existing #3260 independently | A test directory or word such as example never exempts a real provider token or high-entropy value by itself |
 
@@ -91,3 +91,5 @@ The initial query grammar accepts exactly one literal pagination or representati
 The context-classification foundation and its original regression corpus derive from Seth Hobson's withdrawn #3548. This maintainer branch adds stricter URL/expression boundaries and review reporting; it does not imply that the contributor endorsed these additions. Neither withdrawn PR is reopened.
 
 Parenthesized generic secret assignments and quoted JSON keys remain known baseline detector gaps, not newly exempted cases. The new controls assert findings only where the existing detector recognizes the assignment, while proving that continued expressions cannot gain a new exemption. Existing #2805 and #3260 remain separately scoped work.
+
+Review hardening limits non-shell literals to the reserved `$ARGUMENTS` marker; uppercase spelling alone is not an environment reference. General `$NAME` syntax requires a shell file or a demonstrable shell-option context. Navigation exemptions cover only known password-navigation entries, never adjacent `Secret` or `Token` fields. Contributor review groups retain category, title, description and remediation so distinct evidence at the same location is not ambiguous. These strings are untrusted report data, not instructions or approvals.

@@ -123,3 +123,26 @@ def test_python_marker_requires_a_complete_parsed_assignment(content: str) -> No
 def test_closing_delimiters_do_not_prove_marker_expression_end(tail: str) -> None:
     """Unknown surrounding expression syntax must not gain a secret exemption."""
     assert _first_hardcoded_secret_line(Path("config.ts"), 'token = "$ARGUMENTS"' + tail) is not None
+
+
+@pytest.mark.parametrize("path", ["config.py", "config.ts", "README.md"])
+@pytest.mark.parametrize("value", ["$P4SSW0RD1", "$ADMIN2024", "$OTHER_TEMPLATE"])
+def test_non_shell_dollar_literals_are_not_assumed_to_expand(path: str, value: str) -> None:
+    """Uppercase spelling alone does not make a non-shell password a reference."""
+    assert _first_hardcoded_secret_line(Path(path), f'password = "{value}"') is not None
+
+
+@pytest.mark.parametrize("key", ["SuperSecret", "ClientSecret", "AccessToken"])
+def test_key_derived_screen_credentials_remain_findings(key: str) -> None:
+    """A navigation map never exempts every credential-like entry it contains."""
+    import re
+
+    value = re.sub(r"([a-z])([A-Z])", r"\1-\2", key).lower()
+    content = f"screens: {{{key}: '{value}', Home: 'home', ForgotPassword: 'forgot-password'}}"
+    assert _first_hardcoded_secret_line(Path("navigation.ts"), content) is not None
+
+
+def test_raw_crlf_retrieval_fence_has_the_same_classification() -> None:
+    """A physical CRLF terminator is distinct from an embedded carriage return."""
+    assert read_only_curl_spans("```bash\r\ncurl https://example.com/status\r\n```\r\n")
+    assert not is_read_only_curl("curl 'https://example.com/sta\rtus'\r\n", 0)

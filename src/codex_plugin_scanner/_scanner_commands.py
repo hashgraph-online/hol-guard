@@ -167,7 +167,7 @@ def run_scan(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         emit_hint(
-            "report a suspected false positive in the existing submission PR with the rule, location and reproducer; "
+            "report a suspected false positive to scanner maintainers with the rule, location and reproducer; "
             "keep the gate unchanged."
         )
         return 1

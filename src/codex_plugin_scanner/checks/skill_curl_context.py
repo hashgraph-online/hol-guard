@@ -70,6 +70,8 @@ def is_read_only_curl(content: str, start: int) -> bool:
         return False
     end = content.find("\n", start)
     command = content[start : end if end != -1 else len(content)]
+    if end != -1 and command.endswith("\r"):
+        command = command[:-1]
     if len(command) > 16384 or any(char in command for char in "$`|;&<>(){}"):
         return False
     if any((ord(char) < 32 and char != "\t") or ord(char) >= 127 for char in command):

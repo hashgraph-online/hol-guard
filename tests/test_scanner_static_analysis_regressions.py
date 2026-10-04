@@ -135,9 +135,9 @@ def test_route_metadata_does_not_exempt_provider_tokens():
 
 
 @pytest.mark.parametrize("path", ["src/parser.py", "src/config.ts", "README.md"])
-@pytest.mark.parametrize("value", ["$ARGUMENTS", "$KUBE_TOKEN", "$OTHER_TEMPLATE"])
+@pytest.mark.parametrize("value", ["$ARGUMENTS"])
 def test_complete_symbolic_template_reference_is_not_a_credential(path: str, value: str):
-    """Complete uppercase markers share the same bounded template policy."""
+    """Only a known template marker is recognized in non-shell literals."""
     assert _first_hardcoded_secret_line(Path(path), f'token = "{value}"') is None
 
 
