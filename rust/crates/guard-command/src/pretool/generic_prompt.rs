@@ -117,12 +117,8 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                             .split(',')
                             .map(str::trim)
                             .filter(|item| !item.is_empty())
-                            // A previous identical bypass phrase is a separate order,
-                            // not evidence that the later occurrence is prohibited.
-                            .all(|item| item != *pattern && (
-                                BYPASS_PATTERNS.contains(&item)
-                                    || guardrail_item.is_match(item)
-                            ))
+                            .all(|item| BYPASS_PATTERNS.contains(&item)
+                                || guardrail_item.is_match(item))
                     })
                 });
                 let unconditional = prohibition.is_match(prefix)
