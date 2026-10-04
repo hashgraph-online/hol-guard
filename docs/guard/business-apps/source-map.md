@@ -70,7 +70,30 @@ Its commitment is not a review grant and is not the existing workspace-review
 action binding. The managed executor must consume these owned bytes, bind the
 full authorization context, and never reread paths or stdin after approval.
 
-## Validation
+## Native selector predicates
+
+`guard-policy-snapshot::business_match::BusinessPolicyMatchV1` represents the
+versioned business selector and evaluates its dimensions against complete facts.
+Dimensions intersect; each set contains alternatives. Missing optional selectors
+are wildcards, while explicit null, unknown fields, duplicate values, and counts
+outside JavaScript's safe integer range are rejected. Count thresholds are
+inclusive per-action lower bounds, not cumulative budgets.
+
+Incomplete or contradictory facts return errors before a nonmatch can fall
+through. This predicate grants no permission, authenticates no facts, and is not
+yet an enforcing signed-snapshot consumer. Existing policy floors and managed
+dispatch still need explicit integration; Cloud publication remains refused.
+
+`contracts/business-policy/selector-v1-fixtures.json` contains 36 validation
+vectors shared byte-for-byte with the Cloud policy fixture. Native integration
+tests also exercise matching boundaries, unknown facts, direct-struct bounds,
+and duplicate wire keys. These are synthetic contract checks.
+
+Selectors reject unknown audience/sensitivity members and require every selected
+operation's service in the service set. Unknown facts still stop evaluation;
+they cannot be targeted as a normal matching category.
+
+## Validation commands
 
 `cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-contracts`
 checks strict objects, duplicate keys, unsupported versions/actions, hidden
