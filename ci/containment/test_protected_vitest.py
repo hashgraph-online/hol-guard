@@ -47,7 +47,10 @@ test('fixed resolution reaches the real worker without wider permissions', async
   expect(transformSync('const value: number = 7', {loader: 'ts'}).code).toContain('7');
   // NODE_OPTIONS preloads are inherited but are not listed in process.execArgv.
   const resolverPath = path.join(path.dirname(os.tmpdir()), 'localhost-resolution.cjs');
-  expect(process.env.NODE_OPTIONS).toBe(`--require ${JSON.stringify(resolverPath)}`);
+  expect([
+    `--disable-wasm-trap-handler --require ${JSON.stringify(resolverPath)}`,
+    `--require ${JSON.stringify(resolverPath)}`,
+  ]).toContain(process.env.NODE_OPTIONS);
   expect(await dns.promises.lookup('localhost')).toEqual({address: '127.0.0.1', family: 4});
   expect(await dns.promises.lookup('localhost', 6)).toEqual({address: '::1', family: 6});
   expect(await dns.promises.lookup('localhost.', {all: true})).toEqual([{address: '127.0.0.1', family: 4}]);

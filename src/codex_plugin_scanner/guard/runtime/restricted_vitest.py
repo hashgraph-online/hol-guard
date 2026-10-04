@@ -227,10 +227,13 @@ def run_restricted_node_plan(
             from .restricted_localhost import prepare_localhost_resolver
 
             plan = prepare_localhost_resolver(plan, root)
-            # Vitest supplies its own worker execArgv. Only this Guard-owned
-            # preload, not caller NODE_OPTIONS, may reach those child runtimes.
+            # Vitest supplies its own worker execArgv. Only Guard-owned
+            # options, not caller NODE_OPTIONS, may reach those child runtimes.
             preload = json.dumps(str(root / "localhost-resolution.cjs"), ensure_ascii=False)
-            launch_env["NODE_OPTIONS"] = f"--require {preload}"
+            # Caller NODE_OPTIONS were already removed by linux_node_environment;
+            # keep only Guard-owned flags (e.g. --disable-wasm-trap-handler).
+            guard_options = launch_env.get("NODE_OPTIONS", "")
+            launch_env["NODE_OPTIONS"] = f"{guard_options} --require {preload}".strip()
         return _run_backend_process(
             _backend_argv(plan, private_root=root),
             env=launch_env,
