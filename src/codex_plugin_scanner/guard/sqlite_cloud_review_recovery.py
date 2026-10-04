@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from .review_event_wake import review_event_wake_signal
+from .sqlite_deadline_connection import connect_sqlite_with_deadline
 from .store_native_workspace_review import (
     NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX,
     _receipt_payload,
@@ -65,10 +66,11 @@ def salvage_cloud_review_state(*, source: Path, destination: Path) -> bool:
 
     if source.is_symlink() or destination.is_symlink() or not destination.is_file():
         return False
+    source_uri = f"{source.resolve().as_uri()}?mode=ro"
     try:
         with (
-            closing(sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True, timeout=1.0)) as src,
-            closing(sqlite3.connect(destination, timeout=1.0)) as dst,
+            closing(connect_sqlite_with_deadline(source_uri, uri=True, timeout_seconds=1.0)) as src,
+            closing(connect_sqlite_with_deadline(destination, timeout_seconds=1.0)) as dst,
             dst,
         ):
             _ = src.execute("begin")

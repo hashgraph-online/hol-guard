@@ -42,6 +42,8 @@ from tests.conftest import guard_commands_module
 from tests.daemon_hook_test_client import open_authenticated_claude_request
 from tests.support.network import urlopen_json
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
@@ -1204,6 +1206,7 @@ class TestGuardSurfaceServer:
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
+        (home_dir / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
@@ -1245,6 +1248,7 @@ class TestGuardSurfaceServer:
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
+        (home_dir / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 8.0)
         monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)

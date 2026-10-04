@@ -218,6 +218,7 @@ fn devin_reads_allow_only_bounded_existing_files() {
     #[cfg(unix)]
     {
         let escaped = home.join("project/etc-passwd-link");
+        let _ = std::fs::remove_file(&escaped);
         std::os::unix::fs::symlink("/etc/passwd", &escaped).unwrap();
         let via_symlink = devin(
             json!({

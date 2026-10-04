@@ -23,8 +23,11 @@ def _resource(uri=_URI, content=_CONTENT):
 
 
 def _entry():
-    return {"uri": _URI, "frontmatter": {"name": "report", "description": "Prepare a report."},
-            "resources": [_resource()]}
+    return {
+        "uri": _URI,
+        "frontmatter": {"name": "report", "description": "Prepare a report."},
+        "resources": [_resource()],
+    }
 
 
 def _result(**fields):
@@ -45,7 +48,10 @@ def test_declaration_requires_resources_and_actual_extension_not_tool_names():
         assert not mcp_skills_declared(capabilities, protocol_version="2026-07-28")
         with pytest.raises(McpSkillError, match="not_declared"):
             McpSkillsClient(
-                origin=_ORIGIN, capabilities=capabilities, protocol_version="2026-07-28", request=lambda *_: {},
+                origin=_ORIGIN,
+                capabilities=capabilities,
+                protocol_version="2026-07-28",
+                request=lambda *_: {},
             )
     assert not mcp_skills_declared(_CAPABILITIES, protocol_version="2025-11-25")
     for invalid in ("2026-07-27", "2026-13-01", "2026-07-28-extra", "20260728"):
@@ -59,7 +65,10 @@ def test_later_negotiated_revision_is_sent_in_skills_request_metadata():
         return _result(skills=[])
 
     client = McpSkillsClient(
-        origin=_ORIGIN, capabilities=_CAPABILITIES, protocol_version="2027-01-01", request=request,
+        origin=_ORIGIN,
+        capabilities=_CAPABILITIES,
+        protocol_version="2027-01-01",
+        request=request,
     )
     assert client.list_metadata() == ((), True, None)
 
@@ -105,11 +114,18 @@ def test_manifest_binds_whole_resource_set_frontmatter_and_origin():
     assert parse_mcp_skill_entry(value, origin=_ORIGIN).manifest_digest != third.manifest_digest
 
 
-@pytest.mark.parametrize("uri", [
-    "skill://team/report/../outside.md", "skill://team/report/%2e%2e/outside.md",
-    "skill://team/report/%252e%252e/outside.md", "skill://team/report/%2foutside.md",
-    "skill://team/report/%0aoutside.md", "skill://team/report\\outside.md", "skill://different/reference.md",
-])
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "skill://team/report/../outside.md",
+        "skill://team/report/%2e%2e/outside.md",
+        "skill://team/report/%252e%252e/outside.md",
+        "skill://team/report/%2foutside.md",
+        "skill://team/report/%0aoutside.md",
+        "skill://team/report\\outside.md",
+        "skill://different/reference.md",
+    ],
+)
 def test_manifest_cannot_escape_its_skill_directory(uri):
     value = _entry()
     value["resources"].append(_resource(uri, b""))
@@ -161,9 +177,16 @@ def test_changed_or_unlisted_content_revokes_held_entry_and_cache():
 def test_frontmatter_mismatch_and_cross_origin_are_rejected_and_dynamic_declined():
     value = _entry()
     value["frontmatter"]["allowed-tools"] = "*"
-    client = McpSkillsClient(origin=_ORIGIN, capabilities=_CAPABILITIES, protocol_version="2026-07-28",
-                            request=lambda method, _: _result(skill=value) if method == "skills/get"
-                            else _result(contents=[{"uri": _URI, "text": _CONTENT.decode()}]))
+    client = McpSkillsClient(
+        origin=_ORIGIN,
+        capabilities=_CAPABILITIES,
+        protocol_version="2026-07-28",
+        request=lambda method, _: (
+            _result(skill=value)
+            if method == "skills/get"
+            else _result(contents=[{"uri": _URI, "text": _CONTENT.decode()}])
+        ),
+    )
     entry = client.get_metadata(_URI)
     with pytest.raises(McpSkillError, match="skill_frontmatter_changed"):
         client.inspect_content(entry, _URI)
@@ -189,6 +212,10 @@ def test_repeated_cursor_retains_partial_metadata_and_malformed_cache_scope_is_t
     entries, complete, reason = client.list_metadata()
     assert len(entries) == 1 and not complete and reason == "repeated_skills_cursor"
     assert calls[1]["cursor"] == "opaque"
-    broken = McpSkillsClient(origin=_ORIGIN, capabilities=_CAPABILITIES, protocol_version="2026-07-28",
-                            request=lambda *_: _result(skills=[], cacheScope={"private": True}))
+    broken = McpSkillsClient(
+        origin=_ORIGIN,
+        capabilities=_CAPABILITIES,
+        protocol_version="2026-07-28",
+        request=lambda *_: _result(skills=[], cacheScope={"private": True}),
+    )
     assert broken.list_metadata() == ((), False, "invalid_skills_result")

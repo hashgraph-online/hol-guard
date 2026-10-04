@@ -5517,6 +5517,19 @@
     }
   }
 
+  .focus-within\:outline-2:focus-within {
+    outline-style: var(--tw-outline-style);
+    outline-width: 2px;
+  }
+
+  .focus-within\:outline-offset-2:focus-within {
+    outline-offset: 2px;
+  }
+
+  .focus-within\:outline-brand-blue:focus-within {
+    outline-color: var(--brand-blue);
+  }
+
   @media (hover: hover) {
     .hover\:border-amber-300:hover {
       border-color: var(--color-amber-300);

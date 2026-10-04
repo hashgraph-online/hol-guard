@@ -44,7 +44,7 @@ def test_resource_tuning_keeps_current_attempt_coverage_and_quality_gate() -> No
     indices = [names.index(name) for name in ordered]
     assert indices == sorted(indices)
     download = steps[indices[1]]
-    assert download["with"]["pattern"] == "pytest-coverage-${{ github.run_attempt }}-*"
+    assert download["with"]["artifact-ids"] == "${{ steps.coverage-selection.outputs.artifact-ids }}"
     for index in indices:
         assert not steps[index].get("continue-on-error", False)
         assert steps[index]["if"] == "steps.token-presence.outputs.has-token == 'true'"

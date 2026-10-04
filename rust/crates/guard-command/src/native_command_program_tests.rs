@@ -362,9 +362,11 @@ fn graph_depth_proof_cannot_be_bypassed_by_memoized_shared_children() {
 #[test]
 fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
     let unrestricted = binding(&[], false);
+    // This wrapper has no verified repository context; extension consent
+    // cannot prove that Git's effective configuration is execution-free.
     assert_eq!(
         decision("git status", &unrestricted).minimum_action,
-        "allow"
+        "require-reapproval"
     );
     for (kind, target, command) in [
         ("extension", "command.git", "git status"),
@@ -378,7 +380,7 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         ),
         (
             "permission",
-            "command.github.permission.read-local",
+            "command.github.permission.read-remote",
             "gh auth status",
         ),
         (

@@ -320,14 +320,18 @@ def run_isolated_hook_process(
     is captured before process creation so startup and stream cleanup consume
     the caller's existing budget instead of receiving a new minimum timeout.
     """
-    if _HOOK_PROCESS_CONTAINMENT_FAILED.is_set() and not _retry_quarantined_hook_processes():
-        return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     if deadline_monotonic is None:
         if timeout_seconds is None:
             return BoundedHookProcessResult(None, "", False, False)
         deadline = time.monotonic() + max(0.0, timeout_seconds)
     else:
         deadline = deadline_monotonic
+    if time.monotonic() >= deadline:
+        return BoundedHookProcessResult(
+            None, "", False, True, containment_failed=_HOOK_PROCESS_CONTAINMENT_FAILED.is_set()
+        )
+    if _HOOK_PROCESS_CONTAINMENT_FAILED.is_set() and not _retry_quarantined_hook_processes():
+        return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     try:
         process, windows_job, liveness_write_fd = _spawn_hook_process(
             command,

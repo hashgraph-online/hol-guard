@@ -86,6 +86,11 @@ def read_contained_test_request(path: Path, expected_sha256: str, *, workspace: 
         ):
             raise _reject()
         payload = value["payload"]
+        if "cwd" in payload and (
+            not isinstance(payload["cwd"], str)
+            or Path(payload["cwd"]).resolve(strict=True) != workspace.resolve(strict=True)
+        ):
+            raise _reject()
         tool_input = payload.get("tool_input")
         if (
             payload.get("hook_event_name") != "PreToolUse"
@@ -124,6 +129,7 @@ def run_authorized_contained_test(
     node_test = len(command) > 1 and Path(command[0]).name in {"node", "nodejs"} and command[1] == "--test"
     vitest = bool(command) and (
         Path(command[0]).name in {"bunx", "npx", "vitest"}
+        or restricted_vitest.bun_vitest_invocation(command) is not None
         or (
             len(command) > 1
             and Path(command[0]).name in {"node", "nodejs"}
@@ -131,17 +137,24 @@ def run_authorized_contained_test(
         )
     )
     git = bool(command) and Path(command[0]).name == "git"
-    node_tool = bool(command) and (
-        Path(command[0]).name in {"eslint", "tsc", "vite", "bun", "npm", "pnpm"}
-        or (Path(command[0]).name in {"bunx", "npx"} and any(arg in {"eslint", "tsc", "vite"} for arg in command[1:3]))
-        or (
-            len(command) > 1
-            and Path(command[0]).name in {"node", "nodejs"}
-            and command[1].endswith(
-                (
-                    "/node_modules/eslint/bin/eslint.js",
-                    "/node_modules/typescript/bin/tsc",
-                    "/node_modules/vite/bin/vite.js",
+    node_tool = (
+        restricted_vitest.bun_vitest_invocation(command) is None
+        and bool(command)
+        and (
+            Path(command[0]).name in {"eslint", "tsc", "vite", "bun", "npm", "pnpm"}
+            or (
+                Path(command[0]).name in {"bunx", "npx"}
+                and any(arg in {"eslint", "tsc", "vite"} for arg in command[1:3])
+            )
+            or (
+                len(command) > 1
+                and Path(command[0]).name in {"node", "nodejs"}
+                and command[1].endswith(
+                    (
+                        "/node_modules/eslint/bin/eslint.js",
+                        "/node_modules/typescript/bin/tsc",
+                        "/node_modules/vite/bin/vite.js",
+                    )
                 )
             )
         )
@@ -203,14 +216,18 @@ def run_authorized_contained_test(
 
     def authorize_capability(argv: tuple[str, ...]) -> None:
         capability = {**payload, "tool_input": {**tool_input, "command": shlex.join(argv)}}
-        response = authorize(capability)
-        if (
-            not isinstance(response, Mapping)
-            or response.get("decision") != "allow"
-            or response.get("policy_action") != "allow"
-            or response.get("observe_mode") is True
-        ):
-            raise _reject()
+        contexts = [workspace]
+        if vitest_plan is not None and vitest_plan.cwd != workspace:
+            contexts.append(vitest_plan.cwd)
+        for directory in contexts:
+            response = authorize({**capability, "cwd": str(directory)})
+            if (
+                not isinstance(response, Mapping)
+                or response.get("decision") != "allow"
+                or response.get("policy_action") != "allow"
+                or response.get("observe_mode") is True
+            ):
+                raise _reject()
 
     # No shell and no unsandboxed retry: the required profile is the actual sink.
     if inline_plan is not None:
@@ -233,8 +250,10 @@ def run_authorized_contained_test(
         # Check the resolved Node/script action too: wrapper consent must not
         # override an extension deny for the underlying executable.
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(vitest_plan.command)}}
-        if not required(authorize(underlying)):
-            raise _reject()
+        # Selecting another directory cannot shed the original project's denies.
+        for directory in dict.fromkeys((workspace, vitest_plan.cwd)):
+            if not required(authorize({**underlying, "cwd": str(directory)})):
+                raise _reject()
         return restricted_vitest.run_restricted_vitest(
             command,
             workspace=workspace,

@@ -383,13 +383,15 @@ def snapshot_bytes_v3(snapshot: Mapping[str, object]) -> bytes:
     return encoded
 
 
-def _policy_snapshot_push_bytes_v3(snapshot: Mapping[str, object]) -> bytes:
+def _policy_snapshot_push_bytes_v3(snapshot: Mapping[str, object], *, deadline_budget_ms: int | None = None) -> bytes:
     """Build the strict resident push envelope after validating its snapshot."""
 
     _validate_snapshot_v3(snapshot)
     envelope = {
         "operation": "policy_snapshot_push",
-        "deadline_budget_ms": int(_PUBLISH_TIMEOUT_SECONDS * 1_000),
+        "deadline_budget_ms": (
+            int(_PUBLISH_TIMEOUT_SECONDS * 1_000) if deadline_budget_ms is None else deadline_budget_ms
+        ),
         "request": {"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": snapshot},
     }
     _require_snapshot_mapping_fields_v3(envelope, _PUSH_ENVELOPE_FIELDS)

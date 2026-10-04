@@ -6,12 +6,17 @@ import threading
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from scripts.bench_guard_native_installed_slo_runtime import _require
 from scripts.native_slo_adapter import Observation
 from scripts.native_slo_contract import SAFE_ROUTE_NAMES
 
+if TYPE_CHECKING:
+    from scripts.native_slo_session import AdapterSession
+
 _MAX_CONCURRENCY = 64
+_HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS = 30.0
 _LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
 
 
@@ -121,3 +126,32 @@ def _reconcile_wave_routes(
     if not _wave_routes_match(observations, errors=errors, before=before, after=after, expected=expected):
         return observations
     return [replace(item, route="native_resident") if not item.overloaded else item for item in observations]
+
+
+def _stabilize_ready_hook_workers(session: AdapterSession) -> int:
+    """Bring every configured steady-state hook worker to ready before RSS sampling."""
+
+    runner = session.daemon._server.hook_process_runner
+    runner.notify_queued_work()
+    runner.enable_full_capacity(delay_seconds=0.0, active_deferral_seconds=0.0)
+    target = runner.stats()["target"]
+    _require(
+        isinstance(target, int) and not isinstance(target, bool) and 1 <= target <= _MAX_CONCURRENCY,
+        "hook worker stabilization target was invalid",
+    )
+    _require(
+        runner.wait_for_capacity(
+            minimum_workers=target,
+            timeout_seconds=_HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS,
+        ),
+        "hook worker stabilization did not reach the configured target",
+    )
+    stabilized = runner.stats()
+    _require(
+        stabilized["target"] == target
+        and stabilized["workers"] == target
+        and stabilized["ready"] == target
+        and stabilized["busy"] == 0,
+        "hook worker capacity changed while stabilizing",
+    )
+    return target
