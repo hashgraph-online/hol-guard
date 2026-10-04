@@ -31,6 +31,12 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
     (workspace / ".env").write_text("SYNTHETIC_ONLY=not-a-real-secret\n")
     (workspace / "unsafe-tests").mkdir()
     (workspace / "unsafe-tests/.env").write_text("SYNTHETIC_ONLY=not-a-real-secret\n")
+    (workspace / "grep-exclusions/fixtures/tls").mkdir(parents=True)
+    (workspace / "grep-exclusions/one.ts").write_text(source)
+    (workspace / "grep-exclusions/fixtures/tls/test-root-ca.key").write_text("ordinary-key-only\n")
+    (workspace / "grep-files").mkdir()
+    (workspace / "grep-files/one.ts").write_text(source)
+    (workspace / "grep-files/private.key").write_text("ordinary-key-only\n")
     try:
         (workspace / "unsafe-tests/alias.ts").symlink_to(workspace / ".env")
     except OSError as error:
@@ -92,6 +98,10 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("grep-context-cluster", "grep -rnC1 ordinary __tests__/"),
         ("grep-pattern-cluster", "grep -nreordinary src/one.ts"),
         ("grep-option-terminator", "grep -rn -- ordinary __tests__/"),
+        ("grep-exclude-directory", "grep -rn --exclude-dir=fixtures ordinary grep-exclusions/"),
+        ("grep-exclude-directory-separated", "grep -rn --exclude-dir fixtures ordinary grep-exclusions/"),
+        ("grep-exclude-file", "grep -rn --exclude=private.key ordinary grep-files/"),
+        ("grep-exclude-glob-benign-tree", "grep -rn --exclude='*.md' ordinary __tests__/"),
         ("grep-pipeline", "grep -n ordinary src/one.ts | head -1"),
         ("rg-file", "rg -n ordinary src/one.ts"),
         ("rg-absolute-directory", f"rg -n ordinary {directory}"),
@@ -155,6 +165,13 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("secret-alias", "cat unsafe-tests/alias.ts"),
         ("secret-recursion", "grep -rn SYNTHETIC_ONLY unsafe-tests/"),
         ("secret-recursion-alias", "grep -Rn SYNTHETIC_ONLY unsafe-tests/"),
+        ("grep-unexcluded-key", "grep -rn ordinary grep-exclusions/"),
+        ("grep-exclude-directory-near-match", "grep -rn --exclude-dir=fixture ordinary grep-exclusions/"),
+        ("grep-exclude-file-near-match", "grep -rn --exclude=private.ke ordinary grep-files/"),
+        ("grep-exclude-explicit-key", "grep -rn --exclude=private.key ordinary grep-files/private.key"),
+        ("grep-exclude-empty-attached", "grep -rn --exclude-dir= fixtures ordinary grep-exclusions/"),
+        ("grep-exclude-include-override", "grep -rn --exclude=private.key --include=private.key ordinary grep-files/"),
+        ("grep-exclude-glob-protected-tree", "grep -rn --exclude='*.key' ordinary grep-files/"),
         ("delete-directory", "rm -rf src"),
         ("destructive-chain", "cat src/one.ts && rm -rf src"),
         ("sleep-secret", "sleep 0.01; cat .env"),

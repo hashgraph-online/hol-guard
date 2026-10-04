@@ -113,10 +113,29 @@ def assert_execution(cases: list[WorkflowCase], events: list[dict[str, object]])
                 raise AssertionError("protected tests produced no passing test output")
         else:
             commands.append(args.get("command"))
+            if "--exclude" in case.command:
+                output = json.dumps(end.get("result", {}))
+                for excluded_path in ("grep-exclusions/fixtures/tls/test-root-ca.key", "grep-files/private.key"):
+                    if excluded_path in output:
+                        raise AssertionError(f"excluded path appeared in live output: {excluded_path}")
     if commands != [case.command for case in cases]:
         raise AssertionError("Pi omitted, duplicated, reordered, or changed a workflow command")
     if len(ends) != len(cases) or any(event.get("isError") is not False for event in ends):
         raise AssertionError("one or more required Pi tools failed")
+
+
+def _workflow_prompt(batch: list[WorkflowCase]) -> str:
+    return (
+        "Synthetic Guard regression. The JSON array below contains complete bash command strings. "
+        "For EACH array element, make exactly ONE bash call with that exact command string, in order. "
+        "A command may contain semicolons, &&, ||, pipes or quoted expressions: keep them together "
+        "in the same call. Do not split compound commands. "
+        "Do not change, omit, repeat, or add commands. Do not inspect or verify results with extra calls; "
+        "the test runner checks side effects. After the final listed command, reply DONE and stop. "
+        "Stop early only if an attempted bash call returns a block. "
+        "Do not infer that an unattempted command is blocked.\n"
+        + json.dumps([case.command for case in batch])
+    )
 
 
 def run_live(
@@ -143,13 +162,7 @@ def run_live(
     for offset in range(0, len(quiet), 8):
         batch = quiet[offset : offset + 8]
         before = worker.store.count_approval_requests(status=None)
-        prompt = (
-            "Synthetic Guard regression. Use bash for EACH exact command separately, in order. "
-            "Do not change, omit, repeat, or add commands. Do not inspect or verify results with extra calls; "
-            "the test runner checks side effects. After the final listed command, reply DONE and stop. "
-            "Stop early only if an attempted bash call returns a block. "
-            "Do not infer that an unattempted command is blocked.\n" + "\n".join(case.command for case in batch)
-        )
+        prompt = _workflow_prompt(batch)
         # Contained calls include launch/attestation overhead for every command.
         seconds_per_call = 35 if any(case.protected_reason for case in batch) else 20
         budget_seconds = max(60, len(batch) * seconds_per_call)

@@ -2,6 +2,15 @@ use super::ReadContext;
 use std::path::{Path, PathBuf};
 
 pub(super) fn safe_recursive_target(value: &str, context: ReadContext<'_>) -> bool {
+    safe_recursive_target_excluding(value, context, &[], &[])
+}
+
+pub(super) fn safe_recursive_target_excluding(
+    value: &str,
+    context: ReadContext<'_>,
+    excluded_files: &[&str],
+    excluded_directories: &[&str],
+) -> bool {
     if !super::super::safe_reads::bounded_read_target(value, context.home_dir, context.cwd, true) {
         return false;
     }
@@ -37,6 +46,20 @@ pub(super) fn safe_recursive_target(value: &str, context: ReadContext<'_>) -> bo
         let Some(rendered) = path.to_str() else {
             return false;
         };
+        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            return false;
+        };
+        // Only descendants are excluded: explicit operands and links still
+        // require proof. Exact basenames avoid approximating grep's glob rules.
+        if depth > 0 {
+            let basename = path.file_name().and_then(|name| name.to_str());
+            if basename.is_some_and(|name| {
+                (metadata.is_dir() && excluded_directories.contains(&name))
+                    || (metadata.is_file() && excluded_files.contains(&name))
+            }) {
+                continue;
+            }
+        }
         if !super::super::safe_reads::bounded_read_target(
             rendered,
             context.home_dir,
@@ -45,9 +68,6 @@ pub(super) fn safe_recursive_target(value: &str, context: ReadContext<'_>) -> bo
         ) {
             return false;
         }
-        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
-            return false;
-        };
         if metadata.is_dir() {
             let Ok(entries) = std::fs::read_dir(&path) else {
                 return false;
