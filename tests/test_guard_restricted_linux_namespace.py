@@ -29,6 +29,9 @@ def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_gran
     executable = tmp_path / "bin" / "git"
     executable.parent.mkdir()
     executable.write_bytes(b"\x7fELF")
+    approved_image = private / "esbuild"
+    approved_image.write_bytes(b"\x7fELF")
+    approved_image.chmod(0o500)
     monkeypatch.setattr(sys, "platform", "linux")
     library = tmp_path / "library"
     library.mkdir()
@@ -36,7 +39,7 @@ def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_gran
     (library / ".env").write_text("synthetic fixture")
     monkeypatch.setattr(model, "_LINUX_READ_ROOTS", (library,) if with_system_library else ())
     monkeypatch.setattr(model, "_LINUX_READ_FILES", ())
-    monkeypatch.setattr(sandbox, "_runtime_read_roots", lambda plan: ())
+    monkeypatch.setattr(sandbox, "_runtime_read_roots", lambda plan, **kwargs: ())
     monkeypatch.setattr(namespace, "resolve_linux_elf_loader", lambda path: None)
     monkeypatch.setattr(namespace, "collect_mapping_evidence", lambda **kwargs: [])
     plan = model.RestrictedPytestPlan(
@@ -47,7 +50,7 @@ def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_gran
         cwd=workspace,
         command=(str(executable), "diff", "--stat"),
         executable=executable,
-        allowed_executables=(executable,),
+        allowed_executables=(executable, approved_image),
         read_only_roots=(metadata,),
         denied_capabilities=("workspace-write", "workspace-credential-read", "network"),
     )
@@ -83,3 +86,7 @@ def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_gran
     mappings = argv.index("/guard-approved-mappings")
     assert argv[mappings - 3 : mappings] == ["--perms", "0700", "--tmpfs"]
     assert "/tmp" not in argv
+    private_bind = argv.index(str(private))
+    image_bind = max(index for index, value in enumerate(argv) if value == str(approved_image))
+    assert argv[image_bind - 2 : image_bind + 1] == ["--ro-bind", str(approved_image), str(approved_image)]
+    assert image_bind > private_bind

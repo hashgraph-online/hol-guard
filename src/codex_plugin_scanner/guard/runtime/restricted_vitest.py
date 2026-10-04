@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .restricted_node_capabilities import linux_node_environment
-from .restricted_node_test import prepare_restricted_node_test
+from .restricted_node_test import _node_runtime_args, prepare_restricted_node_test
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TOOL_READ_ONLY_PROFILE_VERSION,
@@ -50,6 +50,7 @@ def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str
 def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
     argv = _normalized_command(command)
     name = Path(argv[0]).name
+    runtime_args = _node_runtime_args(argv)
     if name == "bun" and (invocation := bun_vitest_invocation(argv)) is not None:
         args = invocation[1]
     elif name in {"bunx", "npx"}:
@@ -61,8 +62,11 @@ def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
         args = args[1:]
     elif name == "vitest":
         args = argv[1:]
-    elif name in {"node", "nodejs"} and len(argv) > 2 and argv[1].endswith("/node_modules/vitest/vitest.mjs"):
-        args = argv[2:]
+    elif name in {"node", "nodejs"}:
+        node_args = argv[1 + len(runtime_args) :]
+        if len(node_args) < 2 or not node_args[0].endswith("/node_modules/vitest/vitest.mjs"):
+            raise RestrictedPytestError("vitest_restricted_invalid_command", "Only local Vitest run is supported.")
+        args = node_args[1:]
     else:
         raise RestrictedPytestError("vitest_restricted_invalid_command", "Only local Vitest run is supported.")
     if not args or args[0] != "run" or any(item in {";", "&&", "||", "|", "|&", "&"} for item in args):
@@ -74,6 +78,7 @@ def prepare_restricted_vitest(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None
 ) -> RestrictedPytestPlan:
     args = vitest_arguments(command)
+    runtime_args = _node_runtime_args(command)
     invocation = bun_vitest_invocation(command)
     if invocation is not None and invocation[0] is not None:
         # Resolve against the original hook cwd, not the daemon's process cwd.
@@ -95,7 +100,10 @@ def prepare_restricted_vitest(
         entry = lexical.resolve(strict=True)
         if not entry.is_file() or not _path_is_within(entry, plan.workspace / "node_modules"):
             raise OSError("invalid local Vitest entrypoint")
-        if Path(command[0]).name in {"node", "nodejs"} and Path(command[1]).resolve(strict=True) != entry:
+        if (
+            Path(command[0]).name in {"node", "nodejs"}
+            and Path(command[1 + len(runtime_args)]).resolve(strict=True) != entry
+        ):
             raise OSError("unexpected Vitest entrypoint")
     except (OSError, RuntimeError) as error:
         raise RestrictedPytestError(
@@ -104,7 +112,9 @@ def prepare_restricted_vitest(
         ) from error
     args = _readonly_config_arguments(args, entry.parent / "package.json")
     return replace(
-        plan, profile_version=VITEST_READ_ONLY_PROFILE_VERSION, command=(str(plan.executable), str(entry), *args)
+        plan,
+        profile_version=VITEST_READ_ONLY_PROFILE_VERSION,
+        command=(str(plan.executable), *runtime_args, str(entry), *args),
     )
 
 
@@ -173,11 +183,29 @@ def run_restricted_node_plan(
         raise RestrictedPytestError(
             "vitest_restricted_invalid_command", "Protected Vitest requires its validated OS plan."
         )
-    with tempfile.TemporaryDirectory(prefix="hol-guard-vitest-") as temporary:
+    with (
+        tempfile.TemporaryDirectory(prefix="hol-guard-vitest-") as temporary,
+        tempfile.TemporaryDirectory(prefix="hol-guard-vitest-images-") as images,
+    ):
         root = Path(temporary).resolve()
         home, tmp = root / "home", root / "tmp"
         home.mkdir(mode=0o700)
         tmp.mkdir(mode=0o700)
+        esbuild = None
+        if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION:
+            from .restricted_esbuild import snapshot_esbuild
+
+            # Executable images have a separate read-only tree. A child cannot
+            # replace the image by renaming a writable scratch ancestor.
+            esbuild = snapshot_esbuild(plan.workspace, Path(images).resolve())
+            if esbuild is not None:
+                source, image, version = esbuild
+                if authorize_capability is None:
+                    raise RestrictedPytestError(
+                        "vitest_restricted_esbuild_unavailable", "Transform execution needs native authorization."
+                    )
+                authorize_capability((str(source), f"--service={version}", "--ping"))
+                plan = replace(plan, allowed_executables=(*plan.allowed_executables, image))
         launch_env = _restricted_environment(
             env if env is not None else os.environ,
             workspace=plan.workspace,
@@ -193,6 +221,19 @@ def run_restricted_node_plan(
             timeout_seconds=timeout_seconds,
             authorize_capability=authorize_capability,
         )
+        if esbuild is not None:
+            launch_env["ESBUILD_BINARY_PATH"] = str(esbuild[1])
+        if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION:
+            from .restricted_localhost import prepare_localhost_resolver
+
+            plan = prepare_localhost_resolver(plan, root)
+            # Vitest supplies its own worker execArgv. Only Guard-owned
+            # options, not caller NODE_OPTIONS, may reach those child runtimes.
+            preload = json.dumps(str(root / "localhost-resolution.cjs"), ensure_ascii=False)
+            # Caller NODE_OPTIONS were already removed by linux_node_environment;
+            # keep only Guard-owned flags (e.g. --disable-wasm-trap-handler).
+            guard_options = launch_env.get("NODE_OPTIONS", "")
+            launch_env["NODE_OPTIONS"] = f"{guard_options} --require {preload}".strip()
         return _run_backend_process(
             _backend_argv(plan, private_root=root),
             env=launch_env,

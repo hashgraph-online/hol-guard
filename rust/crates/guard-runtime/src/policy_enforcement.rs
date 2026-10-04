@@ -358,7 +358,14 @@ pub(crate) fn apply_post_tool_policy(
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
     }
-    let action_type = post_action_type(request, payload_kind)?;
+    let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
+        && guard_command::pretool::bounded_task_metadata_output(&request.payload);
+    let classified_action = post_action_type(request, payload_kind)?;
+    let action_type = if task_metadata {
+        PreToolActionTypeV1::Harness
+    } else {
+        classified_action
+    };
     let intrinsic = response
         .observed_policy_action
         .as_deref()
@@ -388,7 +395,15 @@ pub(crate) fn apply_post_tool_policy(
         action_type,
         &FloorInput {
             facts: &facts,
-            reason_code: &response.reason_code,
+            reason_code: if task_metadata
+                && matches!(
+                    response.reason_code.as_str(),
+                    "output_scan_allow" | "source_full_scan_allow"
+                ) {
+                "native_agent_task_metadata"
+            } else {
+                &response.reason_code
+            },
             prompt_classes: &[],
             benign_prompt: false,
         },
