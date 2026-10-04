@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.plim",
+  "version": "1.3.0",
+  "name": "Plim MCP",
+  "description": "Desktop audio alerts, interactive Telegram questions, and terminal command monitoring for AI coding agents.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.marcusedu",
+    "displayName": "Marcus Duarte",
+    "url": "https://github.com/marcusedu/plim"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#F59E0B"
+  },
+  "homepage": "https://plim.sh",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "plim-mcp"
+  },
+  "riskClasses": ["external-command-execution"],
+  "tools": [
+    { "name": "plim_notify", "state": "inherit" },
+    { "name": "plim_ask", "state": "inherit" },
+    { "name": "plim_run", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/marcusedu/plim",
+    "https://plim.sh"
+  ],
+  "saferAlternatives": [
+    "Review shell commands before approving plim_run execution, or rely on plim_notify and plim_ask for safe notification and user confirmation workflows."
+  ]
+}
