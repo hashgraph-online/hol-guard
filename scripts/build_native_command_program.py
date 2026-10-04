@@ -108,7 +108,10 @@ def implementation_digest() -> str:
 def main() -> int:
     """Build or strictly check projections bound to current native implementation and authored sources."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Reject a missing or stale checked-in artifact.")
+    parser.add_argument("--check", action="store_true", help="Reject a missing or stale generated artifact.")
+    parser.add_argument(
+        "--projections-only", action="store_true", help="Stage package inputs without rewriting published descriptors."
+    )
     parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")
     args = parser.parse_args()
     command = (
@@ -161,7 +164,7 @@ def main() -> int:
     if any(parent.is_symlink() for parent in (package_directory, *package_directory.parents) if parent != ROOT):
         raise ValueError("package resource directory cannot traverse a symlink")
     outputs.update({package_directory / path.name: content for path, content in tuple(outputs.items())})
-    for descriptor in compiled["descriptors"]:
+    for descriptor in () if args.projections_only else compiled["descriptors"]:
         identity = descriptor["id"]
         if "/" in identity or "\\" in identity or not identity.startswith("command."):
             raise ValueError("invalid generated descriptor identity")
@@ -169,7 +172,9 @@ def main() -> int:
     descriptor_directory = ROOT / "contributions/extensions"
     expected_descriptors = {path for path in outputs if path.parent == descriptor_directory}
     unexpected_descriptors = sorted(
-        path for path in descriptor_directory.glob("command.*.json") if path not in expected_descriptors
+        path
+        for path in descriptor_directory.glob("command.*.json")
+        if not args.projections_only and path not in expected_descriptors
     )
     if any(not path.is_file() or path.is_symlink() for path in unexpected_descriptors):
         raise ValueError("unexpected generated descriptor destination is not a regular file")

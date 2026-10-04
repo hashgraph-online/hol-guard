@@ -1,8 +1,7 @@
 name: Extension artifact regen
 
 # Contributors own canonical contribution sources. The generated projections
-# derived from them (command catalog, native command program, descriptors
-# and directory render) are maintainer-owned and
+# derived from them (published descriptors and directory render) are maintainer-owned and
 # regenerated here after merges so contribution PRs never conflict on them.
 #
 # NOTE: the main-branch ruleset requires every change to arrive through a
@@ -92,7 +91,8 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           uv run --no-sync python scripts/refresh_extension_artifacts.py
-          # Test expectations and fixture trust are authored inputs, never outputs.
+          # Command catalog/program copies are ignored build outputs and are
+          # never published to Git. Test expectations remain authored inputs.
           git add -A contracts/extensions docs/guard/extensions contributions/extensions \
             src/codex_plugin_scanner/guard/contracts/data/extensions
           close_superseded() {

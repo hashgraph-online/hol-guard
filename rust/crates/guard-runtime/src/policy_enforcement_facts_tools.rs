@@ -199,6 +199,7 @@ pub(crate) fn risk_classes(
             risks.push("prompt_injection");
         }
         PreToolActionTypeV1::Prompt => {}
+        PreToolActionTypeV1::Harness if reason_code == "native_agent_task_metadata" => {}
         PreToolActionTypeV1::Harness => risks.push("execution"),
         PreToolActionTypeV1::Unknown => {}
     }
