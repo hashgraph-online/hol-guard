@@ -47,7 +47,22 @@ def test_resource_tuning_keeps_current_attempt_coverage_and_quality_gate() -> No
     assert download["with"]["artifact-ids"] == "${{ steps.coverage-selection.outputs.artifact-ids }}"
     for index in indices:
         assert not steps[index].get("continue-on-error", False)
+    for index in indices[:-1]:
         assert steps[index]["if"] == "steps.token-presence.outputs.has-token == 'true'"
+    main_gate = steps[indices[-1]]
+    assert main_gate["if"] == (
+        "steps.token-presence.outputs.has-token == 'true' && github.event_name == 'push' "
+        "&& github.ref == 'refs/heads/main'"
+    )
+    vendor_gate = next(
+        step for step in steps if step.get("name") == "Check standard Sonar gate for PRs and qualification"
+    )
+    assert vendor_gate["uses"] == "sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa"
+    assert vendor_gate["if"] == (
+        "steps.token-presence.outputs.has-token == 'true' && "
+        "!(github.event_name == 'push' && github.ref == 'refs/heads/main')"
+    )
+    assert not vendor_gate.get("continue-on-error", False)
     assert job["permissions"] == {"contents": "read", "actions": "read"}
     assert not job.get("continue-on-error", False)
     assert len(workflow["jobs"]["coverage"]["strategy"]["matrix"]["shard-index"]) == 128

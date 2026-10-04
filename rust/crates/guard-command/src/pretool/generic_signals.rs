@@ -128,6 +128,9 @@ pub(crate) fn extract_generic_signals(
     let sensitive_target = guard_bypass_intent || content_sensitive;
     Ok(GenericSignals {
         command,
+        business_action_present: maps.iter().any(|record| {
+            record.contains_key("business_action") || record.contains_key("businessAction")
+        }),
         tool_name,
         package_present: !package_values.is_empty(),
         package_values,

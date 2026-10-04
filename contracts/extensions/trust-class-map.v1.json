@@ -78,9 +78,11 @@
       "command.storage.minio"
     ],
     "external": [
+      "command.appimg",
       "command.blitcp",
       "command.cloudg",
       "command.cogext",
+      "command.cs",
       "command.ctty",
       "command.digline",
       "command.errand",
@@ -102,7 +104,8 @@
       "command.snoboard",
       "command.syngraphe",
       "command.tui-runner",
-      "command.uivoid"
+      "command.uivoid",
+      "command.vttforge"
     ]
   }
 }

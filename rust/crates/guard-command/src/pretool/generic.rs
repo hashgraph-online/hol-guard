@@ -19,6 +19,24 @@ use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
 
+/// Bounded caller-supplied context, never authenticated provider facts.
+pub struct UntrustedCommandContext {
+    pub command: Option<String>,
+    pub business_action_present: bool,
+}
+
+/// Share native aliases, nested JSON handling, ambiguity checks and limits.
+pub fn extract_untrusted_command_context(
+    payload: &Value,
+) -> Result<UntrustedCommandContext, String> {
+    let signals = extract_generic_signals(payload)
+        .map_err(|_| "native_command_context_unavailable".to_owned())?;
+    Ok(UntrustedCommandContext {
+        command: signals.command,
+        business_action_present: signals.business_action_present,
+    })
+}
+
 #[path = "agent_metadata.rs"]
 mod agent_metadata;
 
