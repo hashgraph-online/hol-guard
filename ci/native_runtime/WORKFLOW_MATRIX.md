@@ -10,7 +10,7 @@ python -m ci.native_runtime.probe_workflow_matrix --live-omp \
 ```
 
 The model defaults to `opencode-go/deepseek-flash`. `omp` must be on PATH. The existing isolated
-test project must contain `tests/workflow.test.mjs`, `tests/zcode-multi.test.mjs`
+test project must contain `tests/workflow.test.mjs`, `tests/secondary.test.mjs`
 and its already-installed local Vitest. This runner never installs dependencies,
 enables Codex, grants approvals, changes user policy, or mutates the test project.
 It creates a fresh disposable home, workspace and Guard state for each run.

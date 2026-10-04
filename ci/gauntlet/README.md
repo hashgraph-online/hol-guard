@@ -63,6 +63,18 @@ python -m ci.gauntlet run \
 
 For a GitHub test-merge checkout, also pass `--candidate-sha FULL_PR_HEAD_SHA`. The tested checkout must be that candidate or its exact two-parent test merge. The installed native build must match the checkout, and the PR evidence publisher checks the merge parents against GitHub's current PR head and base.
 
+The additive contained Bun/Vitest profile is selected explicitly, runs only on macOS, and requires an existing isolated fixture project with project-local `node_modules`; it never installs dependencies and does not qualify or replace core20:
+
+```sh
+python -m ci.gauntlet run \
+  --profile contained-bun-vitest \
+  --contained-test-project /absolute/path/to/contained-vitest-fixture \
+  --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/contained-evidence
+```
+
+Its report is labeled `contained-bun-vitest-extended`, requires all seven reviewed Bun/Vitest commands to complete through the real `execute-contained-test` sink, and always reports `merge_qualified: false`. The fixture oracle hashes a bounded manifest of every project file and publishes only a digest-bound request proof; raw request bytes remain private. Use `verify --exploratory` to independently check this additive report. A local stub or simulated `gh` result is not part of this profile.
+
 The default per-scenario host deadline is 300 seconds with at most 32 provider rounds. `--timeout` and `--max-inference-rounds` are explicit bounded controls. `--case ID` runs a targeted investigation but **cannot qualify the full profile**. Every run uses a fresh output directory and fresh disposable fixture; failed evidence is not overwritten. Qualification requires the entire Git working tree to be clean, including untracked files. Put downloaded wheels, public reports and scratch files outside the checkout. The start/end source snapshots detect drift during the run; publication independently rechecks immutable source bindings. `--work-root` accepts a private parent directory, including spaces and Unicode. Command placeholders are shell-quoted separately from native file paths.
 
 A local live inference server can be selected with `--provider-url http://127.0.0.1:PORT/v1 --allow-loopback-provider --model MODEL --provider-identity ID`. The identity must truthfully describe the actual backend. Do not label an opaque helper as DeepSeek, Codex or another model whose identity was not verified.
