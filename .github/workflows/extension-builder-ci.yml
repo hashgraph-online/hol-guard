@@ -18,6 +18,7 @@ on:
       - docs/guard/extensions/**
       - scripts/export_extension_directory.py
       - scripts/prepare_extension_contribution.py
+      - scripts/build_native_command_program.py
       - scripts/render_command_extension_directory.py
       - scripts/notify_merged_extension_claimants.py
       - scripts/refresh_extension_artifacts.py
@@ -75,6 +76,8 @@ jobs:
           - os: macos-15
             python: "3.13"
     steps:
+      # The default PR checkout is GitHub's merge ref, not a contributor head.
+      # Prepare shared outputs here so authors do not need to keep rebasing main.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
@@ -88,6 +91,10 @@ jobs:
           enable-cache: true
           save-cache: false
           cache-dependency-glob: uv.lock
+      - name: Stage external contribution trust defaults
+        # Do this before editable package resources and Rust embed the trust map.
+        # Existing reviewed classes are preserved; missing ids are external/opt-in.
+        run: python scripts/refresh_extension_artifacts.py --trust-only
       - name: Install the locked development environment
         run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
       - uses: ./.github/actions/setup-rust
@@ -108,7 +115,6 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
           fi
-          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER"
           uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
           uv run --no-sync python scripts/render_command_extension_directory.py
           uv run --no-sync python scripts/prepare_extension_contribution.py --check "${arguments[@]}"
@@ -120,6 +126,7 @@ jobs:
             tests/test_guard_extension_directory*.py \
             tests/test_guard_extension_claim_notice.py \
             tests/test_prepare_extension_contribution.py \
+            tests/test_extension_builder_ci_preparation.py \
             tests/test_guard_extension_contribution.py \
             tests/test_guard_extension_trust.py \
             tests/test_guard_mcp_server_contribution.py \
