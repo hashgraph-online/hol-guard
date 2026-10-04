@@ -40,7 +40,7 @@ def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path,
     monkeypatch.setattr(refresh, "contribution_ids", lambda: ["command.demo"])
     monkeypatch.setattr(refresh, "pending_contribution_ids", lambda: [])
     monkeypatch.setattr(refresh, "_run", lambda command, **kwargs: calls.append(command))
-    assert refresh.main() == 0
+    assert refresh.main([]) == 0
     cargo = [command for command in calls if command[0] == "cargo"]
     assert len(cargo) == 1
     assert cargo[0][-2:] == ["--bin", "guard-command-source"]
