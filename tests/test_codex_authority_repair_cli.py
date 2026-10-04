@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -32,6 +33,20 @@ def _args(*extra):
     return parser.parse_args(["apps", "repair", "codex", "--restore-authority", "--json", *extra])
 
 
+def _tree_without_resident_lease_timestamps(root):
+    tree = _tree(root)
+    for relative_path, metadata in tree.items():
+        path = Path(relative_path)
+        if (
+            path.parent.name == "resident-client-leases.v1"
+            and path.parent.parent.name == "native-runtime"
+            and path.name.startswith("client-")
+            and path.suffix == ".lease"
+        ):
+            tree[relative_path] = (*metadata[:2], None, metadata[3])
+    return tree
+
+
 def test_only_explicit_restore_path_defers_to_exact_gate():
     explicit = _args()
     assert lifecycle_gate_requirement(explicit) is None
@@ -46,7 +61,7 @@ def test_only_explicit_restore_path_defers_to_exact_gate():
 def test_parent_deadline_refuses_before_preparation_or_factors(
     prepared_repair,
     monkeypatch,
-    deadline,  # noqa: F811 -- shared fixture
+    deadline,
 ):
     context, _config, manifest, _plan = prepared_repair
     store = GuardStore(context.guard_home)
@@ -128,7 +143,7 @@ def test_approval_prompt_does_not_restart_expired_parent_budget(prepared_repair,
 def test_dry_run_prepares_without_factors_or_publication(prepared_repair, tmp_path, monkeypatch):  # noqa: F811
     context, _config, manifest, _plan = prepared_repair
     store = GuardStore(context.guard_home)
-    before = _tree(tmp_path)
+    before = _tree_without_resident_lease_timestamps(tmp_path)
     factors = []
     monkeypatch.setattr(command, "consume_desktop_lifecycle_env", lambda **kwargs: factors.append(kwargs))
     code, payload = command.run_codex_authority_repair(_args("--dry-run"), context, store, None)
@@ -137,7 +152,7 @@ def test_dry_run_prepares_without_factors_or_publication(prepared_repair, tmp_pa
     assert payload["verified"] is False
     assert factors == []
     assert not manifest.exists()
-    assert _tree(tmp_path) == before
+    assert _tree_without_resident_lease_timestamps(tmp_path) == before
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -192,7 +207,7 @@ def test_existing_inverse_reports_recovery_required_before_factors(prepared_repa
 def test_public_apps_repair_uses_exact_plan_and_real_native_protection(
     prepared_repair,
     monkeypatch,
-    capsys,  # noqa: F811 -- shared fixture
+    capsys,
 ):
     context, config, manifest, _plan = prepared_repair
     store = GuardStore(context.guard_home)
@@ -240,7 +255,7 @@ def test_captured_request_apply_does_not_prepare_under_collected_factors(
     prepared_repair,
     tmp_path,
     monkeypatch,
-    capsys,  # noqa: F811 -- shared fixture
+    capsys,
 ):
     context, _config, manifest, _plan = prepared_repair
     store = GuardStore(context.guard_home)
@@ -283,7 +298,7 @@ def test_captured_request_apply_does_not_prepare_under_collected_factors(
 def test_changed_captured_dependency_refuses_before_factor_consumption(
     prepared_repair,
     tmp_path,
-    monkeypatch,  # noqa: F811 -- shared fixture
+    monkeypatch,
 ):
     context, config, manifest, _plan = prepared_repair
     store = GuardStore(context.guard_home)
@@ -317,7 +332,7 @@ def test_changed_captured_dependency_refuses_before_factor_consumption(
 def test_verification_workspace_does_not_change_signed_installation_context(
     prepared_repair,
     tmp_path,
-    capsys,  # noqa: F811 -- shared fixture
+    capsys,
 ):
     _context, _config, manifest, _plan = prepared_repair
     folder = tmp_path / "private-review-context"

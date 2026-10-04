@@ -71,6 +71,13 @@ pub fn integrity_mac(
         &snapshot_signing_bytes(snapshot)?,
     )))
 }
+/// Standard RFC-2104 HMAC-SHA256 over a message (no domain label injection).
+/// Used by `local_authority_integrity` for both `_purpose_key` derivation and
+/// the final payload MAC, where Python calls `hmac.new(key, msg, sha256)`.
+pub(crate) fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> [u8; 32] {
+    hmac_sha256(key, b"", message)
+}
+
 pub(super) fn hmac_sha256(key: &[u8], label: &[u8], message: &[u8]) -> [u8; 32] {
     const BLOCK_BYTES: usize = 64;
     let mut key_block = [0u8; BLOCK_BYTES];
@@ -100,7 +107,7 @@ pub(super) fn hmac_sha256(key: &[u8], label: &[u8], message: &[u8]) -> [u8; 32] 
     output
 }
 
-pub(super) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+pub(crate) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
         return false;
     }

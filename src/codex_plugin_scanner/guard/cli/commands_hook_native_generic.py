@@ -633,6 +633,7 @@ def _should_relax_configured_default(
     harness: str = "codex",
     has_narrow_override: bool,
     home_dir: Path | None,
+    guard_home: Path | None = None,
     payload: Mapping[str, object],
     runtime_artifact_checked: bool = False,
     runtime_workspace: Path | None,
@@ -644,7 +645,7 @@ def _should_relax_configured_default(
         prompt_text = payload.get("prompt")
         if not isinstance(prompt_text, str) or not prompt_text.strip():
             return False
-        if extract_prompt_requests(prompt_text):
+        if extract_prompt_requests(prompt_text, guard_home=guard_home):
             return False
         if (
             _codex_prompt_credential_file_artifact(
@@ -660,6 +661,7 @@ def _should_relax_configured_default(
             or _codex_prompt_attachment_artifact(
                 prompt_text=prompt_text,
                 home_dir=home_dir,
+                guard_home=guard_home,
                 config_path="<runtime>",
             )
             is None
@@ -769,6 +771,7 @@ def run_native_generic_payload(
         harness=args.harness,
         has_narrow_override=configured_narrow_override is not None,
         home_dir=home_dir,
+        guard_home=store.guard_home,
         payload=payload_map,
         runtime_artifact_checked=runtime_artifact_checked,
         runtime_workspace=runtime_workspace,

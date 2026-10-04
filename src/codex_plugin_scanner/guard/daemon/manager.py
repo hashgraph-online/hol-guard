@@ -2287,10 +2287,22 @@ def _write_private_atomic_text(path: Path, text: str) -> None:
 
 def _set_private_mode(path: Path, mode: int) -> None:
     if os.name == "nt":
+        if path.is_dir():
+            _set_windows_private_directory(path)
         return
     try:
         os.chmod(path, mode)
     except OSError:
+        return
+
+
+def _set_windows_private_directory(path: Path) -> None:
+    from ..native_policy_snapshot import NativePolicySnapshotError
+    from ..native_policy_snapshot_windows_state import _windows_ensure_private_directory
+
+    try:
+        _windows_ensure_private_directory(path)
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError):
         return
 
 

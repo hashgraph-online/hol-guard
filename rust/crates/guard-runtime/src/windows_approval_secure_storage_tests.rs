@@ -1,6 +1,9 @@
 use super::*;
 use std::fs;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static NEXT_FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
 
 struct Fixture {
     state_base: std::path::PathBuf,
@@ -9,12 +12,16 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        Self::at_time(SystemTime::now())
+    }
+
+    fn at_time(now: SystemTime) -> Self {
+        let nonce = now.duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        // Clock precision is not a uniqueness guarantee. Parallel fixtures
+        // must never share a directory or the credentials derived from it.
+        let serial = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
         let state_base = std::env::temp_dir().join(format!(
-            "hol-guard-windows-secure-storage-{}-{nonce}",
+            "hol-guard-windows-secure-storage-{}-{nonce}-{serial}",
             std::process::id()
         ));
         crate::resident_state::ensure_private_directory(&state_base, true).unwrap();
@@ -39,6 +46,46 @@ impl Drop for Fixture {
         let _ = guard_runtime_windows_process::credential_delete(&target_for_device(&self.account));
         let _ = fs::remove_dir_all(&self.state_base);
     }
+}
+
+#[test]
+fn same_clock_tick_fixtures_keep_independent_state_after_cleanup() {
+    let now = SystemTime::now();
+    let (first, second) = std::thread::scope(|scope| {
+        let first = scope.spawn(|| Fixture::at_time(now));
+        let second = scope.spawn(|| Fixture::at_time(now));
+        (first.join().unwrap(), second.join().unwrap())
+    });
+    assert_ne!(first.state_base, second.state_base);
+    assert_ne!(first.account, second.account);
+    assert_ne!(
+        target_for_anchor(&first.account),
+        target_for_anchor(&second.account)
+    );
+    assert_ne!(
+        target_for_device(&first.account),
+        target_for_device(&second.account)
+    );
+    for (fixture, value) in [(&first, "first"), (&second, "second")] {
+        write(
+            &fixture.state_base,
+            &fixture.account,
+            value,
+            fixture.max_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            read(&fixture.state_base, &fixture.account, fixture.max_bytes()),
+            Ok(Some(value.to_owned()))
+        );
+    }
+    let removed_path = first.state_base.clone();
+    drop(first);
+    assert!(!removed_path.exists());
+    assert_eq!(
+        read(&second.state_base, &second.account, second.max_bytes()),
+        Ok(Some("second".to_owned()))
+    );
 }
 
 fn anchor_for(bytes: &[u8]) -> Anchor {
