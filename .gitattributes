@@ -7,6 +7,9 @@
 /contracts/guard-cloud-review/v2/*.json text eol=lf
 /docs/guard/contracts/guard-cloud-review-v2.md text eol=lf
 
+# Pinned provider exports are hashed as checkout bytes.
+/contracts/business-policy/providers/*.json text eol=lf
+
 # Contribution digests must match canonical Git blobs on every checkout.
 /contributions/extensions/*.json text eol=lf
 /contributions/command-sources/*.json text eol=lf
