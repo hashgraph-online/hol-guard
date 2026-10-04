@@ -44,6 +44,25 @@ def _watch_binding(store: Any) -> dict[str, Any]:
     return {key: binding[key] for key in ("mode", "generation", "policy_digest", "runtime_identity")}
 
 
+def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
+    """Label new inbox rows by the mixed-read path they name. Unrecognized rows stay unmatched."""
+
+    from .mixed_reads import TARGETS
+
+    labels = []
+    for row in store.list_approval_requests(status=None, limit=200):
+        if not isinstance(row, dict) or str(row.get("request_id") or "") in known_ids:
+            continue
+        launch = str(row.get("launch_target") or "").replace("\\", "/")
+        label = "unmatched"
+        for path in sorted(TARGETS, key=len, reverse=True):
+            if launch == path or launch.endswith("/" + path):
+                label = path
+                break
+        labels.append(label)
+    return labels
+
+
 def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str]:
     """The model/host receives no inherited provider, cloud or GitHub credential."""
     environment = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "WINDIR") if key in os.environ}
@@ -339,6 +358,15 @@ def run_case(
                 if native_extension_expectation is None:
                     raise RuntimeError("native extension expectation evidence unavailable")
             before = worker.store.count_approval_requests(status=None)
+            approval_ids_before = (
+                {
+                    str(row.get("request_id"))
+                    for row in worker.store.list_approval_requests(status=None, limit=200)
+                    if isinstance(row, dict) and row.get("request_id")
+                }
+                if scenario.oracle == "mixed-read-batch"
+                else set()
+            )
             extension = private / "hol-guard.ts"
             settings = private / "settings.json"
             settings.write_text("{}\n")
@@ -396,6 +424,8 @@ def run_case(
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
+            if scenario.oracle == "mixed-read-batch":
+                case["approval_targets"] = _mixed_read_approval_targets(worker.store, approval_ids_before)
             case["inference"] = relay.evidence()
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)

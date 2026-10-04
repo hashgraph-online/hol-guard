@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.metadata
+import logging
 import threading
 import time
 import uuid
@@ -98,6 +99,8 @@ from .trusted_local_tools import (
     parse_local_tool_grant_selection,
 )
 from .value_coercion import coerce_non_negative_int
+
+_LOGGER = logging.getLogger(__name__)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -640,7 +643,9 @@ def record_unprompted_review(
             redaction_level=redaction_level,
             continuation_operation=continuation_operation,
         )
-    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        # Exception text can include tool input. Keep the class only.
+        _LOGGER.warning("Silent review stayed blocked without an inbox row (%s)", type(error).__name__)
         return []
 
 

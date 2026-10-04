@@ -65,19 +65,13 @@ def _record_copilot_silent_review(
     """Store a Copilot review that the agent will see only as a silent block."""
 
     from ..approvals import record_unprompted_review
-    from ..models import HarnessDetection
+    from .commands_support_runtime_resolution import _runtime_detection
 
     launch_target = (
         json.dumps(runtime_arguments, sort_keys=True) if runtime_arguments is not None else runtime_artifact.command
     )
     record_unprompted_review(
-        detection=HarnessDetection(
-            harness=args.harness,
-            installed=True,
-            command_available=True,
-            config_paths=(runtime_artifact.config_path,),
-            artifacts=(runtime_artifact,),
-        ),
+        detection=_runtime_detection(args.harness, runtime_artifact),
         evaluation={
             "artifacts": [
                 {

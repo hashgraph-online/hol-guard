@@ -52,6 +52,11 @@ def _queue_local_protect_approvals(
         if artifact is not None and approval_item is not None:
             from ..approvals import record_unprompted_review
 
+            _annotate_package_execution_context_change(
+                approval_item,
+                store=store,
+                artifact_id=artifact.artifact_id,
+            )
             record_unprompted_review(
                 detection=HarnessDetection(
                     harness=artifact.harness,
