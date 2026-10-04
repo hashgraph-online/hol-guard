@@ -2,6 +2,19 @@ use super::sensitive_command;
 use regex::Regex;
 use std::sync::OnceLock;
 
+const BYPASS_PATTERNS: [&str; 10] = [
+    "disable hol-guard",
+    "hol-guard disable",
+    "hol-guard off",
+    "hol-guard uninstall",
+    "disable guard",
+    "turn off guard",
+    "uninstall guard",
+    "use another mcp server",
+    "guard-bypass",
+    "guard_bypass",
+];
+
 fn authentication_requirement_pattern() -> &'static Regex {
     static AUTH_REQUIREMENT: OnceLock<Regex> = OnceLock::new();
     AUTH_REQUIREMENT.get_or_init(|| {
@@ -58,18 +71,7 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
     values.iter().any(|value| {
         let lowered = value.to_ascii_lowercase();
         let normalized = lowered.split_whitespace().collect::<Vec<_>>().join(" ");
-        [
-            "disable hol-guard",
-            "hol-guard disable",
-            "hol-guard off",
-            "hol-guard uninstall",
-            "disable guard",
-            "turn off guard",
-            "uninstall guard",
-            "use another mcp server",
-            "guard-bypass",
-            "guard_bypass",
-        ]
+        BYPASS_PATTERNS
         .iter()
         .any(|pattern| {
             normalized.match_indices(pattern).any(|(offset, _)| {
@@ -82,7 +84,7 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                         .expect("bounded guard bypass prohibition")
                 });
                 let list_prohibition = LIST_PROHIBITION.get_or_init(|| {
-                    Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:[a-z0-9_ -]{1,80},\s*)+$")
+                    Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+((?:[a-z0-9_ -]{1,80},\s*)+)$")
                         .expect("bounded comma-listed guard bypass prohibition")
                 });
                 let list_connector = LIST_CONNECTOR.get_or_init(|| {
@@ -101,8 +103,17 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                     Regex::new(r"(?i)\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\b")
                         .expect("bounded guard bypass referential follow-up")
                 });
+                let list_items_are_bypass = list_prohibition.captures(prefix).is_some_and(|captures| {
+                    captures.get(1).is_some_and(|body| {
+                        body.as_str()
+                            .split(',')
+                            .map(str::trim)
+                            .filter(|item| !item.is_empty())
+                            .all(|item| BYPASS_PATTERNS.iter().any(|pattern| item == *pattern))
+                    })
+                });
                 let unconditional = prohibition.is_match(prefix)
-                    || (list_prohibition.is_match(prefix) && list_connector.is_match(tail));
+                    || (list_items_are_bypass && list_connector.is_match(tail));
                 !unconditional || reversal.is_match(prefix) || reversal.is_match(clause)
                     || followup.is_match(tail)
             })
