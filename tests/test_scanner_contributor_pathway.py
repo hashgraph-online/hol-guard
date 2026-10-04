@@ -109,7 +109,7 @@ def test_retrieval_recognition_is_bounded(tmp_path: Path) -> None:
     "content",
     [
         '"""token = \'$ARGUMENTS\';"""',
-        'token = ("$ARGUMENTS") + "additional-literal"',
+        'token = "$ARGUMENTS".join(["additional-literal"])',
         'token = "$ARGUMENTS" if ready else "additional-literal"',
         'prefix = 0\ntoken = "$ARGUMENTS"\nthis is not valid python!',
     ],

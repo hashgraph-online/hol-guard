@@ -105,3 +105,9 @@ def test_markdown_exposes_the_maintainer_review_pathway() -> None:
     assert "Contributor review pathway" in output
     assert "HOL owns fixes" in output
     assert "keep" in output.lower()
+
+
+def test_optional_metadata_ties_have_deterministic_group_order() -> None:
+    """Missing metadata is distinct from an explicitly empty value."""
+    findings = (_finding(file_path=None), _finding(file_path=""), _finding(line_number=None), _finding(line_number=0))
+    assert build_contributor_review(_result(findings)) == build_contributor_review(_result(tuple(reversed(findings))))

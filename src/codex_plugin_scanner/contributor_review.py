@@ -11,7 +11,8 @@ REVIEW_STEPS = (
     "Keep the full scan report, scanner version, source revision and centralized scan run together.",
     "In the existing submission PR, give the rule, location, intended behavior and a minimal reproducer. "
     "Do not publish real secrets or private source.",
-    "A maintainer must distinguish a detector defect from a source problem, a risky capability or an infrastructure failure.",
+    "A maintainer must distinguish a detector defect from a source problem, "
+    "a risky capability or an infrastructure failure.",
     "HOL owns fixes to its detectors and release/pin propagation. Contributors need not maintain a scanner fork.",
     "Keep the score and severity gates unchanged; do not disable rules or trust a submitter-provided baseline.",
     "Rerun the centralized scan on the exact source revision after the reviewed scanner fix is released.",
@@ -46,12 +47,15 @@ def build_contributor_review(result: ScanResult) -> dict[str, object]:
         key=lambda finding: (
             -SEVERITY_ORDER[finding.severity],
             finding.rule_id,
+            finding.file_path is not None,
             finding.file_path or "",
+            finding.line_number is not None,
             finding.line_number or 0,
             finding.source,
             finding.category,
             finding.title,
             finding.description,
+            finding.remediation is not None,
             finding.remediation or "",
         ),
     )

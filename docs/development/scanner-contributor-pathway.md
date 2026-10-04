@@ -74,10 +74,20 @@ Catalog scanner pin synchronization is part of the release definition of done. T
 
 ## Implementation checklist
 
-- [ ] Land bounded curl and symbolic-value classification with negative controls.
-- [ ] Add report-only contributor review guidance without changing policy or submission outcomes.
+- [x] Implement bounded curl and symbolic-value classification with negative controls on this branch.
+- [x] Add report-only contributor review guidance without changing policy or submission outcomes.
 - [ ] Reconcile #2805 and #3260 as separate reviewed changes; do not silently duplicate or merge them.
 - [ ] Pass normal-configuration scanner regressions and required CI on the final commit.
 - [ ] Publish a scanner release and repair/verify downstream immutable pin updates.
 - [ ] Rerun remaining willing contributors' centralized scans on pinned source revisions.
 - [ ] Enable any temporary adjudication lane only after the requirements above are implemented and independently reviewed.
+
+## Current implementation evidence
+
+The contributor-review payload is report-only. It groups exact duplicate Finding records and repeats trusted maintainer instructions in JSON, Markdown and Action summaries. It does not read a decision file, grant admission, delete findings, reduce severity or change score accounting. Group numbers are report-local and are explicitly not source-bound attestations.
+
+The initial query grammar accepts exactly one literal pagination or representation field. Multiple fields, encodings, unrecognized keys and arbitrary values retain findings. The original linear command/URL matcher is unchanged; bounded retrieval recognition lives in a separate module.
+
+The context-classification foundation and its original regression corpus derive from Seth Hobson's withdrawn #3548. This maintainer branch adds stricter URL/expression boundaries and review reporting; it does not imply that the contributor endorsed these additions. Neither withdrawn PR is reopened.
+
+Parenthesized generic secret assignments and quoted JSON keys remain known baseline detector gaps, not newly exempted cases. The new controls assert findings only where the existing detector recognizes the assignment, while proving that continued expressions cannot gain a new exemption. Existing #2805 and #3260 remain separately scoped work.
