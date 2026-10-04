@@ -31,9 +31,7 @@ def test_compound_native_unavailable_is_explicit_and_fail_closed(
     }
 
 
-def test_activity_read_only_authority_upgrade_is_unavailable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_activity_read_only_authority_upgrade_is_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = SimpleNamespace(
         read_extension_control_authority_for_registry=lambda *_args, **_kwargs: (_ for _ in ()).throw(
             NativeCommandControlMutationRequiredError()
@@ -55,9 +53,7 @@ def test_activity_read_only_authority_upgrade_is_unavailable(
         )
 
 
-def test_workflow_native_unavailable_does_not_fabricate_allow(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_workflow_native_unavailable_does_not_fabricate_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     descriptor = object()
     store = SimpleNamespace(read_extension_control_authority_for_registry=lambda *_args, **_kwargs: object())
     monkeypatch.setattr(workflow_hook, "_runtime_github_workflow_descriptor", lambda *_args, **_kwargs: descriptor)

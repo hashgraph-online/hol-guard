@@ -35,6 +35,7 @@ from .approval_gate import ApprovalGateGrant, require_policy_clear, require_poli
 from .approval_resolution import require_resolvable_approval_request
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
+from .fork_safety import forget_in_child
 from .local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
     POLICY_INTEGRITY_MODE_DEGRADED,
@@ -349,6 +350,7 @@ _SYSTEM_KEYRING_AVAILABILITY_CACHE_TTL_SECONDS = 86_400.0
 _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES = frozenset({"missing_integrity", "unknown_key"})
 _ENCRYPTED_SECRET_INIT_LOCKS_GUARD = threading.Lock()
 _ENCRYPTED_SECRET_INIT_LOCKS: dict[str, threading.Lock] = {}
+forget_in_child(_ENCRYPTED_SECRET_INIT_LOCKS)
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:

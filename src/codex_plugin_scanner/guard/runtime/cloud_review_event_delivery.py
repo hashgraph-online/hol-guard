@@ -128,16 +128,17 @@ def _normalize_response(
                 "Guard Cloud Review acknowledgement stopped before an accepted event. "
                 "Retry sync after updating HOL Guard."
             )
-        normalized.append(
-            {
-                "index": index,
-                "accepted": accepted,
-                "code": item.get("code"),
-                "error": None if accepted else (item.get("code") or status),
-            }
-        )
+        normalized_item: dict[str, object] = {
+            "index": index,
+            "accepted": accepted,
+            "code": item.get("code"),
+            "error": None if accepted else (item.get("code") or status),
+        }
+        if status in {"accepted", "duplicate"} and item.get("nativeContextCommitted") is True:
+            normalized_item["nativeContextCommitted"] = True
         if status == "rejected" and item.get("code") == "review_event_snapshot_sequence_collision":
-            normalized[-1]["eventId"] = expected_event_id
+            normalized_item["eventId"] = expected_event_id
+        normalized.append(normalized_item)
     accepted_count = sum(bool(item["accepted"]) for item in normalized)
     if response.get("accepted") != accepted_count or response.get("rejected") != len(events) - accepted_count:
         raise CloudReviewEventProtocolError(

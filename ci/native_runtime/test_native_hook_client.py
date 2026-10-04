@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
+import select
+import shutil
 import subprocess
 import time
 from pathlib import Path
 
+import pytest
 from native_hook_client_support import (
     _invoke,
     _request,
@@ -17,6 +21,91 @@ from native_hook_client_support import (
 from native_hook_client_support import native_runtime as _native_runtime_fixture  # noqa: F401
 
 from ci.native_runtime.native_process_test_support import process_is_alive
+
+
+def _read_stream_frame(client: subprocess.Popen[bytes], timeout: float = 3) -> bytes:
+    assert client.stdout is not None
+    deadline = time.monotonic() + timeout
+
+    def read_exact(size: int) -> bytes:
+        chunks = bytearray()
+        while len(chunks) < size:
+            remaining = deadline - time.monotonic()
+            assert remaining > 0, "native stream frame timed out"
+            ready, _, _ = select.select([client.stdout], [], [], remaining)
+            assert ready, "native stream frame timed out"
+            chunk = os.read(client.stdout.fileno(), size - len(chunks))
+            assert chunk, "native stream closed before completing frame"
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    size = int.from_bytes(read_exact(4), "big")
+    assert 0 < size <= 4 * 1024 * 1024
+    return read_exact(size)
+
+
+@pytest.mark.parametrize("event", ["PreToolUse", "UserPromptSubmit"])
+def test_same_runtime_in_distinct_frozen_extractions_reuses_resident(
+    native_runtime: tuple[Path, Path],
+    tmp_path: Path,
+    event: str,
+) -> None:
+    runtime, state_dir = native_runtime
+    first = tmp_path / "extraction-first" / runtime.name
+    second = tmp_path / "extraction-second" / runtime.name
+    first.parent.mkdir()
+    second.parent.mkdir()
+    shutil.copy2(runtime, first)
+    shutil.copy2(runtime, second)
+    request = _request(runtime, tmp_path)
+    if event == "UserPromptSubmit":
+        envelope = json.loads(request)
+        envelope["harness"] = "zcode"
+        envelope["event"] = event
+        envelope["raw_payload"] = {
+            "hookEventName": event,
+            "userPrompt": "Summarize the README without changing files.",
+        }
+        request = json.dumps(envelope).encode()
+    assert _result(_invoke(first, state_dir, request))["minimum_action"] == "allow"
+    initial = _state_files(state_dir)
+    assert _result(_invoke(second, state_dir, request))["minimum_action"] == "allow"
+    assert _state_files(state_dir) == initial
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not unlink running executables")
+def test_removed_frozen_extraction_releases_owner_even_with_live_client(
+    native_runtime: tuple[Path, Path],
+    tmp_path: Path,
+) -> None:
+    runtime, state_dir = native_runtime
+    extracted = tmp_path / "extraction" / runtime.name
+    extracted.parent.mkdir()
+    shutil.copy2(runtime, extracted)
+    request = _request(runtime, tmp_path)
+    assert _result(_invoke(extracted, state_dir, request))["minimum_action"] == "allow"
+    state = json.loads(_state_files(state_dir)[0].read_text())
+    # Keep a real client lease alive while its resident's onefile extraction disappears.
+    client = subprocess.Popen(
+        (str(extracted), "resident-client-stream", "--stdin", str(state_dir)),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        assert client.stdin is not None and client.stdout is not None
+        client.stdin.write(len(request).to_bytes(4, "big") + request)
+        client.stdin.flush()
+        assert _result(json.loads(_read_stream_frame(client)))["minimum_action"] == "allow"
+        extracted.unlink()
+        deadline = time.monotonic() + 3
+        while process_is_alive(state["process_id"]) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert not process_is_alive(state["process_id"])
+        assert _result(_invoke(runtime, state_dir, request))["minimum_action"] == "allow"
+    finally:
+        client.terminate()
+        client.communicate(timeout=3)
 
 
 def test_native_hook_client_reuses_one_authenticated_generation(

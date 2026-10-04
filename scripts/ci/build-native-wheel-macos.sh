@@ -16,8 +16,8 @@ source_compiler="$target_dir/release/guard-command-source"
 # The ARM image includes Rosetta for this build-time sanity check.
 # Installed Intel performance is measured on macos-15-intel below.
 "$runtime" self-test --json
-# Match Linux: validate pending contribution sources on PRs, but keep strict
-# freshness checks for pushes, scheduled builds and manual runs.
+# Match Linux: prepare and verify the complete current source tree for every
+# event. Source-only PRs never need to commit generated catalogs or fixtures.
 verification_arguments=(--compiler "$source_compiler")
 if [[ -n "${NATIVE_PR_BASE_SHA:-}" ]]; then
   if [[ ! "$NATIVE_PR_BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then

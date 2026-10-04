@@ -172,6 +172,13 @@ def _record_native_pre_activity(
     response: dict[str, object],
     receipt: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
+
+    # Bind diagnostics to this call's accepted receipt, never the worker's
+    # shared last-receipt slot (other HTTP requests may run concurrently).
+    observation = transition_hook_observation(payload, receipt)
+    if observation is not None:
+        response = {**response, OBSERVATION_FIELD: observation}
     submit = getattr(host.activity_writer, "submit_command_activity", None)
     if callable(submit):
         with suppress(Exception):
@@ -549,6 +556,9 @@ class HookWorkerNativeMixin:
         claimed_approval_request_id: str | None = None,
         capture_receipts: list[Mapping[str, object]] | None = None,
     ) -> tuple[dict[str, object], bool]:
+        from ..runtime_transition_hook_probe import transition_hook_probe
+
+        probe = transition_hook_probe(payload)
         edge = self._review_raw_hook_native(
             payload=payload,
             harness=harness,
@@ -560,6 +570,7 @@ class HookWorkerNativeMixin:
             observe_mode=recording_only,
             deadline=deadline,
             policy_snapshot=policy_snapshot,
+            **({"request_id": probe[1]} if probe is not None else {}),
         )
         if edge is None:
             if event_name == "PostToolUse":
@@ -718,12 +729,22 @@ class HookWorkerNativeMixin:
             )
             if repaired_result:
                 native_result = repaired_result
+            from ..adapters.zcode_contained_tests import route_zcode_containment
+
+            rendered = route_zcode_containment(
+                harness_json_from_native_pre_tool(native_harness, native_result),
+                harness=native_harness,
+                payload=payload,
+                guard_home=guard_home,
+                home_dir=home_dir,
+                workspace=workspace,
+            )
             return (
                 _record_native_pre_activity(
                     self,
                     native_harness,
                     payload,
-                    harness_json_from_native_pre_tool(native_harness, native_result),
+                    rendered,
                     accepted_receipt,
                 ),
                 True,
@@ -812,6 +833,9 @@ class HookWorkerNativeMixin:
                 guard_home=guard_home,
                 deadline=deadline,
             ) as fenced:
+                from ..runtime_transition_hook_probe import transition_hook_probe
+
+                probe = transition_hook_probe(payload)
                 edge = self._review_raw_hook_native(
                     payload=payload,
                     harness=harness,
@@ -823,6 +847,7 @@ class HookWorkerNativeMixin:
                     observe_mode=recording_only,
                     deadline=deadline,
                     policy_snapshot=policy_snapshot,
+                    **({"request_id": probe[1]} if probe is not None else {}),
                 )
                 if edge is not None and deadline is not None and time.monotonic() >= deadline:
                     raise TimeoutError("native_review_fence_deadline")
