@@ -105,7 +105,7 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                         .expect("bounded guard bypass referential follow-up")
                 });
                 let guardrail_item = GUARDRAIL_ITEM.get_or_init(|| {
-                    Regex::new(r"(?i)^(?:(?:change|modify|alter|set|unset)\s+(?:node_options|(?:hol[-_ ]guard|guard)\s+(?:hooks?|configuration|settings|policy)|policy\s+authority)|recover\s+policy\s+authority)$")
+                    Regex::new(r"(?i)^(?:(?:change|modify|alter|set|unset)\s+(?:node(?:[_-]|\s+)options|(?:hol[-_ ]guard|guard)\s+(?:hooks?|configuration|settings|policy)|policy\s+authority)|recover\s+policy\s+authority)$")
                         .expect("bounded protection-setting list item")
                 });
                 let list_items_are_guardrails = list_prohibition.captures(prefix).is_some_and(|captures| {
@@ -123,7 +123,9 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                 let unconditional = prohibition.is_match(prefix)
                     || (list_items_are_guardrails && list_connector.is_match(tail));
                 !unconditional || reversal.is_match(prefix) || reversal.is_match(clause)
-                    || followup.is_match(tail)
+                    || followup.is_match(
+                        &tail.split_inclusive(['.', '!', '?', ';']).take(2).collect::<String>(),
+                    )
             })
         })
             || ["approval_policy=\"never\"", "approval_policy='never'"]

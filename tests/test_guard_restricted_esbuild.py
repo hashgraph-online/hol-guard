@@ -60,7 +60,7 @@ def test_missing_dependency_does_not_download_or_grant_an_image(tmp_path):
     assert module.snapshot_esbuild(tmp_path, tmp_path) is None
 
 
-@pytest.mark.parametrize("private_parent_name", ["private", "private with spaces"])
+@pytest.mark.parametrize("private_parent_name", ["private", "private with spaces", "private's with spaces"])
 def test_runner_keeps_authorized_image_outside_writable_ancestors(tmp_path, monkeypatch, private_parent_name):
     import shlex
     import tempfile

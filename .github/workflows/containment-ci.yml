@@ -74,7 +74,11 @@ jobs:
     # A minimal runtime image avoids indexing unrelated hosted toolchains.
     # The tested child still receives the production namespace, Landlock and
     # seccomp policy, including all negative boundary assertions below.
-    # The outer image must permit a fresh procfs for the inner PID namespace.
+    # These outer-container exceptions provision the production inner sandbox:
+    # SYS_ADMIN permits namespace mount setup; seccomp permits unshare/setns;
+    # AppArmor permits the nested bubblewrap profile; systempaths permits
+    # a fresh procfs inside the new PID namespace. Production child restrictions
+    # remain enabled and are verified by the deny assertions in this job.
     container:
       image: node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
       options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined
