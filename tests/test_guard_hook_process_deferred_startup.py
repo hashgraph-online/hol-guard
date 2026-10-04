@@ -21,7 +21,7 @@ def test_initial_capacity_is_mandatory_before_daemon_readiness(monkeypatch: pyte
     with pytest.raises(RuntimeError, match="did not become ready"):
         runner.require_initial_capacity()
 
-    wait_for_capacity.assert_called_once_with(minimum_workers=1, timeout_seconds=14.0)
+    wait_for_capacity.assert_called_once_with(minimum_workers=1, timeout_seconds=30.0)
 
 
 def test_adaptive_deferred_start_returns_before_startup_floor_is_ready(monkeypatch, tmp_path: Path) -> None:

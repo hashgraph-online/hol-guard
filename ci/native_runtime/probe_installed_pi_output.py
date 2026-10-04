@@ -372,9 +372,12 @@ const casesPath = process.argv[3];
 const cwd = process.argv[4];
 const contentDigest = (canonical) => createHash("sha256").update(canonical).digest("hex");
 const fetchEvidence = [];
+const pendingEvidence = [];
+let activeCaseId;
 const originalFetch = globalThis.fetch;
 if (typeof originalFetch !== "function") throw new Error("fetch is unavailable");
 globalThis.fetch = async (input, init) => {
+  const caseId = activeCaseId;
   let requestUrl;
   try {
     requestUrl = new URL(
@@ -393,23 +396,29 @@ globalThis.fetch = async (input, init) => {
         ? input.method.toUpperCase()
         : "GET";
   const response = await originalFetch(input, init);
-  const proof = {};
-  try {
-    const body = await response.clone().json();
-    if (body && typeof body === "object" && !Array.isArray(body)) {
-      for (const key of [
-        "decision",
-        "model_output_action",
-        "reviewed_output_sha256",
-        "observe_mode",
-        "policy_action",
-      ]) {
-        const value = body[key];
-        if (typeof value === "string" || typeof value === "boolean") proof[key] = value;
+  const evidence = { case_id: caseId, method, pathname: requestUrl.pathname, status: response.status };
+  fetchEvidence.push(evidence);
+  // Reading the proof must not delay the original response inside Guard's deadline.
+  // Await these copies only after the generated handler has returned.
+  const capture = (async () => {
+    try {
+      const body = await response.clone().json();
+      if (body && typeof body === "object" && !Array.isArray(body)) {
+        for (const key of [
+          "decision",
+          "model_output_action",
+          "reviewed_output_sha256",
+          "observe_mode",
+          "policy_action",
+          "reason_code",
+        ]) {
+          const value = body[key];
+          if (typeof value === "string" || typeof value === "boolean") evidence[key] = value;
+        }
       }
-    }
-  } catch {}
-  fetchEvidence.push({ method, pathname: requestUrl.pathname, status: response.status, ...proof });
+    } catch {}
+  })();
+  pendingEvidence.push(capture);
   return response;
 };
 const extensionModule = await import(pathToFileURL(extensionPath).href);
@@ -426,7 +435,7 @@ const cases = JSON.parse(readFileSync(casesPath, "utf8"));
 const results = [];
 for (const testCase of cases) {
   const before = notifications.length;
-  const fetchStart = fetchEvidence.length;
+  activeCaseId = testCase.id;
   const event = {
     toolCallId: testCase.id,
     toolName: "Bash",
@@ -440,8 +449,18 @@ for (const testCase of cases) {
     { cwd, ui: { notify(message, kind) { notifications.push({ message, kind }); } } },
   );
   const inputContentAfter = JSON.stringify(event.content);
-  const fetchEnd = fetchEvidence.length;
-  for (const fetch of fetchEvidence.slice(fetchStart, fetchEnd)) fetch.case_id = testCase.id;
+  let evidenceTimer;
+  try {
+    await Promise.race([
+      Promise.all(pendingEvidence.splice(0)),
+      new Promise((_, reject) => {
+        evidenceTimer = setTimeout(() => reject(new Error("daemon evidence capture timed out")), 5000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(evidenceTimer);
+    activeCaseId = undefined;
+  }
   results.push({
     id: testCase.id,
     preserved: result === undefined,
@@ -615,6 +634,7 @@ def _assert_fetch_evidence(
         "reviewed_output_sha256",
         "observe_mode",
         "policy_action",
+        "reason_code",
     }
     if len(fetches) != len(cases):
         raise ProbeError("generated extension did not make exactly one daemon request per real case")
@@ -675,6 +695,55 @@ def _assert_fetch_evidence(
             "preserved": preserved,
         }
     return evidence
+
+
+def _positive_failure_diagnostic(
+    results: list[dict[str, Any]],
+    fetches: list[dict[str, Any]],
+    cases: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Describe a failed proof without recording output, tokens, or URL queries."""
+    reason_codes = {
+        "native_policy_not_ready",
+        "native_post_tool_unavailable",
+        "native_review_deadline_exceeded",
+        "native_command_control_fence_unavailable",
+        "native_hook_edge_invalid_response",
+        "native_runtime_unavailable",
+    }
+    rows = []
+    for case in cases:
+        case_id = case["id"]
+        result = next((row for row in results if row.get("id") == case_id), {})
+        returned = result.get("result")
+        digest, _, _ = _text_digest(case["content"])
+        responses = []
+        for fetch in [row for row in fetches if row.get("case_id") == case_id][:3]:
+            status = fetch.get("status")
+            decision = fetch.get("decision")
+            action = fetch.get("model_output_action")
+            reason = fetch.get("reason_code")
+            responses.append(
+                {
+                    "status": status if type(status) is int and 100 <= status <= 599 else None,
+                    "decision": decision if decision in ("allow", "deny") else "unknown",
+                    "model_output_action": (
+                        action if action in ("allow_original", "replace_with_reviewed_excerpt", "block") else "unknown"
+                    ),
+                    "reviewed_output_matches": fetch.get("reviewed_output_sha256") == digest,
+                    "reason_code": reason if isinstance(reason, str) and reason in reason_codes else "other_or_missing",
+                }
+            )
+        rows.append(
+            {
+                "case_id": case_id,
+                "preserved": result.get("preserved") is True,
+                "input_content_unchanged": result.get("input_content_unchanged") is True,
+                "is_error": isinstance(returned, dict) and returned.get("isError") is True,
+                "daemon_responses": responses,
+            }
+        )
+    return {"schema": "hol-guard.installed-pi-positive-failure.v1", "cases": rows, "fetch_count": len(fetches)}
 
 
 def _assert_native_route_metrics(snapshot: Mapping[str, Any], expected: int) -> dict[str, int]:
@@ -1302,10 +1371,16 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
             cwd=workspace,
             env=_isolated_env(home=home, python_path=python_path),
         )
-        _assert_no_positive_cli_fallback(real_log)
-        real_output_evidence = _assert_real_results(real_results, cases)
-        real_fetch_evidence = _assert_fetch_evidence(real_fetches, real_results, cases)
-        native_routes = _wait_for_native_route_metrics(daemon, len(cases))
+        try:
+            _assert_no_positive_cli_fallback(real_log)
+            real_output_evidence = _assert_real_results(real_results, cases)
+            real_fetch_evidence = _assert_fetch_evidence(real_fetches, real_results, cases)
+            native_routes = _wait_for_native_route_metrics(daemon, len(cases))
+        except ProbeError:
+            print(
+                json.dumps(_positive_failure_diagnostic(real_results, real_fetches, cases), sort_keys=True), flush=True
+            )
+            raise
         negative_home = root / "negative-home"
         negative_guard_home = root / "negative-guard-home"
         negative_workspace = root / "negative-workspace"
