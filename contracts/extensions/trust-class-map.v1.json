@@ -100,7 +100,8 @@
       "command.skill-sunset",
       "command.syngraphe",
       "command.tui-runner",
-      "command.uivoid"
+      "command.uivoid",
+      "command.xrpl-muse-skill"
     ]
   }
 }
