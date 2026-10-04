@@ -48,9 +48,12 @@ def stable_dispatch_is_allowed(
     latest_pypi: str,
     asset_names: Iterable[str] = (),
     release_missing: bool = False,
+    deferred_pypi: bool = False,
 ) -> bool:
     if requested == expected_next:
         return True
+    if deferred_pypi:
+        return not release_missing and not github_release_needs_asset_repair(requested, asset_names)
     if not latest_pypi or requested != latest_pypi:
         return False
     if release_missing:
@@ -71,6 +74,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--latest-pypi", default="")
     parser.add_argument("--asset-names-file", type=Path)
     parser.add_argument("--release-missing", action="store_true")
+    parser.add_argument(
+        "--deferred-pypi",
+        action="store_true",
+        help="Allow recovery of a complete GitHub release that is still absent from PyPI",
+    )
     args = parser.parse_args(argv)
     allowed = stable_dispatch_is_allowed(
         requested=args.requested,
@@ -78,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         latest_pypi=args.latest_pypi,
         asset_names=_asset_names(args.asset_names_file),
         release_missing=bool(args.release_missing),
+        deferred_pypi=bool(args.deferred_pypi),
     )
     return 0 if allowed else 1
 
