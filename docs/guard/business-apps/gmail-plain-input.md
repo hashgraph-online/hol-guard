@@ -2,7 +2,7 @@
 
 `guard-command::business_gmail_plain::GmailPlainInputV1` consumes an owned
 `GmailSendWireInputV1`. It retains the original params/body/MIME bytes and exposes
-private, immutable sender, To/Cc/Bcc occurrences and exact unencoded body bytes.
+private, immutable sender, To/Cc/Bcc occurrences and exact decoded body bytes.
 There is no filesystem, shell, network, provider, review or policy operation.
 These values have no Debug, Serialize, Clone or mutable interface.
 
@@ -22,12 +22,22 @@ This is a deliberately narrow preparation profile, not general MIME support:
 - Default ASCII text/plain, or literal `text/plain` with `charset=us-ascii` or
   `charset=utf-8`, optionally quoted. Charset spelling is case-insensitive; extra
   parameters or alternate whitespace forms are unsupported. MIME-Version, if
-  present, must be `1.0`. Only 7bit/8bit transfer encodings are supported; non-ASCII
-  body text requires both explicit UTF-8 and 8bit. Body text must be valid UTF-8,
+  present, must be `1.0`. Supported transfer encodings are 7bit, 8bit, base64 and
+  quoted-printable. Non-ASCII decoded text requires explicit UTF-8 and an
+  encoding other than 7bit. Body text must be valid UTF-8,
   contain no NUL/Unicode controls except tab/CRLF, reject Unicode line/paragraph
   separators, use CRLF line breaks and remain
   within the 998-byte line limit. The entire wire already has a 256 KiB cap.
-- Attachments, multipart, HTML, base64/quoted-printable transfer bodies, threadId,
+- Encoded bodies follow a deliberately strict subset of
+  [RFC 2045](https://www.rfc-editor.org/rfc/rfc2045.html): CRLF framing and at most
+  76 bytes per encoded line. Base64 accepts only the standard alphabet, canonical
+  padding/bits, complete four-character groups per line and an optional final
+  CRLF; it never ignores non-alphabet bytes. Quoted-printable requires uppercase
+  hexadecimal escapes, retains hard CRLF and joins only explicit soft breaks;
+  raw trailing space/tab, malformed escapes and raw non-ASCII bytes reject.
+  Decoding never expands beyond the bounded encoded input. All decoded text
+  undergoes the same charset, Unicode-control and 998-byte line checks.
+- Attachments, multipart, HTML, threadId,
   reply/resend/sender overrides, folding and all other shapes reject. Never catch
   these errors as a policy nonmatch or pass through the original command.
 
@@ -37,7 +47,7 @@ hex commitment bytes. Every original wire byte remains bound; this is not an
 approval, dispatch token, authenticated identity or content classification.
 
 The native owner must still inspect **all original private MIME bytes**, including
-headers and body, resolve every recipient/group and the actual authenticated
+headers and encoded body, **and the decoded body**, resolve every recipient/group and the actual authenticated
 From/account/tenant, apply the strongest current policy floors and bind the
 prepared action to existing native private review authority. No "public" label
 is inferred from parse success. Cloud must receive only approved minimal facts;

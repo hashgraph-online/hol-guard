@@ -51,6 +51,8 @@ def create_fixture(root: Path) -> Fixture:
         "src/settings.ts": SETTINGS_BEFORE,
         "src/one.ts": SOURCE,
         "src/two.ts": SOURCE,
+        "src/batch-alpha.ts": "ordinary-batch-alpha\n",
+        "src/batch-beta.ts": "ordinary-batch-beta\n",
         "src/move-source.ts": SOURCE,
         "src/path with spaces.ts": SOURCE,
         "src/café.ts": SOURCE,
@@ -119,6 +121,11 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
         checks["documentation-exact"] = exact(
             fixture.workspace / "docs/change.md", "Retry limit increased from 3 to 5.\n"
         )
+    if oracle == "mixed-read-batch":
+        for name in ("alpha", "beta"):
+            checks[f"batch-{name}-unchanged"] = exact(
+                fixture.workspace / f"src/batch-{name}.ts", f"ordinary-batch-{name}\n"
+            )
     if oracle == "home-task":
         checks["sibling-note-exact"] = exact(fixture.home / "other-project/notes.md", "Verified settings change.\n")
     if oracle == "home-copy-task":
