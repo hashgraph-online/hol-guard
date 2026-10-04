@@ -200,7 +200,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --extra dev --python 3.12
 
+      - uses: ./.github/actions/setup-rust
+      - name: Build source compiler
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+
       - name: Build wheel and source distribution
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
         run: uv build
 
       - name: Smoke test built wheel and Cline lifecycle

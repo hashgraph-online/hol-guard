@@ -40,6 +40,16 @@ SOURCE_SHA = "a" * 40
 WHEEL_NAME = f"hol_guard-{VERSION}-py3-none-any.whl"
 
 
+def test_canary_counts_match_the_reviewed_native_contract() -> None:
+    from scripts import run_installed_canary as canary
+
+    root = Path(__file__).resolve().parents[1]
+    totals = json.loads((root / "tests/fixtures/guard-command-corpus/native-contract.json").read_bytes())["totals"]
+    assert totals["cases"] == canary._FROZEN_CORPUS_CASE_COUNT
+    assert totals["native_evaluation_errors"] == canary._FROZEN_NATIVE_REJECTION_COUNT
+    assert totals["stronger_than_original_oracle"] == canary._FROZEN_ORACLE_ABOVE_COUNT
+
+
 def test_current_corpus_manifest_is_verified_by_its_canonical_bindings() -> None:
     root = Path(__file__).resolve().parents[1]
 
