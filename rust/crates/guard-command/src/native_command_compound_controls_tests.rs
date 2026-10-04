@@ -84,6 +84,17 @@ fn explicit_command_permission_settles_only_its_covered_generic_review() {
             "{command}"
         );
     }
+    #[cfg(unix)]
+    {
+        assert_eq!(
+            evaluate(&controls, "echo ready 2>/dev/null; git push origin main").minimum_action,
+            "allow"
+        );
+        assert_ne!(
+            evaluate(&controls, "git push origin main; cat .env 2>/dev/null").minimum_action,
+            "allow"
+        );
+    }
     for command in [
         "cat ordinary.txt; git push origin main",
         "cat alias.txt; git push origin main",
@@ -250,6 +261,11 @@ fn explicit_command_permission_settles_only_its_covered_generic_review() {
     disabled.layers[0].controls[0].state = "disabled".into();
     disabled.effective_digest = disabled.compute_effective_digest().unwrap();
     let controls = CompiledNativeCommandControls::new(&disabled).unwrap();
+    #[cfg(unix)]
+    assert_eq!(
+        evaluate(&controls, "echo ready 2>/dev/null; git push origin main").minimum_action,
+        "block"
+    );
     assert_eq!(
         evaluate(&controls, "git push origin main").minimum_action,
         "block"

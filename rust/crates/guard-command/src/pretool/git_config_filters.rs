@@ -79,29 +79,66 @@ pub(super) fn unused(
         .split(|byte| *byte == 0)
         .filter(|path| !path.is_empty())
     {
+        if Instant::now() >= deadline {
+            return None;
+        }
         let path = root.join(std::str::from_utf8(path).ok()?);
         if path.is_dir() && path.join(".git").exists() {
             return Some(false);
         }
     }
-    let attributes = query(
-        &["check-attr", "-z", "--stdin", "filter"],
-        Some(paths.clone()),
-        Some(&root),
-    )?;
-    let mut fields = attributes.split(|byte| *byte == 0);
-    for path in paths
-        .split(|byte| *byte == 0)
-        .filter(|path| !path.is_empty())
-    {
-        if fields.next()? != path || fields.next()? != b"filter" {
+    // Attribute output repeats each path plus two fields. Batch by the
+    // expected response size while retaining the per-query output cap.
+    const BATCH_BYTES: usize = 512 * 1024;
+    let mut offset = 0;
+    let mut batches = 0;
+    while offset < paths.len() {
+        if Instant::now() >= deadline || batches >= 64 {
             return None;
         }
-        if !matches!(fields.next()?, b"unspecified" | b"unset") {
-            return Some(false);
+        let start = offset;
+        let mut expected_bytes = 0;
+        for path in paths[start..].split(|byte| *byte == 0) {
+            if path.is_empty() {
+                break;
+            }
+            let cost = path.len().checked_add(20)?;
+            if cost > BATCH_BYTES {
+                return None;
+            }
+            if expected_bytes + cost > BATCH_BYTES {
+                break;
+            }
+            expected_bytes += cost;
+            offset += path.len() + 1;
         }
+        if offset == start {
+            return None;
+        }
+        let batch = &paths[start..offset];
+        let attributes = query(
+            &["check-attr", "-z", "--stdin", "filter"],
+            Some(batch.to_vec()),
+            Some(&root),
+        )?;
+        let mut fields = attributes.split(|byte| *byte == 0);
+        for path in batch
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+        {
+            if fields.next()? != path || fields.next()? != b"filter" {
+                return None;
+            }
+            if !matches!(fields.next()?, b"unspecified" | b"unset") {
+                return Some(false);
+            }
+        }
+        if fields.next()? != b"" || fields.next().is_some() {
+            return None;
+        }
+        batches += 1;
     }
-    (fields.next()? == b"" && fields.next().is_none()).then_some(true)
+    Some(true)
 }
 
 fn bounded_output(

@@ -69,6 +69,38 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn stderr_null_sink_preserves_each_compound_command_risk() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    for command in [
+        "ls -la src 2>/dev/null",
+        "ls -la; echo ---; ls -la src 2>/dev/null; echo done",
+        "grep -n use src/lib.rs 2>/dev/null | head -1",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_eq!(
+            decision.minimum_action, "allow",
+            "{command}: {}",
+            decision.reason_code
+        );
+    }
+    for command in [
+        "cat .env 2>/dev/null",
+        "ls src 2>/dev/null; rm -rf src",
+        "cat src/lib.rs 2> .env",
+        "ls src 2>/dev/null; cat .env",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_ne!(decision.minimum_action, "allow", "{command}");
+    }
+}
+
 #[test]
 fn git_c_inspections_require_verified_repository_scope() {
     let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
