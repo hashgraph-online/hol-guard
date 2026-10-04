@@ -1,4 +1,5 @@
-use super::{GenericSignals, PreToolActionTypeV1, PreToolOperationV1};
+use super::{PreToolActionTypeV1, PreToolOperationV1};
+use crate::pretool::generic::extract::GenericSignals;
 use crate::CanonicalCommandV1;
 
 fn compact(value: &str) -> String {
