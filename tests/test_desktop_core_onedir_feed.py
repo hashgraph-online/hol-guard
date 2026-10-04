@@ -166,6 +166,54 @@ class TestInspectAssets:
         with pytest.raises(SystemExit, match="partial or ambiguous"):
             namespace.inspect_assets(assets, base)
 
+    def test_matching_baseline_stays_verify_existing(self, tmp_path: Path, capsys) -> None:
+        namespace = _feed()
+        base = "hol-guard-core-3.13.0-x86_64-unknown-linux-gnu"
+        assets = tmp_path / "assets.txt"
+        assets.write_text(f"{base}\n{base}.json\n{base}.attested.json\n", encoding="utf-8")
+        marker = tmp_path / "marker.json"
+        marker.write_text(json.dumps({"buildBaseline": "ubuntu-22.04"}), encoding="utf-8")
+        namespace.inspect_assets(assets, base, marker, "ubuntu-22.04")
+        output = capsys.readouterr().out
+        assert "mode=verify_existing" in output
+        assert "onedir=false" in output
+
+    def test_mismatched_baseline_forces_build(self, tmp_path: Path, capsys) -> None:
+        namespace = _feed()
+        base = "hol-guard-core-3.13.0-x86_64-unknown-linux-gnu"
+        assets = tmp_path / "assets.txt"
+        assets.write_text(f"{base}\n{base}.json\n{base}.attested.json\n", encoding="utf-8")
+        marker = tmp_path / "marker.json"
+        marker.write_text(json.dumps({"buildBaseline": "ubuntu-24.04"}), encoding="utf-8")
+        namespace.inspect_assets(assets, base, marker, "ubuntu-22.04")
+        assert "mode=build" in capsys.readouterr().out
+
+    def test_marker_without_baseline_forces_build(self, tmp_path: Path, capsys) -> None:
+        namespace = _feed()
+        base = "hol-guard-core-3.13.0-x86_64-unknown-linux-gnu"
+        assets = tmp_path / "assets.txt"
+        assets.write_text(f"{base}\n{base}.json\n{base}.attested.json\n", encoding="utf-8")
+        marker = tmp_path / "marker.json"
+        marker.write_text(json.dumps({"schema": "hol-guard-core-attestation.v3"}), encoding="utf-8")
+        namespace.inspect_assets(assets, base, marker, "ubuntu-22.04")
+        assert "mode=build" in capsys.readouterr().out
+
+    def test_missing_marker_forces_build(self, tmp_path: Path, capsys) -> None:
+        namespace = _feed()
+        base = "hol-guard-core-3.13.0-x86_64-unknown-linux-gnu"
+        assets = tmp_path / "assets.txt"
+        assets.write_text(f"{base}\n{base}.json\n{base}.attested.json\n", encoding="utf-8")
+        namespace.inspect_assets(assets, base, tmp_path / "absent.json", "ubuntu-22.04")
+        assert "mode=build" in capsys.readouterr().out
+
+    def test_empty_baseline_keeps_legacy_reuse(self, tmp_path: Path, capsys) -> None:
+        namespace = _feed()
+        base = "hol-guard-core-3.13.0-x86_64-unknown-linux-gnu"
+        assets = tmp_path / "assets.txt"
+        assets.write_text(f"{base}\n{base}.json\n{base}.attested.json\n", encoding="utf-8")
+        namespace.inspect_assets(assets, base, baseline="")
+        assert "mode=verify_existing" in capsys.readouterr().out
+
 
 class TestOnedirManifest:
     def test_create_and_validate_round_trip(self, tmp_path: Path) -> None:
@@ -428,6 +476,50 @@ class TestOnedirMarker:
         zip_path.write_bytes(b"tampered")
         with pytest.raises(SystemExit, match="Marker hash mismatch"):
             namespace.validate_marker(base, marker, base_suffix=".onedir", **common)
+
+    def test_linux_marker_records_build_baseline(self, tmp_path: Path) -> None:
+        namespace = _feed()
+        base = tmp_path / "core"
+        manifest = Path(f"{base}.json")
+        marker = Path(f"{base}.attested.json")
+        base.write_bytes(b"binary-subject")
+        manifest.write_bytes(b"manifest-subject")
+        common = dict(
+            version="3.13.0",
+            source_commit="a" * 40,
+            source_tag="v3.13.0",
+            target="x86_64-unknown-linux-gnu",
+            apple_signing_identity="",
+            apple_team_id="",
+            build_baseline="ubuntu-22.04",
+        )
+        namespace.create_marker(base, marker, workflow_run="9", **common)
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+        assert payload["buildBaseline"] == "ubuntu-22.04"
+        namespace.validate_marker(base, marker, **common)
+        with pytest.raises(SystemExit, match="Marker mismatch for buildBaseline"):
+            namespace.validate_marker(base, marker, **{**common, "build_baseline": "ubuntu-24.04"})
+
+    def test_non_linux_marker_omits_build_baseline(self, tmp_path: Path) -> None:
+        namespace = _feed()
+        base = tmp_path / "core"
+        manifest = Path(f"{base}.json")
+        marker = Path(f"{base}.attested.json")
+        base.write_bytes(b"binary-subject")
+        manifest.write_bytes(b"manifest-subject")
+        common = dict(
+            version="3.13.0",
+            source_commit="a" * 40,
+            source_tag="v3.13.0",
+            target="aarch64-apple-darwin",
+            apple_signing_identity="Developer ID Application: HOL",
+            apple_team_id="TEAMID",
+            build_baseline="ubuntu-22.04",
+        )
+        namespace.create_marker(base, marker, workflow_run="9", **common)
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+        assert "buildBaseline" not in payload
+        namespace.validate_marker(base, marker, **common)
 
 
 class TestSealOnedir:

@@ -72,6 +72,9 @@ jobs:
       RELEASE_TARGET: x86_64-unknown-linux-gnu
       NATIVE_RUNTIME_TARGET: x86_64-unknown-linux-musl
       MINIMUM_DESKTOP_VERSION: 0.1.0-beta.0
+      # Markers recorded on another build baseline (for example assets built
+      # before the ubuntu-22.04 move) force a rebuild instead of verification.
+      CORE_BUILD_BASELINE: ubuntu-22.04
     steps:
       - name: Require trusted main workflow invocation
         shell: bash
@@ -202,8 +205,16 @@ jobs:
           BASE="hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           gh release view "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
             --jq '.assets[].name' > "$RUNNER_TEMP/release-assets.txt"
+          mkdir -p "$RUNNER_TEMP/core-marker"
+          if grep -Fxq "$BASE.attested.json" "$RUNNER_TEMP/release-assets.txt"; then
+            gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern "$BASE.attested.json" --dir "$RUNNER_TEMP/core-marker"
+            test -f "$RUNNER_TEMP/core-marker/$BASE.attested.json"
+          fi
           python3 -I scripts/release/desktop_core_alpha_feed.py inspect-assets \
-            --assets "$RUNNER_TEMP/release-assets.txt" --base "$BASE" >> "$GITHUB_OUTPUT"
+            --assets "$RUNNER_TEMP/release-assets.txt" --base "$BASE" \
+            --marker "$RUNNER_TEMP/core-marker/$BASE.attested.json" \
+            --baseline "$CORE_BUILD_BASELINE" >> "$GITHUB_OUTPUT"
       - name: Set up Python
         if: steps.release.outputs.available == 'true'
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -267,7 +278,7 @@ jobs:
           python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker \
             --base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
             --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "" \
-            --apple-team-id ""
+            --apple-team-id "" --baseline "$CORE_BUILD_BASELINE"
       - name: Build standalone Core executable
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
@@ -387,7 +398,8 @@ jobs:
           set -euo pipefail
           BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           COMMON=(--base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
-            --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "" --apple-team-id "")
+            --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "" --apple-team-id "" \
+            --baseline "$CORE_BUILD_BASELINE")
           if [[ "$MODE" == "build" ]]; then
             python3 -I scripts/release/desktop_core_alpha_feed.py create-marker "${COMMON[@]}" --workflow-run "$GITHUB_RUN_ID"
           else
@@ -412,6 +424,12 @@ jobs:
         run: |
           set -euo pipefail
           BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
+          NAME="$(basename "$BASE")"
+          for asset in "$NAME" "$NAME.json" "$NAME.attested.json"; do
+            if grep -Fxq "$asset" "$RUNNER_TEMP/release-assets.txt"; then
+              gh release delete-asset "$CORE_TAG" "$asset" --repo "$GITHUB_REPOSITORY" --yes
+            fi
+          done
           gh release upload "$CORE_TAG" "$BASE" "$BASE.json" "$BASE.attested.json" --repo "$GITHUB_REPOSITORY"
       - name: Verify final release assets and provenance
         if: steps.release.outputs.available == 'true'

@@ -73,27 +73,35 @@ def discover_release(tags_file: Path, requested_version: str = "") -> None:
     _emit("branch", "main")
 
 
-def inspect_assets(assets_file: Path, base: str) -> None:
+def inspect_assets(assets_file: Path, base: str, marker_file: Path | None = None, baseline: str = "") -> None:
     """Reuse a complete published Core set. Native bundling is build-only.
 
     Existing GitHub Core assets are immutable. A complete set is verified as-is
     and is not rebuilt, so the native runtime verifier runs only on new builds.
+    When ``baseline`` is given, a marker recorded on a different build baseline
+    (for example after the job moved to a lower-glibc runner) forces a rebuild
+    so the contract check never executes an incompatible binary.
     """
     names = set(assets_file.read_text(encoding="utf-8").splitlines())
     legacy = {base, f"{base}.json", f"{base}.attested.json"}
     onedir = {f"{base}.onedir.zip", f"{base}.onedir.json", f"{base}.onedir.attested.json"}
     present = (legacy | onedir) & names
     if not present:
-        _emit("mode", "build")
-        _emit("onedir", True)
+        mode, onedir_mode = "build", True
     elif present == legacy:
-        _emit("mode", "verify_existing")
-        _emit("onedir", False)
+        mode, onedir_mode = "verify_existing", False
     elif present == legacy | onedir:
-        _emit("mode", "verify_existing")
-        _emit("onedir", True)
+        mode, onedir_mode = "verify_existing", True
     else:
         raise SystemExit(f"Refusing partial or ambiguous Core asset set: {sorted(present)}")
+    if mode == "verify_existing" and baseline:
+        recorded = ""
+        if marker_file is not None and marker_file.is_file():
+            recorded = str(json.loads(marker_file.read_text(encoding="utf-8")).get("buildBaseline") or "")
+        if recorded != baseline:
+            mode = "build"
+    _emit("mode", mode)
+    _emit("onedir", onedir_mode)
 
 
 def verify_bootstrap(payload_file: Path, version: str, subject: str) -> None:
@@ -276,14 +284,21 @@ _LINUX_SIDECAR_TARGET = "x86_64-unknown-linux-gnu"
 
 
 def _marker_metadata(
-    *, version: str, source_commit: str, source_tag: str, target: str, apple_signing_identity: str, apple_team_id: str
+    *,
+    version: str,
+    source_commit: str,
+    source_tag: str,
+    target: str,
+    apple_signing_identity: str,
+    apple_team_id: str,
+    build_baseline: str = "",
 ) -> dict[str, str]:
     if target == _LINUX_SIDECAR_TARGET:
         if apple_signing_identity or apple_team_id:
             raise SystemExit("Linux Desktop Core marker must not include Apple identity")
     elif not apple_signing_identity.strip() or not apple_team_id.strip():
         raise SystemExit("Apple identity is required for this Desktop Core target")
-    return {
+    metadata = {
         "schema": MARKER_SCHEMA,
         "version": version,
         "sourceCommit": source_commit,
@@ -292,6 +307,9 @@ def _marker_metadata(
         "appleSigningIdentity": apple_signing_identity,
         "appleTeamId": apple_team_id,
     }
+    if target == _LINUX_SIDECAR_TARGET and build_baseline:
+        metadata["buildBaseline"] = build_baseline
+    return metadata
 
 
 def _marker_subject_paths(base: Path, base_suffix: str) -> tuple[Path, Path]:
@@ -349,6 +367,11 @@ def _marker_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--apple-signing-identity", required=True)
     parser.add_argument("--apple-team-id", required=True)
     parser.add_argument(
+        "--baseline",
+        default="",
+        help="build baseline recorded in Linux sidecar markers; mismatches force a rebuild",
+    )
+    parser.add_argument(
         "--base-suffix",
         default="",
         help="subject suffix: with '.onedir' the marker binds <base>.onedir.zip and <base>.onedir.json",
@@ -364,6 +387,12 @@ def main() -> int:
     inspect = subparsers.add_parser("inspect-assets")
     inspect.add_argument("--assets", type=Path, required=True)
     inspect.add_argument("--base", required=True)
+    inspect.add_argument("--marker", type=Path)
+    inspect.add_argument(
+        "--baseline",
+        default="",
+        help="expected build baseline; a marker recorded on another baseline forces a rebuild",
+    )
     bootstrap = subparsers.add_parser("verify-bootstrap")
     bootstrap.add_argument("--payload", type=Path, required=True)
     bootstrap.add_argument("--version", required=True)
@@ -389,7 +418,7 @@ def main() -> int:
     if args.command == "discover-release":
         discover_release(args.tags, args.version)
     elif args.command == "inspect-assets":
-        inspect_assets(args.assets, args.base)
+        inspect_assets(args.assets, args.base, args.marker, args.baseline)
     elif args.command == "verify-bootstrap":
         verify_bootstrap(args.payload, args.version, args.subject)
     elif args.command in {"create-manifest", "validate-manifest"}:
@@ -422,6 +451,7 @@ def main() -> int:
             "target": args.target,
             "apple_signing_identity": args.apple_signing_identity,
             "apple_team_id": args.apple_team_id,
+            "build_baseline": args.baseline,
         }
         if args.command == "create-marker":
             create_marker(
