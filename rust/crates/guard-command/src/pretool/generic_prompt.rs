@@ -115,7 +115,7 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                             .map(str::trim)
                             .filter(|item| !item.is_empty())
                             .all(|item| item != *pattern && (
-                                BYPASS_PATTERNS.iter().any(|candidate| item == *candidate)
+                                BYPASS_PATTERNS.contains(&item)
                                     || guardrail_item.is_match(item)
                             ))
                     })
