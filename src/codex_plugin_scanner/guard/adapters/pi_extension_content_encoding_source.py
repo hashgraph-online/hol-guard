@@ -274,7 +274,25 @@ function sourceFileRefForPostToolUse(
 }
 
 type BoundedValue = { value: unknown; truncated: boolean };
-const OUTPUT_TEXT_KEYS = ["stdout", "stderr", "output", "content", "result", "message", "text"] as const;
+// Keep this traversal order identical to guard_rules::OUTPUT_TEXT_KEYS.
+const OUTPUT_TEXT_KEYS = [
+  "stdout",
+  "stderr",
+  "output",
+  "content",
+  "result",
+  "message",
+  "text",
+  "originalFile",
+  "original_file",
+  "oldString",
+  "old_string",
+  "newString",
+  "new_string",
+  "structuredPatch",
+  "structured_patch",
+  "lines",
+] as const;
 
 function truncateText(value: string, limit = GUARD_TEXT_LIMIT_CHARS): string {
   if (value.length <= limit) return value;
