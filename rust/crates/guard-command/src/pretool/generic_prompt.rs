@@ -123,9 +123,7 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                 let unconditional = prohibition.is_match(prefix)
                     || (list_items_are_guardrails && list_connector.is_match(tail));
                 !unconditional || reversal.is_match(prefix) || reversal.is_match(clause)
-                    || followup.is_match(
-                        &tail.split_inclusive(['.', '!', '?', ';']).take(2).collect::<String>(),
-                    )
+                    || followup.is_match(tail)
             })
         })
             || ["approval_policy=\"never\"", "approval_policy='never'"]
