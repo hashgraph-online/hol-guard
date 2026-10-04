@@ -16,7 +16,7 @@ import { useState } from "react";
 import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
-import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionDetail } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionDetail, redactDisplayText } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
@@ -164,9 +164,10 @@ function TechnicalSection({ receipt }: TechnicalSectionProps) {
           {receipt.source_scope && (
             <DetailRow label="Source scope" value={receipt.source_scope} />
           )}
-          {receipt.provenance_summary && (
-            <DetailRow label="Provenance" value={receipt.provenance_summary} />
-          )}
+          {receipt.provenance_summary && (() => {
+            const provenance = redactDisplayText(receipt.provenance_summary);
+            return provenance ? <DetailRow label="Provenance" value={provenance} /> : null;
+          })()}
           {(receipt.changed_capabilities ?? []).length > 0 && (
             <DetailRow
               label="Changed capabilities"
@@ -406,10 +407,10 @@ export function EvidenceActionDetail({
           </div>
         )}
 
-        {receipt.provenance_summary && (
+        {receipt.provenance_summary && redactDisplayText(receipt.provenance_summary) && (
           <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
             <SectionLabel>Provenance</SectionLabel>
-            <p className="text-xs text-slate-700">{receipt.provenance_summary}</p>
+            <p className="text-xs text-slate-700">{redactDisplayText(receipt.provenance_summary)}</p>
           </div>
         )}
 

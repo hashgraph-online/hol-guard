@@ -32,6 +32,7 @@ export interface CommandActivityMatch {
 }
 
 export interface CommandActivityItem {
+  action_preview?: string | null;
   activity_id: string;
   occurred_at: string;
   harness: string;

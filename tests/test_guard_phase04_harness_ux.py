@@ -434,8 +434,9 @@ def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsy
 
     captured = capsys.readouterr()
 
-    assert opened_urls == ["https://example.invalid/requests/req-1"]
-    assert "https://example.invalid/requests/req-1" in captured.err
+    assert opened_urls == []
+    assert "hol-guard approvals open req-1" in captured.err
+    assert "https://example.invalid/requests/req-1" not in captured.err
 
 
 @pytest.mark.usefixtures("native_hook_force")

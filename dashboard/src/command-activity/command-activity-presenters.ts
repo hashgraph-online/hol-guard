@@ -37,7 +37,7 @@ const REASON_LABELS: Record<string, string> = {
   no_match: "No command rule controlled the decision",
   extension_match: "A command rule controlled the decision",
   uncertainty: "Uncertainty retained a stricter review floor",
-  policy: "A saved policy controlled the decision",
+  policy: "Guard recorded the policy decision",
   approval_reuse: "A prior approval was evaluated for reuse",
   containment: "Verified containment evidence controlled the decision",
   capability: "A workflow capability controlled the decision",

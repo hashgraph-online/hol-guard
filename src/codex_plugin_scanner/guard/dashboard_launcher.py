@@ -169,6 +169,7 @@ def open_dashboard(
     config: GuardConfig,
     force_open: bool = True,
     open_key: str = "dashboard",
+    request_id: str | None = None,
 ) -> DashboardLaunchResult:
     """Open the local Guard dashboard in the default browser.
 
@@ -224,9 +225,13 @@ def open_dashboard(
             _last_result = result
             return result
 
-        browser_url = _build_authenticated_browser_url(
-            approval_center_url, auth_token=auth_token, surface="approval-center"
-        )
+        target_url = approval_center_url
+        if request_id is not None:
+            parsed = urllib.parse.urlparse(approval_center_url)
+            target_url = urllib.parse.urlunparse(
+                parsed._replace(path=f"/requests/{urllib.parse.quote(request_id, safe='')}", query="", fragment="")
+            )
+        browser_url = _build_authenticated_browser_url(target_url, auth_token=auth_token, surface="approval-center")
 
         surface_runtime = GuardSurfaceRuntime(store)
         try:

@@ -8,8 +8,7 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING
 
-from ..approval_hook_copy import _SIGNED_APPROVAL_LINK_UNAVAILABLE, authenticated_approval_review_url
-from ..approval_link_output import open_authenticated_approval_link
+from ..approval_hook_copy import authenticated_approval_review_url
 from ..browser_opener import open_browser_url
 from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, bound_wait_timeout_seconds, process_identity_matches
 from ..runtime.approval_context import approval_context_tokens_validation_reason
@@ -296,10 +295,10 @@ def _record_harness_usage_for_hook(
         occurred_at=_now(),
     )
 
-def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
+def _emit(command: str, payload: dict[str, object], as_json: bool, *, live_approval_home: Path | None = None) -> None:
     from .render import emit_guard_payload
 
-    emit_guard_payload(command, payload, as_json)
+    emit_guard_payload(command, payload, as_json, live_approval_home=live_approval_home)
 
 def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
@@ -791,14 +790,37 @@ def _preferred_approval_review_url(response_payload: Mapping[str, object], *, ha
 def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_home: Path | None = None) -> None:
     harness = _optional_string(response_payload.get("harness")) or "codex"
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
-    open_authenticated_approval_link(
-        review_url,
-        guard_home=guard_home,
-        authenticate=authenticated_approval_review_url,
-        unavailable_message=_SIGNED_APPROVAL_LINK_UNAVAILABLE,
-        open_browser=open_browser_url,
-        output_stream=sys.stderr,
+    if not review_url:
+        return
+    from ..approval_hook_copy import _approval_recovery_command, is_loopback_approval_url
+
+    browser_url = (
+        authenticated_approval_review_url(review_url, guard_home=guard_home)
+        if guard_home is not None and is_loopback_approval_url(review_url)
+        else None
     )
+    if browser_url is not None:
+        print(
+            f"HOL Guard is waiting for approval in your browser: {browser_url}",
+            file=sys.stderr,
+            flush=True,
+        )
+        try:
+            opened = open_browser_url(browser_url)
+        except Exception:
+            opened = False
+        if opened is not False:
+            return
+
+    recovery_command = _approval_recovery_command(response_payload, review_url=review_url)
+    if recovery_command is not None:
+        message = (
+            "HOL Guard is waiting for approval. "
+            f"Run `{recovery_command}` to open this request in the local Guard app."
+        )
+    else:
+        message = "HOL Guard is waiting for approval. Open the local Guard app to review this request."
+    print(message, file=sys.stderr, flush=True)
 
 __all__ = [
     "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_bind_hook_blocked_operation_queue",

@@ -158,7 +158,7 @@ export function CommandActivityDetail(props: {
       </div>
 
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-        <CommandValue preview={props.activity.invocation_preview} />
+        <CommandValue preview={props.activity.action_preview?.trim() || props.activity.invocation_preview} />
         <EvidenceField label="Decision" value={commandDecisionLabel(props.activity.policy_action)} />
         <EvidenceField label="Run result" value={commandExecutionLabel(props.activity.execution_status)} />
       </dl>

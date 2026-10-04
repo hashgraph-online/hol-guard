@@ -31,8 +31,9 @@ function CommandRow(props: {
   } else if (props.item.decision_reason_code === "no_match") {
     ruleLabel = "No rule match";
   }
-  const commandLabel = commandInvocationLabel(props.item.invocation_preview);
-  const hasCommand = props.item.invocation_preview !== null;
+  const actionPreview = props.item.action_preview?.trim() || null;
+  const commandLabel = actionPreview ?? commandInvocationLabel(props.item.invocation_preview);
+  const hasCommand = actionPreview !== null || props.item.invocation_preview !== null;
   return (
     <tr className={props.selected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50/70"}>
       <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600">{recordedTime(props.item.occurred_at)}</td>

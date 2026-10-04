@@ -555,7 +555,9 @@ def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     assert "/requests/" in reason
     assert "guard-token=gld1." in reason
     assert "retry the same Codex action" in reason
-    assert "waiting for approval in your browser" in captured.err
+    assert "HOL Guard is waiting for approval." in captured.err
+    assert "hol-guard approvals open " in captured.err
+    assert "/requests/" not in captured.err
 
 
 @pytest.mark.usefixtures("native_hook_force")

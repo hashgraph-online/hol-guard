@@ -116,7 +116,9 @@ Current Guard support in this repo:
   - detects a running ZCode app through its non-secret process identity signals when no config file exists yet
   - installs Guard-managed `PreToolUse` and `UserPromptSubmit` hooks in the `hooks` section of `~/.zcode/cli/config.json` without touching user `mcp`, `plugins`, or pre-existing hooks
   - blocks by returning exit code `2` and ZCode-native stdout JSON `hookSpecificOutput.permissionDecision: "deny"` with approval-center copy in stderr
-  - fails open if a hook crashes or times out, so ZCode keeps working when Guard is unreachable
+  - enables the hook runner during managed installation and restores its prior enabled setting on uninstall when the managed value is unchanged
+  - records `PostToolUse` and `PostToolUseFailure` events to correlate execution evidence
+  - pauses protected pre-execution actions when a review fails or times out instead of authorizing unchecked execution
 - `devin`
   - detects `~/.config/devin/config.json` (`%APPDATA%\devin\config.json` on Windows), `~/.config/devin/mcp_config.json`, project `.devin/config.json`, `.devin/config.local.json`, `.devin/hooks.v1.json`, `.devin/mcp_config.json`, and `.devin/mcp_config.local.json`, plus legacy `mcpServers` inside `config.json` files
   - detects skills in `.devin/skills/` and `.agents/skills/` at both user and project scope
