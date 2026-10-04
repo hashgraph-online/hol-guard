@@ -655,6 +655,60 @@ def test_installed_daemon_cleanup_rejects_unconfirmed_quarantine() -> None:
         probe._cleanup_installed_daemon(LiveServeThreadDaemon())
 
 
+def test_installed_daemon_cleanup_rechecks_after_stop_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def bounded_call(_daemon: object, method_name: str) -> object:
+        calls.append(method_name)
+        if method_name == "stop":
+            raise probe._DaemonCallTimeoutError("stop timeout")
+        return True
+
+    monkeypatch.setattr(probe, "_bounded_daemon_call", bounded_call)
+
+    probe._cleanup_installed_daemon(object())
+
+    assert calls == ["stop", "_finish_service"]
+
+
+def test_installed_daemon_cleanup_stop_timeout_stays_unsafe_without_finish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def bounded_call(_daemon: object, method_name: str) -> object:
+        if method_name == "stop":
+            raise probe._DaemonCallTimeoutError("stop timeout")
+        return False
+
+    monkeypatch.setattr(probe, "_bounded_daemon_call", bounded_call)
+
+    with pytest.raises(
+        ProbeCleanupUnsafeError,
+        match="cleanup did not complete after stop timeout",
+    ):
+        probe._cleanup_installed_daemon(object())
+
+
+def test_native_cleanup_retries_transient_resident_close(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard import native_resident_client
+
+    close_results = iter((False, True))
+    calls: list[tuple[Path, float]] = []
+
+    def close_native_residents(guard_home: Path, *, deadline_monotonic: float) -> bool:
+        calls.append((guard_home, deadline_monotonic))
+        return next(close_results)
+
+    monkeypatch.setattr(native_resident_client, "close_native_residents", close_native_residents)
+    monkeypatch.setattr(probe, "_native_state_files", lambda _guard_home: ())
+    monkeypatch.setattr(probe.time, "sleep", lambda _seconds: None)
+
+    guard_home = tmp_path / "guard-home"
+    probe._cleanup_native(SimpleNamespace(path=Path("/bin/false")), guard_home)
+
+    assert [home for home, _deadline in calls] == [guard_home, guard_home]
+    assert calls[0][1] == calls[1][1]
+
+
 def test_installed_daemon_cleanup_bounds_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     release = threading.Event()
 
@@ -668,7 +722,10 @@ def test_installed_daemon_cleanup_bounds_stop(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(probe, "_DAEMON_CLEANUP_TIMEOUT", 0.01)
     daemon = HangingDaemon()
     try:
-        with pytest.raises(ProbeError, match="stop timed out"):
+        with pytest.raises(
+            ProbeCleanupUnsafeError,
+            match="cleanup did not complete after stop timeout",
+        ):
             probe._cleanup_installed_daemon(daemon)
         assert daemon.finished is False
     finally:
