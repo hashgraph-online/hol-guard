@@ -32,6 +32,7 @@ jobs:
           version: "0.9.26"
           enable-cache: true
           cache-dependency-glob: uv.lock
+      - uses: ./.github/actions/stage-command-projections
       - name: Install policy dependencies
         run: uv sync --frozen --extra dev
       - name: Validate workflow policy code

@@ -111,6 +111,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
+      - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - name: Run wheel-builder contracts
         run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py tests/test_native_source_compiler.py
@@ -185,6 +186,7 @@ jobs:
       - name: Assemble and install native wheel
         env:
           SOURCE_SHA: ${{ github.sha }}
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/x86_64-unknown-linux-musl/release/guard-command-source
         run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           uv build --wheel --out-dir pure-dist
@@ -392,6 +394,7 @@ jobs:
         shell: pwsh
         env:
           SOURCE_SHA: ${{ github.sha }}
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source.exe
         run: |
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

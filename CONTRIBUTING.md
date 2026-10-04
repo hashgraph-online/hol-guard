@@ -168,6 +168,27 @@ For packaging or release changes, verify the wheel build:
 uv build --wheel
 ```
 
+Wheel and source-distribution builds generate the command catalog and native command
+program from `contributions/command-sources/`, `contributions/mcp-servers/`, and the
+reviewed trust map using Rust 1.88.0. Their contract files and packaged copies are
+ignored build outputs; do not commit them or resolve merge conflicts in them.
+The build rejects invalid sources and mismatched compiler identities. To reuse an
+already-built source compiler, set `HOL_GUARD_BUILD_SOURCE_COMPILER` to its path.
+Source archives include a build fingerprint and frozen projections. A wheel build
+from an unchanged archive verifies those inputs without requiring Rust; changing
+an authored source, native implementation, or generated projection rejects reuse.
+
+Editable dependency installation does not compile Rust or stage these projections.
+Before running Python tests from a fresh checkout, generate them explicitly:
+
+```bash
+uv run --no-sync python scripts/build_native_command_program.py --projections-only
+```
+
+CI stages and checks the projections before test collection. Installed Guard reads
+the frozen package resources; it does not discover built-in policy from a mutable
+extension directory at startup. External extensions retain their opt-in requirement.
+
 A source checkout or generic wheel build does not qualify a platform release. The
 [native wheel workflow](.github/workflows/native-wheel-ci.yml) assembles and tests the native
 runtime and source compiler with their manifests; the
