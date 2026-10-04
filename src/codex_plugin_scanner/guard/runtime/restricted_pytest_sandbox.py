@@ -167,9 +167,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
         for path in plan.allowed_executables
         if not _path_is_within(path, plan.workspace)
     )
-    immutable_executable_denial = (
-        f"(deny file-write* {immutable_executables})" if immutable_executables else ""
-    )
+    immutable_executable_denial = f"(deny file-write* {immutable_executables})" if immutable_executables else ""
     return "\n".join(
         (
             "(version 1)",
