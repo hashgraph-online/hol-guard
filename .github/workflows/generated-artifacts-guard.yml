@@ -25,8 +25,10 @@ jobs:
           owned+='|^docs/guard/extensions/(README\.md|catalog\.v[12]\.json)$'
           owned+='|^src/codex_plugin_scanner/guard/contracts/data/extensions/'
           owned+='|^src/codex_plugin_scanner/guard/contracts/data/mcp_servers/'
+          # These four projections are now ignored build outputs. Permit their
+          # removal, but reject adding them back even from a contribution PR.
           files=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
-            --jq '.[].filename')
+            --jq '.[] | select((.status == "removed" and (.filename | test("^(contracts/extensions|src/codex_plugin_scanner/guard/contracts/data/extensions)/(command-catalog|native-command-program)\\.v1\\.json$"))) | not) | .filename')
           changed=$(printf '%s\n' "${files}" | grep -E "${owned}" || [ $? -eq 1 ])
           if [ -n "${changed}" ]; then
             printf '%s\n' "::error::This PR modifies paths owned by the extension-artifact-regen workflow. Generated artifacts are regenerated on main after merge — drop them from this diff:" "${changed}"

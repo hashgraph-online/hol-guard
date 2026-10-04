@@ -52,6 +52,8 @@ jobs:
           uv run --no-sync python scripts/ci/rust_io_ownership_gate.py \
             --root . --json rust-io-ownership.json
       - name: Prove route and evidence privacy
+        uses: ./.github/actions/stage-command-projections
+      - name: Prove route and evidence privacy
         run: |
           uv run --no-sync python scripts/ci/rust_io_privacy_gate.py \
             --root . --json rust-io-privacy.json
