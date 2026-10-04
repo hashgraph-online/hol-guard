@@ -29,6 +29,7 @@ _CANONICAL_AUTHORITY_ACTION_PREFIXES = (
     "doctor.",
     "init.",
     "install",
+    "runtime.",
     "uninstall",
     "update",
 )
@@ -43,11 +44,30 @@ class LifecycleGateRequirement:
 def lifecycle_gate_requirement(args: argparse.Namespace) -> LifecycleGateRequirement | None:
     # Every protection-mutating command must be listed here; unmatched commands are intentionally exempt.
     command = _string_attribute(args, "guard_command")
+    if command == "desktop" and _string_attribute(args, "desktop_command") == "transition-activate":
+        # The command consumes Desktop proof once, prepares the complete exact
+        # subject, then requires/validates runtime.transition before begin().
+        # A generic parsing-time gate would consume that proof too early.
+        return None
     if _bool_attribute(args, "dry_run"):
         return None
     if command in {"install", "uninstall", "update", "disconnect"}:
         return LifecycleGateRequirement(command, _command_subject(args))
     apps_command = _string_attribute(args, "apps_command")
+    if (
+        command == "apps"
+        and apps_command == "repair"
+        and (
+            _bool_attribute(args, "restore_authority")
+            or _string_attribute(args, "authority_request")
+            or _string_attribute(args, "authority_request_sha256")
+            or getattr(args, "authority_deadline_epoch", None) is not None
+            or getattr(args, "authority_verification_workspace", None) is not None
+        )
+    ):
+        # This explicit path prepares the exact file/native plan under its
+        # owner before consuming factors and requiring its repair-only grant.
+        return None
     if command == "apps" and apps_command in {"connect", "repair", "disconnect"}:
         return LifecycleGateRequirement(f"apps.{apps_command}", _string_attribute(args, "harness") or "all")
     if command == "bootstrap" and not _bool_attribute(args, "skip_install"):

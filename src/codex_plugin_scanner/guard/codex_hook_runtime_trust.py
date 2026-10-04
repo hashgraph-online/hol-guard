@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from .codex_hook_compatibility import bridge_argv_sha256
 from .codex_hook_file_integrity import (
+    active_hook_validation_deadline,
     canonical_path,
+    check_hook_validation_deadline,
     verify_executable_file_identity,
     verify_regular_file_identity,
 )
@@ -39,6 +42,7 @@ _REQUIRED_PACKAGE_ROLES = frozenset(
         "windows_job",
     }
 )
+_OBSERVATION_PACKAGE_ROLES = _REQUIRED_PACKAGE_ROLES | {"hook_probe", "native_receipt"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +51,12 @@ class TrustedCodexHookLaunch:
 
     cwd: Path
     environment: Mapping[str, str]
+    deadline_monotonic: float | None = None
+
+    def _launch_deadline(self, timeout_seconds: float) -> float | None:
+        if self.deadline_monotonic is None:
+            return None
+        return min(self.deadline_monotonic, time.monotonic() + max(0.0, timeout_seconds))
 
     def run_start(
         self,
@@ -69,9 +79,15 @@ class TrustedCodexHookLaunch:
             cwd=self.cwd,
             environment=environment,
             timeout_seconds=timeout_seconds,
+            deadline_monotonic=self._launch_deadline(timeout_seconds),
             allow_windows_breakaway=True,
         )
-        return result.returncode == 0 and not result.output_limit_exceeded and not result.timed_out
+        return (
+            result.returncode == 0
+            and not result.output_limit_exceeded
+            and not result.timed_out
+            and not result.containment_failed
+        )
 
     def run_fallback(
         self,
@@ -86,8 +102,9 @@ class TrustedCodexHookLaunch:
             cwd=self.cwd,
             environment=self.environment,
             timeout_seconds=timeout_seconds,
+            deadline_monotonic=self._launch_deadline(timeout_seconds),
         )
-        if result.returncode != 0 or result.output_limit_exceeded or result.timed_out:
+        if result.returncode != 0 or result.output_limit_exceeded or result.timed_out or result.containment_failed:
             return None
         return result.stdout
 
@@ -122,6 +139,8 @@ def validate_codex_hook_launch(
     _state, configured_manifest, guard_home = _resolve_managed_hook_paths(state_path, manifest_path)
     manifest = load_authenticated_hook_manifest_path(guard_home, configured_manifest)
     _verify_manifest_context(manifest, guard_home=guard_home, manifest_path=configured_manifest)
+    manifest = _selected_launch_generation(manifest, config_json=config_json)
+    _verify_manifest_context(manifest, guard_home=guard_home, manifest_path=configured_manifest)
     interpreter = _mapping(manifest.get("interpreter"), label="interpreter")
     verify_executable_file_identity(interpreter)
     packaged_by_role = _verified_packaged_files(manifest)
@@ -143,7 +162,40 @@ def validate_codex_hook_launch(
     return TrustedCodexHookLaunch(
         cwd=private_hook_runtime_cwd(configured_manifest),
         environment=isolated_hook_environment(),
+        deadline_monotonic=active_hook_validation_deadline(),
     )
+
+
+def _selected_launch_generation(manifest: dict[str, object], *, config_json: str) -> dict[str, object]:
+    """Select only exact current or explicitly retained authenticated argv."""
+    retained = manifest.get("retained_bridge_generations", [])
+    allowed = manifest.get("compatible_bridge_argv_sha256", [])
+    if not isinstance(retained, list) or len(retained) > 8 or not isinstance(allowed, list) or len(allowed) > 8:
+        raise ValueError("managed Codex hook retained generation identity is invalid")
+    if any(
+        not isinstance(value, str) or len(value) != 64 or any(char not in "0123456789abcdef" for char in value)
+        for value in allowed
+    ):
+        raise ValueError("managed Codex hook bridge compatibility identity is invalid")
+    bridge_path = str(Path(__file__).with_name("adapters").joinpath("codex_daemon_hook_bridge.py").resolve())
+    for candidate in [manifest, *reversed(retained)]:
+        if not isinstance(candidate, dict):
+            raise ValueError("managed Codex hook retained generation identity is invalid")
+        interpreter = _mapping(candidate.get("interpreter"), label="interpreter")
+        expected = [interpreter.get("invocation_path"), "-I", bridge_path, config_json]
+        events = candidate.get("events")
+        if not isinstance(events, list) or not events:
+            raise ValueError("managed Codex hook event identity is invalid")
+        exact = all(_mapping(event, label="event").get("argv") == expected for event in events)
+        if exact and (candidate is manifest or bridge_argv_sha256(expected) in allowed):
+            if candidate.get("installation_id") != manifest.get("installation_id") or candidate.get(
+                "context"
+            ) != manifest.get("context"):
+                raise ValueError("managed Codex hook retained generation context is invalid")
+            return candidate
+    # Legacy manifests have a compatibility hash but no complete old layout.
+    # Their existing current-layout validation still applies; no old path is inferred.
+    return manifest
 
 
 def _verify_manifest_context(manifest: Mapping[str, object], *, guard_home: Path, manifest_path: Path) -> None:
@@ -173,7 +225,7 @@ def _verified_packaged_files(manifest: Mapping[str, object]) -> dict[str, dict[s
             raise ValueError("managed Codex hook packaged-file roles are invalid")
         verify_regular_file_identity(identity)
         packaged_by_role[role] = identity
-    if set(packaged_by_role) != _REQUIRED_PACKAGE_ROLES:
+    if set(packaged_by_role) not in (_REQUIRED_PACKAGE_ROLES, _OBSERVATION_PACKAGE_ROLES):
         raise ValueError("managed Codex hook package identity is incomplete")
     return packaged_by_role
 
@@ -181,13 +233,24 @@ def _verified_packaged_files(manifest: Mapping[str, object]) -> dict[str, dict[s
 def _verify_transport(
     packaged_by_role: Mapping[str, dict[str, object]],
     manifest: Mapping[str, object],
+    *,
+    recorded_runtime_path: Path | None = None,
 ) -> None:
-    bridge_path = Path(__file__).with_name("adapters").joinpath("codex_daemon_hook_bridge.py").resolve()
-    bridge_resume_path = Path(__file__).with_name("adapters").joinpath("codex_daemon_hook_resume.py").resolve()
-    bridge_runtime_path = Path(__file__).with_name("codex_hook_bridge_runtime.py").resolve()
-    launch_runtime_path = Path(__file__).with_name("codex_hook_launch_runtime.py").resolve()
-    runtime_trust_path = Path(__file__).resolve()
-    windows_job_path = Path(__file__).with_name("codex_hook_windows_job.py").resolve()
+    runtime_path = Path(__file__) if recorded_runtime_path is None else recorded_runtime_path
+    for role, filename in (
+        ("hook_probe", "runtime_transition_hook_probe.py"),
+        ("native_receipt", "native_decision_receipt.py"),
+    ):
+        if role in packaged_by_role and packaged_by_role[role].get("path") != str(
+            runtime_path.with_name(filename).resolve()
+        ):
+            raise ValueError("managed Codex observation package path is invalid")
+    bridge_path = runtime_path.with_name("adapters").joinpath("codex_daemon_hook_bridge.py").resolve()
+    bridge_resume_path = runtime_path.with_name("adapters").joinpath("codex_daemon_hook_resume.py").resolve()
+    bridge_runtime_path = runtime_path.with_name("codex_hook_bridge_runtime.py").resolve()
+    launch_runtime_path = runtime_path.with_name("codex_hook_launch_runtime.py").resolve()
+    runtime_trust_path = runtime_path.resolve()
+    windows_job_path = runtime_path.with_name("codex_hook_windows_job.py").resolve()
     if packaged_by_role["bridge"].get("path") != str(bridge_path):
         raise ValueError("managed Codex hook bridge path is invalid")
     if packaged_by_role["bridge_resume"].get("path") != str(bridge_resume_path):
@@ -211,6 +274,97 @@ def _verify_transport(
         or transport.get("wrapper") is not None
     ):
         raise ValueError("managed Codex hook transport identity is invalid")
+
+
+def verify_captured_launch_generation(
+    manifest: Mapping[str, object],
+) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
+    """Validate an authenticated captured layout without selecting or spawning it.
+
+    The caller must authenticate the enclosing manifest and retained argv
+    membership first. Normal launch verification still binds this module's
+    own physical path; this read-only check binds the recorded package root.
+    """
+    check_hook_validation_deadline()
+    interpreter = _mapping(manifest.get("interpreter"), label="interpreter")
+    verify_executable_file_identity(interpreter)
+    packaged = _verified_packaged_files(manifest)
+    events = manifest.get("events")
+    if not isinstance(events, list) or not events:
+        raise ValueError("managed Codex hook captured events are invalid")
+    argv = _string_list(_mapping(events[0], label="event").get("argv"), label="bridge argv")
+    if len(argv) not in (3, 4):
+        raise ValueError("managed Codex hook captured argv is invalid")
+    config_json = argv[-1]
+    try:
+        config = json.loads(config_json)
+    except (ValueError, RecursionError) as exc:
+        raise ValueError("managed Codex hook captured config is invalid") from exc
+    config = _mapping(config, label="bridge config")
+    context = _mapping(manifest.get("context"), label="context")
+    registration = _mapping(manifest.get("config"), label="config target")
+    home, runtime_home, target = (
+        context.get("guard_home"),
+        context.get("runtime_guard_home"),
+        registration.get("target"),
+    )
+    if not all(isinstance(value, str) for value in (home, runtime_home, target)):
+        raise ValueError("managed Codex hook captured context is invalid")
+    assert isinstance(home, str) and isinstance(runtime_home, str) and isinstance(target, str)
+    state = Path(runtime_home) / "daemon-state.json"
+    configured_manifest = hook_manifest_path(Path(home), Path(target))
+    if config.get("state_path") != str(state) or config.get("manifest_path") != str(configured_manifest):
+        raise ValueError("managed Codex hook captured context changed")
+    fallback = _string_list(config.get("fallback_command"), label="fallback command")
+    start = _string_list(config.get("start_command"), label="start command")
+    if len(argv) == 4 and argv[1] == "-I":
+        trust_path = packaged["runtime_trust"].get("path")
+        if not isinstance(trust_path, str):
+            raise ValueError("managed Codex hook captured trust path is invalid")
+        _verify_transport(packaged, manifest, recorded_runtime_path=Path(trust_path))
+        _verify_launch_contracts(
+            manifest,
+            interpreter=interpreter,
+            packaged_by_role=packaged,
+            runtime_guard_home=Path(runtime_home),
+            fallback_command=fallback,
+            start_command=start,
+        )
+        _verify_registered_bridge_argv(
+            manifest,
+            interpreter=interpreter,
+            bridge=packaged["bridge"],
+            config_json=config_json,
+        )
+    else:
+        from .frozen_codex_runtime import (
+            _verify_frozen_bridge_contract,
+            _verify_frozen_launch_contracts,
+            _verify_frozen_transport,
+        )
+
+        target_identity = _mapping(interpreter.get("target"), label="interpreter target")
+        if any(identity.get("path") != target_identity.get("path") for identity in packaged.values()):
+            raise ValueError("managed frozen Codex captured package is incomplete")
+        _verify_frozen_transport(manifest, packaged)
+        _verify_frozen_launch_contracts(
+            manifest,
+            interpreter=interpreter,
+            guard_home=Path(runtime_home),
+            fallback_command=fallback,
+            start_command=start,
+        )
+        _verify_frozen_bridge_contract(
+            manifest,
+            interpreter=interpreter,
+            state=state,
+            configured_manifest=configured_manifest,
+            fallback_command=fallback,
+            start_command=start,
+            config_json=config_json,
+        )
+    check_hook_validation_deadline()
+    return interpreter, packaged
 
 
 def _verify_launch_contracts(

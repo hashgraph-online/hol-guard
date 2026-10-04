@@ -13,6 +13,8 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 @pytest.mark.parametrize(
     "command",

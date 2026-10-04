@@ -73,18 +73,21 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
         _run_corpus(tmp_path)
 
 
-def test_disabled_native_harness_records_prevention(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The runner must establish its outage even when the parent uses auto and
     # diagnostic shortcuts; none of these settings may leak into the child.
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
     monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    cache_prefix = str(tmp_path / "child-bytecode-cache")
+    monkeypatch.setattr(sys, "pycache_prefix", cache_prefix)
     run = subprocess.run
     hook_responses: list[dict[str, object]] = []
 
     def capture_native_hook(command: list[str], **kwargs):
         is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
         if is_hook:
+            assert kwargs["env"]["PYTHONPYCACHEPREFIX"] == cache_prefix
             assert kwargs["env"]["HOL_GUARD_NATIVE"] == "off"
             assert kwargs["env"]["PYTHONPATH"] == ""
             assert "HOL_GUARD_PYTHON_ORACLE" not in kwargs["env"]

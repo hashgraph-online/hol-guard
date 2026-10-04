@@ -17,6 +17,8 @@ from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
 from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _runtime_tool_artifact() -> GuardArtifact:
     return GuardArtifact(

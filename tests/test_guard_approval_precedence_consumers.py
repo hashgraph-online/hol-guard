@@ -43,6 +43,9 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
 def _exact_package_context_token() -> str:
     # Built lazily inside tests: the token is native-owned and a module-level
     # call would run before the runtime fixture binds the resident home.
@@ -205,7 +208,9 @@ def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path,
     assert store.claimed is True
 
 
-def test_package_reuse_uses_post_scanner_current_action_before_claim(tmp_path: Path, native_context_digest: Path) -> None:
+def test_package_reuse_uses_post_scanner_current_action_before_claim(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
@@ -228,7 +233,9 @@ def test_package_reuse_uses_post_scanner_current_action_before_claim(tmp_path: P
     assert store.claimed is False
 
 
-def test_package_weaker_supplied_current_action_cannot_erase_package_block(tmp_path: Path, native_context_digest: Path) -> None:
+def test_package_weaker_supplied_current_action_cannot_erase_package_block(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
@@ -1094,7 +1101,9 @@ def _save_sensitive_read_allow(
     )
 
 
-def test_stdio_sensitive_read_exact_review_approval_is_reused_with_evidence(tmp_path: Path, native_context_digest: Path) -> None:
+def test_stdio_sensitive_read_exact_review_approval_is_reused_with_evidence(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")

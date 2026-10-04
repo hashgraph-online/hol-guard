@@ -59,9 +59,7 @@ def test_native_edge_floor_action_only_floors_post_tool_use() -> None:
     assert _native_edge_floor_action(None, "PostToolUse") is None
     assert _native_edge_floor_action({"decision": "deny"}, "PreToolUse") is None
     assert _native_edge_floor_action({"decision": "deny"}, "PostToolUse") == "require-reapproval"
-    assert (
-        _native_edge_floor_action({"decision": "deny"}, "PostToolUse", artifact_default_action="warn") is None
-    )
+    assert _native_edge_floor_action({"decision": "deny"}, "PostToolUse", artifact_default_action="warn") is None
     assert _native_edge_floor_action({"policy_action": "allow"}, "PostToolUse") == "allow"
 
 
@@ -137,9 +135,7 @@ def test_should_relax_configured_default_rejects_prompt_submit_without_clean_pro
     }
     assert _should_relax_configured_default(payload={"hook_event_name": "UserPromptSubmit"}, **base) is False
     assert (
-        _should_relax_configured_default(
-            payload={"hook_event_name": "UserPromptSubmit", "prompt": "   "}, **base
-        )
+        _should_relax_configured_default(payload={"hook_event_name": "UserPromptSubmit", "prompt": "   "}, **base)
         is False
     )
     assert (
@@ -165,9 +161,7 @@ def test_digest_binding_sink_matches_resolved_shim_path(tmp_path, monkeypatch) -
         }
 
     monkeypatch.setattr(eval_module, "package_shim_status", fake_status)
-    artifact = SimpleNamespace(
-        metadata={"package_manager": "uv", "package_executable": str(real_executable)}
-    )
+    artifact = SimpleNamespace(metadata={"package_manager": "uv", "package_executable": str(real_executable)})
     assert (
         _runtime_external_archive_has_digest_binding_sink(
             artifact=artifact,
