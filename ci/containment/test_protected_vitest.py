@@ -26,7 +26,11 @@ def test_workers_inherit_localhost_preload_and_cannot_replace_transform_image(tm
     shutil.copyfile(Path(runtime).resolve(strict=True), node)
     node.chmod(0o500)
     monkeypatch.setenv("PATH", str(node.parent) + os.pathsep + os.environ.get("PATH", ""))
-    (workspace / ".env").write_text("SYNTHETIC_ONLY=worker-regression\n")
+    # Exercise the credential denial deliberately in the worker, not during
+    # Vite's automatic root-level dotenv loading.
+    credentials = workspace / "credentials"
+    credentials.mkdir()
+    (credentials / ".env").write_text("SYNTHETIC_ONLY=worker-regression\n")
     source = workspace / "worker.test.ts"
     source.write_text(
         r"""
@@ -40,7 +44,8 @@ import path from 'node:path';
 test('fixed resolution reaches the real worker without wider permissions', async () => {
   expect(process.env.VITEST_WORKER_ID).toBeDefined();
   expect(transformSync('const value: number = 7', {loader: 'ts'}).code).toContain('7');
-  expect(process.execArgv.some(arg => arg.endsWith('/localhost-resolution.cjs'))).toBe(true);
+  // NODE_OPTIONS preloads are inherited but are not listed in process.execArgv.
+  expect(process.env.NODE_OPTIONS).toContain('localhost-resolution.cjs');
   expect(await dns.promises.lookup('localhost')).toEqual({address: '127.0.0.1', family: 4});
   expect(await dns.promises.lookup('localhost', 6)).toEqual({address: '::1', family: 6});
   expect(await dns.promises.lookup('localhost.', {all: true})).toEqual([{address: '127.0.0.1', family: 4}]);
@@ -67,7 +72,7 @@ test('fixed resolution reaches the real worker without wider permissions', async
   denied(() => fs.renameSync(parent, path.join(scratch, 'moved-images')));
   denied(() => fs.mkdirSync(path.join(parent, 'new-child')));
   expect(fs.readFileSync(image!)).toEqual(before);
-  denied(() => fs.readFileSync('.env'));
+  denied(() => fs.readFileSync('credentials/.env'));
   denied(() => fs.writeFileSync('worker.test.ts', 'replacement'));
   fs.writeFileSync(path.join(os.tmpdir(), 'ordinary-scratch.txt'), 'allowed');
 });
@@ -107,5 +112,5 @@ test('fixed resolution reaches the real worker without wider permissions', async
         == 0
     )
     assert (str(transform), f"--service={version}", "--ping") in checked
-    assert (workspace / ".env").read_text() == "SYNTHETIC_ONLY=worker-regression\n"
+    assert (credentials / ".env").read_text() == "SYNTHETIC_ONLY=worker-regression\n"
     assert "fixed resolution reaches the real worker" in source.read_text()
