@@ -31,6 +31,7 @@ def test_workers_inherit_localhost_preload_and_cannot_replace_transform_image(tm
     source.write_text(
         r"""
 import { test, expect } from 'vitest';
+import { transformSync } from 'esbuild';
 import dns from 'node:dns';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -38,6 +39,7 @@ import path from 'node:path';
 
 test('fixed resolution reaches the real worker without wider permissions', async () => {
   expect(process.env.VITEST_WORKER_ID).toBeDefined();
+  expect(transformSync('const value: number = 7', {loader: 'ts'}).code).toContain('7');
   expect(process.execArgv.some(arg => arg.endsWith('/localhost-resolution.cjs'))).toBe(true);
   expect(await dns.promises.lookup('localhost')).toEqual({address: '127.0.0.1', family: 4});
   expect(await dns.promises.lookup('localhost', 6)).toEqual({address: '::1', family: 6});

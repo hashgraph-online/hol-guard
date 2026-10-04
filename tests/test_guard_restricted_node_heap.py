@@ -58,7 +58,11 @@ def test_heap_option_reaches_prepared_sink_only_after_native_authorization(tmp_p
     monkeypatch.setattr(sink, "run_restricted_inline_eval", run_plan)
     monkeypatch.setattr(node_test, "run_restricted_node_test", run_prepared)
     monkeypatch.setattr(vitest, "run_restricted_vitest", run_prepared)
-    payload = {"tool_name": "bash", "cwd": str(tmp_path), "tool_input": {"command": shlex.join(argv)}}
+    payload: dict[str, object] = {
+        "tool_name": "bash",
+        "cwd": str(tmp_path),
+        "tool_input": {"command": shlex.join(argv)},
+    }
     if blocked:
         with pytest.raises(RestrictedPytestError):
             sink.run_authorized_contained_test(payload, workspace=tmp_path, authorize=authorize, timeout_seconds=20)

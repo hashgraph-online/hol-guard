@@ -25,7 +25,9 @@ def fixture(tmp_path, monkeypatch):
 
 def test_local_native_image_is_snapshotted(tmp_path, monkeypatch):
     source, private = fixture(tmp_path, monkeypatch)
-    original, image, version = module.snapshot_esbuild(tmp_path, private)
+    prepared_snapshot = module.snapshot_esbuild(tmp_path, private)
+    assert prepared_snapshot is not None
+    original, image, version = prepared_snapshot
     assert original == source
     assert image.parent == private
     assert version == "0.25.4"

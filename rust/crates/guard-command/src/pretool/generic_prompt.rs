@@ -65,6 +65,7 @@ pub(super) fn prompt_sensitive_text(value: &str) -> bool {
 pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
     static PROHIBITION: OnceLock<Regex> = OnceLock::new();
     static LIST_PROHIBITION: OnceLock<Regex> = OnceLock::new();
+    static GUARDRAIL_ITEM: OnceLock<Regex> = OnceLock::new();
     static LIST_CONNECTOR: OnceLock<Regex> = OnceLock::new();
     static REVERSAL: OnceLock<Regex> = OnceLock::new();
     static FOLLOWUP: OnceLock<Regex> = OnceLock::new();
@@ -100,22 +101,31 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                 let tail = &normalized[offset + pattern.len()..];
                 let clause = tail.split(['.', '!', '?', ';']).next().unwrap_or("");
                 let followup = FOLLOWUP.get_or_init(|| {
-                    Regex::new(r"(?i)\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\b")
+                    Regex::new(r"(?i)\b(?:do|perform|execute|run|use)\s+(?:(?:it|them)\b|(?:this|that)(?:\s+(?:anyway|regardless|now))?\s*(?:[.!?;]|$))")
                         .expect("bounded guard bypass referential follow-up")
                 });
-                let list_items_are_bypass = list_prohibition.captures(prefix).is_some_and(|captures| {
+                let guardrail_item = GUARDRAIL_ITEM.get_or_init(|| {
+                    Regex::new(r"(?i)^(?:(?:change|modify|alter|set|unset)\s+(?:node_options|(?:hol[-_ ]guard|guard)\s+(?:hooks?|configuration|settings|policy)|policy\s+authority)|recover\s+policy\s+authority)$")
+                        .expect("bounded protection-setting list item")
+                });
+                let list_items_are_guardrails = list_prohibition.captures(prefix).is_some_and(|captures| {
                     captures.get(1).is_some_and(|body| {
                         body.as_str()
                             .split(',')
                             .map(str::trim)
                             .filter(|item| !item.is_empty())
-                            .all(|item| BYPASS_PATTERNS.iter().any(|pattern| item == *pattern))
+                            .all(|item| item != *pattern && (
+                                BYPASS_PATTERNS.iter().any(|candidate| item == *candidate)
+                                    || guardrail_item.is_match(item)
+                            ))
                     })
                 });
                 let unconditional = prohibition.is_match(prefix)
-                    || (list_items_are_bypass && list_connector.is_match(tail));
+                    || (list_items_are_guardrails && list_connector.is_match(tail));
                 !unconditional || reversal.is_match(prefix) || reversal.is_match(clause)
-                    || followup.is_match(tail)
+                    || followup.is_match(
+                        &tail.split_inclusive(['.', '!', '?', ';']).take(2).collect::<String>(),
+                    )
             })
         })
             || ["approval_policy=\"never\"", "approval_policy='never'"]

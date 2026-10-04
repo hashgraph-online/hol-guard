@@ -61,12 +61,17 @@ def test_native_prompt_block_renders_supported_host_contracts() -> None:
     claude = harness_json_from_native_prompt("claude-code", result)
     assert claude["decision"] == "block"
     assert claude["policy_action"] == "block"
-    assert claude["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    hook_specific = claude["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["hookEventName"] == "UserPromptSubmit"
     assert claude["reason_code"] == "native_guard_bypass_prompt"
-    assert len(claude["risk_signals"]) == 3
-    assert any("local .env file" in signal for signal in claude["risk_signals"])
-    assert any("exfiltration" in signal for signal in claude["risk_signals"])
-    assert any("bypass" in signal for signal in claude["risk_signals"])
+    signals = claude["risk_signals"]
+    assert isinstance(signals, list)
+    assert all(isinstance(signal, str) for signal in signals)
+    assert len(signals) == 3
+    assert any("local .env file" in signal for signal in signals)
+    assert any("exfiltration" in signal for signal in signals)
+    assert any("bypass" in signal for signal in signals)
     codex = harness_json_from_native_prompt("codex", result)
     assert codex["decision"] == "block"
     assert codex["continue"] is False
@@ -83,7 +88,9 @@ def test_native_prompt_allow_does_not_create_a_block() -> None:
         {"decision": "allow", "minimum_action": "allow", "reason_code": "native_prompt_clean"},
     )
     assert "decision" not in rendered
-    assert rendered["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["hookEventName"] == "UserPromptSubmit"
     assert harness_json_from_native_prompt(
         "codex",
         {"decision": "allow", "minimum_action": "warn", "reason_code": "native_policy_warning"},
@@ -131,7 +138,9 @@ def test_hook_worker_routes_native_prompt_without_post_tool_projection(
         )
         if mode == "enforce":
             assert rendered["decision"] == "block"
-            assert rendered["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+            hook_specific = rendered["hookSpecificOutput"]
+            assert isinstance(hook_specific, dict)
+            assert hook_specific["hookEventName"] == "UserPromptSubmit"
         else:
             assert rendered["continue"] is True
             assert rendered["policy_action"] == "allow"
@@ -387,7 +396,7 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
         workspace=tmp_path / "workspace",
         store=GuardStore(tmp_path / "guard-home"),
     )
-    assert response is not None
+    assert isinstance(response, dict)
     assert response["reason_code"] == "native_hook_worker_exception"
     assert response["policy_action"] == "block"
     output = response["hookSpecificOutput"]
