@@ -49,7 +49,11 @@ jobs:
         run: uv run --no-sync python scripts/ci/python_hook_semantic_callgraph_gate.py --root .
       - name: Enforce native receipt persistence contract at exact HEAD
         run: uv run --no-sync python scripts/ci/native_receipt_persistence_gate.py --root . --json native-receipt-persistence.json
+      - name: Build source compiler for package projections
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
       - name: Prove source and built artifact capability ownership
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
         run: |
           PACKAGE_ARTIFACT_DIR=$(mktemp -d)
           uv build --wheel --sdist --out-dir "$PACKAGE_ARTIFACT_DIR"

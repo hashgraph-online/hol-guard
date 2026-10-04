@@ -37,6 +37,7 @@ jobs:
         with:
           version: "0.9.26"
       - run: uv sync --frozen --extra dev --python 3.12
+      - uses: ./.github/actions/stage-command-projections
       - run: uv run --no-sync python scripts/mdm/run-local-lab.py ${{ matrix.suites }}
       - run: uv run --no-sync basedpyright --level error
       - run: uv run --no-sync python -c "import glob, subprocess, sys; raise SystemExit(subprocess.call([sys.executable, '-m', 'ruff', 'check', 'src/', *glob.glob('tests/test_guard_mdm_*.py'), 'scripts/mdm/generate-release-manifest.py']))"
@@ -61,6 +62,7 @@ jobs:
         with:
           version: "0.9.26"
       - run: uv sync --frozen --extra mdm-build --python 3.12
+      - uses: ./.github/actions/stage-command-projections
       - shell: bash
         run: echo "HOL_GUARD_VERSION=$(uv run python -c 'from codex_plugin_scanner.version import __version__; print(__version__)')" >> "$GITHUB_ENV"
       - if: matrix.platform == 'macos'
