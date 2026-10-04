@@ -10,7 +10,6 @@ from ..models import GuardArtifact, HarnessDetection
 from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _resolve_command
 from .pi_extension_previous_source import previous_managed_extension_source
-from .pi_extension_source import legacy_managed_extension_source
 from .pi_support import (
     EXTENSION_SUFFIXES,
     OMP_AGENT_DIR,
@@ -667,13 +666,6 @@ def _legacy_omp_managed_extension_sources(
             display_name="Pi",
         ),
         previous_managed_extension_source(
-            guard_home=context.guard_home,
-            home_dir=context.home_dir,
-            settings_path=settings_path,
-            harness="pi",
-            display_name="Pi",
-        ),
-        legacy_managed_extension_source(
             guard_home=context.guard_home,
             home_dir=context.home_dir,
             settings_path=settings_path,

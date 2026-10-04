@@ -2,170 +2,65 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from .command_contained_routine_candidates import contained_routine_candidate_factor
 from .command_critical_floors import command_critical_floor_factors
 from .command_decision_adapter import (
     command_uncertainties,
     decision_factors,
-    effect_decision_to_dict,
     extension_evidence_batch,
     extension_uncertainties,
 )
+from .command_evaluation_types import _FLOOR_RANK, _MODE_FLOOR, _SEVERITY_RANK, _UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS
+from .command_evaluation_types import (
+    CommandDecisionFloor as CommandDecisionFloor,
+)
+from .command_evaluation_types import (
+    CommandRuleMatch as CommandRuleMatch,
+)
+from .command_evaluation_types import (
+    CompositeCommandEvaluation as CompositeCommandEvaluation,
+)
+from .command_evaluation_types import (
+    OwnedCommandRuleMatch as OwnedCommandRuleMatch,
+)
 from .command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
-    CommandSafetyRule,
     risk_classes_for_command_action,
 )
 from .command_model import CanonicalCommand
+from .command_native_factors import (
+    _direct_github_permission_ids,
+    _explicit_permission_allow_factors,
+    _native_classification_factors,
+)
 from .command_shell_read_factors import shell_read_floor_factors
 from .command_verified_read_candidates import verified_read_candidate_factor
 from .command_workspace_write_candidates import workspace_write_candidate_factors
-from .effect_contract import DecisionBasis, ProofRequirement, ProofRoute, UncertaintyKind
 from .effect_decision import (
-    DecisionFactor,
-    DecisionFactorSource,
-    EffectDecision,
     EffectDecisionRequest,
-    PositiveProof,
     evaluate_effect_decision,
 )
 from .extension_control_contract import (
-    ControlResolution,
     ControlSurface,
     ExtensionControlLayer,
     ResolverFailureCode,
 )
 from .extension_control_resolver import resolve_extension_controls
 from .extension_control_runtime import (
-    ExtensionControlDecisionEvidence,
     ExtensionControlRuntimeSnapshot,
     current_extension_control_snapshot,
 )
 from .extension_trust import filter_inert_external_observations
-from .github_capability_contract import github_capability_contract
-from .github_command_capabilities import classify_github_cli
 from .github_workflow_authorization import (
     GitHubWorkflowAuthorization,
     github_workflow_authorization_evidence,
 )
 from .native_command_extension_evidence import (
-    NativeCommandExtensionObservation,
-    NativeMatcherEvidence,
     observations_from_native_evidence,
 )
-
-CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
-_FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
-_UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS = frozenset(
-    {
-        "destructive_shell",
-        "credential_exfiltration",
-        "data_flow_exfiltration",
-        "encoded_execution",
-        "encoded_exfiltration",
-        "guard_bypass",
-        "policy_bypass",
-    }
-)
-_SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-_MODE_FLOOR: dict[str, CommandDecisionFloor] = {
-    "disabled": "allow",
-    "monitor": "monitor",
-    "review": "review",
-    "enforce": "block",
-    "required": "review",
-}
-
-
-@dataclass(frozen=True, slots=True)
-class CommandRuleMatch:
-    rule: CommandSafetyRule
-    action_class: str | None
-    reason: str
-    command: CanonicalCommand
-    matcher_evidence: tuple[NativeMatcherEvidence, ...] = ()
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "rule_id": self.rule.rule_id,
-            "severity": self.rule.severity,
-            "risk_classes": list(self.rule.risk_classes),
-            "action_class": self.action_class,
-            "reason": self.reason,
-            "safer_alternatives": list(self.rule.safer_alternatives),
-            "matcher_evidence": [item.to_dict() for item in self.matcher_evidence],
-            "parse_confidence": self.command.confidence,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class OwnedCommandRuleMatch:
-    """One rule match with its owning extension."""
-
-    extension: CommandSafetyExtension
-    match: CommandRuleMatch
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "extension_id": self.extension.extension_id,
-            **self.match.to_dict(),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class CompositeCommandEvaluation:
-    """All command matches plus the compatibility-preserving controlling action."""
-
-    command: CanonicalCommand
-    matches: tuple[OwnedCommandRuleMatch, ...]
-    controlling_action_class: str | None
-    controlling_reason: str | None
-    controlling_rule_id: str | None
-    minimum_action: CommandDecisionFloor
-    extension_observations: tuple[NativeCommandExtensionObservation, ...]
-    decision_plane: EffectDecision
-    baseline_factors: tuple[DecisionFactor, ...]
-    baseline_uncertainties: tuple[UncertaintyKind, ...]
-    control_resolution: ControlResolution
-    private_control_evidence: ExtensionControlDecisionEvidence | None
-
-    @property
-    def risk_classes(self) -> tuple[str, ...]:
-        risks = {risk for owned in self.matches for risk in owned.match.rule.risk_classes}
-        if self.controlling_action_class is not None:
-            risks.update(risk_classes_for_command_action(self.controlling_action_class))
-        if any(factor.reason_code == "critical.local-secret-read" for factor in self.baseline_factors):
-            risks.add("local_secret_read")
-        if any(factor.reason_code == "critical.local-script-execution" for factor in self.baseline_factors):
-            risks.add("execution")
-        return tuple(sorted(risks))
-
-    @property
-    def matched(self) -> bool:
-        return self.controlling_action_class is not None or bool(self.matches)
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "security_identity": self.command.security_identity,
-            "controlling_action_class": self.controlling_action_class,
-            "controlling_reason": self.controlling_reason,
-            "controlling_rule_id": self.controlling_rule_id,
-            "minimum_action": self.minimum_action,
-            "risk_classes": list(self.risk_classes),
-            "matches": [owned.to_dict() for owned in self.matches],
-            "extension_observations": [item.to_dict() for item in self.extension_observations],
-            "decision_plane": effect_decision_to_dict(self.decision_plane),
-            "parse_confidence": self.command.confidence,
-            "uncertainty_reason": self.command.uncertainty_reason,
-        }
 
 
 def evaluate_command(
@@ -561,171 +456,6 @@ def evaluate_command(
         control_resolution=control_resolution,
         private_control_evidence=runtime_snapshot.private_evidence if runtime_snapshot is not None else None,
     )
-
-
-def _native_classification_factors(
-    value: object,
-    command: CanonicalCommand,
-    *,
-    allow_benign_proof: bool = True,
-) -> tuple[DecisionFactor, ...]:
-    """Carry native hard blocks and benign proof into host policy composition.
-
-    Called only after request/control-bound native observation validation.
-    It supplies the positive proof missing from an otherwise empty policy
-    request; independent restrictive factors still win in the reducer.
-    """
-    if not isinstance(value, dict):
-        return ()
-    blocked = value.get("minimum_action") == "block"
-    privileged_wrapper_reapproval = (
-        value.get("minimum_action") == "require-reapproval"
-        and value.get("reason_code") == "native_privileged_wrapper_reapproval"
-    )
-    explicitly_benign = (
-        allow_benign_proof
-        and command.confidence == "exact"
-        and value.get("minimum_action") == "allow"
-        and value.get("explicitly_benign") is True
-    )
-    factors: list[DecisionFactor] = []
-    if blocked or privileged_wrapper_reapproval or explicitly_benign:
-        digest = hashlib.sha256(
-            json.dumps(
-                {
-                    "schema": "guard.native-classification-projection.v1",
-                    "command_security_identity": command.security_identity,
-                    "command_extensions": value["command_extensions"],
-                    "minimum_action": (
-                        "block" if blocked else "require-reapproval" if privileged_wrapper_reapproval else "allow"
-                    ),
-                    "explicitly_benign": explicitly_benign,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode()
-        ).hexdigest()
-        if blocked:
-            factors.append(
-                DecisionFactor(
-                    source=DecisionFactorSource.ASSURANCE,
-                    reason_code="native.classification-block",
-                    basis=DecisionBasis("block", None),
-                    producer_ref="native:command-classification",
-                    evidence_digest=digest,
-                )
-            )
-        elif privileged_wrapper_reapproval:
-            factors.append(
-                DecisionFactor(
-                    source=DecisionFactorSource.ASSURANCE,
-                    reason_code="native.privileged-wrapper-reapproval",
-                    basis=DecisionBasis("require-reapproval", None),
-                    producer_ref="native:command-classification",
-                    evidence_digest=digest,
-                )
-            )
-        else:
-            proof = PositiveProof(
-                ProofRoute.VERIFIED,
-                digest,
-                frozenset({ProofRequirement.CONFIGURATION_IDENTITY, ProofRequirement.PARSER_CONFIDENCE}),
-            )
-            factors.append(
-                DecisionFactor(
-                    source=DecisionFactorSource.ASSURANCE,
-                    reason_code="native.explicit-benign",
-                    basis=DecisionBasis("allow", ProofRoute.VERIFIED),
-                    producer_ref="native:command-classification",
-                    evidence_digest=digest,
-                    proof=proof,
-                )
-            )
-    return tuple(factors)
-
-
-def _explicit_permission_allow_factors(
-    command: CanonicalCommand,
-    layers: tuple[ExtensionControlLayer, ...],
-    permission_ids: frozenset[str],
-    authority_evidence: ExtensionControlDecisionEvidence | None,
-) -> tuple[DecisionFactor, ...]:
-    if command.confidence != "exact" or not permission_ids:
-        return ()
-    canonical_layers = [
-        {
-            "kind": layer.kind.value,
-            "catalog_digest": layer.catalog_digest,
-            "global_lockdown": layer.global_lockdown,
-            "controls": [
-                {
-                    "kind": control.target.kind.value,
-                    "target_id": control.target.target_id,
-                    "state": control.state.value,
-                }
-                for control in sorted(
-                    layer.controls,
-                    key=lambda item: (item.target.kind.value, item.target.target_id),
-                )
-            ],
-        }
-        for layer in sorted(layers, key=lambda item: item.kind.value)
-    ]
-    requirements = frozenset(
-        {
-            ProofRequirement.CONFIGURATION_IDENTITY,
-            ProofRequirement.PARSER_CONFIDENCE,
-            ProofRequirement.CAPABILITY_CONSTRAINTS,
-        }
-    )
-    factors: list[DecisionFactor] = []
-    for permission_id in sorted(permission_ids):
-        binding_digest = hashlib.sha256(
-            json.dumps(
-                {
-                    "command_security_identity": command.security_identity,
-                    "permission_id": permission_id,
-                    "layers": canonical_layers,
-                    "authority": (
-                        {
-                            "revision": authority_evidence.revision,
-                            "effective_digest": authority_evidence.effective_digest,
-                        }
-                        if authority_evidence is not None
-                        else None
-                    ),
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        proof = PositiveProof(ProofRoute.VERIFIED, binding_digest, requirements)
-        factors.append(
-            DecisionFactor(
-                source=DecisionFactorSource.CONTROL,
-                reason_code="control.explicitly-enabled-permission",
-                basis=DecisionBasis("allow", ProofRoute.VERIFIED),
-                producer_ref=f"control:{permission_id}",
-                evidence_digest=binding_digest,
-                proof=proof,
-            )
-        )
-    return tuple(factors)
-
-
-def _direct_github_permission_ids(command: CanonicalCommand) -> set[str]:
-    """Resolve catalog permissions for exact GitHub capabilities without matcher rules."""
-
-    permission_ids: set[str] = set()
-    for segment in command.segments:
-        executable = (segment.executable or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
-        if executable.removesuffix(".exe") != "gh":
-            continue
-        assessment = classify_github_cli(segment.arguments)
-        permission_ids.update(
-            github_capability_contract(capability).permission_id for capability in assessment.capabilities
-        )
-    return permission_ids
 
 
 def _rule_floor(owned: OwnedCommandRuleMatch) -> CommandDecisionFloor:

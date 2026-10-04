@@ -106,6 +106,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._started = False
         self._thread: threading.Thread | None = None
         self._snapshot: dict[str, object] | None = None
+        self._resident_startup_required = True
         self._acked = False
         self._epoch = 0
         self._last_error: str | None = None
@@ -255,6 +256,9 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             self._input_fingerprint = fingerprint
             return
         same_resident = _same_resident_paths(self._input_fingerprint[1], fingerprint[1])
+        if not same_resident:
+            with self._condition:
+                self._resident_startup_required = True
         previous_inputs = dict(self._input_fingerprint[0])
         current_inputs = dict(fingerprint[0])
         changed_paths = {
@@ -621,6 +625,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 if self._input_fingerprint is not None:
                     self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint_confirmed)
                 self._snapshot = snapshot
+                self._resident_startup_required = False
                 self._published_config_digest = cast(str, snapshot["config_digest"])
                 self._published_local_cli_revision = local_cli_revision
                 self._published_policy_fingerprint = (

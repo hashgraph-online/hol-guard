@@ -436,11 +436,21 @@ fn tui_runner_expansion_matches_wrapper_executable_name_variants_by_position() {
     for (executable, arguments, expected) in [
         ("exec", vec!["tui-runner.exe", "$RECONFIG_FLAG"], vec![0]),
         ("exec", vec!["tui-runner.cmd", "$RECONFIG_FLAG"], vec![0]),
-        ("xargs", vec!["-n", "1", "tui-runner.exe", "$RECONFIG_FLAG"], vec![0]),
+        (
+            "xargs",
+            vec!["-n", "1", "tui-runner.exe", "$RECONFIG_FLAG"],
+            vec![0],
+        ),
         ("exec", vec!["tui-runner", "--reconfigure"], vec![]),
         ("exec", vec!["tui-runner.exe", "--reconfigure"], vec![]),
     ] {
-        let command = model(&[(Some(executable.to_owned()), arguments.iter().map(|v| (*v).to_owned()).collect())], None);
+        let command = model(
+            &[(
+                Some(executable.to_owned()),
+                arguments.iter().map(|v| (*v).to_owned()).collect(),
+            )],
+            None,
+        );
         assert_eq!(
             matcher.match_segments(&command),
             Ok(expected),

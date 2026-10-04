@@ -418,7 +418,11 @@ fn expansion_markers() -> BTreeSet<String> {
     string_set(&["$", "`"])
 }
 fn executable_name_variants(name: &str) -> BTreeSet<String> {
-    BTreeSet::from([name.to_owned(), format!("{name}.cmd"), format!("{name}.exe")])
+    BTreeSet::from([
+        name.to_owned(),
+        format!("{name}.cmd"),
+        format!("{name}.exe"),
+    ])
 }
 fn tui_runner_launchers() -> Vec<Vec<String>> {
     [

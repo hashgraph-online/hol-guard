@@ -155,7 +155,7 @@ def _groups() -> dict[str, NativeCaseContract]:
             or not 0 <= value.variant_remainder < value.variant_modulus
             or value.original_floor not in _ACTIONS
             or value.expected_floor not in _ACTIONS
-            or value.expected_native_floor not in ("allow", "review", "block")
+            or value.expected_native_floor not in ("allow", "review", "require-reapproval", "block")
             or type(value.expected_explicitly_benign) is not bool
             or value.expected_decision not in ("allow", "deny")
             or (value.expected_native_floor == "allow") != value.expected_explicitly_benign
@@ -278,7 +278,7 @@ def _input_contracts(
             ].append(case.case_id)
         if group.expected_evalerror is not None:
             rejected[group.expected_evalerror].append(case.case_id)
-    if variant_ids or total != 51_000 or stronger != 11_558 or set(members) != set(groups):
+    if variant_ids or total != 51_000 or stronger != 11_683 or set(members) != set(groups):
         raise ValueError("native corpus fixed input coverage changed")
     expected: dict[str, tuple[int, str]] = {}
     for raw in cast(list[object], _contract_data()["groups"]):
@@ -330,6 +330,29 @@ def expected_native_case(case: CommandCorpusCase, oracle: OracleRecord) -> Nativ
     return expected
 
 
+def _diagnostic_value(field: str, value: object) -> str:
+    """Expose finite contract facts, never raw commands, paths or arbitrary native text."""
+    if value is None:
+        return "null"
+    if type(value) is bool:
+        return str(value).lower()
+    if type(value) is int and 0 <= value <= 1_000_000:
+        return str(value)
+    vocabulary = {
+        "decision_plane_floor": _ACTIONS,
+        "native_floor": _ACTIONS,
+        "policy_action": _ACTIONS,
+        "model_confidence": ("exact", "uncertain"),
+        "decision": ("allow", "deny"),
+        "authority": ("rust",),
+    }
+    if isinstance(value, str) and value in vocabulary.get(field, ()):
+        return value
+    # Even a syntactically valid reason or rule ID could contain private text.
+    encoded = json.dumps(value, sort_keys=True, ensure_ascii=True, default=lambda _: "<unsupported>").encode()
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
 def validate_native_case(case: CommandCorpusCase, oracle: OracleRecord, reviewed: NativeCommandEvaluation) -> str:
     """Require the authored native signature without modifying its evidence."""
 
@@ -375,7 +398,11 @@ def validate_native_case(case: CommandCorpusCase, oracle: OracleRecord, reviewed
     )
     for field, actual, authored in checks:
         if actual != authored or (isinstance(authored, bool) and type(actual) is not bool):
-            raise ValueError(f"native corpus contract mismatch: {case.case_id} {field}")
+            raise ValueError(
+                f"native corpus contract mismatch: {case.case_id} {field}; "
+                f"group={expected.group_id}; "
+                f"expected={_diagnostic_value(field, authored)}; actual={_diagnostic_value(field, actual)}"
+            )
     if expected.expected_evalerror is not None and (observations or permissions):
         raise ValueError("native corpus failed evaluation must retain empty observations")
     if _ACTIONS.index(reviewed.evaluation.decision_plane.action) < _ACTIONS.index(oracle.minimum_floor):
