@@ -15,6 +15,7 @@ from tests.support.ci_workflow import expand_ci_job_actions
 
 @pytest.fixture
 def detector():
+    """Load a fresh regeneration detector for isolated state and environment tests."""
     path = Path(__file__).parents[1] / "scripts/ci/detect_pending_extension_regen.py"
     spec = importlib.util.spec_from_file_location("pending_native_artifact_regeneration", path)
     assert spec is not None and spec.loader is not None
@@ -49,6 +50,31 @@ def test_source_only_native_changes_report_pending(detector, monkeypatch, capsys
     assert capsys.readouterr().out == "true\n"
 
 
+def test_clean_checkout_catalog_awaits_generation(detector, monkeypatch, tmp_path):
+    """A missing generated catalog must remain distinguishable from a malformed file."""
+    monkeypatch.setattr(detector, "CATALOG", tmp_path / "command-catalog.v1.json")
+    assert detector.catalog_ids() == set()
+
+
+def test_malformed_staged_catalog_is_not_treated_as_missing(detector, monkeypatch, tmp_path):
+    """Invalid staged JSON must fail instead of being interpreted as an unstaged output."""
+    catalog = tmp_path / "command-catalog.v1.json"
+    catalog.write_text("invalid")
+    monkeypatch.setattr(detector, "CATALOG", catalog)
+    with pytest.raises(ValueError):
+        detector.catalog_ids()
+
+
+def test_clean_source_only_pr_defers_published_freshness(detector, monkeypatch, tmp_path, capsys):
+    """Absent build outputs alone must not mark existing contributions as pending."""
+    monkeypatch.setattr(detector, "CATALOG", tmp_path / "command-catalog.v1.json")
+    monkeypatch.setattr(detector, "contribution_ids", lambda: {"command.example"})
+    monkeypatch.setattr(detector, "regen_artifacts_absent_from_diff", lambda: True)
+    monkeypatch.setattr(sys, "argv", ["detector", "--defer-freshness"])
+    assert detector.main() == 0
+    assert capsys.readouterr().out == "true\n"
+
+
 def test_unchanged_canonical_inputs_still_require_fresh_artifacts(detector, monkeypatch, capsys):
     """Verify unchanged canonical inputs still require fresh artifacts."""
     monkeypatch.setattr(
@@ -62,13 +88,27 @@ def test_unchanged_canonical_inputs_still_require_fresh_artifacts(detector, monk
 
 
 @pytest.fixture
-def verifier():
+def verifier(monkeypatch):
+    """Load the verifier without inheriting the real workflow environment file."""
+    monkeypatch.delenv("GITHUB_ENV", raising=False)
     path = Path(__file__).parents[1] / "scripts/ci/verify_native_command_program.py"
     spec = importlib.util.spec_from_file_location("native_program_verifier", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_verified_compiler_is_reused_by_subsequent_package_steps(verifier, monkeypatch, tmp_path):
+    """Successful verification exports the exact compiler for later package builds."""
+    compiler = tmp_path / "guard-command-source"
+    compiler.write_bytes(b"compiler fixture")
+    environment = tmp_path / "workflow-environment"
+    monkeypatch.setenv("GITHUB_ENV", str(environment))
+    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", str(compiler)])
+    monkeypatch.setattr(verifier, "_run", lambda command: None)
+    assert verifier.main() == 0
+    assert environment.read_text() == f"HOL_GUARD_BUILD_SOURCE_COMPILER={compiler}\n"
 
 
 @pytest.mark.parametrize(
