@@ -66,9 +66,7 @@ def test_prompt_timeout_never_releases_an_unreviewed_protected_prompt(
         )
     response = _json_object(output.getvalue())
     assert returncode == 0
-    if harness == "grok":
-        assert response == {}
-    elif harness == "copilot":
+    if harness == "copilot":
         assert response["behavior"] == "deny"
     else:
         assert response["decision"] == "block"

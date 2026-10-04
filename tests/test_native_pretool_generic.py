@@ -79,7 +79,11 @@ def test_native_prompt_block_renders_supported_host_contracts() -> None:
     copilot = harness_json_from_native_prompt("copilot", result)
     assert copilot["behavior"] == "deny"
     assert copilot["reason_code"] == "native_guard_bypass_prompt"
-    assert harness_json_from_native_prompt("grok", result) == {}
+    grok = harness_json_from_native_prompt("grok", result)
+    assert grok["decision"] == "block"
+    assert grok["reason"] == "HOL Guard blocked this prompt because it asks to disable Guard protection."
+    assert grok["policy_action"] == "block"
+    assert grok["reason_code"] == "native_guard_bypass_prompt"
 
 
 def test_native_prompt_allow_does_not_create_a_block() -> None:
