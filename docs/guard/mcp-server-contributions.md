@@ -26,9 +26,9 @@ Operators can still add an unlisted MCP server with **Add custom extension**. Cu
 ## How to contribute
 
 1. Add `contributions/mcp-servers/mcp.<name>.json`.
-2. Add catalog id `command.mcp-<name>` to the `external` list in `contracts/extensions/trust-class-map.v1.json`.
+2. New catalog ids default to `external` and opt-in. Extension builder CI stages missing entries in the shared trust map before building; contributors do not need to edit that shared list.
 3. Package the JSON through Hatch force-include and the packaged-contract copy script. The Builder's reviewed `apply` plan handles these integration edits for generated kits.
-4. [Regenerate the complete native program and catalog](extension-builder/VALIDATION.md#native-source-and-fixture-checks), rebuild the native binaries, and refresh the public directory. Commit those generated projections with the MCP input.
+4. Submit the authored MCP input and tests together with the packaging integration edits in step 3. In particular, the frozen-build copy list must include the new MCP JSON; source-only trust preparation does not replace that packaging integration. Do not commit generated catalogs or directory files. CI prepares and verifies projections on the PR merge checkout, and maintainer artifact regeneration publishes shared outputs after merge.
 5. Run `tests/test_guard_mcp_server_contribution.py`, the trust checks, and any generated MCP test file using the [validation workflow](extension-builder/VALIDATION.md#source-tree-checks).
 
 Do not declare `trusted-library` or `first-party`. The schema only allows `external`.
@@ -56,7 +56,7 @@ v1 enables the whole contributed server entry. Per-tool catalog permissions are 
 
 ## Review bar
 
-- New catalog ids must be added to the trust-class map in the same change.
+- New catalog ids must resolve to external/opt-in. CI and maintainer regeneration add missing ids conservatively; changes to existing reviewed trust classes still require review.
 - Tests must prove the contribution stays inert until a local-admin enable exists.
 - A this-device custom MCP grant must still win over the contribution.
 - Remote HTTP contributions must prove they cannot lower policy through an `allow` state.
