@@ -1,19 +1,43 @@
 #![forbid(unsafe_code)]
 
 mod approval;
+mod approval_gate_consumers;
+mod approval_gate_enrollment;
+mod approval_gate_grants;
+mod approval_gate_op;
+mod approval_gate_settings;
+mod approval_gate_state;
+mod approval_gate_verify;
+mod approval_reuse;
 mod archive_inspect;
 mod archive_inspect_containment;
+mod claim_approval_reuse_op;
+mod claim_reuse;
+mod command_effect;
+#[cfg(unix)]
+mod contained_op;
 mod context_digest;
 mod context_digest_json;
 mod edge;
+mod encrypted_secret_store;
+mod github_workflow_runtime_authorization;
 mod hardening;
+mod hook_process_spawn;
+mod local_once_store;
 mod managed_resident;
+mod mcp_probe_op;
 mod native_hook_receipt;
+mod native_runtime_admission;
+mod native_runtime_resilience;
 mod oneshot;
+mod package_authority_op;
 mod policy_enforcement;
+mod policy_integrity_resolver;
 mod policy_store;
+mod prompt_analyze_op;
 mod resident_client;
 mod resident_endpoint;
+mod resident_ops;
 mod resident_process_identity;
 mod resident_protocol;
 mod resident_state;
@@ -21,9 +45,12 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod shim_op;
 #[cfg(unix)]
 mod state_directory_lock;
 mod strict_json;
+mod totp;
+mod workflow_capability_store;
 
 pub(crate) use resident_protocol::{capabilities, encode_response, strict_json_value};
 pub(crate) use resident_transport::{

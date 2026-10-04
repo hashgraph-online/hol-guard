@@ -192,7 +192,7 @@ fn resolved_path_allowed_for_operation(
         || guard_secure_fs::credential_named_path(canonical)
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
             || guard_safety_doc(canonical, home_dir)
-            || agent_skill_document(canonical, home_dir)
+            || (read_only && agent_skill_document(canonical, home_dir))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;
@@ -267,17 +267,53 @@ pub(super) fn agent_skill_document(canonical: &std::path::Path, home_dir: Option
     let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
         return false;
     };
-    let Ok(skills) = std::fs::canonicalize(home.join(".agents/skills")) else {
+    if canonical
+        .extension()
+        .is_none_or(|extension| extension != "md")
+    {
         return false;
-    };
-    let Ok(relative) = canonical.strip_prefix(skills) else {
-        return false;
-    };
-    canonical.extension().is_some_and(|extension| extension == "md")
-        && relative.components().count() >= 2
-        && relative.components().all(|component| {
-            matches!(component, std::path::Component::Normal(part) if !part.to_string_lossy().starts_with('.'))
-        })
+    }
+    for root in [
+        ".agents/skills",
+        ".claude/skills",
+        ".codex/skills",
+        ".codex/superpowers/skills",
+        ".zcode/cli/plugins/cache",
+    ] {
+        let Ok(skills) = std::fs::canonicalize(home.join(root)) else {
+            continue;
+        };
+        // Retain the existing managed .agents root-link support. New roots
+        // must not turn a broader hidden application directory into skills.
+        if root != ".agents/skills" && skills != home.join(root) {
+            continue;
+        }
+        let Ok(relative) = canonical.strip_prefix(skills) else {
+            continue;
+        };
+        let Some(parts) = relative
+            .components()
+            .map(|component| match component {
+                std::path::Component::Normal(part) if !part.to_string_lossy().starts_with('.') => {
+                    Some(part)
+                }
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
+        // Cache entries are marketplace/plugin/version/skills/skill/document.
+        let scoped = if root == ".zcode/cli/plugins/cache" {
+            parts.len() >= 6 && parts[3] == "skills"
+        } else {
+            parts.len() >= 2
+        };
+        if scoped {
+            return true;
+        }
+    }
+    false
 }
 
 /// `~/.hol-support/SAFETY.md` is the harness-facing safety guide that agents

@@ -202,7 +202,22 @@ def exercise(root: Path) -> dict[str, object]:
     home, workspace = root / "home", root / "work"
     home.mkdir(mode=0o700)
     workspace.mkdir(mode=0o700)
+    bind_windows_state = None
+    if os.name == "nt":
+        from codex_plugin_scanner.guard.native_policy_snapshot_windows_state import (
+            _windows_ensure_private_directory,
+            _windows_private_state_binding,
+        )
+
+        bind_windows_state = _windows_private_state_binding
+        _windows_ensure_private_directory(home)
+        _windows_ensure_private_directory(workspace)
     store = GuardStore(home)
+    if bind_windows_state is not None:
+        # Settings writes start a resident. Create the runtime directory first so
+        # that client pins the directory publication opens, not a missing path.
+        with bind_windows_state(home):
+            pass
     password = secrets.token_urlsafe(32)
     update_guard_settings(home, {"mode": "enforce"})
     update_settings(
@@ -471,7 +486,7 @@ def main() -> int:
         "native_feature_missing",
     )
     authoring = prove_installed_data_only_authoring(package)
-    with tempfile.TemporaryDirectory(prefix="hge-", dir=None if os.name == "nt" else "/tmp") as temporary:
+    with tempfile.TemporaryDirectory(prefix="hge-", dir=Path.home() if os.name == "nt" else "/tmp") as temporary:
         report = exercise(Path(temporary))
     report["data_only_authoring"] = authoring
     report["data_only_authoring_receipts_authenticated"] = False

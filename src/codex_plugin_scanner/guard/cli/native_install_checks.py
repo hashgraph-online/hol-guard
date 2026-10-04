@@ -133,7 +133,7 @@ def _grok_hook_command_is_guard(command: str, context: HarnessContext | None = N
 
 
 def _grok_prompt_hook_is_observe(prompt_hook: Path, context: HarnessContext | None = None) -> bool:
-    """Verify the required Grok observation events have managed command hooks."""
+    """Verify the prompt gate and passive lifecycle callbacks have managed hooks."""
     if not prompt_hook.is_file():
         return False
     try:

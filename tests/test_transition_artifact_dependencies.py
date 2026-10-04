@@ -241,7 +241,7 @@ def test_artifact_record_schema_refuses_missing_digest_and_unknown_identity_fiel
 
 def test_artifact_dependency_cannot_be_used_for_reserved_hook_key(
     transition,
-    tmp_path,  # noqa: F811 -- shared pytest fixture
+    tmp_path,
 ):
     runtime, plan, _bindings, _pointer = transition
     key = plan.guard_home / "managed/codex/hook-manifest.key"
@@ -256,7 +256,7 @@ def test_artifact_dependency_cannot_be_used_for_reserved_hook_key(
 
 def test_signed_large_artifact_dependency_never_mutates_or_journals_artifact(
     transition,
-    tmp_path,  # noqa: F811 -- shared pytest fixture
+    tmp_path,
 ):
     runtime, plan, _bindings, _pointer = transition
     path, identity = _artifact(tmp_path, large=True)

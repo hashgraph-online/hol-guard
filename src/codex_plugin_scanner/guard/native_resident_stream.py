@@ -6,6 +6,7 @@ owns one bounded framed client so the pool registry remains small and testable.
 
 from __future__ import annotations
 
+import os
 import struct
 import subprocess
 import threading
@@ -38,6 +39,33 @@ def _hold_until(lock: _TimedLock, deadline: float | None) -> Iterator[bool]:
     finally:
         if acquired:
             lock.release()
+
+
+def _is_directory(path: Path) -> bool:
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _existing_state_dir(state_dir: Path) -> Path:
+    """Launch against a spelling that exists.
+
+    A pool may have pinned ``resolve()`` before ``native-runtime`` existed.
+    Publication creates the absolute spelling. Opening the missing pin makes
+    Windows report a missing private ancestor.
+    """
+
+    if _is_directory(state_dir):
+        return state_dir
+    absolute = Path(os.path.abspath(state_dir))
+    if not _is_directory(absolute):
+        return state_dir
+    try:
+        resolved = absolute.resolve()
+    except OSError:
+        return absolute
+    return resolved if _is_directory(resolved) else absolute
 
 
 class _StreamFailure:
@@ -93,7 +121,7 @@ class _PersistentNativeClient:
                     str(self._executable),
                     "resident-client-stream",
                     "--stdin",
-                    str(self._state_dir),
+                    str(_existing_state_dir(self._state_dir)),
                 ),
                 cwd=self._executable.parent,
                 env=self._environment,

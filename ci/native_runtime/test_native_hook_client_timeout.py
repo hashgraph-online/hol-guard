@@ -19,7 +19,7 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path, deadline_budget_ms=20)
+    request = _request(runtime, state_dir.parent, deadline_budget_ms=20)
     process = subprocess.Popen(
         (str(runtime), "hook-client", "--stdin", str(state_dir)),
         stdin=subprocess.PIPE,
