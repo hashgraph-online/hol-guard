@@ -68,9 +68,7 @@ def _record_copilot_silent_review(
     from ..models import HarnessDetection
 
     launch_target = (
-        json.dumps(runtime_arguments, sort_keys=True)
-        if runtime_arguments is not None
-        else runtime_artifact.command
+        json.dumps(runtime_arguments, sort_keys=True) if runtime_arguments is not None else runtime_artifact.command
     )
     record_unprompted_review(
         detection=HarnessDetection(
