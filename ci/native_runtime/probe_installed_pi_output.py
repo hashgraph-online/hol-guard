@@ -35,7 +35,7 @@ _NODE_PROBE_TIMEOUT = 5.0
 # Match the production workspace-readiness cap without extending hook budgets.
 _DAEMON_READINESS_TIMEOUT = 25.0
 _DAEMON_CLEANUP_TIMEOUT = 10.0
-_NATIVE_CLEANUP_RETRY_INTERVAL = 0.05
+_NATIVE_CLEANUP_RETRY_INTERVAL = 0.25
 _NODE_PROBE_SOURCE = 'const typedValue: string = "node-capability-probe";\nprocess.stdout.write(typedValue);\n'
 _ENV_ALLOWLIST = {
     "COMSPEC",
@@ -989,7 +989,7 @@ def _cleanup_installed_daemon(daemon: Any) -> None:
         if stop_timeout is not None and exc is not stop_timeout:
             raise ProbeCleanupUnsafeError(
                 "authenticated Guard daemon cleanup did not complete after stop timeout"
-            ) from stop_timeout
+            ) from exc
         if isinstance(exc, ProbeCleanupUnsafeError):
             raise exc
         if isinstance(exc, ProbeError):
@@ -1049,7 +1049,7 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
                 except (OSError, RuntimeError) as exc:
                     cleanup_error = exc
                 state_files = _native_state_files(guard_home)
-        if contained and not state_files:
+        if cleanup_error is None and contained and not state_files:
             return
         if time.monotonic() >= deadline:
             if cleanup_error is None:
