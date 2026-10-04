@@ -42,7 +42,6 @@ jobs:
 
   initialize:
     name: Optional live-agent qualification
-    continue-on-error: true
     env:
       GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA: ${{ github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3' && github.sha || '' }}
     if: >-

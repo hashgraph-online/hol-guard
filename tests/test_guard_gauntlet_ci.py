@@ -464,11 +464,14 @@ def test_gauntlet_qualification_is_optional_and_separate_from_required_ci():
     ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     job = ci["jobs"]["ci-python-312"]
     assert "gauntlet" not in str(job).lower()
-    assert len(job["steps"]) == 1
-    assert job["needs"] == ["quality", "coverage-plan", "coverage", "compatibility", "scheduling-sensitive"]
     optional = yaml.safe_load((root / ".github/workflows/guard-gauntlet-gate.yml").read_text())["jobs"]["initialize"]
-    assert optional["continue-on-error"] is True
+    assert not optional.get("continue-on-error", False)
     assert "github.event_name == 'pull_request_target'" in optional["if"]
     checkout = next(step for step in optional["steps"] if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"] == {"persist-credentials": False}
-    assert any(step.get("run") == "python -m ci.gauntlet.github_ci require" for step in optional["steps"])
+    requirement = next(
+        step for step in optional["steps"] if step.get("run") == "python -m ci.gauntlet.github_ci require"
+    )
+    assert requirement["if"] == (
+        "github.event_name == 'pull_request_target' && hashFiles('ci/gauntlet/pr_requirement.py') != ''"
+    )

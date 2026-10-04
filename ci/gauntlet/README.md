@@ -97,13 +97,14 @@ The default-branch verifier checks the live report as data. Feature-branch verif
 
 The optional qualification job can report “fresh real-agent evidence required.” After the evidence workflow finishes successfully, rerun that optional job to check the new evidence. New enforcement commits invalidate old evidence. The verifier revalidates the verified source against the current PR base, so a stale test-merge report cannot silently qualify a newer integration. Unrelated documentation changes do not require a product run.
 
-Guard Gauntlet is optional and does not block merge. Its qualification job uses `continue-on-error` and runs from the trusted base, not candidate Python. The required `ci (3.12)` aggregate has no dependency on Gauntlet, and the `Guard Gauntlet` status must remain outside required merge checks. No provider secret is automatically exposed to fork PRs. Fork contributions need a repository-writer-attested live run to qualify, not an untrusted uploaded `pass: true`.
+Guard Gauntlet is optional and does not block merge. Its qualification job reports failures normally and runs from the trusted base, not candidate Python. The required `ci (3.12)` aggregate has no dependency on Gauntlet. Neither the optional job nor the `Guard Gauntlet` status belongs in required merge checks. No provider secret is automatically exposed to fork PRs. Fork contributions need a repository-writer-attested live run to qualify, not an untrusted uploaded `pass: true`.
 
 ## Initial installation and verifier upgrades
 
-PR #3463 is the only initial-installation exception. Its required CI check pins
-an immutable reviewed verifier SHA in `.github/workflows/ci.yml`; that commit is
-also named `guard-gauntlet-bootstrap-v3`. The original v1 tag remains unchanged; v2 corrects the observed home-anchor judge and repository API route handling. The exception applies only to this
+PR #3463 was the initial-installation exception. It used an immutable reviewed
+verifier SHA, also named `guard-gauntlet-bootstrap-v3`. The required CI pin has
+since been removed; qualification now belongs to the optional workflow.
+The original v1 tag remains unchanged; v2 corrects the observed home-anchor judge and repository API route handling. The exception applies only to this
 repository and PR, only while the trusted base does not contain Gauntlet, and
 only to evidence produced by that exact pinned commit. It does not waive the
 full live suite or permit replayed evidence. Dispatch the initial evidence and
@@ -113,7 +114,7 @@ posts no qualification; it directs the operator to this bounded path.
 After installation, dispatch from `main`. A new candidate can change runner
 implementation or add scenario data while the trusted base judge recomputes
 outcomes. Existing scenario expectations, exact commands and physical oracles
-cannot be weakened by the candidate. The publisher and required CI consumer
+cannot be weakened by the candidate. The publisher and optional qualification consumer
 both verify the producer revision and the tested source. Reinitializing an
 unchanged, still-qualified head preserves its success rather than resetting it
 to pending.
