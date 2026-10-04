@@ -429,7 +429,8 @@ def _write_output_wheel_exclusive(
             for name in sorted(entries):
                 if not _safe_archive_path(name):
                     raise NativeWheelError(f"refusing unsafe output path: {name}")
-                archive.writestr(_zip_info(name, mode=modes.get(name, 0o644)), entries[name])
+                # Explicit ZipInfo entries do not inherit the archive's compression level.
+                archive.writestr(_zip_info(name, mode=modes.get(name, 0o644)), entries[name], compresslevel=9)
         output_file.flush()
         os.fsync(output_file.fileno())
 
