@@ -52,10 +52,13 @@ jobs:
         run: |
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
       - name: Verify generated native command catalogs before pytest fan-out
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           arguments=(--compiler rust/target/release/guard-command-source)
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            arguments+=(--changed-from "$BASE_SHA")
           fi
           python3 scripts/ci/verify_native_command_program.py "${arguments[@]}"
       - uses: ./.github/actions/setup-ci-python
@@ -349,6 +352,11 @@ jobs:
     needs: [quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      statuses: read
     steps:
       - name: Verify Python CI dependencies
         env:
@@ -363,6 +371,43 @@ jobs:
           test "$COVERAGE_RESULT" = "success"
           test "$COMPATIBILITY_RESULT" = "success"
           test "$SCHEDULING_SENSITIVE_RESULT" = "success"
+
+      - name: Check out the trusted Gauntlet verifier
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: gauntlet-trusted
+          persist-credentials: false
+      - name: Resolve the initial-installation verifier
+        id: gauntlet_verifier
+        if: github.event_name == 'pull_request'
+        env:
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -f gauntlet-trusted/ci/gauntlet/pr_requirement.py ]; then
+            echo "bootstrap=false" >> "$GITHUB_OUTPUT"
+          elif [ "$REPOSITORY" = "hashgraph-online/hol-guard" ] && [ "$PR_NUMBER" = "3463" ]; then
+            echo "bootstrap=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::The trusted base does not contain the required Gauntlet verifier."
+            exit 1
+          fi
+      - name: Check out the pinned initial-installation verifier
+        if: github.event_name == 'pull_request' && steps.gauntlet_verifier.outputs.bootstrap == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: 69de8c263514933786d5816b7a4ae8b239326a65
+          path: gauntlet-trusted
+          persist-credentials: false
+      - name: Require actual live-agent qualification for enforcement changes
+        if: github.event_name == 'pull_request'
+        working-directory: gauntlet-trusted
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA: 69de8c263514933786d5816b7a4ae8b239326a65
+        run: python3 -m ci.gauntlet.github_ci require
 
   pi-exact-continuation:
     name: Pi exact continuation (actual SDKs)
