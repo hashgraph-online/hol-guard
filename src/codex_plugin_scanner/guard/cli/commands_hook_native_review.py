@@ -202,32 +202,16 @@ def review_native_artifact_hook(
         guard_payload=response_payload,
     )
     observe_mode = config.mode == "observe"
-    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+    from ..blocked_request_mode import asks_for_approval
 
     if (
         not observe_mode
         and not asks_for_approval(config)
         and (policy_action in {"review", "require-reapproval"} or cursor_native_queue)
     ):
-        set_native_artifact_hook_final_action(state, "block")
-        state.approval_prompted = False
-        guidance = safe_alternative_reason(f"HOL Guard blocked this action. {risk_summary}")
-        _terminalize_runtime_action_copy(state.response_payload)
-        state.response_payload.update(
-            terminal_action="block",
-            approval_requests=[],
-            prompted=False,
-            operation_status="blocked",
-            terminal=True,
-            review_hint=guidance,
-            blocked_request_guidance=guidance,
-        )
-        decision_copy = state.response_payload.get("decision_v2_json")
-        if isinstance(decision_copy, dict):
-            decision_copy["harness_message"] = guidance
-        evaluation = state.response_payload.get("supply_chain_evaluation")
-        if isinstance(evaluation, dict) and isinstance(evaluation.get("user_copy"), dict):
-            evaluation["user_copy"].update(harness_message=guidance, next_step=guidance, dashboard_url=None)
+        from .commands_hook_native_silent_review import apply_unprompted_native_review
+
+        apply_unprompted_native_review(state, args, store, config, policy_action)
         return None
     terminal_action = policy_action in {
         "block",

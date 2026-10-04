@@ -23,6 +23,7 @@ from ci.native_runtime import probe_installed_native_extensions as native_probe
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
+from .cleanup import cleanup_case_resources
 from .evidence import TRANSCRIPT_LIMIT, assess_case, public_events, read_events, sha256_bytes
 from .fixtures import create_fixture, digest_file, filesystem_checks, scenario_fixture_name
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
@@ -42,6 +43,25 @@ def _watch_binding(store: Any) -> dict[str, Any]:
     if binding is None or binding.get("mode") != "observe":
         raise RuntimeError("Watch fixture lacks an authenticated resident-accepted policy")
     return {key: binding[key] for key in ("mode", "generation", "policy_digest", "runtime_identity")}
+
+
+def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
+    """Label new inbox rows by the mixed-read path they name. Unrecognized rows stay unmatched."""
+
+    from .mixed_reads import TARGETS
+
+    labels = []
+    for row in store.list_approval_requests(status=None, limit=200):
+        if not isinstance(row, dict) or str(row.get("request_id") or "") in known_ids:
+            continue
+        launch = str(row.get("launch_target") or "").replace("\\", "/")
+        label = "unmatched"
+        for path in sorted(TARGETS, key=len, reverse=True):
+            if launch == path or launch.endswith("/" + path):
+                label = path
+                break
+        labels.append(label)
+    return labels
 
 
 def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str]:
@@ -339,6 +359,15 @@ def run_case(
                 if native_extension_expectation is None:
                     raise RuntimeError("native extension expectation evidence unavailable")
             before = worker.store.count_approval_requests(status=None)
+            approval_ids_before = (
+                {
+                    str(row.get("request_id"))
+                    for row in worker.store.list_approval_requests(status=None, limit=200)
+                    if isinstance(row, dict) and row.get("request_id")
+                }
+                if scenario.oracle == "mixed-read-batch"
+                else set()
+            )
             extension = private / "hol-guard.ts"
             settings = private / "settings.json"
             settings.write_text("{}\n")
@@ -396,6 +425,8 @@ def run_case(
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
+            if scenario.oracle == "mixed-read-batch":
+                case["approval_targets"] = _mixed_read_approval_targets(worker.store, approval_ids_before)
             case["inference"] = relay.evidence()
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
@@ -449,12 +480,7 @@ def run_case(
     finally:
         case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
         if daemon is not None:
-            try:
-                probe._cleanup_installed_daemon(daemon)
-                probe._cleanup_native(identity, fixture.root / "guard-home")
-                case["cleanup_ok"] = True
-            except Exception as exc:
-                case["cleanup_error"] = type(exc).__name__
+            case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
     case["elapsed_seconds"] = round(time.monotonic() - started, 3)
     case["hook_latency"] = summarize_hook_latency(case["guard_observations"])
     case["assessment"] = assess_case(scenario, case)

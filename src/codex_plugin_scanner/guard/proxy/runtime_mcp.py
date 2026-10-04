@@ -3479,6 +3479,32 @@ class RuntimeMcpGuardProxy:
                 additional_scanner_evidence=scanner_evidence,
                 policy_action=policy_action,
             )
+            from ..approvals import record_unprompted_review
+
+            record_unprompted_review(
+                detection=HarnessDetection(
+                    harness=self.harness,
+                    installed=True,
+                    command_available=True,
+                    config_paths=(self.config_path,),
+                    artifacts=(artifact,),
+                ),
+                evaluation={
+                    "artifacts": [
+                        self._build_artifact_payload(
+                            artifact,
+                            artifact_hash,
+                            tool_name,
+                            params,
+                            signals,
+                            policy_action=policy_action,
+                            scanner_evidence=scanner_evidence,
+                        )
+                    ]
+                },
+                store=self.store,
+                redaction_level=self.config.receipt_redaction_level,
+            )
             return _blocked_tool_response(
                 message_id,
                 tool_name,
