@@ -49,7 +49,7 @@ def test_isolated_python_rejects_group_writable(tmp_path: Path) -> None:
     assert _isolated_python_is_usable(path) is False
 
 
-def test_isolated_python_probe_requires_python_310(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_isolated_python_probe_requires_python_39(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters import cursor_hook_config
 
     path = tmp_path / "python3"
@@ -64,7 +64,7 @@ def test_isolated_python_probe_requires_python_310(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(cursor_hook_config.subprocess, "run", fake_run)
     assert cursor_hook_config._isolated_python_is_usable(path) is False
     assert captured
-    assert "sys.version_info >= (3, 10)" in captured[0]
+    assert "sys.version_info >= (3, 9)" in captured[0]
 
 
 def test_frozen_cursor_hook_command_prefers_isolated_python(monkeypatch, tmp_path: Path) -> None:

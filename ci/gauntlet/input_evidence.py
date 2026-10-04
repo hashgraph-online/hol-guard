@@ -48,7 +48,7 @@ def public_observations(rows: list[dict], replacements: dict[str, str]) -> list[
     """Check original observer bytes before exporting comparable public inputs."""
     result = []
     for row in rows:
-        if row.get("observer_error"):
+        if row.get("observer_error") or row.get("transport_error"):
             result.append(row)
             continue
         raw = row.get("input_json")
