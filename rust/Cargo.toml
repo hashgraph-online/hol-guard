@@ -16,6 +16,10 @@ members = [
 ]
 resolver = "2"
 
+[profile.release]
+# Executable behavior is unchanged; omit symbol tables from distributed binaries.
+strip = "symbols"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
