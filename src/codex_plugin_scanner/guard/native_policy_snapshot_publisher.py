@@ -106,6 +106,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._started = False
         self._thread: threading.Thread | None = None
         self._snapshot: dict[str, object] | None = None
+        self._last_runtime_status: Any | None = None
         self._resident_startup_required = True
         self._acked = False
         self._epoch = 0
@@ -375,6 +376,19 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             if "command_extensions" in snapshot:
                 binding["command_extensions_bound"] = True
             return binding
+
+    def current_runtime_status(self) -> Any | None:
+        """Return the verified runtime status bound to the acknowledged snapshot."""
+
+        with self._condition:
+            self._mark_expired_locked()
+            if not self._acked or self._snapshot is None or self._closed:
+                return None
+            status = self._last_runtime_status
+            identity = getattr(status, "identity", None)
+            if identity is None or self._snapshot.get("runtime_identity") != getattr(identity, "sha256", None):
+                return None
+            return status
 
     def local_cli_publication_receipt(self, revision: int) -> dict[str, object] | None:
         """Bind control-plane status to an ACK for this exact saved revision."""
@@ -655,6 +669,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
 
             status_provider = native_runtime_status
         status = status_provider()
+        with self._condition:
+            self._last_runtime_status = status
         if getattr(status, "mode", None) not in {"auto", "force", "shadow"}:
             self._record_error("native_policy_snapshot_native_disabled")
             return None
