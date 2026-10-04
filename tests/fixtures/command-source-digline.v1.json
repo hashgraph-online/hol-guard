@@ -16549,6 +16549,7 @@
           "command.errand",
           "command.genclave",
           "command.gitsync",
+          "command.kindling",
           "command.mcp-filesystem",
           "command.mcp-instapods",
           "command.mcp-pr-ui-compare",
