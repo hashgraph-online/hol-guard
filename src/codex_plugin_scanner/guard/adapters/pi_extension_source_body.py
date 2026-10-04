@@ -22,6 +22,13 @@ _STRUCTURED_BLOCKED_REASON_PRELUDE = (
 
 
 def build_extension_source_body(*, harness: str, display_name: str) -> str:
+    # The shared approval source is frozen for previous-extension matching.
+    # Only current extensions opt out of reusing a retiring daemon socket.
+    approval_helpers = APPROVAL_RESUME_HELPERS_SOURCE.replace(
+        "headers: { 'X-Guard-Token': connection.authToken },",
+        "headers: { 'X-Guard-Token': connection.authToken, 'Connection': 'close' },",
+        1,
+    )
     return (
         "type GuardDaemonConnection = { port: number; authToken: string };\n" + "type GuardDaemonAttempt = {\n"  # pyright: ignore[reportImplicitStringConcatenation]
         "  response: GuardResponse | null;\n"
@@ -140,6 +147,8 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      headers: {\n"
         "        'Content-Type': 'application/json',\n"
         "        'X-Guard-Token': connection.authToken,\n"
+        "        // The local daemon closes each response; never reuse a retiring socket.\n"
+        "        'Connection': 'close',\n"
         "      },\n"
         "      body: daemonPayload,\n"
         "      signal: controller?.signal,\n"
@@ -273,7 +282,7 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  if (isError) result.isError = true;\n"
         "  return result;\n"
         "}\n"
-        "\n" + APPROVAL_RESUME_HELPERS_SOURCE + "export default function (pi: ExtensionAPI) {\n"  # pyright: ignore[reportImplicitStringConcatenation]
+        "\n" + approval_helpers + "export default function (pi: ExtensionAPI) {\n"  # pyright: ignore[reportImplicitStringConcatenation]
         "  const blockedToolResults = new Map<string, string>();\n"
         "  type InputApprovalResumeBinding = {\n"
         "    generation: number;\n"
