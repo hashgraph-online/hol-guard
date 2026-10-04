@@ -13,7 +13,6 @@ TARGETS = frozenset({*PUBLIC_READS, ".env"})
 REVIEW_DENY_REASONS = frozenset(
     {
         "native_file_read_review",
-        "native_command_extension_uncertain",
         "native_policy_reapproval_required",
         "native_sensitive_access_review",
         "native_git_execution_context_review",
@@ -131,8 +130,10 @@ def assess_mixed_reads(
     recorded = case.get("approval_targets")
     delta = case.get("approval_delta")
     # A recorded target must be a review-tier denial. A hard block or an ordinary read is not.
-    if not isinstance(delta, int) or delta < 0 or delta > len(review_paths):
-        return "false-positive", "mixed batch created an approval for an ordinary read"
+    if type(delta) is not int or delta < 0:
+        return "false-positive", "mixed batch approval count is not a valid inbox total"
+    if delta > len(review_paths):
+        return "false-positive", "mixed batch approval count exceeds its review-tier denials"
     if delta == 0 and recorded in (None, []):
         pass
     elif (

@@ -90,13 +90,27 @@ def test_ordinary_read_approval_does_not_pass():
     assert assess_mixed_reads(case, calls, guards)[0] == "false-positive"
 
 
-def test_hard_block_inbox_row_does_not_pass():
+@pytest.mark.parametrize("reason", ["native_policy_blocked", "native_command_extension_uncertain"])
+def test_hard_block_inbox_row_does_not_pass(reason):
     case, calls, guards = mixed_case()
-    guards["call-1"][0]["reason_code"] = "native_policy_blocked"
-    guards["call-1"][0]["native_observation"]["native_receipt"]["reason_code"] = "native_policy_blocked"
+    guards["call-1"][0]["reason_code"] = reason
+    guards["call-1"][0]["native_observation"]["native_receipt"]["reason_code"] = reason
     case["approval_delta"] = 1
     case["approval_targets"] = [".env"]
-    assert assess_mixed_reads(case, calls, guards)[0] == "false-positive"
+    assert assess_mixed_reads(case, calls, guards) == (
+        "false-positive",
+        "mixed batch approval count exceeds its review-tier denials",
+    )
+
+
+def test_boolean_approval_count_does_not_pass():
+    case, calls, guards = mixed_case()
+    case["approval_delta"] = True
+    case["approval_targets"] = [".env"]
+    assert assess_mixed_reads(case, calls, guards) == (
+        "false-positive",
+        "mixed batch approval count is not a valid inbox total",
+    )
 
 
 def test_host_defaults_do_not_change_original_model_path_contract():

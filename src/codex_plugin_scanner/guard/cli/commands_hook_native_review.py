@@ -202,63 +202,16 @@ def review_native_artifact_hook(
         guard_payload=response_payload,
     )
     observe_mode = config.mode == "observe"
-    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+    from ..blocked_request_mode import asks_for_approval
 
     if (
         not observe_mode
         and not asks_for_approval(config)
         and (policy_action in {"review", "require-reapproval"} or cursor_native_queue)
     ):
-        if policy_action in {"review", "require-reapproval"}:
-            from ..approvals import record_unprompted_review
+        from .commands_hook_native_silent_review import apply_unprompted_native_review
 
-            package_evaluation_to_dict = getattr(package_evaluation, "to_dict", None)
-            record_unprompted_review(
-                detection=_runtime_detection(args.harness, runtime_artifact),
-                evaluation={
-                    "artifacts": [
-                        {
-                            "artifact_id": artifact_id,
-                            "artifact_name": artifact_name,
-                            "artifact_hash": runtime_artifact_hash,
-                            "policy_action": policy_action,
-                            "changed_fields": list(changed_capabilities),
-                            "artifact_type": runtime_artifact.artifact_type,
-                            "source_scope": runtime_artifact.source_scope,
-                            "config_path": runtime_artifact.config_path,
-                            "launch_target": _runtime_request_summary(runtime_artifact),
-                            "risk_summary": risk_summary,
-                            "action_envelope_json": _action_envelope_json(action_envelope),
-                            "decision_v2_json": decision_v2_payload,
-                            "scanner_evidence": list(scanner_evidence_payload),
-                            "supply_chain_evaluation": (
-                                package_evaluation_to_dict() if callable(package_evaluation_to_dict) else None
-                            ),
-                        }
-                    ]
-                },
-                store=store,
-                redaction_level=config.receipt_redaction_level,
-            )
-        set_native_artifact_hook_final_action(state, "block")
-        state.approval_prompted = False
-        guidance = safe_alternative_reason(f"HOL Guard blocked this action. {risk_summary}")
-        _terminalize_runtime_action_copy(state.response_payload)
-        state.response_payload.update(
-            terminal_action="block",
-            approval_requests=[],
-            prompted=False,
-            operation_status="blocked",
-            terminal=True,
-            review_hint=guidance,
-            blocked_request_guidance=guidance,
-        )
-        decision_copy = state.response_payload.get("decision_v2_json")
-        if isinstance(decision_copy, dict):
-            decision_copy["harness_message"] = guidance
-        evaluation = state.response_payload.get("supply_chain_evaluation")
-        if isinstance(evaluation, dict) and isinstance(evaluation.get("user_copy"), dict):
-            evaluation["user_copy"].update(harness_message=guidance, next_step=guidance, dashboard_url=None)
+        apply_unprompted_native_review(state, args, store, config, policy_action)
         return None
     terminal_action = policy_action in {
         "block",
