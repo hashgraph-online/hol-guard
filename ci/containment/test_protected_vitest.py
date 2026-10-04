@@ -86,11 +86,7 @@ test('fixed resolution reaches the real worker without wider permissions', async
   expect(fs.existsSync(path.join(scratch, 'moved-images'))).toBe(false);
   denied(() => fs.mkdirSync(path.join(parent, 'new-child')));
   expect(fs.readFileSync(image!).equals(before)).toBe(true);
-<<<<<<< HEAD
   denied(() => fs.readFileSync('credentials/.env'));
-=======
-  denied(() => fs.readFileSync('.env'));
->>>>>>> 067da7144 (fix(runtime): carry fixed localhost resolution into test workers)
   denied(() => fs.writeFileSync('worker.test.ts', 'replacement'));
   fs.writeFileSync(path.join(os.tmpdir(), 'ordinary-scratch.txt'), 'allowed');
 });
