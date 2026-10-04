@@ -237,7 +237,9 @@ def test_native_preflight_stops_known_contract_failures_before_shard_fanout() ->
         assert not steps[index].get("continue-on-error", False)
     check = steps[preflight]
     assert "test_native_contract_validates_every_authored_signature_without_rewriting_evidence" in check["run"]
-    assert "tests/test_pi_legacy_source_contract.py" in check["run"]
+    assert "test_install_writes_managed_extension_that_denies_on_hook_errors" in check["run"]
+    assert "test_managed_extension_fails_safe_on_ambiguous_success_payloads" in check["run"]
+    assert "test_pi_legacy_source_contract" not in check["run"]
     assert "--ignore" not in check["run"] and "--deselect" not in check["run"]
     assert check["env"]["HOL_GUARD_NATIVE_REGRESSION"] == "1"
     assert document["jobs"]["coverage-plan"]["needs"] == "native-command-evaluators"

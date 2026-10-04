@@ -51,7 +51,10 @@ pub fn run_fixtures(bytes: &[u8]) -> Result<Value, &'static str> {
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
             || !ids.insert(case.id.clone())
-            || !matches!(case.expected_action.as_str(), "allow" | "review" | "block")
+            || !matches!(
+                case.expected_action.as_str(),
+                "allow" | "review" | "require-reapproval" | "block"
+            )
             || !program
                 .rules
                 .iter()

@@ -156,3 +156,29 @@ def test_expired_deadline_never_opens_store(legacy, monkeypatch):
         lookup.read_legacy_codex_probe_receipt(
             store, correlation=handle, since=since, deadline_monotonic=time.monotonic() - 1
         )
+
+
+def test_short_lock_wait_does_not_replace_the_admission_operation_deadline(legacy, monkeypatch):
+    from codex_plugin_scanner.guard.sqlite_tuning import (
+        sqlite_connect_timeout_seconds,
+        sqlite_operation_deadline_monotonic,
+    )
+
+    _, _, _, handle, since = legacy
+    now = [10.0]
+    observed = []
+    stop = RuntimeError("stop after checking connection budget")
+
+    class BudgetStore:
+        @contextmanager
+        def _connect(self):
+            observed.append((sqlite_connect_timeout_seconds(), sqlite_operation_deadline_monotonic()))
+            now[0] = 10.2  # Slow setup remains inside the original 20-second deadline.
+            observed.append((sqlite_connect_timeout_seconds(), sqlite_operation_deadline_monotonic()))
+            raise stop
+            yield  # pragma: no cover - context manager shape
+
+    monkeypatch.setattr(lookup.time, "monotonic", lambda: now[0])
+    with pytest.raises(RuntimeError, match="stop after checking"):
+        lookup.read_legacy_codex_probe_receipt(BudgetStore(), correlation=handle, since=since, deadline_monotonic=20.0)
+    assert observed == [(0.1, 20.0), (0.1, 20.0)]

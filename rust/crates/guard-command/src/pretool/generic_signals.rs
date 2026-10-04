@@ -117,7 +117,9 @@ pub(crate) fn extract_generic_signals(
         && benign_prompt_text(&prompt_values[0]);
     let independent_sensitive_target = sensitive_text(&path_values)
         || sensitive_text(&url_values)
-        || sensitive_text(&prompt_values)
+        || prompt_values
+            .iter()
+            .any(|value| prompt_sensitive_text(value))
         || sensitive_text(&text_values);
     let content_sensitive = independent_sensitive_target
         || command

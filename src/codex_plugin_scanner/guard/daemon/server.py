@@ -584,6 +584,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: GuardDaemonServer | None
     home_dir: Path
+    workspace_dir: Path | None
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """Suppress expected peer disconnects without hiding server defects."""
@@ -623,6 +624,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         runtime_session_id: str,
         runtime_started_at: str,
         home_dir: Path,
+        workspace_dir: Path | None,
         idle_timeout_seconds: float | None,
         shutdown_started: threading.Event,
         diagnostics: DaemonDiagnostics,
@@ -637,6 +639,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.runtime_session_id = runtime_session_id
         self.runtime_started_at = runtime_started_at
         self.home_dir = home_dir.resolve(strict=False)
+        self.workspace_dir = workspace_dir.resolve(strict=False) if workspace_dir is not None else None
         self.idle_timeout_seconds = idle_timeout_seconds
         self.last_activity_monotonic = time.monotonic()
         self.start_monotonic = time.monotonic()
@@ -722,6 +725,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         try:
             self.hook_worker = HookWorker(
                 store=self.store,
+                workspace=self.workspace_dir,
                 activity_writer=self.runtime_hook_evidence_writer,
                 capture_writer=self.codex_binding_capture_writer,
             )
@@ -8570,6 +8574,7 @@ class GuardDaemonServer:
                 runtime_session_id=uuid.uuid4().hex,
                 runtime_started_at=_now(),
                 home_dir=(home_dir or Path.home()).expanduser().resolve(strict=False),
+                workspace_dir=workspace_dir.expanduser().resolve(strict=False) if workspace_dir is not None else None,
                 idle_timeout_seconds=_guard_daemon_idle_timeout_seconds(
                     store.guard_home,
                     idle_timeout_seconds=idle_timeout_seconds,
