@@ -12,6 +12,7 @@ advertise a protected mode, or add an enforcing policy dimension.
 | Command option semantics | `rust/crates/guard-command/src/command_argument_semantics.rs` | Scalar replacement is not additive recipient/attachment parsing |
 | Contribution source and trust | `contributions/command-sources/`, `contracts/extensions/trust-class-map.v1.json` | External sources remain inert until local authorization |
 | Business facts | `rust/crates/guard-contracts/src/business_action.rs` | Explicit schema negotiation and strict bounded decoding |
+| Frozen input bytes | `rust/crates/guard-command/src/business_input.rs` | Native ownership and digest checks before the existing private review snapshot; no provider invocation |
 | Private review request | `rust/crates/guard-runtime/src/workspace_review_request.rs` | Bind exact facts to the existing authenticated native origin and private snapshot |
 | Decision delivery claims | `rust/crates/guard-runtime/src/workspace_review_decision_claims.rs` | Identical decision redelivery does not prove single provider dispatch |
 | Local setup and coverage | `dashboard/src/guard-types.ts` | Operation/mode proof remains distinct from configured hooks |
@@ -42,8 +43,32 @@ and establish immutable dispatch. An older consumer must reject unsupported
 enforcing semantics. Do not append these facts to a legacy envelope and assume
 ignored fields provide protection.
 
-No runtime capability is advertised by this contract-only addition. Provider,
+No runtime capability is advertised by these preparation primitives. Provider,
 real-agent, packaged setup, and operating-system qualification remain unrun.
+
+## Prepared input ownership
+
+`PreparedBusinessInputV1::prepare` takes ownership of the primary payload and
+ordered attachments, checks the complete bounded facts shape, and verifies
+every content digest and aggregate byte count. It returns immutable byte views
+and a domain-separated commitment to the typed facts. JSON formatting and key
+order do not change that commitment. The value has no `Debug`, `Serialize`,
+`Clone`, or mutable accessors, keeping private bytes out of generic diagnostics.
+
+`content.snapshot_digest` commits the complete frozen input, preserving the
+business contract's original semantics. `business_input_snapshot_digest` hashes
+the `hol-guard.business-input-snapshot.v1\0` domain, primary length and bytes,
+attachment count, and each ordered attachment's length and bytes. Lengths and
+counts use unsigned 64-bit big-endian integers, preventing ambiguous byte
+partitions. Individual attachment digests remain SHA-256 of attachment bytes.
+`volume.byte_count` and `content.inspected_bytes` cover the primary payload plus
+all attachments. Primary-only digests cannot substitute for the complete snapshot.
+Content inspection, account authentication, provider-request normalization,
+policy admission, and durable dispatch remain separate requirements. This API
+validates inspection claims against byte counts; it does not perform inspection.
+Its commitment is not a review grant and is not the existing workspace-review
+action binding. The managed executor must consume these owned bytes, bind the
+full authorization context, and never reread paths or stdin after approval.
 
 ## Validation
 
@@ -51,3 +76,8 @@ real-agent, packaged setup, and operating-system qualification remain unrun.
 checks strict objects, duplicate keys, unsupported versions/actions, hidden
 recipients, ambiguous identities, count/service contradictions, and bounds.
 These are contract tests, not provider dispatch or interception evidence.
+
+`cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --lib business_input`
+checks owned bytes, changed content/attachment order/count, false byte counts,
+unknown facts, bounds, and preparation commitment stability. No target command
+or provider action is executed.
