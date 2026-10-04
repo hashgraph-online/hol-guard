@@ -40,3 +40,40 @@ dns.promises.lookup = async hostname => { throw new Error('original:' + hostname
     )
     result = subprocess.run([node, str(script)], capture_output=True, text=True, timeout=20, check=False)
     assert result.returncode == 0, result.stderr
+
+
+def test_worker_explicit_arguments_keep_fixed_preload(tmp_path: Path):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node runtime not available")
+    preload = tmp_path / "localhost-resolution.cjs"
+    preload.write_text(_SOURCE)
+    script = """
+import assert from 'node:assert/strict';
+import { Worker } from 'node:worker_threads';
+import { lookup } from 'node:dns';
+await new Promise((resolve, reject) => lookup('localhost', (error, address) => {
+  try { assert.equal(error, null); assert.equal(address, '127.0.0.1'); resolve(); }
+  catch (error) { reject(error); }
+}));
+const worker = new Worker(`
+  const { parentPort } = require('node:worker_threads');
+  require('node:dns').promises.lookup('localhost').then(result => parentPort.postMessage(result));
+`, {eval: true, execArgv: [], env: {NODE_OPTIONS: ''}});
+await new Promise((resolve, reject) => {
+  worker.once('error', reject);
+  worker.once('message', result => {
+    try { assert.deepEqual(result, {address:'127.0.0.1', family:4}); resolve(); }
+    catch (error) { reject(error); }
+  });
+});
+await worker.terminate();
+"""
+    result = subprocess.run(
+        [node, "--require", str(preload), "--input-type=module", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

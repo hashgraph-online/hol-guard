@@ -37,6 +37,7 @@ def test_workers_inherit_localhost_preload_and_cannot_replace_transform_image(tm
 import { test, expect } from 'vitest';
 import { transformSync } from 'esbuild';
 import dns from 'node:dns';
+import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -46,12 +47,22 @@ test('fixed resolution reaches the real worker without wider permissions', async
   expect(transformSync('const value: number = 7', {loader: 'ts'}).code).toContain('7');
   // NODE_OPTIONS preloads are inherited but are not listed in process.execArgv.
   const resolverPath = path.join(path.dirname(os.tmpdir()), 'localhost-resolution.cjs');
-  expect(process.env.NODE_OPTIONS).toContain(`--require ${JSON.stringify(resolverPath)}`);
+  expect(process.env.NODE_OPTIONS).toBe(`--require ${JSON.stringify(resolverPath)}`);
   expect(await dns.promises.lookup('localhost')).toEqual({address: '127.0.0.1', family: 4});
   expect(await dns.promises.lookup('localhost', 6)).toEqual({address: '::1', family: 6});
   expect(await dns.promises.lookup('localhost.', {all: true})).toEqual([{address: '127.0.0.1', family: 4}]);
   expect(await dns.promises.lookup('127.0.0.2')).toEqual({address: '127.0.0.2', family: 4});
-  await expect(dns.promises.lookup('guard-worker-test.invalid')).rejects.toBeDefined();
+  await new Promise<void>((resolve, reject) => {
+    const socket = net.connect({host: '198.51.100.1', port: 443});
+    socket.once('connect', () => { socket.destroy(); reject(new Error('outbound network allowed')); });
+    socket.once('error', (error: any) => {
+      try { expect(['EACCES', 'EPERM']).toContain(error.code); resolve(); }
+      catch (error) { reject(error); }
+    });
+    socket.setTimeout(1000, () => {
+      socket.destroy(); reject(new Error('outbound network was not promptly denied'));
+    });
+  });
   await new Promise<void>((resolve, reject) => dns.lookup('localhost', (error, address, family) => {
     try {
       expect(error).toBeNull(); expect(address).toBe('127.0.0.1'); expect(family).toBe(4); resolve();
@@ -75,7 +86,11 @@ test('fixed resolution reaches the real worker without wider permissions', async
   expect(fs.existsSync(path.join(scratch, 'moved-images'))).toBe(false);
   denied(() => fs.mkdirSync(path.join(parent, 'new-child')));
   expect(fs.readFileSync(image!).equals(before)).toBe(true);
+<<<<<<< HEAD
   denied(() => fs.readFileSync('credentials/.env'));
+=======
+  denied(() => fs.readFileSync('.env'));
+>>>>>>> 067da7144 (fix(runtime): carry fixed localhost resolution into test workers)
   denied(() => fs.writeFileSync('worker.test.ts', 'replacement'));
   fs.writeFileSync(path.join(os.tmpdir(), 'ordinary-scratch.txt'), 'allowed');
 });
@@ -106,7 +121,7 @@ test('fixed resolution reaches the real worker without wider permissions', async
     assert (
         run_restricted_vitest(
             command,
-            env={},
+            env={"NODE_OPTIONS": "--require /untrusted/loader.cjs"},
             workspace=workspace,
             timeout_seconds=90,
             prepared_plan=plan,

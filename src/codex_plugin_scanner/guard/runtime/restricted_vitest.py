@@ -227,8 +227,10 @@ def run_restricted_node_plan(
             from .restricted_localhost import prepare_localhost_resolver
 
             plan = prepare_localhost_resolver(plan, root)
-            preload = str(root / "localhost-resolution.cjs").replace("\\", "\\\\").replace('"', '\\"')
-            launch_env["NODE_OPTIONS"] = (f'{launch_env.get("NODE_OPTIONS", "")} --require "{preload}"').strip()
+            # Vitest supplies its own worker execArgv. Only this Guard-owned
+            # preload, not caller NODE_OPTIONS, may reach those child runtimes.
+            preload = json.dumps(str(root / "localhost-resolution.cjs"), ensure_ascii=False)
+            launch_env["NODE_OPTIONS"] = f"--require {preload}"
         return _run_backend_process(
             _backend_argv(plan, private_root=root),
             env=launch_env,

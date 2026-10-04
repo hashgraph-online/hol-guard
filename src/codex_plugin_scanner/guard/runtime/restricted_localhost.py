@@ -26,6 +26,17 @@ dns.lookup = function(hostname, options, callback) {
 dns.promises.lookup = async function(hostname, options) {
   return local(hostname, options) || originalPromiseLookup(hostname, options);
 };
+// Worker threads can supply execArgv that omits the parent's fixed preload.
+const threads = require('node:worker_threads');
+const OriginalWorker = threads.Worker;
+threads.Worker = class extends OriginalWorker {
+  constructor(filename, options = {}) {
+    const execArgv = [...(options.execArgv || process.execArgv)];
+    if (!execArgv.includes(__filename)) execArgv.push('--require', __filename);
+    super(filename, {...options, execArgv});
+  }
+};
+require('node:module').syncBuiltinESMExports();
 """
 
 
