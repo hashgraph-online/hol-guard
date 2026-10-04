@@ -1027,6 +1027,7 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
 
     deadline = time.monotonic() + _DAEMON_CLEANUP_TIMEOUT
     last_error: OSError | RuntimeError | None = None
+    stop_confirmed = True
     while True:
         contained = False
         cleanup_error: OSError | RuntimeError | None = None
@@ -1038,6 +1039,7 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
         if state_files:
             remaining = deadline - time.monotonic()
             if remaining > 0:
+                stop_confirmed = False
                 try:
                     if not stop_native_resident(
                         executable=identity.path,
@@ -1047,10 +1049,12 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
                         deadline_monotonic=deadline,
                     ):
                         cleanup_error = RuntimeError("native resident stop did not complete")
+                    else:
+                        stop_confirmed = True
                 except (OSError, RuntimeError) as exc:
                     cleanup_error = exc
                 state_files = _native_state_files(guard_home)
-        if cleanup_error is None and contained and not state_files:
+        if cleanup_error is None and contained and not state_files and stop_confirmed:
             return
         last_error = cleanup_error or last_error
         if time.monotonic() >= deadline:

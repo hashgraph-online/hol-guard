@@ -737,19 +737,33 @@ def test_native_cleanup_does_not_accept_failed_stop_when_state_disappears(
 
     stop_calls: list[Path] = []
     state_file = tmp_path / "generation.json"
-    state_files = iter(((state_file,), ()))
-    monotonic_values = iter((0.0, 0.0, 0.2))
+    close_calls = 0
+    state_checks = 0
+    monotonic_values = iter((0.0, 0.0, 0.1, 0.1, 2.0))
 
-    monkeypatch.setattr(probe, "_DAEMON_CLEANUP_TIMEOUT", 0.1)
+    monkeypatch.setattr(probe, "_DAEMON_CLEANUP_TIMEOUT", 1.0)
     monkeypatch.setattr(probe.time, "monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr(native_resident_client, "close_native_residents", lambda *args, **kwargs: True)
+
+    def close_native_residents(*args: object, **kwargs: object) -> bool:
+        nonlocal close_calls
+        close_calls += 1
+        return True
+
+    monkeypatch.setattr(native_resident_client, "close_native_residents", close_native_residents)
 
     def failed_stop(*, state_dir: Path, **kwargs: object) -> bool:
         stop_calls.append(state_dir)
         return False
 
     monkeypatch.setattr(native_resident_client, "stop_native_resident", failed_stop)
-    monkeypatch.setattr(probe, "_native_state_files", lambda _guard_home: next(state_files))
+
+    def state_files(_guard_home: Path) -> tuple[Path, ...]:
+        nonlocal state_checks
+        state_checks += 1
+        return (state_file,) if state_checks == 1 else ()
+
+    monkeypatch.setattr(probe, "_native_state_files", state_files)
+    monkeypatch.setattr(probe.time, "sleep", lambda _seconds: None)
 
     class Identity:
         path = Path("/bin/false")
@@ -758,6 +772,7 @@ def test_native_cleanup_does_not_accept_failed_stop_when_state_disappears(
         probe._cleanup_native(Identity(), tmp_path / "guard-home")
 
     assert stop_calls == [tmp_path / "guard-home" / "native-runtime"]
+    assert close_calls == 2
 
 
 def test_installed_daemon_cleanup_bounds_stop(monkeypatch: pytest.MonkeyPatch) -> None:
