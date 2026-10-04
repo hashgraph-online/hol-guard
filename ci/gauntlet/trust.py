@@ -15,7 +15,11 @@ BOOTSTRAP_PULL_REQUEST = 3463
 def validate_producer_revision(api: Any, number: int, pull: dict, run: dict) -> None:
     """A writer-dispatched candidate judge is not automatically trusted code."""
     revision = run.get("head_sha")
-    base = pull["base"]["sha"]
+    # GitHub PR metadata may retain an old base after its destination advances.
+    # Only the independently resolved current branch tip can anchor verifier trust.
+    base = pull.get("gauntlet_base_sha")
+    if not isinstance(base, str) or SHA.fullmatch(base) is None:
+        raise RuntimeError("Gauntlet producer has no current trusted base revision")
     if not isinstance(revision, str) or SHA.fullmatch(revision) is None:
         raise RuntimeError("Gauntlet producer has no immutable verifier revision")
     if revision == base:

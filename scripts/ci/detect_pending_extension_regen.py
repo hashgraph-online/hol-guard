@@ -2,7 +2,7 @@
 
 Prints ``{"pending": ..., "pending_ids": [...]}`` (or a bare ``true``/``false``
 with ``--flag``) when any canonical contribution under ``contributions/``
-declares an extension id that the checked-in ``command-catalog.v1.json`` does
+declares an extension id that the staged ``command-catalog.v1.json`` does
 not contain.
 That state means the source-only contribution is awaiting maintainer-owned
 projection regeneration, so generated-artifact freshness gates should stand
@@ -78,7 +78,9 @@ def contribution_ids() -> set[str]:
 
 
 def catalog_ids() -> set[str]:
-    """Read the identities covered by the checked-in generated catalog."""
+    """Read staged catalog identities; a clean checkout awaits generation."""
+    if not CATALOG.exists():
+        return set()
     catalog = json.loads(CATALOG.read_text())
     return {entry["extension_id"] for entry in catalog["catalog"]}
 
@@ -226,7 +228,10 @@ def regen_artifacts_absent_from_diff(diff: list[str] | None = None) -> bool:
 
 def main() -> int:
     """Print regeneration status only after any requested base comparison succeeds."""
-    pending_ids = sorted(contribution_ids() - catalog_ids())
+    # An unstaged build output says nothing about pending authored changes.
+    # Keep catalog_ids() useful to generation callers, but do not classify all
+    # canonical identities as new in an ordinary clean checkout.
+    pending_ids = sorted(contribution_ids() - catalog_ids()) if CATALOG.is_file() else []
     changed: list[str] = []
     if "--changed-from" in sys.argv:
         base = sys.argv[sys.argv.index("--changed-from") + 1]

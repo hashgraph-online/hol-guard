@@ -57,6 +57,8 @@ jobs:
       - name: Install locked test tools
         run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - name: Check acceptance harness and native build contracts
+        uses: ./.github/actions/stage-command-projections
+      - name: Check acceptance harness and native build contracts
         run: |
           uv run --no-sync ruff check scripts/ci/check_extension_fixture_isolation.py tests/test_native_build_projection_workflows.py
           uv run --no-sync ruff format --check scripts/ci/check_extension_fixture_isolation.py tests/test_native_build_projection_workflows.py

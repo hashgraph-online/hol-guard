@@ -37,6 +37,7 @@ jobs:
           cache-dependency-glob: |
             pyproject.toml
             uv.lock
+      - uses: ./.github/actions/stage-command-projections
       - run: uv run --no-sync pytest -q tests/test_guard_gauntlet_ci.py
 
   initialize:

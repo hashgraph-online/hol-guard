@@ -27,12 +27,17 @@ concurrency:
 
 jobs:
   quality:
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: ./.github/actions/ci-job-quality
 
   native-command-evaluators:
@@ -410,6 +415,7 @@ jobs:
         run: python3 -m ci.gauntlet.github_ci require
 
   pi-exact-continuation:
+    needs: native-command-evaluators
     name: Pi exact continuation (actual SDKs)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -417,6 +423,10 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: ./.github/actions/ci-job-pi-exact-continuation
 
   dashboard:
