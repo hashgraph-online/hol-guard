@@ -14,7 +14,7 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use super::evaluate_pre_tool_with_context;
+use super::evaluate_pre_tool_with_execution_context;
 use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
@@ -113,7 +113,7 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
         && signals.path_values.is_empty()
         && signals.url_values.is_empty();
     let command_decision = signals.command.as_deref().map(|command| {
-        evaluate_pre_tool_with_context(
+        evaluate_pre_tool_with_execution_context(
             &CommandModelRequestV1 {
                 command: command.to_owned(),
                 dialect: "posix".to_owned(),
@@ -122,6 +122,8 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
             },
             home_dir,
             cwd,
+            deadline,
+            execution_environment,
         )
     });
     // Parsed benign commands may contain credential words as search patterns.

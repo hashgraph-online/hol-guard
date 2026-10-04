@@ -189,7 +189,7 @@ def test_native_contract_rejects_missing_owned_uncertainty_even_when_action_is_s
     payload = copy.deepcopy(reviewed.payload)
     evidence = cast(dict[str, object], payload["command_extensions"])
     observations = cast(list[dict[str, object]], evidence["observations"])
-    assert len(observations) == 15
+    assert len(observations) == 16
     observations.pop()
     with pytest.raises(ValueError, match="uncertain_rules"):
         contract.validate_native_case(case, oracle, replace(reviewed, payload=payload))
