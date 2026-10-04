@@ -167,6 +167,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         "coverage",
         "compatibility",
         "scheduling-sensitive",
+        "native-workspace",
     }
 
     cache_consumers = (
