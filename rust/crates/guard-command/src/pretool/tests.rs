@@ -10,6 +10,48 @@ fn request(command: &str) -> CommandModelRequestV1 {
 }
 
 #[test]
+fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    for command in [
+        "od -c src/lib.rs",
+        "wc -c src/lib.rs && od -c src/lib.rs | tail -2",
+        "cat src/lib.rs | od -An -tx1",
+        "cat src/lib.rs | od -c -",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+    }
+    for command in [
+        "od -c .env",
+        "od -c ~/.ssh/id_rsa",
+        "od -c /etc/shadow",
+        "cat .env | od -c",
+        "od -c src/lib.rs; rm -rf src",
+        "od -c src/lib.rs > .env",
+        "od -c src/lib.rs .env",
+        "od -c",
+        "od --unknown src/lib.rs",
+        "od -c $(echo src/lib.rs)",
+    ] {
+        let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
+        assert!(
+            decision.is_err() || decision.unwrap().minimum_action != "allow",
+            "{command}"
+        );
+    }
+    assert_ne!(
+        evaluate_pre_tool(&request("od -c src/lib.rs"))
+            .unwrap()
+            .minimum_action,
+        "allow"
+    );
+}
+
+#[test]
 fn bounded_find_listings_do_not_admit_actions_or_sensitive_targets() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .canonicalize()
