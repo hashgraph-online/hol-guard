@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Older releases are preserved in the [changelog archive](docs/changelog-archive.md).
 
+## [3.23.0](https://github.com/hashgraph-online/hol-guard/compare/v3.22.0...v3.23.0) (2026-10-04)
+
+
+### Features
+
+* **native:** prove bounded git worktree creation ([#3502](https://github.com/hashgraph-online/hol-guard/issues/3502)) ([7e5da94](https://github.com/hashgraph-online/hol-guard/commit/7e5da94c9c72e4bf6ac1d9b5843e5fda509dbc66))
+
+
+### Bug Fixes
+
+* **ci:** parallelize required Rust checks and correct PR fixture attribution ([#3524](https://github.com/hashgraph-online/hol-guard/issues/3524)) ([846fe97](https://github.com/hashgraph-online/hol-guard/commit/846fe97cb2445bbf6e73a05d6c540e8470fc6904))
+* **gauntlet:** preserve owned cleanup proof after timeout ([#3526](https://github.com/hashgraph-online/hol-guard/issues/3526)) ([5ba252e](https://github.com/hashgraph-online/hol-guard/commit/5ba252eaea5cb1b7814beee90059beccecbc150d))
+* **native:** allow bounded directory reads in agent workflows ([9dc21be](https://github.com/hashgraph-online/hol-guard/commit/9dc21be38d4266faf197a474e0f9f5dc50e1577f))
+
 ## [3.22.0](https://github.com/hashgraph-online/hol-guard/compare/v3.21.1...v3.22.0) (2026-10-04)
 
 
