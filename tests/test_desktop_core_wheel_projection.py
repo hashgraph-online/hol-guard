@@ -37,9 +37,19 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
         shutil.copyfile(source, destination)
 
     implementation_digest = "i" * 64
+    descriptor_ids = (
+        "command.blitcp",
+        "command.noodle",
+        "command.ollama",
+        "command.probe",
+        "command.repo2nb",
+        "command.skill-sunset",
+        "command.tui-runner",
+        "command.uivoid",
+    )
     compiled = {
         "catalog": [],
-        "descriptors": [],
+        "descriptors": [{"id": identity, "fixture": True} for identity in descriptor_ids],
         "program": {
             "catalog_digest": "c" * 64,
             "program_digest": "p" * 64,
@@ -85,6 +95,7 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
     staged = staged_root / "extensions/native-command-program.v1.json"
     assert json.loads(generated.read_text(encoding="utf-8"))["program_digest"] == "p" * 64
     assert staged.read_bytes() == generated.read_bytes()
+    assert (staged_root / "extensions/contributions/command.blitcp.json").is_file()
 
 
 @pytest.mark.parametrize(
