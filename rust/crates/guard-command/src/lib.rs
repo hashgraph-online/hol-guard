@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+pub mod business_gmail_plain;
 pub mod business_gmail_wire;
 pub mod business_gws_command;
 pub mod business_input;
