@@ -17,6 +17,34 @@ use std::time::Instant;
 
 #[path = "agent_metadata.rs"]
 mod agent_metadata;
+
+/// Reuse the exact host-input proof after execution; output content still
+/// requires its independent native scan and installed policy enforcement.
+pub fn bounded_task_metadata_output(payload: &serde_json::Value) -> bool {
+    let Some(root) = payload.as_object() else {
+        return false;
+    };
+    let Some(tool) = root.get("tool_name").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    if root
+        .get("toolName")
+        .is_some_and(|alias| alias.as_str() != Some(tool))
+    {
+        return false;
+    }
+    let input = root
+        .iter()
+        .filter(|(key, _)| {
+            !matches!(
+                key.as_str(),
+                "tool_response" | "toolResponse" | "toolResultPreview"
+            )
+        })
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    agent_metadata::bounded_task_list(&serde_json::Value::Object(input), Some(tool))
+}
 #[path = "generic_tools.rs"]
 mod tools;
 use tools::{infer_action_type, package_command, tool_matches};
