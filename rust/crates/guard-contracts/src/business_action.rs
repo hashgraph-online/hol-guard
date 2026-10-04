@@ -69,10 +69,13 @@ pub enum BusinessFactStateV1 {
 pub struct BusinessProviderV1 {
     pub service: BusinessServiceV1,
     /// Native-private identity commitment, not a browser/model account claim.
+    /// Both binding keys are required even when their value is explicitly null.
+    /// Do not add serde(default): an omitted identity must fail strict decoding.
+    /// The business_provider_required_nullable tests pin this wire distinction.
     #[serde(deserialize_with = "required_nullable")]
-    pub account_binding: Option<String>,
+    pub account_binding: Option<String>, // NOSONAR: rust:S9334; required key, nullable value.
     #[serde(deserialize_with = "required_nullable")]
-    pub tenant_binding: Option<String>,
+    pub tenant_binding: Option<String>, // NOSONAR: rust:S9334; required key, nullable value.
     pub identity_state: BusinessFactStateV1,
     pub tool_identity_digest: String,
     pub tool_schema_digest: String,
