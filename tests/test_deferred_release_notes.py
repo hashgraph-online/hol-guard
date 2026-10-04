@@ -1,4 +1,16 @@
 from scripts.ci.generate_release_notes import render_notes
+from scripts.ci import generate_release_notes
+
+
+def test_release_notes_cli_accepts_deferred_flag(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(generate_release_notes.sys, "argv", ["generate_release_notes.py", "--help"])
+
+    try:
+        generate_release_notes.main()
+    except SystemExit as exc:
+        assert exc.code == 0
+
+    assert "--pypi-deferred" in capsys.readouterr().out
 
 
 def test_deferred_stable_release_notes_use_verified_github_asset_install() -> None:
