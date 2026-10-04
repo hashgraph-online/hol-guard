@@ -8,6 +8,49 @@ fn generic(payload: Value) -> PreToolResultV1 {
 }
 
 #[test]
+fn grok_dual_event_labels_do_not_create_a_false_conflict() {
+    let result = evaluate_pre_tool_envelope(
+        "grok",
+        "PreToolUse",
+        &json!({
+            "hookEventName": "pre_tool_use",
+            "hook_event_name": "PreToolUse",
+            "toolName": "run_terminal_command",
+            "toolInput": {"command": "pwd"}
+        }),
+    );
+    assert_eq!(result.minimum_action, "allow");
+    assert_ne!(result.reason_code, "native_pre_tool_ambiguous_payload");
+}
+
+#[test]
+fn grok_dual_event_labels_preserve_protected_and_conflicting_inputs() {
+    for command in ["cat .env", "rm -rf /"] {
+        let result = evaluate_pre_tool_envelope(
+            "grok",
+            "PreToolUse",
+            &json!({
+                "hookEventName": "pre_tool_use",
+                "hook_event_name": "PreToolUse",
+                "toolName": "run_terminal_command",
+                "toolInput": {"command": command}
+            }),
+        );
+        assert_ne!(result.minimum_action, "allow");
+        assert_ne!(result.reason_code, "native_pre_tool_ambiguous_payload");
+    }
+    for payload in [
+        json!({"hookEventName": "post_tool_use", "hook_event_name": "PreToolUse", "command": "pwd"}),
+        json!({"hookEventName": "pre_tool_use", "hook_event_name": "PreToolUse", "command": "pwd", "cmd": "cat .env"}),
+        json!({"hookEventName": "pre_tool_use", "hook_event_name": "PreToolUse", "toolName": "read_file", "tool_name": "write_file"}),
+    ] {
+        let result = evaluate_pre_tool_envelope("grok", "PreToolUse", &payload);
+        assert_eq!(result.minimum_action, "block");
+        assert_eq!(result.reason_code, "native_pre_tool_ambiguous_payload");
+    }
+}
+
+#[test]
 fn bounds_reject_oversized_payload() {
     let oversized = generic(json!({"prompt": "x".repeat(MAX_COMMAND_BYTES + 1)}));
     assert_eq!(oversized.minimum_action, "block");

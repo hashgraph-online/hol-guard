@@ -125,6 +125,18 @@ to pending.
 
 ## Reading a result
 
+`summary.json`, `summary.md` and each case report include hook HTTP round-trip
+latency: nearest-rank p50, p90, p95, p99, mean and maximum, with sample counts
+and separate event distributions. These timings include response-body completion;
+they exclude model inference and CLI startup. Transport failures remain in the
+latency sample, and failed attempts and missing timings are counted explicitly.
+An empty distribution reports null, not zero. Percentiles from small runs do
+not establish a production latency SLO. The verifier recomputes reported timings
+from the observations without changing protection qualification.
+Older evidence can still verify its protection outcomes, but the verifier
+explicitly returns `hook_latency_reported: false` and lists cases that lack
+latency reports. Recomputed figures do not claim the original run reported them.
+
 `summary.json` and per-case public JSON bind the candidate, installed source, native binary/rule digest, SDK lock, runner files and catalog. Public tool events omit model reasoning and system prompts. The observer records the complete Guard input and its original digest; the runner applies the same fixture-path redactions to host and Guard inputs, then the judge checks their equality. The Guard-input comparison permits only the pinned OMP adapter's derived single-target edit metadata, validated against the actual patch header. Task-scope checks also recognize the host's `~/` display alias for the explicit disposable HOME; they never use the operator's home or relax target identity. Private fixture logs remain on the test machine for diagnosis; they must not be attached wholesale to a public PR.
 
 | Result | Meaning |

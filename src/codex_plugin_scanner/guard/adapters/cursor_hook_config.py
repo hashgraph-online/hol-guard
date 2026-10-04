@@ -31,7 +31,7 @@ _OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution", "afterMCPExecution")
 _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
 _ISOLATED_PYTHON_PROBE = (
-    "import hmac, json, sys, urllib.request; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
+    "import hmac, json, sys, urllib.request; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)"
 )
 _ISOLATED_PYTHON_PROBE_TIMEOUT_SECONDS = 1.5
 

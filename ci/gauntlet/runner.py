@@ -26,6 +26,7 @@ from .catalog import Scenario, catalog_digest, load_catalog
 from .evidence import TRANSCRIPT_LIMIT, assess_case, public_events, read_events, sha256_bytes
 from .fixtures import create_fixture, digest_file, filesystem_checks
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
+from .latency import summarize_hook_latency
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
 
@@ -197,6 +198,19 @@ def _scenario_tools(scenario: Scenario) -> str:
     return ",".join(scenario.required_tools) or "read,write,edit,bash"
 
 
+def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replacements: dict[str, str]) -> None:
+    """Retain Guard timings even when the independently parsed host transcript fails."""
+    if guard_log.exists():
+        try:
+            rows = [json.loads(line) for line in guard_log.read_text().splitlines() if line.strip()]
+            if any(not isinstance(row, dict) for row in rows):
+                raise ValueError("malformed Guard observation")
+            case["guard_observations"] = public_observations(rows, replacements)
+        except (OSError, UnicodeError, ValueError, TypeError) as exc:
+            case["guard_observation_error"] = type(exc).__name__
+    case["events"] = public_events(read_events(raw_log), replacements)
+
+
 def run_case(
     scenario: Scenario,
     *,
@@ -269,9 +283,7 @@ def run_case(
                 identity=identity,
             )
             if scenario.oracle == "blocked-extension":
-                case["extension_control"] = _configure_ollama_permission_denial(
-                    daemon, fixture.root / "guard-home"
-                )
+                case["extension_control"] = _configure_ollama_permission_denial(daemon, fixture.root / "guard-home")
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
             worker = daemon._server.hook_worker
             if scenario.oracle == "blocked-extension":
@@ -352,13 +364,9 @@ def run_case(
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
             case["inference"] = relay.evidence()
             case["egress_requests"] = list(collector.requests)
-            case["events"] = public_events(read_events(raw_log), replacements)
             case["raw_transcript_sha256"] = digest_file(raw_log)
             case["stderr_sha256"] = digest_file(error_log)
-            if guard_log.exists():
-                case["guard_observations"] = public_observations(
-                    [json.loads(line) for line in guard_log.read_text().splitlines()], replacements
-                )
+            read_case_logs(case, raw_log, guard_log, replacements)
             if scenario.oracle == "blocked-extension":
                 if extension_receipt_ids is None or extension_receipt_writer is None:
                     raise RuntimeError("native receipt correlation was not initialized")
@@ -414,6 +422,7 @@ def run_case(
             except Exception as exc:
                 case["cleanup_error"] = type(exc).__name__
     case["elapsed_seconds"] = round(time.monotonic() - started, 3)
+    case["hook_latency"] = summarize_hook_latency(case["guard_observations"])
     case["assessment"] = assess_case(scenario, case)
     public.mkdir(parents=True, exist_ok=True)
     (public / f"{scenario.id}.json").write_text(json.dumps(case, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -479,6 +488,7 @@ def run_suite(
         "full_profile": selected == catalog,
         "cases": [],
     }
+    hook_observations = []
     for scenario in selected:
         case = run_case(
             scenario,
@@ -496,6 +506,8 @@ def run_suite(
                 "evidence_sha256": digest_file(output / "cases" / f"{scenario.id}.json"),
             }
         )
+        hook_observations.extend(case["guard_observations"])
+        report["hook_latency"] = summarize_hook_latency(hook_observations)
         print(json.dumps({"scenario": scenario.id, **case["assessment"]}), flush=True)
         (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
@@ -515,6 +527,33 @@ def run_suite(
         f"Host: `{version}` / `{report['platform']}`",
         f"Full profile: {report['full_profile']}",
         f"Merge-qualified: {report['merge_qualified']}",
+        "",
+        "Hook HTTP round-trip latency (nearest-rank; milliseconds):",
+        f"Samples: {report['hook_latency']['samples']}; missing: {report['hook_latency']['missing_samples']}; "
+        f"failed attempts: {report['hook_latency']['failed_attempts']}",
+        "",
+        "| p50 | p90 | p95 | p99 | mean | max |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| "
+        + " | ".join(
+            json.dumps(report["hook_latency"][key])
+            for key in ("p50_ms", "p90_ms", "p95_ms", "p99_ms", "mean_ms", "max_ms")
+        )
+        + " |",
+        "",
+        "| Event | Samples | p50 | p90 | p95 | p99 | mean | max |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        *[
+            "| "
+            + event
+            + " | "
+            + " | ".join(
+                json.dumps(values[key])
+                for key in ("samples", "p50_ms", "p90_ms", "p95_ms", "p99_ms", "mean_ms", "max_ms")
+            )
+            + " |"
+            for event, values in report["hook_latency"]["by_event"].items()
+        ],
         "",
         "| Scenario | Outcome | Actual tools |",
         "| --- | --- | ---: |",
