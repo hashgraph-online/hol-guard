@@ -1,10 +1,22 @@
 """Default native denials never solicit operator approval."""
 
+import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests.test_native_review_approval_coordination import _edge, _worker
+
+
+def _assert_silent_review_recorded(store) -> None:
+    pending = store.list_approval_requests(status="pending")
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] in {"review", "require-reapproval"}
+    with sqlite3.connect(store.path) as connection:
+        created = connection.execute(
+            "select count(*) from guard_review_outbox_events where event_type = 'review.request.created'"
+        ).fetchone()
+    assert created is not None and int(created[0]) >= 1
 
 
 @pytest.mark.parametrize(
@@ -46,7 +58,8 @@ def test_native_review_defaults_to_safe_alternative(
     )
     assert response["policy_action"] == "block"
     assert response["prompted"] is False
-    assert store.list_approval_requests(status="pending") == []
+    assert response.get("approval_requests", []) == []
+    _assert_silent_review_recorded(store)
     reason = response.get("reason") or response["hookSpecificOutput"]["permissionDecisionReason"]
     assert "safe, permitted alternative" in reason
     assert "bypass Guard" in reason
@@ -68,5 +81,5 @@ def test_malformed_config_denies_review_without_prompt(tmp_path, monkeypatch):
     )
     assert response["policy_action"] == "block"
     assert response["prompted"] is False
-    assert store.list_approval_requests() == []
+    _assert_silent_review_recorded(store)
     worker.close()

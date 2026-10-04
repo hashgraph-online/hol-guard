@@ -50,6 +50,12 @@ def test_mixed_batch_preserves_independent_outcomes():
     assert assess_mixed_reads(*mixed_case())[0] == "pass"
 
 
+def test_recorded_silent_block_is_not_an_ordinary_approval():
+    case, calls, guards = mixed_case()
+    case["approval_delta"] = 1
+    assert assess_mixed_reads(case, calls, guards)[0] == "pass"
+
+
 def test_host_defaults_do_not_change_original_model_path_contract():
     case, calls, guards = mixed_case()
     calls[0]["args"]["limit"] = 2000
@@ -129,7 +135,7 @@ def test_incomplete_or_unbound_evidence_cannot_pass(defect):
     elif defect == "fixture":
         case["filesystem"]["batch-alpha-unchanged"] = False
     elif defect == "approval":
-        case["approval_delta"] = 1
+        case["approval_delta"] = 3
     elif defect == "duplicate":
         calls[2]["args"] = dict(calls[0]["args"])
     else:

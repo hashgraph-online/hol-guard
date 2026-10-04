@@ -132,4 +132,6 @@ def test_copilot_native_denial_records_no_prompt(tmp_path, monkeypatch, capsys, 
     with sqlite3.connect(store.path) as connection:
         row = connection.execute("select policy_action, prompted from command_activity").fetchone()
     assert row == ("block", 0)
-    assert store.list_approval_requests() == []
+    pending = store.list_approval_requests(status="pending")
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "review"

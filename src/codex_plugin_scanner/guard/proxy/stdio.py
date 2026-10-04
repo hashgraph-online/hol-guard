@@ -852,6 +852,41 @@ class StdioGuardProxy:
                             )
                         )
                         response_data["guardPolicyAction"] = "block"
+                        if (
+                            self.guard_store is not None
+                            and not terminal_policy_action
+                            and policy_action in {"review", "require-reapproval"}
+                        ):
+                            from ..approvals import record_unprompted_review
+
+                            record_unprompted_review(
+                                detection=HarnessDetection(
+                                    harness=self.harness,
+                                    installed=True,
+                                    command_available=True,
+                                    config_paths=(runtime_artifact.config_path,),
+                                    artifacts=(runtime_artifact,),
+                                ),
+                                evaluation={
+                                    "artifacts": [
+                                        {
+                                            "artifact_id": runtime_artifact.artifact_id,
+                                            "artifact_name": runtime_artifact.name,
+                                            "artifact_hash": runtime_artifact_hash,
+                                            "policy_action": policy_action,
+                                            "changed_fields": ["file_read_request"],
+                                            "artifact_type": runtime_artifact.artifact_type,
+                                            "source_scope": runtime_artifact.source_scope,
+                                            "config_path": runtime_artifact.config_path,
+                                            "launch_target": runtime_artifact.metadata.get("request_summary"),
+                                            "scanner_evidence": list(reuse_evidence),
+                                        }
+                                    ]
+                                },
+                                store=self.guard_store,
+                                approval_center_url=self.approval_center_url,
+                                redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),
+                            )
                     if (
                         self.guard_store is not None
                         and self.approval_center_url is not None

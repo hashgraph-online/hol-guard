@@ -164,6 +164,19 @@ def pause_native_pre_tool_for_approval(
     except (OSError, RuntimeError, TypeError, ValueError):
         ask = False
     if not ask:
+        # The agent stays on the silent block. The inbox row is a separate record.
+        queued = queue_native_pre_tool_review(
+            store,
+            harness=harness,
+            payload=payload,
+            native_result=native_result,
+            native_receipt=native_receipt,
+            workspace=workspace,
+            guard_home=guard_home,
+            home_dir=home_dir,
+        )
+        if queued is None:
+            _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
         blocked = dict(native_result)
         blocked.update(
             decision="deny",
