@@ -14,7 +14,7 @@ from ci.native_runtime import probe_installed_native_extensions as probe
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 
 
-@pytest.mark.parametrize(("publish_timeout", "expected_deadline"), [(2.0, 105.0), (8.0, 108.0)])
+@pytest.mark.parametrize(("publish_timeout", "expected_deadline"), [(2.0, 109.0), (8.0, 109.0)])
 def test_control_publication_finishes_before_hook_admission_with_one_deadline(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, publish_timeout: float, expected_deadline: float
 ) -> None:
@@ -23,6 +23,8 @@ def test_control_publication_finishes_before_hook_admission_with_one_deadline(
     published = [False]
     monkeypatch.setattr(probe.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(probe, "_PUBLISH_TIMEOUT_SECONDS", publish_timeout)
+    monkeypatch.setattr(probe, "_PUBLISH_STARTUP_TIMEOUT_SECONDS", 9.0)
+    assert probe._PUBLISH_STARTUP_TIMEOUT_SECONDS >= probe._PUBLISH_TIMEOUT_SECONDS
 
     def register(workspace: Path) -> None:
         assert workspace == tmp_path
