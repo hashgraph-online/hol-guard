@@ -90,6 +90,7 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Install the locked development environment
         run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
+      - uses: ./.github/actions/setup-rust
       - name: Build native command evaluators
         run: |
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
@@ -124,6 +125,8 @@ jobs:
             tests/test_guard_mcp_server_contribution.py \
             --junitxml=builder-evidence/tests.xml --tb=short
       - name: Build and install a wheel outside the checkout
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: ${{ env.HOL_GUARD_NATIVE_SOURCE_COMPILER }}
         run: |
           uv build --wheel --out-dir "$RUNNER_TEMP/extension-builder-dist"
           uv export --frozen --no-dev --no-emit-project --format requirements-txt \
