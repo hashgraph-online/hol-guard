@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from tests.pi_extension_response_source_support import (
+    _generated_output_text_keys,
     _generated_preprocessing_helper,
     _generated_structured_helper,
     _strip_generated_types,
@@ -44,7 +45,7 @@ const GUARD_OBJECT_KEY_LIMIT = 24;
 const GUARD_MAX_DEPTH = 24;
 const GUARD_MAX_SERIALIZED_PAYLOAD_CHARS = 24000;
 const GUARD_MAX_SERIALIZED_RESPONSE_CHARS = 12 * GUARD_TEXT_LIMIT_CHARS + GUARD_MAX_SERIALIZED_PAYLOAD_CHARS;
-const OUTPUT_TEXT_KEYS = ["stdout", "stderr", "output", "content", "result", "message", "text"];
+{_generated_output_text_keys(source)}
 const GUARD_ARGS = [];
 const GUARD_CLI_WRAPPER_COMMAND = "hol-guard";
 const GUARD_CLI_WRAPPER_ARGS = [];

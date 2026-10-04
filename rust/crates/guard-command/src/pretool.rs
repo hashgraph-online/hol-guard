@@ -26,6 +26,7 @@ mod worktree_writes;
 
 pub mod generic;
 
+pub use generic::bounded_task_metadata_output;
 pub use generic::evaluate_pre_tool_envelope;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;

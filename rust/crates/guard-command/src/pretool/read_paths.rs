@@ -94,7 +94,7 @@ pub(super) fn bounded_read_target(
     };
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
         return (canonical.is_file() || (allow_directory && canonical.is_dir()))
-            && resolved_path_allowed(&canonical, home_dir, cwd);
+            && resolved_path_allowed_for_operation(&canonical, home_dir, cwd, false, true);
     }
     // An unresolvable absolute or `~` target cannot prove a bounded file;
     // a workspace-relative spelling keeps the pre-existing lexical floor.
@@ -162,6 +162,16 @@ pub(super) fn resolved_path_allowed_in_scope(
     cwd: Option<&str>,
     verified_temporary: bool,
 ) -> bool {
+    resolved_path_allowed_for_operation(canonical, home_dir, cwd, verified_temporary, false)
+}
+
+fn resolved_path_allowed_for_operation(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+    read_only: bool,
+) -> bool {
     let rendered = canonical.to_string_lossy().replace('\\', "/");
     let lowered = rendered.to_ascii_lowercase();
     const ROOTS: [&str; 7] = [
@@ -182,11 +192,75 @@ pub(super) fn resolved_path_allowed_in_scope(
         || guard_secure_fs::credential_named_path(canonical)
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
             || guard_safety_doc(canonical, home_dir)
-            || agent_skill_document(canonical, home_dir))
+            || agent_skill_document(canonical, home_dir)
+            || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;
     }
     true
+}
+
+/// Hosts persist oversized tool output separately from their credentials and
+/// configuration. Allow only a regular output leaf in the verified user's
+/// execution tree, not arbitrary files in hidden application state.
+fn execution_output_log(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
+    let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    let Ok(relative) = canonical.strip_prefix(home) else {
+        return false;
+    };
+    let Some(parts) = relative
+        .components()
+        .map(|component| match component {
+            std::path::Component::Normal(part) => part.to_str(),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    let [state, "cli", "exec", session, output] = parts.as_slice() else {
+        return false;
+    };
+    let Some(state_name) = state.strip_prefix('.') else {
+        return false;
+    };
+    if state_name.is_empty()
+        || !state_name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        || guard_secure_fs::EXTERNAL_SENSITIVE_PARTS
+            .iter()
+            .any(|part| state.eq_ignore_ascii_case(part) || state_name.eq_ignore_ascii_case(part))
+    {
+        return false;
+    }
+    let Some(session) = session.strip_prefix("sess_") else {
+        return false;
+    };
+    if session.len() != 36
+        || !session.bytes().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        })
+    {
+        return false;
+    }
+    let Some(call) = output.strip_prefix("call_").and_then(|value| {
+        value
+            .strip_suffix("-stdout.log")
+            .or_else(|| value.strip_suffix("-stderr.log"))
+    }) else {
+        return false;
+    };
+    call.len() == 24
+        && call.bytes().all(|byte| byte.is_ascii_hexdigit())
+        && std::fs::metadata(canonical)
+            .is_ok_and(|metadata| metadata.is_file() && metadata.len() <= 64 * 1024 * 1024)
 }
 
 pub(super) fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
@@ -283,3 +357,7 @@ pub(super) fn lexical_read_path(value: &str) -> Option<String> {
     normalized.push_str(&parts.join("/"));
     Some(normalized)
 }
+
+#[cfg(test)]
+#[path = "read_output_tests.rs"]
+mod execution_output_tests;
