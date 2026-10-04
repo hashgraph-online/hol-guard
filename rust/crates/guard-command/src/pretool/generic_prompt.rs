@@ -69,6 +69,7 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
     static LIST_CONNECTOR: OnceLock<Regex> = OnceLock::new();
     static REVERSAL: OnceLock<Regex> = OnceLock::new();
     static FOLLOWUP: OnceLock<Regex> = OnceLock::new();
+    static TEST_RETRY: OnceLock<Regex> = OnceLock::new();
     values.iter().any(|value| {
         let lowered = value.to_ascii_lowercase();
         let normalized = lowered.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -111,6 +112,13 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                     Regex::new(r"(?i)^(?:(?:change|modify|alter|set|unset)\s+(?:node(?:[_-]|\s+)options|(?:hol[-_ ]guard|guard)\s+(?:hooks?|configuration|settings|policy)|policy\s+authority)|recover\s+policy\s+authority)$")
                         .expect("bounded protection-setting list item")
                 });
+                // A qualified retry of an intervening test action refers to that
+                // action, not the earlier prohibition. Explicit reversals remain.
+                let test_retry = TEST_RETRY.get_or_init(|| {
+                    Regex::new(r"(?i)(?:^|[.!?;])\s*(?:run|rerun|retry|execute)\s+(?:the\s+)?(?:tests?|test\s+suite|typecheck|validation)\s*[.!?;]\s*(?:if\s+(?:they|it)\s+fails?,\s*)?(?:then\s+)?(?:do|perform|execute|run)\s+(?:it|them|so)\s+to\s+(?:investigate|debug|validate|check)\b")
+                        .expect("bounded explicit test retry reference")
+                });
+                let followup_tail = test_retry.replace_all(tail, ". qualified test retry");
                 let list_items_are_guardrails = list_prohibition.captures(prefix).is_some_and(|captures| {
                     captures.get(1).is_some_and(|body| {
                         body.as_str()
@@ -124,7 +132,7 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                 let unconditional = prohibition.is_match(prefix)
                     || (list_items_are_guardrails && list_connector.is_match(tail));
                 !unconditional || reversal.is_match(prefix) || reversal.is_match(clause)
-                    || followup.is_match(tail)
+                    || followup.is_match(&followup_tail)
             })
         })
             || ["approval_policy=\"never\"", "approval_policy='never'"]
