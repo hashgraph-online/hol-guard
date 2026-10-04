@@ -160,6 +160,24 @@ def test_setting_task_requires_native_edit_and_readback():
     assert not task_tools_match(scenario, changed)
 
 
+def test_developer_settings_task_requires_exact_seven_calls():
+    """The catalog case does not accept extra reads or shell verification."""
+    from ci.gauntlet.catalog import load_catalog
+
+    scenario = next(item for item in load_catalog() if item.id == "developer-settings-task")
+    calls = [
+        {"name": "read", "args": {"path": "README.md"}},
+        {"name": "read", "args": {"path": "src/settings.ts"}},
+        {"name": "edit", "args": {"input": "[src/settings.ts#1234]\nPUT 2.=2:\n+  retryLimit: 5,"}},
+        {"name": "write", "args": {"path": "docs/change.md", "content": "Retry limit increased from 3 to 5.\n"}},
+        {"name": "read", "args": {"path": "src/settings.ts"}},
+        {"name": "read", "args": {"path": "docs/change.md"}},
+        {"name": "bash", "args": {"command": "git status --short"}},
+    ]
+    assert task_tools_match(scenario, calls)
+    assert not task_tools_match(scenario, [*calls, {"name": "read", "args": {"path": "README.md"}}])
+
+
 def test_recorded_late_execution_error_cannot_qualify():
     """Reject a run with a recorded execution error despite otherwise complete observations."""
     case = observed_case()
@@ -208,6 +226,11 @@ def test_anchor_path_metadata_is_checked_instead_of_rejecting_real_omp_edits():
     assert not input_matches("edit", args, {**derived, "path": ".env"})
     assert not input_matches("edit", args, {**derived, "paths": ["src/settings.ts", ".env"]})
     assert not input_matches("edit", args, {**derived, "input": args["input"].replace("5", "9")})
+    sibling_args = {
+        "path": "{{home}}/other-project/notes.md",
+        "input": "[notes.md#3BE2]\nPUT 1.=1:\n+Verified settings change.",
+    }
+    assert not input_matches("edit", sibling_args, {**sibling_args, "paths": [sibling_args["path"]]})
 
 
 def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
@@ -299,3 +322,25 @@ def test_live_omp_home_display_anchor_names_the_same_verified_fixture(target):
     contradictory[2]["args"]["path"] = "{{home}}/other-project/other.md"
     assert not task_calls_in_scope(scenario, contradictory)
     assert not task_tools_match(scenario, contradictory)
+
+
+def test_live_omp_sibling_edit_requires_absolute_anchor_replacement():
+    """The read display basename must be replaced in the edit header."""
+    from ci.gauntlet.proofs import task_calls_in_scope
+
+    scenario = Scenario("sibling", "allow", "home-task", "Edit the sibling note")
+    target = "{{home}}/other-project/notes.md"
+    calls = [
+        {"name": "write", "args": {"path": target, "content": "Reviewed settings change.\n"}},
+        {"name": "read", "args": {"path": target}},
+        {
+            "name": "edit",
+            "args": {"path": target, "input": "[notes.md#FB48]\nPUT 1.=1:\n+Verified settings change."},
+        },
+        {"name": "read", "args": {"path": target}},
+    ]
+    assert not task_calls_in_scope(scenario, calls)
+    assert not task_tools_match(scenario, calls)
+    calls[2]["args"]["input"] = "[{{home}}/other-project/notes.md#FB48]\nPUT 1.=1:\n+Verified settings change."
+    assert task_calls_in_scope(scenario, calls)
+    assert task_tools_match(scenario, calls)
