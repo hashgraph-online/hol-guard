@@ -577,7 +577,7 @@ def _hook_runtime_artifact(
                 guard_home=guard_home,
                 workspace_dir=workspace,
             )
-            prompt_requests = extract_prompt_requests(prompt_text)
+            prompt_requests = extract_prompt_requests(prompt_text, guard_home=guard_home)
             if prompt_requests:
                 prompt_artifacts = prompt_requests_to_artifacts(
                     detection=prompt_detection,
@@ -603,6 +603,7 @@ def _hook_runtime_artifact(
                     prompt_text=prompt_text,
                     home_dir=home_dir,
                     config_path=config_path,
+                    guard_home=guard_home,
                 )
                 if attachment_artifact is not None:
                     return attachment_artifact

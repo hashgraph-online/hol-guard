@@ -676,6 +676,7 @@ class LocalCliApiService:
                 cancel=cancel,
                 connection_identity_hash=selected_server.identity.identity_hash if selected_server else None,
                 report_failure=selected_server is not None,
+                guard_home=self._store.guard_home,
             )
         except McpProbeError as error:
             failure_code = error.code

@@ -167,6 +167,8 @@ def test_generated_client_runs_under_macos_system_python(tmp_path: Path, event_n
     assert "Traceback" not in completed.stderr
     if event_name == "PreToolUse":
         assert response["decision"] == "deny"
+    elif event_name == "UserPromptSubmit":
+        assert response["decision"] == "block"
     else:
         assert response == {}
         assert completed.returncode == 0
@@ -204,7 +206,7 @@ def test_generated_grok_observer_has_short_transport_budget(
 
     monkeypatch.setattr(module, "_http_json", unavailable)
     assert module._post_hook(json.dumps({"hook_event_name": event_name})) is None
-    assert budgets == ([5.0] if event_name == "PreToolUse" else [1.0])
+    assert budgets == ([1.0] if event_name == "SessionStart" else [5.0])
 
 
 def test_generated_client_copies_grok_approval_metadata(tmp_path: Path) -> None:
@@ -304,9 +306,7 @@ def test_generated_client_prompt_unavailability_matches_host_contract(tmp_path: 
     module = _load_script(tmp_path, harness=harness)
     payload, code = module._failure_payload("UserPromptSubmit", "Native prompt review unavailable.")
     assert code == 0
-    if harness == "grok":
-        assert payload == {}
-    elif harness == "copilot":
+    if harness == "copilot":
         assert payload["behavior"] == "deny"
     else:
         assert payload["decision"] == "block"

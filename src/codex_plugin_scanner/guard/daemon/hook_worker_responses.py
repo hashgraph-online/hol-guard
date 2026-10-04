@@ -199,8 +199,6 @@ _NATIVE_PROMPT_RISK_LABELS = {
 
 def harness_json_from_native_prompt(harness: str, response: Mapping[str, object]) -> dict[str, object]:
     canonical = _canonical_hook_harness(harness)
-    if canonical == "grok":
-        return {}
     action = response.get("minimum_action")
     reason_code = str(response.get("reason_code") or "native_prompt_unavailable")
     classes = response.get("prompt_risk_classes")
@@ -210,6 +208,9 @@ def harness_json_from_native_prompt(harness: str, response: Mapping[str, object]
         else []
     )
     if response.get("decision") == "allow" and action in {"allow", "warn"}:
+        if canonical == "grok":
+            # Grok accepts an empty success; decision:allow is not a prompt decision.
+            return {}
         if canonical == "codex":
             return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
         output = {
