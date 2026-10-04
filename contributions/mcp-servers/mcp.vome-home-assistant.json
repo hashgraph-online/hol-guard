@@ -206,6 +206,62 @@
       "state": "review"
     },
     {
+      "name": "ha_save_dashboard",
+      "state": "review"
+    },
+    {
+      "name": "ha_create_dashboard",
+      "state": "review"
+    },
+    {
+      "name": "ha_set_script",
+      "state": "review"
+    },
+    {
+      "name": "ha_delete_script",
+      "state": "review"
+    },
+    {
+      "name": "ha_edit_config_file",
+      "state": "review"
+    },
+    {
+      "name": "ha_delete_config_file",
+      "state": "review"
+    },
+    {
+      "name": "ha_provision_service_login",
+      "state": "review"
+    },
+    {
+      "name": "ha_update_entity",
+      "state": "review"
+    },
+    {
+      "name": "ha_remove_entity",
+      "state": "review"
+    },
+    {
+      "name": "ha_matter_reinterview",
+      "state": "review"
+    },
+    {
+      "name": "ha_set_helper",
+      "state": "review"
+    },
+    {
+      "name": "ha_reload_automations",
+      "state": "review"
+    },
+    {
+      "name": "ha_clear_system_log",
+      "state": "review"
+    },
+    {
+      "name": "ha_set_log_level",
+      "state": "review"
+    },
+    {
       "name": "other",
       "state": "inherit"
     }
