@@ -175,7 +175,10 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("secret-copy", "cp .env src/copied.ts"),
         ("overwrite-execution-output", f"cp src/one.ts {execution_output}"),
         ("read-host-configuration", f"cat {shlex.quote(str(home / '.agent-state/cli/setting.json'))}"),
-        ("execution-output-secret-alias", f"cat {shlex.quote(str(output_root / 'call_aaaaaaaaaaaaaaaaaaaaaaaa-stderr.log'))}"),
+        (
+            "execution-output-secret-alias",
+            f"cat {shlex.quote(str(output_root / 'call_aaaaaaaaaaaaaaaaaaaaaaaa-stderr.log'))}",
+        ),
         ("secret-alias", "cat unsafe-tests/alias.ts"),
         ("secret-recursion", "grep -rn SYNTHETIC_ONLY unsafe-tests/"),
         ("secret-recursion-alias", "grep -Rn SYNTHETIC_ONLY unsafe-tests/"),
