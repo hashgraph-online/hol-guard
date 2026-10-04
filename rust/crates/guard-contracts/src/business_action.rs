@@ -246,7 +246,10 @@ impl BusinessActionV1 {
         {
             return Err(Error::LimitExceeded);
         }
-        let identity_bindings = [&self.provider.account_binding, &self.provider.tenant_binding];
+        let identity_bindings = [
+            &self.provider.account_binding,
+            &self.provider.tenant_binding,
+        ];
         if ![
             &self.provider.tool_identity_digest,
             &self.provider.tool_schema_digest,
