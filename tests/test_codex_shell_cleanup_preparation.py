@@ -108,7 +108,7 @@ def test_symlink_target_is_refused_before_any_cleanup(tmp_path, monkeypatch, man
 def test_signed_inverse_restores_deleted_files_and_non_utf8_profile(
     transition,
     tmp_path,
-    monkeypatch,  # noqa: F811 -- shared pytest fixture
+    monkeypatch,
 ):
     runtime, plan, _bindings, _pointer = transition
     context, profile, only_managed, guard = _sources(tmp_path, monkeypatch)

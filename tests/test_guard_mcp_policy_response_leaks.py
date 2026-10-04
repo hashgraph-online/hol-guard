@@ -46,9 +46,7 @@ class TestPolicyResponseLeakAssertionEnforcement:
         ids=("message-field", "requestId-field"),
     )
     def test_rejects_known_credentials_in_payload(self, payload: dict[str, object]) -> None:
-        sensitive_value = (
-            str(payload["message"]) if "message" in payload else _FIXTURE_TOTP_REQUEST_ID
-        )
+        sensitive_value = str(payload["message"]) if "message" in payload else _FIXTURE_TOTP_REQUEST_ID
         with pytest.raises(AssertionError, match="Response leaked sensitive value"):
             _assert_no_policy_response_leaks(
                 payload, request_id=_FIXTURE_TOTP_REQUEST_ID, sensitive_values=(sensitive_value,)

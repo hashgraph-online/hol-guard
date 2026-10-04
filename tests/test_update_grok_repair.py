@@ -57,6 +57,51 @@ def test_grok_repair_skips_when_hooks_already_current(tmp_path: Path) -> None:
     assert hook_path.read_text(encoding="utf-8") == before
 
 
+def test_grok_repair_preserves_additional_current_prompt_hooks(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.grok_config import GUARD_HOOK_PROMPT_FILE
+
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = "2026-10-04T00:00:00+00:00"
+    prompt = _seed_grok_install(context, store, now).with_name(GUARD_HOOK_PROMPT_FILE)
+    payload = json.loads(prompt.read_text())
+    payload["custom"] = "keep"
+    payload["hooks"]["UserPromptSubmit"][0]["hooks"].append({"type": "command", "command": "echo user-hook"})
+    payload["hooks"]["CustomEvent"] = [{"hooks": [{"type": "command", "command": "echo other-hook"}]}]
+    before = json.dumps(payload, indent=2) + "\n"
+    prompt.write_text(before)
+
+    repaired, warning = repair_grok_install(context=context, store=store, workspace=None, now=now)
+
+    assert (repaired, warning) == (None, None)
+    assert prompt.read_text() == before
+
+
+@pytest.mark.parametrize("stale_kind", ["missing", "timeout", "command"])
+def test_grok_repair_checks_prompt_hook_even_when_pretool_is_current(tmp_path: Path, stale_kind: str) -> None:
+    from codex_plugin_scanner.guard.adapters.grok_config import GUARD_HOOK_PROMPT_FILE
+
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = "2026-10-04T00:00:00+00:00"
+    pretool = _seed_grok_install(context, store, now)
+    prompt = pretool.with_name(GUARD_HOOK_PROMPT_FILE)
+    expected = prompt.read_text()
+    if stale_kind == "missing":
+        prompt.unlink()
+    else:
+        payload = json.loads(expected)
+        hook = payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+        hook[stale_kind] = 1 if stale_kind == "timeout" else "missing-guard"
+        prompt.write_text(json.dumps(payload))
+
+    repaired, warning = repair_grok_install(context=context, store=store, workspace=None, now=now)
+
+    assert warning is None
+    assert repaired is not None
+    assert prompt.read_text() == expected
+
+
 @pytest.mark.parametrize("stale_kind", ["frozen", "script"])
 def test_grok_repair_migrates_to_current_lightweight_client(tmp_path: Path, monkeypatch, stale_kind: str) -> None:
     from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import (

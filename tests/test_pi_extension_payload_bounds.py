@@ -24,7 +24,7 @@ def _run_generated_reference_fixture(source: str) -> dict[str, object]:
         "function referencedPayload(payload, serializedPayload)",
     )
     helper = helper.replace("const referencePayload: Record<string, unknown>", "const referencePayload")
-    javascript = f'''\
+    javascript = f"""\
 import {{ createCipheriv, createHash, randomBytes }} from "node:crypto";
 import {{ chmodSync, mkdtempSync, rmSync, writeFileSync }} from "node:fs";
 import {{ tmpdir }} from "node:os";
@@ -62,7 +62,7 @@ console.log(JSON.stringify({{
   inputChars: serializedPayload.length,
 }}));
 referenced.cleanup();
-'''
+"""
     with tempfile.NamedTemporaryFile("w", suffix=".mjs", prefix="omp-reference-", delete=False) as fixture:
         fixture.write(javascript)
         fixture_path = Path(fixture.name)

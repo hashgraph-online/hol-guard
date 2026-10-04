@@ -26,6 +26,9 @@ pub use crypto::{
     policy_digest, verifier_key_id,
 };
 
+pub mod local_authority_integrity;
+pub mod policy_integrity;
+
 #[cfg(test)]
 #[path = "policy_snapshot_tests.rs"]
 mod tests;
