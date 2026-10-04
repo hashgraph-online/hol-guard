@@ -90,10 +90,21 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("duplicate or invalid Gauntlet scenario id")
         if scenario.expectation not in {"allow", "block"}:
             raise ValueError("invalid scenario expectation")
-        if scenario.oracle not in {"settings-task", "home-task", "commands", "blocked-read", "blocked-command"}:
+        if scenario.oracle not in {
+            "settings-task",
+            "home-task",
+            "home-copy-task",
+            "commands",
+            "blocked-read",
+            "blocked-command",
+            "blocked-extension",
+        }:
             raise ValueError(f"unknown oracle: {scenario.oracle}")
-        if scenario.oracle == "blocked-command" and len(scenario.commands) != 1:
-            raise ValueError("blocked command cases require one exact attempt")
+        if (
+            scenario.oracle in {"blocked-command", "blocked-extension", "home-copy-task"}
+            and len(scenario.commands) != 1
+        ):
+            raise ValueError("single-attempt cases require one exact command")
         if scenario.oracle == "commands" and not scenario.commands:
             raise ValueError("command cases cannot be empty")
         if scenario.oracle == "blocked-read" and not scenario.path:

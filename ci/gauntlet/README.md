@@ -20,6 +20,8 @@ The core catalog pairs ordinary coding tasks with synthetic protection cases:
 
 The model must use actual native `read`, `write`, `edit` and `bash` tools. The judge correlates model call IDs, host starts/completions, native pre/post responses, native route counts, approvals, physical file contents and local collector observations. It does not count a model's refusal as a Guard block.
 
+The current core catalog contains 20 scenarios. Its paired checks cover the exact seven-call settings task with independent byte checks, absolute sibling-project anchor replacement, sibling copy plus native readback, quoted/Unicode/source-search/pipeline/Git/OD work, recursive and byte-oriented secret searches, secret aliases/copies, local egress and environment protections, deletion sentinels, and an explicitly disabled Ollama permission. Exact-command cases require one model-selected attempt; native receipt/control evidence and filesystem or egress outcomes are checked independently. The Ollama case proves a real OMP Guard attempt and a harmless sentinel that was not executed; it does not claim contact with a real Ollama service.
+
 ## Install the test inputs
 
 Use a dedicated disposable machine or isolated development environment. The runner is currently POSIX-only. Linux results do not qualify macOS-specific containment or Windows behavior.
@@ -43,6 +45,8 @@ Do not use `uv run` without `--no-sync` after installing the wheel: an automatic
 ## Run with real inference
 
 Use an OpenAI-compatible **Chat Completions streaming** provider endpoint and a model that supports tool calls. DeepSeek or another compatible provider can be configured directly. A Codex subscription is not automatically an API credential. A local compatible server is supported explicitly; prerecorded responses are not qualification evidence.
+
+The relay identifies itself as `hol-guard-gauntlet/1.0` and supplies a stable, random `x-opencode-session` for each scenario. These routing headers support coding-agent providers without borrowing another client's identity. Session identifiers and provider credentials are never included in public evidence. Interrupting a run terminates and reaps its owned agent process group.
 
 Set these variables through your normal secret manager or terminal environment. Use a dedicated key with a spend cap, never a repository-automation, release or production key.
 
@@ -143,4 +147,4 @@ Evidence hashes prove byte integrity, not authorship. Qualification additionally
 
 Start from a real user failure. Add a task with an explicit expected outcome and a paired harmful or benign case. Reproduce it in the actual harness before changing runtime code. Keep the old failure evidence, fix the responsible layer, then run the full profile on the final source. Do not weaken a protection rule to satisfy stale tests, and do not change a scenario to optional because it failed.
 
-The older `ci/native_runtime/WORKFLOW_MATRIX.md` remains the broader command and macOS contained-test suite. Gauntlet core does not silently replace its complete admission inventory, positive shell calls, or actual protected Bun/Vitest execution. Those require their own complete live evidence on the supported platform. See `BATTLE_PLAN.md` and `FINDINGS.md` for the rollout and discoveries.
+The older `ci/native_runtime/WORKFLOW_MATRIX.md` remains the broader command and macOS contained-test suite. Gauntlet core does not silently replace its complete admission inventory, positive shell calls, compound matrix, or actual protected Bun/Vitest execution. Those require their own complete live evidence on the supported platform. See `BATTLE_PLAN.md` and `FINDINGS.md` for the rollout and discoveries.

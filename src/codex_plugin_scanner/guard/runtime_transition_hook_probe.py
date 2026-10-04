@@ -47,7 +47,7 @@ def transition_hook_observation(payload: Mapping[str, object], receipt: object) 
         native is None
         or native["request_id"] != probe[1]
         or native["event_name"] != "PreToolUse"
-        or native["harness"] != "codex"
+        or native["harness"] not in {"codex", "omp"}
         or native["payload_kind"] != "inline"
         or native["observe_mode"] is not False
     ):
