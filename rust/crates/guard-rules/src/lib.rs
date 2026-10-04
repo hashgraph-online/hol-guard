@@ -28,6 +28,9 @@ pub const OUTPUT_TEXT_KEYS: &[&str] = &[
     "old_string",
     "newString",
     "new_string",
+    "structuredPatch",
+    "structured_patch",
+    "lines",
 ];
 pub const PAYLOAD_OUTPUT_KEYS: &[&str] = &[
     "tool_response",
