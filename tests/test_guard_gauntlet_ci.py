@@ -463,7 +463,10 @@ def test_gauntlet_qualification_is_optional_and_separate_from_required_ci():
     root = Path(__file__).resolve().parents[1]
     ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     job = ci["jobs"]["ci-python-312"]
-    assert "gauntlet" not in str(job).lower()
+    for step in job["steps"]:
+        assert step.get("with", {}).get("path") != "gauntlet-trusted"
+        assert "ci.gauntlet.github_ci require" not in step.get("run", "")
+    assert "initialize" not in job["needs"]
     optional = yaml.safe_load((root / ".github/workflows/guard-gauntlet-gate.yml").read_text())["jobs"]["initialize"]
     assert not optional.get("continue-on-error", False)
     assert "github.event_name == 'pull_request_target'" in optional["if"]
