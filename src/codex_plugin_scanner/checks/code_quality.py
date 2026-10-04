@@ -11,7 +11,9 @@ from ..path_support import resolves_within_root
 CODE_EXTS = {".py", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"}
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", "__pycache__", ".venv", "venv"}
 
-EVAL_RE = re.compile(r"\beval\s*\(")
+GLOBAL_EVAL_RECEIVER_PATTERN = r"(?:window|globalThis|self|global)"
+EVAL_RE = re.compile(r"(?<![\w.$])eval\s*\(")
+GLOBAL_EVAL_RE = re.compile(rf"(?<![\w.]){GLOBAL_EVAL_RECEIVER_PATTERN}\s*\.\s*eval\s*\(")
 FUNCTION_RE = re.compile(r"new\s+Function\s*\(")
 INTERPOLATED_TEMPLATE_PATTERN = r"`[^`]*\$\{[^}]+\}[^`]*`"
 TS_TEMPLATE_SUFFIX_PATTERN = r"(?:[ \t]+(?:as|satisfies)[ \t]+[^;\n]+)?"
@@ -86,7 +88,7 @@ def check_no_eval(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> Ch
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        if EVAL_RE.search(content):
+        if EVAL_RE.search(content) or GLOBAL_EVAL_RE.search(content):
             findings.append(f"{fpath.relative_to(plugin_dir)}: eval()")
         if FUNCTION_RE.search(content):
             findings.append(f"{fpath.relative_to(plugin_dir)}: new Function()")
