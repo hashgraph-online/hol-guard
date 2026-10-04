@@ -1740,6 +1740,13 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.build.outputs.source_sha }}
+      - name: Checkout release-notes tooling
+        if: needs.publish-main-pypi.outputs.pypi_deferred == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          path: .release-tooling
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions-native
@@ -1774,8 +1781,12 @@ jobs:
           PYPI_DEFERRED: ${{ needs.publish-main-pypi.outputs.pypi_deferred }}
         run: |
           deferred_args=()
-          [[ "$PYPI_DEFERRED" == "true" ]] && deferred_args+=(--pypi-deferred)
-          python3 scripts/ci/generate_release_notes.py \
+          notes_script="scripts/ci/generate_release_notes.py"
+          if [[ "$PYPI_DEFERRED" == "true" ]]; then
+            notes_script=".release-tooling/scripts/ci/generate_release_notes.py"
+            deferred_args+=(--pypi-deferred)
+          fi
+          python3 "$notes_script" \
             --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" \
             --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md" \
             "${deferred_args[@]}"
