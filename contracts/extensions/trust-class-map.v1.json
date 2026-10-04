@@ -91,6 +91,7 @@
       "command.mcp-instapods",
       "command.mcp-pr-ui-compare",
       "command.mcp-reaper",
+      "command.mori",
       "command.noodle",
       "command.ollama",
       "command.probe",
