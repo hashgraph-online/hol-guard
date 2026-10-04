@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -340,4 +341,44 @@ with hold_command_control_authority_lock(pathlib.Path(sys.argv[1]), shared=True)
         if process is not None and process.poll() is None:
             process.kill()
             process.wait(timeout=5)
+        publisher.close()
+
+
+def test_projection_reuses_connection_without_caching_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path, MemorySecretStore())
+    publisher = _publisher(store, monkeypatch)
+    try:
+        first = _publish_ready(publisher)
+        opened = []
+        original_connect = sqlite3.connect
+
+        def connect(database, *args, **kwargs):
+            connection = original_connect(database, *args, **kwargs)
+            if database in (store.path, str(store.path)):
+                opened.append(connection)
+            return connection
+
+        monkeypatch.setattr(sqlite3, "connect", connect)
+        assert publisher._compiled_command_extensions() == first["command_extensions"]
+        assert len(opened) == 1
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            opened[0].execute("select 1")
+
+        assert publisher._compiled_command_extensions() == first["command_extensions"]
+        assert len(opened) == 2
+        assert opened[1] is not opened[0]
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            opened[1].execute("select 1")
+
+        # A later read must authenticate fresh database contents, even if
+        # the previous projection was protected and unchanged.
+        with original_connect(store.path) as writer:
+            writer.execute("update extension_control_authority_snapshot set snapshot_mac = ?", ("0" * 64,))
+        writer.close()
+        changed = publisher._compiled_command_extensions()
+        assert changed["health"] != "protected"
+        assert changed != first["command_extensions"]
+    finally:
         publisher.close()
