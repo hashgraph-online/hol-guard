@@ -100,7 +100,9 @@ def prepare_restricted_vitest(
         entry = lexical.resolve(strict=True)
         if not entry.is_file() or not _path_is_within(entry, plan.workspace / "node_modules"):
             raise OSError("invalid local Vitest entrypoint")
-        if Path(command[0]).name in {"node", "nodejs"} and Path(command[1]).resolve(strict=True) != entry:
+        if Path(command[0]).name in {"node", "nodejs"} and Path(
+            command[1 + len(runtime_args)]
+        ).resolve(strict=True) != entry:
             raise OSError("unexpected Vitest entrypoint")
     except (OSError, RuntimeError) as error:
         raise RestrictedPytestError(
