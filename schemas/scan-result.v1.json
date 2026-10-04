@@ -143,8 +143,23 @@
       "items": {
         "$ref": "#/$defs/skippedTarget"
       }
+    },
+    "contributorReview": {
+      "type": "object",
+      "required": ["schemaVersion", "purpose", "automaticApproval", "sourceBoundAttestation", "scannerVersion", "findingCount", "distinctEvidenceCount", "groups", "steps"],
+      "properties": {
+        "schemaVersion": {"const": "contributor-review.v1"},
+        "purpose": {"const": "report-only"},
+        "automaticApproval": {"const": false},
+        "sourceBoundAttestation": {"const": false},
+        "scannerVersion": {"type": "string"},
+        "findingCount": {"type": "integer", "minimum": 0},
+        "distinctEvidenceCount": {"type": "integer", "minimum": 0},
+        "groups": {"type": "array", "items": {"type": "object"}},
+        "steps": {"type": "array", "items": {"type": "string"}}
+      }
     }
-  },
+  }
   "$defs": {
     "severity": {
       "type": "string",
