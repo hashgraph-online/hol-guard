@@ -1584,6 +1584,34 @@ def build_runtime_snapshot(
     containment_health: object = None,
     serving_runtime: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    # Each store call otherwise opens its own connection. That made this
+    # control-plane read take several seconds on an ordinary local store.
+    with store.connection_scope():
+        return _build_runtime_snapshot(
+            store=store,
+            approval_center_url=approval_center_url,
+            now=now,
+            request_limit=request_limit,
+            receipt_limit=receipt_limit,
+            active_request_id=active_request_id,
+            include_items=include_items,
+            containment_health=containment_health,
+            serving_runtime=serving_runtime,
+        )
+
+
+def _build_runtime_snapshot(
+    *,
+    store: GuardStore,
+    approval_center_url: str | None,
+    now: str | None = None,
+    request_limit: int = 200,
+    receipt_limit: int = 25,
+    active_request_id: str | None = None,
+    include_items: bool = True,
+    containment_health: object = None,
+    serving_runtime: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     queue_page = store.list_pending_approval_summaries(limit=1, exclude_watch_only=True)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
     pending_count = _non_negative_int(queue_page.get("total_pending_count"))
