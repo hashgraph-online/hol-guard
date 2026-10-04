@@ -1,0 +1,681 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "base": "packaged",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "extension_id": "command.redpen",
+          "version": "1.0.0",
+          "name": "Redpen",
+          "description": "Reviews Redpen check, which independently executes repository-defined verification commands and writes an evidence report. Output formatting is not a dry run. Cached report/status/explain commands do not rerun project verification. Boundary reviewed against Redpen 0.3.0 and commit 466df0f (0.4.0 development).",
+          "action_classes": [
+            "Redpen project verification execution"
+          ],
+          "risk_classes": [
+            "execution",
+            "network_egress"
+          ],
+          "safer_alternatives": [
+            "Use redpen report to display the saved evidence receipt without rerunning project commands.",
+            "Review repository scripts and .redpen/config.json before authorizing redpen check."
+          ],
+          "reference_urls": [
+            "https://github.com/ChiragArora31/Redpen/blob/466df0f/src/cli.ts",
+            "https://github.com/ChiragArora31/Redpen/blob/466df0f/src/system/process.ts",
+            "https://github.com/ChiragArora31/Redpen/blob/466df0f/SECURITY.md"
+          ],
+          "required": false,
+          "source": "built-in",
+          "aliases": [],
+          "dependencies": [],
+          "conflicts": [],
+          "ecosystem_ids": [],
+          "executables": [
+            "redpen",
+            "redpen.cmd",
+            "redpen.exe",
+            "redpen-cli",
+            "redpen-cli.cmd",
+            "redpen-cli.exe"
+          ],
+          "project_markers": [],
+          "publisher": {
+            "id": "community.chiragarora31",
+            "display_name": "Chirag Arora",
+            "url": "https://github.com/ChiragArora31"
+          },
+          "homepage": "https://github.com/ChiragArora31/Redpen",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "permissions": [
+            {
+              "permission_id": "command.redpen.permission.check",
+              "implementation_version": "1.0.0",
+              "label": "Execute Redpen project verification",
+              "description": "Allows Redpen to execute discovered/configured project tests, builds, lint, typechecks, regression checks, and custom verification commands. These commands are not sandboxed and may perform network or filesystem operations.",
+              "risk_tier": "high",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "Redpen project verification execution"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Inspect project scripts and configured verification commands before running checks in a repository you do not trust.",
+                "Use redpen report for the last saved receipt; an agent completion or passing receipt is not authorization to execute commands."
+              ],
+              "example_command": "redpen check --json --timeout 120"
+            }
+          ],
+          "rules": [
+            {
+              "rule_id": "command.redpen.check",
+              "rule_version": "1.0.0",
+              "permission_id": "command.redpen.permission.check",
+              "title": "Redpen project verification execution",
+              "description": "Identifies redpen check independently of output format or unrecognized options. Cached report/status/explain commands are outside this execution rule. Subcommand help is conservatively reviewed; no flag-based bypass is granted because shared flag grammars accept forms that Redpen does not treat as help. Direct node script paths, plugin hooks, and package downloads remain outside this rule and retain their existing floors.",
+              "severity": "high",
+              "risk_classes": [
+                "execution",
+                "network_egress"
+              ],
+              "action_classes": [
+                "Redpen project verification execution"
+              ],
+              "safer_alternatives": [
+                "Use redpen report to inspect the last saved verification result without executing project commands."
+              ],
+              "default_mode": "review",
+              "safe_variants": [],
+              "matcher": {
+                "op": "executable.v1",
+                "config": {
+                  "executables": [
+                    "redpen",
+                    "redpen.cmd",
+                    "redpen.exe",
+                    "redpen-cli",
+                    "redpen-cli.cmd",
+                    "redpen-cli.exe"
+                  ],
+                  "subcommands": [
+                    "check"
+                  ],
+                  "allow_leading_options": false,
+                  "fail_secure_unknown_options": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "mcp_sources": [],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
+      "classes": {
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ],
+        "external": [
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.redpen",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.syngraphe",
+          "command.uivoid"
+        ]
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "check",
+      "command": "redpen check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "json-not-dry-run",
+      "command": "redpen check --json",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "markdown-not-dry-run",
+      "command": "redpen check --markdown",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "all-options",
+      "command": "redpen check --timeout 30 --strict-claims --verbose --no-color",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "unknown-option",
+      "command": "redpen check --dry-run",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "help-value-not-help",
+      "command": "redpen check --help=true",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "short-help-value-not-help",
+      "command": "redpen check -h=true",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "subcommand-help-conservative",
+      "command": "redpen check --help",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "version-conservative",
+      "command": "redpen check --version",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "delimiter-conservative",
+      "command": "redpen check -- --help",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "alias",
+      "command": "redpen-cli check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "windows-cmd",
+      "command": "redpen.cmd check --json",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "windows-exe",
+      "command": "redpen-cli.exe check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "quoted-path",
+      "command": "\"/opt/tools with spaces/redpen\" check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "environment-wrapper",
+      "command": "env CI=1 redpen check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "chained-receipt",
+      "command": "redpen report && redpen check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "sibling-help",
+      "command": "redpen --help; redpen check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "pipeline-sibling-help",
+      "command": "redpen check | redpen --help",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "two-checks",
+      "command": "redpen check; redpen-cli check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "receipt",
+      "command": "redpen report",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "status",
+      "command": "redpen status",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "explain",
+      "command": "redpen explain",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "root-help",
+      "command": "redpen --help",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "root-version",
+      "command": "redpen --version",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "similar-subcommand",
+      "command": "redpen checkout",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "claims-not-execution",
+      "command": "redpen claims \"redpen check --json\"",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "task-not-execution",
+      "command": "redpen start \"run redpen check\"",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "file-claims-not-execution",
+      "command": "redpen claims --file completion.txt",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unrelated",
+      "command": "echo redpen check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "extension-inactive",
+      "command": "redpen check",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "permission-disabled",
+      "command": "redpen check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [
+        "command.redpen.permission.check"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "disabled-permission-receipt",
+      "command": "redpen report",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [
+        "command.redpen.permission.check"
+      ],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "npm-install-floor",
+      "command": "npm install -g redpen-cli",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "npx-execution-floor",
+      "command": "npx redpen-cli check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "sibling-deletion-floor",
+      "command": "redpen report; rm -rf ./synthetic-cache",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "script-path-out-of-scope",
+      "command": "node dist/cli.js check",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unknown-subcommand",
+      "command": "redpen execute",
+      "enabled_extensions": [
+        "command.redpen"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.redpen.check",
+      "expected_effective_segments": []
+    }
+  ]
+}
