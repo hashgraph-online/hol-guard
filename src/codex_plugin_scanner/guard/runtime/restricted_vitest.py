@@ -228,9 +228,7 @@ def run_restricted_node_plan(
 
             plan = prepare_localhost_resolver(plan, root)
             preload = str(root / "localhost-resolution.cjs").replace("\\", "\\\\").replace('"', '\\"')
-            launch_env["NODE_OPTIONS"] = (
-                f'{launch_env.get("NODE_OPTIONS", "")} --require "{preload}"'
-            ).strip()
+            launch_env["NODE_OPTIONS"] = (f'{launch_env.get("NODE_OPTIONS", "")} --require "{preload}"').strip()
         return _run_backend_process(
             _backend_argv(plan, private_root=root),
             env=launch_env,

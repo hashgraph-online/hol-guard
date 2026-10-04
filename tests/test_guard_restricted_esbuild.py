@@ -60,13 +60,19 @@ def test_missing_dependency_does_not_download_or_grant_an_image(tmp_path):
     assert module.snapshot_esbuild(tmp_path, tmp_path) is None
 
 
-def test_runner_keeps_authorized_image_outside_writable_ancestors(tmp_path, monkeypatch):
+@pytest.mark.parametrize("private_parent_name", ["private", "private with spaces"])
+def test_runner_keeps_authorized_image_outside_writable_ancestors(tmp_path, monkeypatch, private_parent_name):
+    import shlex
+    import tempfile
     from pathlib import Path
 
     from codex_plugin_scanner.guard.runtime import restricted_vitest as vitest
     from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestPlan
 
     source, _ = fixture(tmp_path, monkeypatch)
+    temporary_parent = tmp_path.parent / (tmp_path.name + "-" + private_parent_name)
+    temporary_parent.mkdir(mode=0o700)
+    monkeypatch.setattr(tempfile, "tempdir", str(temporary_parent))
     plan = RestrictedPytestPlan(
         profile_version="vitest-readonly-v1",
         backend="macos-seatbelt",
@@ -83,6 +89,7 @@ def test_runner_keeps_authorized_image_outside_writable_ancestors(tmp_path, monk
     def launch(argv, *, env, **kwargs):
         image = Path(env["ESBUILD_BINARY_PATH"])
         scratch = Path(env["HOME"]).parent
+        assert shlex.split(env["NODE_OPTIONS"])[-2:] == ["--require", str(scratch / "localhost-resolution.cjs")]
         assert image.is_file()
         assert not image.is_relative_to(scratch)
         assert not image.is_relative_to(tmp_path)

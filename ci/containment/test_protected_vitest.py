@@ -62,16 +62,18 @@ test('fixed resolution reaches the real worker without wider permissions', async
   const scratch = path.dirname(os.tmpdir());
   expect(parent).not.toBe(scratch);
   const before = fs.readFileSync(image!);
-  const denied = (action: () => void) => {
+  const denied = (action: () => void, codes = ['EACCES', 'EPERM', 'EROFS']) => {
     try { action(); throw new Error('sandbox unexpectedly allowed mutation'); }
-    catch (error: any) { expect(['EACCES', 'EPERM', 'EROFS']).toContain(error.code); }
+    catch (error: any) { expect(codes).toContain(error.code); }
   };
   denied(() => fs.chmodSync(image!, 0o700));
   denied(() => fs.writeFileSync(image!, 'replacement'));
   denied(() => fs.unlinkSync(image!));
-  denied(() => fs.renameSync(parent, path.join(scratch, 'moved-images')));
+  // Linux can reject crossing the readonly mount before permission checks.
+  denied(() => fs.renameSync(parent, path.join(scratch, 'moved-images')), ['EACCES', 'EPERM', 'EROFS', 'EXDEV']);
+  expect(fs.existsSync(path.join(scratch, 'moved-images'))).toBe(false);
   denied(() => fs.mkdirSync(path.join(parent, 'new-child')));
-  expect(fs.readFileSync(image!)).toEqual(before);
+  expect(fs.readFileSync(image!).equals(before)).toBe(true);
   denied(() => fs.readFileSync('credentials/.env'));
   denied(() => fs.writeFileSync('worker.test.ts', 'replacement'));
   fs.writeFileSync(path.join(os.tmpdir(), 'ordinary-scratch.txt'), 'allowed');
