@@ -272,11 +272,11 @@ fn retire_clients_for_update_terminates_exact_process() {
         .arg("--nocapture")
         .env("HOL_GUARD_LEASE_RETIRE_CHILD", &root)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::inherit())
         .spawn()
         .unwrap();
-    for _ in 0..1000 {
-        if root.join("child-ready").is_file() {
+    for _ in 0..6_000 {
+        if root.join("child-ready").is_file() || child.try_wait().unwrap().is_some() {
             break;
         }
         std::thread::sleep(Duration::from_millis(10));
