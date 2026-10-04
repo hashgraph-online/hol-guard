@@ -93,17 +93,18 @@ A connected GitHub tool can dispatch the same JSON inputs. The attestation flag 
 
 The generated inputs contain `pr_number`, `candidate_sha`, `evidence_base64`, `evidence_sha256` and `attest_real_inference`. Inline transport is bounded below GitHub's workflow-input limit. Larger bundles can use `evidence_url` instead of `evidence_base64`, pointing to a direct signed HTTPS object on an approved R2, S3, Azure artifact or GitHub object endpoint. Exactly one transport is accepted. Never upload the private fixture directory or model system prompts/reasoning.
 
-The default-branch verifier checks the live report as data. Feature-branch verifier runs cannot qualify their own PR. Candidate catalogs may add cases, but the trusted core cannot be removed or weakened; changes to core oracle contracts require a separate reviewed baseline update. It reads immutable candidate Git blobs through GitHub and never checks out or imports candidate code. A separate write-capable job publishes the exact-head status and a PR comment with the public artifact. A status claim alone is insufficient: the existing required `ci (3.12)` aggregate also requires a successful repository-owned evidence workflow and its unique unexpired candidate artifact.
+The default-branch verifier checks the live report as data. Feature-branch verifier runs cannot qualify their own PR. Candidate catalogs may add cases, but the trusted core cannot be removed or weakened; changes to core oracle contracts require a separate reviewed baseline update. It reads immutable candidate Git blobs through GitHub and never checks out or imports candidate code. A separate write-capable job publishes the exact-head status and a PR comment with the public artifact. Qualification, when checked, requires a successful repository-owned evidence workflow and its unique unexpired candidate artifact; a status claim alone is insufficient.
 
-A first CI run can fail with “fresh real-agent evidence required.” After the evidence workflow finishes successfully, rerun the failed CI jobs. The agent performing the PR should complete this sequence rather than ask the maintainer to waive it. New enforcement commits invalidate old evidence. The required check revalidates the verified source against the current PR base, so a stale test-merge report cannot silently qualify a newer integration. Unrelated documentation changes do not require a product run.
+The optional qualification job can report “fresh real-agent evidence required.” After the evidence workflow finishes successfully, rerun that optional job to check the new evidence. New enforcement commits invalidate old evidence. The verifier revalidates the verified source against the current PR base, so a stale test-merge report cannot silently qualify a newer integration. Unrelated documentation changes do not require a product run.
 
-The gate is incorporated into the repository's already-required `ci (3.12)` check and runs from a separate trusted-base checkout, not candidate Python. This protects the judge from candidate changes, but a repository workflow edit is still governed by normal review. For enforcement independent of candidate workflow edits, add `Guard Gauntlet` (GitHub Actions integration 15368) to the existing `main-status-checks` ruleset after installation. Do not enable that global requirement before the trusted metadata workflow exists on the base, since unrelated open PRs would have no status producer. No provider secret is automatically exposed to fork PRs. Fork contributions need a repository-writer-attested live run, not an untrusted uploaded `pass: true`.
+Guard Gauntlet is optional and does not block merge. Its qualification job reports failures normally and runs from the trusted base, not candidate Python. The required `ci (3.12)` aggregate has no dependency on Gauntlet. Neither the optional job nor the `Guard Gauntlet` status belongs in required merge checks. No provider secret is automatically exposed to fork PRs. Fork contributions need a repository-writer-attested live run to qualify, not an untrusted uploaded `pass: true`.
 
 ## Initial installation and verifier upgrades
 
-PR #3463 is the only initial-installation exception. Its required CI check pins
-an immutable reviewed verifier SHA in `.github/workflows/ci.yml`; that commit is
-also named `guard-gauntlet-bootstrap-v3`. The original v1 tag remains unchanged; v2 corrects the observed home-anchor judge and repository API route handling. The exception applies only to this
+PR #3463 was the initial-installation exception. It used an immutable reviewed
+verifier SHA, also named `guard-gauntlet-bootstrap-v3`. The required CI pin has
+since been removed; qualification now belongs to the optional workflow.
+The original v1 tag remains unchanged; v2 corrects the observed home-anchor judge and repository API route handling. The exception applies only to this
 repository and PR, only while the trusted base does not contain Gauntlet, and
 only to evidence produced by that exact pinned commit. It does not waive the
 full live suite or permit replayed evidence. Dispatch the initial evidence and
@@ -113,7 +114,7 @@ posts no qualification; it directs the operator to this bounded path.
 After installation, dispatch from `main`. A new candidate can change runner
 implementation or add scenario data while the trusted base judge recomputes
 outcomes. Existing scenario expectations, exact commands and physical oracles
-cannot be weakened by the candidate. The publisher and required CI consumer
+cannot be weakened by the candidate. The publisher and optional qualification consumer
 both verify the producer revision and the tested source. Reinitializing an
 unchanged, still-qualified head preserves its success rather than resetting it
 to pending.
