@@ -1,0 +1,155 @@
+{
+  "activeProtectionChanged": false,
+  "binaryIdentityVerified": false,
+  "coverageMeaning": "Enumerated metadata only; not a security certification or proof of runtime completeness.",
+  "discoveredOperations": 8,
+  "discoveryDigest": "d85b67d05a6691833b2b955b42007dd22058a7f3be9c73f091f60148511e1ab3",
+  "limitations": [
+    "metadata-is-not-semantics",
+    "unknown-cli-operations-review"
+  ],
+  "operations": [
+    {
+      "exactSafeInvocations": [
+        [
+          "--help"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "-V"
+        ],
+        [
+          "-h"
+        ]
+      ],
+      "id": "op-75eb278d6a9fb4cf",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [
+        [
+          "completions",
+          "bash"
+        ],
+        [
+          "completions",
+          "elvish"
+        ],
+        [
+          "completions",
+          "fish"
+        ],
+        [
+          "completions",
+          "zsh"
+        ]
+      ],
+      "id": "op-1d8f2e3384b44038",
+      "path": [
+        "completions"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-2e390f4b1131c34a",
+      "path": [
+        "doctor"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-66ac10fbbea895e4",
+      "path": [
+        "edit"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-6c69101a5444aed0",
+      "path": [
+        "install"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [
+        [
+          "list",
+          "--json"
+        ]
+      ],
+      "id": "op-28e623ce1c945c32",
+      "path": [
+        "list"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": [
+        "read-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "op-98ae7de9f4921295",
+      "path": [
+        "remove"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": [
+        "destructive-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [
+        [
+          "update",
+          "--all",
+          "--check"
+        ],
+        [
+          "update",
+          "--all",
+          "--check",
+          "--json"
+        ]
+      ],
+      "id": "op-227d251131facfdb",
+      "path": [
+        "update"
+      ],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "",
+      "untrustedHints": []
+    }
+  ],
+  "reviewedOperations": 8,
+  "revisionDigest": "ae02b6ce488d931f45bb66cb90bfca34c6e69b3c56b91f19978ae8579886e266",
+  "schemaVersion": "guard.extension-coverage-report.v1",
+  "unknownOperationBehavior": "review",
+  "upstreamVersion": "0.2.2"
+}

@@ -1,0 +1,15 @@
+{
+  "builderVersion": "1.0.0",
+  "contributionId": "command.appimg",
+  "managedFiles": {
+    "contributions/authoring/command.appimg/README.md": "687a9c8fd09c864d016e4cfffe8b5a7b592a0e244ab88f876e135dac9dc70bad",
+    "contributions/authoring/command.appimg/discovery.json": "80cf612859dde89be358dc981c0a1220751e62d766b741165333e0c7f7e7a45f",
+    "contributions/authoring/command.appimg/report.json": "08bb9aacc3c210357bcb63046e319a218d9c3d548e660c90774e29bfb8aae659",
+    "contributions/authoring/command.appimg/review.json": "68bea667916bf08984523a85cbfa692dc884294ded97c8a3e8ecf8940301a582",
+    "contributions/command-sources/command.appimg.json": "5414b0a7e280337da415e9b6268971af02af4dc8bf90fe07b06116d93f7fd10b",
+    "contributions/extensions/command.appimg.json": "3e1a04f6f8fc9d85f3b58cf5262999c2cda6da7879ba8f18f7ae68269cacf6e2",
+    "tests/fixtures/command-source-appimg.v1.json": "35ef83f17fd18d450b1f426ddd28d55d11684f7334443d3d31278fa7fcc6eba2"
+  },
+  "revisionDigest": "ae02b6ce488d931f45bb66cb90bfca34c6e69b3c56b91f19978ae8579886e266",
+  "schemaVersion": "guard.extension-authoring-install.v1"
+}
