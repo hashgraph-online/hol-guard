@@ -136,6 +136,20 @@ line-length = 120
 [tool.hatch.build.targets.wheel]
 packages = ["src/codex_plugin_scanner"]
 
+[tool.hatch.build.targets.sdist]
+# Keep all inputs needed to rebuild the wheel and verify frozen projections.
+# Dashboard assets are already bundled under src; contributor tests live in Git.
+only-include = [
+    "src",
+    "scripts",
+    "rust",
+    "contracts",
+    "contributions",
+    "docs/guard/contracts/guard-cloud-review.md",
+    "README.md",
+    "LICENSE",
+]
+
 [tool.hatch.build.hooks.custom]
 path = "scripts/build_command_projection_hook.py"
 
