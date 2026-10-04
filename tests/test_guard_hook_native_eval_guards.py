@@ -6,13 +6,13 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard.cli import commands_hook_native_eval as eval_module
 from codex_plugin_scanner.guard.cli.commands_hook_native_eval import (
     _native_edge_floor_action,
     _requested_policy_action_normalization,
     _runtime_external_archive_command_matches_executable,
     _runtime_external_archive_has_digest_binding_sink,
 )
-from codex_plugin_scanner.guard.cli import commands_hook_native_eval as eval_module
 from codex_plugin_scanner.guard.cli.commands_hook_native_generic import (
     _observed_action_detail,
     _should_relax_configured_default,

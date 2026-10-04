@@ -246,6 +246,35 @@ def _ambient_context_digest_home(
 
 
 @pytest.fixture
+def native_prompt_runtime(
+    _native_context_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    """Exercise prompt behavior through the real authenticated native resident.
+
+    The test suite's independent off-mode hooks stay unchanged. This fixture
+    supplies only the prompt RPC's runtime and session transport directory;
+    no prompt classification or result is mocked.
+    """
+    from codex_plugin_scanner.guard import native_context, native_execution, native_prompt
+    from codex_plugin_scanner.guard.runtime import runner
+
+    runtime = _resolve_native_hook_runtime()
+    analyze = native_prompt.analyze
+
+    def invoke(subop: str, **kwargs):
+        if kwargs.get("guard_home") is None:
+            kwargs["guard_home"] = _native_context_home
+        with monkeypatch.context() as transport:
+            transport.setattr(native_execution, "native_runtime_status", native_context.native_runtime_status)
+            return analyze(subop, **kwargs)
+
+    monkeypatch.setattr(native_prompt, "analyze", invoke)
+    monkeypatch.setattr(runner, "_prompt_analyze_native", invoke)
+    return runtime
+
+
+@pytest.fixture
 def native_context_digest(
     monkeypatch: pytest.MonkeyPatch,
     _native_context_home: Path,

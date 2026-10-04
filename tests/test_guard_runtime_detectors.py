@@ -26,6 +26,8 @@ from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskS
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.types import PromptRequest, RemediationAction
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 class StepClock:
     def __init__(self, values: list[float]) -> None:

@@ -10,12 +10,8 @@ import stat
 from pathlib import Path
 
 from ..models import GuardArtifact
-from ..runtime.runner import (
-    _PROMPT_SENTENCE_BOUNDARY_PATTERN,
-    _SECRET_READ_INTENT_PATTERN,
-    _secret_read_intent_is_negated,
-    extract_prompt_requests,
-)
+from ..native_prompt import NativePromptAnalysisError, extract_prompt_requests
+from ..native_prompt import trailing_secret_read_state as _trailing_secret_read_state
 from .commands_support_codex_paths import (
     _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
     _PROMPT_FILE_READ_VERB_PATTERN,
@@ -62,7 +58,7 @@ def _codex_prompt_attachment_artifact(*, prompt_text: str, home_dir: Path, confi
                 resolved_root=resolved_root,
             )
             classes, digest = _scan_attachment(descriptor)
-        except (OSError, UnicodeError):
+        except (OSError, UnicodeError, NativePromptAnalysisError):
             return _scan_failure(requested_path, "Guard could not fully scan the Codex attachment.", config_path)
         finally:
             if descriptor is not None:
@@ -186,26 +182,6 @@ def _classify_stream_window(
     ):
         classes.append("secret_read")
     return tuple(dict.fromkeys(classes)), _trailing_secret_read_state(inherited_window)
-
-
-def _trailing_secret_read_state(content: str) -> tuple[int, bool] | None:
-    previous_sentence_start = 0
-    trailing_sentence_start = 0
-    for match in _PROMPT_SENTENCE_BOUNDARY_PATTERN.finditer(content):
-        previous_sentence_start = trailing_sentence_start
-        trailing_sentence_start = match.end()
-    trailing_polarity = _secret_read_polarity(content[trailing_sentence_start:])
-    if trailing_polarity is not None:
-        return 0, trailing_polarity
-    previous_polarity = _secret_read_polarity(content[previous_sentence_start:trailing_sentence_start])
-    return None if previous_polarity is None else (1, previous_polarity)
-
-
-def _secret_read_polarity(sentence: str) -> bool | None:
-    intents = tuple(_SECRET_READ_INTENT_PATTERN.finditer(sentence))
-    if not intents:
-        return None
-    return any(not _secret_read_intent_is_negated(sentence, match.start(), match.end()) for match in intents)
 
 
 def _guarded_classes(content_window: str) -> tuple[str, ...]:

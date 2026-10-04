@@ -252,6 +252,7 @@ jobs:
           .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
           .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
           .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_prompt.py --expected-source-sha "$(git rev-parse HEAD)" --json installed-native-prompt.json
       - name: Measure installed adapter-to-decision SLOs
         env:
           NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
@@ -308,6 +309,7 @@ jobs:
             native-default-auto.json
             installed-pi-output.json
             installed-native-extensions.json
+            installed-native-prompt.json
             native-installed-slo.json
             native-soak.json
             native-stress-smoke.json
@@ -513,6 +515,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_extensions.py --json installed-native-extensions.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_prompt.py --expected-source-sha (git rev-parse HEAD) --json installed-native-prompt.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_command_control_lock.py --json installed-command-control-lock.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -523,6 +527,7 @@ jobs:
             native-dist/*.whl
             native-default-auto.json
             installed-native-extensions.json
+            installed-native-prompt.json
             installed-command-control-lock.json
           if-no-files-found: error
     needs: windows-build
@@ -619,6 +624,7 @@ jobs:
         run: |
           source scripts/ci/native-proof-environment.sh
           .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_prompt.py --expected-source-sha "$(git rev-parse HEAD)" --json installed-native-prompt.json
       - name: Measure installed adapter-to-decision SLOs
         if: matrix.proof == 'performance'
         env:
@@ -742,6 +748,7 @@ jobs:
             native-default-auto.json
             installed-pi-output.json
             installed-native-extensions.json
+            installed-native-prompt.json
             native-installed-slo.json
             native-installed-slo-attempt-*.json
             native-installed-slo-attempt-*.json.stderr

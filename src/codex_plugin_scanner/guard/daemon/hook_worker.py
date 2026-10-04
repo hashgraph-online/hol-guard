@@ -80,7 +80,10 @@ class CommandActivityWriter(Protocol):
 _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
 _NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
-    {"native_policy_snapshot_resident_changed", "native_resident_restart_budget_busy"}
+    {
+        "native_policy_snapshot_resident_changed",
+        "native_resident_restart_budget_busy",
+    }
 )
 
 

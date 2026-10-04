@@ -98,6 +98,11 @@ from tests.support.network import stub_authenticated_urlopen
 
 pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("native_hook_force")]
 
+pytestmark = [
+    *(pytestmark if isinstance(pytestmark, list) else [pytestmark]),
+    pytest.mark.usefixtures("native_prompt_runtime"),
+]
+
 
 COPILOT_NATIVE_DENY_COMMANDS = (
     """node -e "require('fs').unlinkSync('dangerous-marker.json')" """,
@@ -13987,8 +13992,8 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
                         workspace=None,
                         reason="approved from test",
                     )
-                if not store.list_approval_requests(limit=10):
-                    return
+                # Detection may queue the next artifact after this batch drains.
+                # Keep servicing requests until the launch under test finishes.
             threading.Event().wait(0.03)
 
     worker = threading.Thread(target=resolve_pending, daemon=True)
@@ -15338,6 +15343,14 @@ def test_runtime_hook_package_without_workspace_invalidates_allow_after_lockfile
 
 
 def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
+    # The approval CLI refuses mutations invoked inside a known agent hook
+    # context (self-approval defense). Clear ambient harness markers so the
+    # in-process approve below runs as the operator path it simulates.
+    from codex_plugin_scanner.guard.runtime.self_approval import _AGENT_ENV_MARKERS
+
+    for marker in _AGENT_ENV_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
