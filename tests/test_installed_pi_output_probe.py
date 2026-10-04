@@ -702,8 +702,11 @@ def test_native_cleanup_retries_transient_resident_close(monkeypatch: pytest.Mon
     monkeypatch.setattr(probe, "_native_state_files", lambda _guard_home: ())
     monkeypatch.setattr(probe.time, "sleep", lambda _seconds: None)
 
+    class Identity:
+        path = Path("/bin/false")
+
     guard_home = tmp_path / "guard-home"
-    probe._cleanup_native(SimpleNamespace(path=Path("/bin/false")), guard_home)
+    probe._cleanup_native(Identity(), guard_home)
 
     assert [home for home, _deadline in calls] == [guard_home, guard_home]
     assert calls[0][1] == calls[1][1]
