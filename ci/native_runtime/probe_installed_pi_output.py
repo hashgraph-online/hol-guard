@@ -1026,9 +1026,10 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
     )
 
     deadline = time.monotonic() + _DAEMON_CLEANUP_TIMEOUT
-    cleanup_error: OSError | RuntimeError | None = None
+    last_error: OSError | RuntimeError | None = None
     while True:
         contained = False
+        cleanup_error: OSError | RuntimeError | None = None
         try:
             contained = close_native_residents(guard_home, deadline_monotonic=deadline)
         except (OSError, RuntimeError) as exc:
@@ -1051,10 +1052,11 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
                 state_files = _native_state_files(guard_home)
         if cleanup_error is None and contained and not state_files:
             return
+        last_error = cleanup_error or last_error
         if time.monotonic() >= deadline:
-            if cleanup_error is None:
-                cleanup_error = RuntimeError("native resident containment did not complete")
-            raise ProbeError(f"authenticated native cleanup failed: {type(cleanup_error).__name__}") from cleanup_error
+            if last_error is None:
+                last_error = RuntimeError("native resident containment did not complete")
+            raise ProbeError(f"authenticated native cleanup failed: {type(last_error).__name__}") from last_error
         time.sleep(min(_NATIVE_CLEANUP_RETRY_INTERVAL, max(0.0, deadline - time.monotonic())))
 
 
