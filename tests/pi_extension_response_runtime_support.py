@@ -26,6 +26,8 @@ def _run_generated_fixture(source: str) -> dict[str, object]:
     run_guard = _strip_generated_types(source[run_start:run_end])
 
     javascript = f"""\
+import {{ createHash }} from "node:crypto";
+
 const GUARD_DAEMON_TIMEOUT_MS = 3100;
 const GUARD_HOME = "/tmp/omp-hook-contract/guard-home";
 const GUARD_HOME_DIR_IS_DEFAULT = true;

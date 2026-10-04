@@ -87,6 +87,7 @@
       "command.errand",
       "command.genclave",
       "command.gitsync",
+      "command.mcp-contribos",
       "command.mcp-filesystem",
       "command.mcp-instapods",
       "command.mcp-pr-ui-compare",
@@ -99,6 +100,7 @@
       "command.skill-base",
       "command.skill-sunset",
       "command.syngraphe",
+      "command.tui-runner",
       "command.uivoid"
     ]
   }

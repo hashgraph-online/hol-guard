@@ -15,6 +15,7 @@ from ..codex_hook_launch_runtime import (
     isolated_hook_environment,
     run_isolated_hook_process,
 )
+from ..hook_execution_environment import stamp_hook_input_text
 from ..stable_guard_cli import prune_safe_cli_executable
 from .adapter_safe_output import write_text_at_authorized_path
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
@@ -519,6 +520,7 @@ def main_from_argv(argv: Sequence[str]) -> int:
             guard_home=guard_home,
             deadline_monotonic=deadline,
         )
+    input_text = stamp_hook_input_text(input_text)
     if config is None:
         return _emit_failure(harness=harness, input_text=input_text)
     return run_bounded_cli_hook(config, input_text=input_text, deadline_monotonic=deadline)
