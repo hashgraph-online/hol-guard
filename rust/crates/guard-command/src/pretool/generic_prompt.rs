@@ -93,15 +93,18 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                         .expect("bounded comma-listed guard bypass connector")
                 });
                 let reversal = REVERSAL.get_or_init(|| {
-                    Regex::new(r"(?i)\b(?:except|unless|until|without|if|then|anyway|regardless)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\b")
+                    Regex::new(r"(?i)\b(?:except|unless|until|without|if|then|anyway|regardless)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them|so)\b")
                         .expect("bounded guard bypass reversal")
                 });
                 // Mask only an unconditional prohibition, not a later bypass
                 // instruction or a conditional exception to the prohibition.
                 let tail = &normalized[offset + pattern.len()..];
                 let clause = tail.split(['.', '!', '?', ';']).next().unwrap_or("");
+                // Direct action references remain detectable anywhere in the tail.
+                // "Use them" may instead refer to later test results, so require
+                // an imperative clause for that ambiguous verb.
                 let followup = FOLLOWUP.get_or_init(|| {
-                    Regex::new(r"(?i)\b(?:do|perform|execute|run|use)\s+(?:(?:it|them)\b|(?:this|that)(?:\s+(?:anyway|regardless|now))?\s*(?:[.!?;]|$))")
+                    Regex::new(r"(?i)\b(?:do|perform|execute|run)\s+(?:(?:it|them|so)\b|(?:this|that)(?:\s+(?:anyway|regardless|now))?\s*(?:[.!?;]|$))|(?:^|[.!?;])\s*(?:(?:then|now|also|and|but|please)\s+)*use\s+(?:(?:it|them|so)\b|(?:this|that)(?:\s+(?:anyway|regardless|now))?\s*(?:[.!?;]|$))|(?:^|[.!?;])\s*(?:anyway|regardless)\s*(?:[.!?;]|$)")
                         .expect("bounded guard bypass referential follow-up")
                 });
                 let guardrail_item = GUARDRAIL_ITEM.get_or_init(|| {
@@ -114,6 +117,8 @@ pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
                             .split(',')
                             .map(str::trim)
                             .filter(|item| !item.is_empty())
+                            // A previous identical bypass phrase is a separate order,
+                            // not evidence that the later occurrence is prohibited.
                             .all(|item| item != *pattern && (
                                 BYPASS_PATTERNS.contains(&item)
                                     || guardrail_item.is_match(item)
