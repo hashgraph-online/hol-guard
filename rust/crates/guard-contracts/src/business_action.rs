@@ -246,6 +246,7 @@ impl BusinessActionV1 {
         {
             return Err(Error::LimitExceeded);
         }
+        let identity_bindings = [&self.provider.account_binding, &self.provider.tenant_binding];
         if ![
             &self.provider.tool_identity_digest,
             &self.provider.tool_schema_digest,
@@ -257,12 +258,9 @@ impl BusinessActionV1 {
         ]
         .iter()
         .all(|value| digest(value))
-            || ![
-                &self.provider.account_binding,
-                &self.provider.tenant_binding,
-            ]
-            .iter()
-            .all(|value| value.as_deref().is_none_or(digest))
+            || !identity_bindings
+                .iter()
+                .all(|value| value.as_deref().is_none_or(digest))
             || !self
                 .content
                 .attachment_digests
