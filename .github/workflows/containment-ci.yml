@@ -32,6 +32,7 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+      - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Provision the production Linux backend
         run: |
