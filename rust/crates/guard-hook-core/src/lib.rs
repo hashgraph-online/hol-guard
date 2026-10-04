@@ -583,6 +583,48 @@ mod tests {
     }
 
     #[test]
+    fn structured_edit_source_is_scanned_instead_of_treated_as_empty() {
+        let payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/ordinary.ts"},
+            "tool_response": {
+                "originalFile": "export const value = 1;",
+                "oldString": "value = 1",
+                "newString": "value = 2",
+                "structuredPatch": [{"lines": ["-value = 1", "+value = 2"]}]
+            }
+        });
+        let extracted = extract_payload_output(&payload);
+        assert!(extracted.text.contains("export const value = 1;"));
+        assert!(extracted.text.contains("+value = 2"));
+        let response = review_post_tool(&request(payload));
+        assert_eq!(response.decision, "allow");
+        assert_eq!(response.reason_code, "output_scan_allow");
+        assert_eq!(
+            response.reviewed_output_sha256,
+            Some(sha256_text(&extracted.text))
+        );
+        for key in [
+            "originalFile",
+            "original_file",
+            "oldString",
+            "old_string",
+            "newString",
+            "new_string",
+        ] {
+            let mut output = serde_json::Map::new();
+            output.insert(key.into(), json!(github_like_token()));
+            let response = review_post_tool(&request(json!({"tool_response": output})));
+            assert_eq!(response.decision, "deny", "{key}");
+            assert_eq!(response.reason_code, "output_secret_match");
+        }
+        let response = review_post_tool(&request(json!({
+            "tool_response": {"structuredPatch": [{"lines": [github_like_token()]}]}
+        })));
+        assert_eq!(response.decision, "deny");
+    }
+
+    #[test]
     fn empty_inline_output_is_allowed_with_digest() {
         let response = review_post_tool(&request(json!({"tool_response": ""})));
         assert_eq!(response.decision, "allow");
