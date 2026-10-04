@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .restricted_node_capabilities import linux_node_environment
-from .restricted_node_test import prepare_restricted_node_test
+from .restricted_node_test import _node_runtime_args, prepare_restricted_node_test
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TOOL_READ_ONLY_PROFILE_VERSION,
@@ -50,6 +50,7 @@ def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str
 def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
     argv = _normalized_command(command)
     name = Path(argv[0]).name
+    runtime_args = _node_runtime_args(argv)
     if name == "bun" and (invocation := bun_vitest_invocation(argv)) is not None:
         args = invocation[1]
     elif name in {"bunx", "npx"}:
@@ -61,8 +62,11 @@ def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
         args = args[1:]
     elif name == "vitest":
         args = argv[1:]
-    elif name in {"node", "nodejs"} and len(argv) > 2 and argv[1].endswith("/node_modules/vitest/vitest.mjs"):
-        args = argv[2:]
+    elif name in {"node", "nodejs"}:
+        node_args = argv[1 + len(runtime_args) :]
+        if len(node_args) < 2 or not node_args[0].endswith("/node_modules/vitest/vitest.mjs"):
+            raise RestrictedPytestError("vitest_restricted_invalid_command", "Only local Vitest run is supported.")
+        args = node_args[1:]
     else:
         raise RestrictedPytestError("vitest_restricted_invalid_command", "Only local Vitest run is supported.")
     if not args or args[0] != "run" or any(item in {";", "&&", "||", "|", "|&", "&"} for item in args):
@@ -74,6 +78,7 @@ def prepare_restricted_vitest(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None
 ) -> RestrictedPytestPlan:
     args = vitest_arguments(command)
+    runtime_args = _node_runtime_args(command)
     invocation = bun_vitest_invocation(command)
     if invocation is not None and invocation[0] is not None:
         # Resolve against the original hook cwd, not the daemon's process cwd.
@@ -104,7 +109,9 @@ def prepare_restricted_vitest(
         ) from error
     args = _readonly_config_arguments(args, entry.parent / "package.json")
     return replace(
-        plan, profile_version=VITEST_READ_ONLY_PROFILE_VERSION, command=(str(plan.executable), str(entry), *args)
+        plan,
+        profile_version=VITEST_READ_ONLY_PROFILE_VERSION,
+        command=(str(plan.executable), *runtime_args, str(entry), *args),
     )
 
 

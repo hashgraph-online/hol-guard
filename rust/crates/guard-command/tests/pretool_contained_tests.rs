@@ -112,6 +112,7 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
     for command in [
         "node --test",
         "node --test tests/test.mjs",
+        "node --max-old-space-size=12288 --test tests/test.mjs",
         "nodejs --test -q",
         "/usr/bin/node --test test.mjs",
     ] {
@@ -127,6 +128,8 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
     for command in [
         "node script.mjs",
         "node --test-other",
+        "node --max-old-space-size=999999 --test tests/test.mjs",
+        "node --max-old-space-size=12288 --require=evil --test tests/test.mjs",
         "node --test > .env",
         "node --test && rm -rf /",
         "node --test $(cat .env)",

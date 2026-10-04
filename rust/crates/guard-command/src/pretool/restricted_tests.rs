@@ -181,8 +181,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return Some("native_vitest_readonly_containment_required");
     }
     if matches!(super::executable_basename(executable), "node" | "nodejs")
-        && segment
-            .arguments
+        && arguments
             .first()
             .is_some_and(|argument| argument == "--test")
     {

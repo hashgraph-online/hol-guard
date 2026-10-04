@@ -332,6 +332,8 @@ fn prompt_sensitive_text(value: &str) -> bool {
 
 fn guard_bypass_prompt(values: &[String]) -> bool {
     static PROHIBITION: OnceLock<Regex> = OnceLock::new();
+    static LIST_PROHIBITION: OnceLock<Regex> = OnceLock::new();
+    static LIST_CONNECTOR: OnceLock<Regex> = OnceLock::new();
     static REVERSAL: OnceLock<Regex> = OnceLock::new();
     static FOLLOWUP: OnceLock<Regex> = OnceLock::new();
     values.iter().any(|value| {
@@ -357,11 +359,19 @@ fn guard_bypass_prompt(values: &[String]) -> bool {
                     .map_or(0, |index| index + 1);
                 let prefix = &normalized[start..offset];
                 let prohibition = PROHIBITION.get_or_init(|| {
-                    Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:(?:[a-z0-9_ -]{1,80},\s*)+(?:(?:or|and)\s+)?)?$")
+                    Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+$")
                         .expect("bounded guard bypass prohibition")
                 });
+                let list_prohibition = LIST_PROHIBITION.get_or_init(|| {
+                    Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:[a-z0-9_ -]{1,80},\s*)+$")
+                        .expect("bounded comma-listed guard bypass prohibition")
+                });
+                let list_connector = LIST_CONNECTOR.get_or_init(|| {
+                    Regex::new(r"(?i)^\s*,\s*(?:or|and)\b")
+                        .expect("bounded comma-listed guard bypass connector")
+                });
                 let reversal = REVERSAL.get_or_init(|| {
-                    Regex::new(r"(?i)\b(?:except|unless|until|without|if|but|then|anyway|regardless)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\b")
+                    Regex::new(r"(?i)\b(?:except|unless|until|without|if|then|anyway|regardless)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\b")
                         .expect("bounded guard bypass reversal")
                 });
                 // Mask only an unconditional prohibition, not a later bypass
@@ -369,10 +379,12 @@ fn guard_bypass_prompt(values: &[String]) -> bool {
                 let tail = &normalized[offset + pattern.len()..];
                 let clause = tail.split(['.', '!', '?', ';']).next().unwrap_or("");
                 let followup = FOLLOWUP.get_or_init(|| {
-                    Regex::new(r"(?i)\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
+                    Regex::new(r"(?i)\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\b")
                         .expect("bounded guard bypass referential follow-up")
                 });
-                !prohibition.is_match(prefix) || reversal.is_match(prefix) || reversal.is_match(clause)
+                let unconditional = prohibition.is_match(prefix)
+                    || (list_prohibition.is_match(prefix) && list_connector.is_match(tail));
+                !unconditional || reversal.is_match(prefix) || reversal.is_match(clause)
                     || followup.is_match(tail)
             })
         })

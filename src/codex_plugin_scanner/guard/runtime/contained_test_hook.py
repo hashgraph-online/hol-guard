@@ -126,14 +126,24 @@ def run_authorized_contained_test(
         command = list(resolve_package_test(command, workspace=workspace))
     inline_eval = is_inline_eval(command)
     # Fail before the authority request if the backend cannot enforce the profile.
-    node_test = len(command) > 1 and Path(command[0]).name in {"node", "nodejs"} and command[1] == "--test"
+    node_runtime_args = (
+        restricted_node_test._node_runtime_args(command)
+        if command and Path(command[0]).name in {"node", "nodejs"}
+        else ()
+    )
+    node_test_index = 1 + len(node_runtime_args)
+    node_test = (
+        len(command) > node_test_index
+        and Path(command[0]).name in {"node", "nodejs"}
+        and command[node_test_index] == "--test"
+    )
     vitest = bool(command) and (
         Path(command[0]).name in {"bunx", "npx", "vitest"}
         or restricted_vitest.bun_vitest_invocation(command) is not None
         or (
             len(command) > 1
             and Path(command[0]).name in {"node", "nodejs"}
-            and command[1].endswith("/node_modules/vitest/vitest.mjs")
+            and any(argument.endswith("/node_modules/vitest/vitest.mjs") for argument in command[1:3])
         )
     )
     git = bool(command) and Path(command[0]).name == "git"

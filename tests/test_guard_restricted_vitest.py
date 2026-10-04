@@ -54,6 +54,16 @@ def test_local_vitest_run_arguments(command: list[str]) -> None:
     assert vitest.vitest_arguments(command)[0] == "run"
 
 
+def test_node_vitest_preserves_bounded_heap_option() -> None:
+    command = [
+        "node",
+        "--max-old-space-size=12288",
+        "/project/node_modules/vitest/vitest.mjs",
+        "run",
+    ]
+    assert vitest.vitest_arguments(command) == ("run",)
+
+
 @pytest.mark.parametrize(
     "command",
     [
