@@ -900,6 +900,9 @@
                     "allow_leading_options": false,
                     "required_flags": [
                       "--help"
+                    ],
+                    "forbidden_flags": [
+                      "--approve"
                     ]
                   }
                 }
@@ -923,6 +926,9 @@
                     "allow_leading_options": false,
                     "required_flags": [
                       "--list"
+                    ],
+                    "forbidden_flags": [
+                      "--approve"
                     ]
                   }
                 }
