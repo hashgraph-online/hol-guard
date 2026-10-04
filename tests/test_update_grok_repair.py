@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -54,6 +55,48 @@ def test_grok_repair_skips_when_hooks_already_current(tmp_path: Path) -> None:
     assert repaired is None
     assert warning is None
     assert hook_path.read_text(encoding="utf-8") == before
+
+
+@pytest.mark.parametrize("stale_kind", ["frozen", "script"])
+def test_grok_repair_migrates_to_current_lightweight_client(tmp_path: Path, monkeypatch, stale_kind: str) -> None:
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import (
+        _render_bounded_hook_script,
+        bounded_hook_script_path,
+    )
+
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = "2026-10-04T00:00:00+00:00"
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: sys.executable,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python", lambda: sys.executable
+    )
+    if stale_kind == "frozen":
+        with monkeypatch.context() as frozen:
+            _force_frozen_hook_commands(frozen)
+            hook_path = _seed_grok_install(context, store, now)
+    else:
+        hook_path = _seed_grok_install(context, store, now)
+        script = bounded_hook_script_path(context.guard_home, "grok")
+        script.write_text(script.read_text() + "\n# stale generated client\n")
+    repaired, warning = repair_grok_install(context=context, store=store, workspace=None, now=now)
+    assert warning is None
+    assert repaired is not None
+    script = bounded_hook_script_path(context.guard_home, "grok")
+    assert script.read_text() == _render_bounded_hook_script(
+        guard_home=context.guard_home, harness="grok", timeout_seconds=85
+    )
+    command = json.loads(hook_path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert " -I " in command
+    assert "__guard-bounded-hook" not in command
 
 
 def test_grok_repair_rewrites_stale_pretool_timeout(tmp_path: Path) -> None:

@@ -183,6 +183,19 @@ _EVENT_ALIASES = {
 _EVENT_NAME_KEYS = ("hook_event_name", "hookEventName", "event", "eventName", "hook_name", "hookName")
 
 
+def _grok_pretool_event_conflict(input_text: str) -> bool:
+    payload = _json_object(input_text) or {}
+    events = {
+        value.strip().lower().replace("_", "").replace("-", "")
+        for key in _EVENT_NAME_KEYS
+        if isinstance(value := payload.get(key), str)
+    }
+    if "pretoolcall" in events:
+        events.discard("pretoolcall")
+        events.add("pretooluse")
+    return "pretooluse" in events and len(events) > 1
+
+
 def _read_bounded_stdin(deadline_monotonic: float) -> tuple[str | None, str]:
     try:
         text = read_hook_input(deadline_monotonic)
@@ -316,7 +329,9 @@ def _emit_failure(
     # Retain the legacy caller argument; a state-home path supplies no mode authority.
     payload, returncode = _failure_payload(
         harness=harness,
-        event_name=_event_name(input_text),
+        event_name="PreToolUse"
+        if harness == "grok" and _grok_pretool_event_conflict(input_text)
+        else _event_name(input_text),
         reason=reason,
         # Failed evaluation supplies no authenticated recording-only authority.
         recording_only=False,
@@ -407,6 +422,12 @@ def run_bounded_cli_hook(
     ):
         return _emit_failure(harness=str(harness or "unknown"), input_text=input_text)
     raw_cli_args = cast(list[object], cli_args_value)
+    if harness == "grok" and _grok_pretool_event_conflict(input_text):
+        return _emit_failure(
+            harness=harness,
+            input_text=input_text,
+            reason="HOL Guard blocked this action because hook event labels conflict.",
+        )
     cli_args = [item for item in raw_cli_args if isinstance(item, str)]
     if len(cli_args) != len(raw_cli_args):
         return _emit_failure(harness=harness, input_text=input_text)
