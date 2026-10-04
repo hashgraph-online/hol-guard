@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from .test_cursor_hook_deadline import _hook_namespace
+from .test_hook_http_deadline import open_descriptor_identities
 
 
 @pytest.mark.parametrize(
@@ -23,7 +24,7 @@ from .test_cursor_hook_deadline import _hook_namespace
 )
 def test_cursor_rpc_obeys_original_deadline(tmp_path, target, slow_stage):
     namespace = _hook_namespace(tmp_path)
-    baseline_fds = len(os.listdir("/dev/fd")) if os.path.isdir("/dev/fd") else None
+    baseline_fds = open_descriptor_identities()
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
@@ -125,8 +126,10 @@ def test_cursor_rpc_obeys_original_deadline(tmp_path, target, slow_stage):
         listener.close()
         thread.join(timeout=3)
         assert not thread.is_alive()
-        if baseline_fds is not None:
-            assert len(os.listdir("/dev/fd")) == baseline_fds
+        ending_fds = open_descriptor_identities()
+        if baseline_fds is not None and ending_fds is not None:
+            leaked = ending_fds - baseline_fds
+            assert not leaked, f"Cursor RPC left file descriptors open: {sorted(leaked)}"
 
 
 def test_cursor_expired_discovery_cannot_start_token_read(tmp_path, monkeypatch):

@@ -46,6 +46,12 @@ _HOOK_EVALUATOR_READY_TIMEOUT_MAX_SECONDS = 120.0
 # daemon->worker deadline so the "ready" reply can cross back before the daemon
 # declares the worker dead.
 _EVALUATOR_TO_WORKER_READY_MARGIN_SECONDS = 3.0
+_HOOK_EVALUATOR_BOOTSTRAP_MODULES = (
+    "codex_plugin_scanner.guard.adapters.base",
+    "codex_plugin_scanner.guard.config",
+    "codex_plugin_scanner.guard.daemon.hook_worker",
+    "codex_plugin_scanner.guard.store",
+)
 
 
 def _parse_timeout_env(raw: str | None, default: float) -> float | None:
@@ -190,14 +196,9 @@ def _terminate_guardian_group() -> None:
 
 def _hook_evaluator_main(connection: Connection, configured_guard_home: str | None) -> None:
     os.environ[_HOOK_SQLITE_TIMEOUT_ENV] = "250"
-    for module_name in (
-        "codex_plugin_scanner.guard.adapters.base",
-        "codex_plugin_scanner.guard.cli.commands_hook",
-        "codex_plugin_scanner.guard.cli.commands_support_connect",
-        "codex_plugin_scanner.guard.config",
-        "codex_plugin_scanner.guard.daemon.hook_worker",
-        "codex_plugin_scanner.guard.store",
-    ):
+    # Resident hooks never call the CLI hook/connect entrypoints. Warming their
+    # unrelated management graph delays isolation readiness without proving it.
+    for module_name in _HOOK_EVALUATOR_BOOTSTRAP_MODULES:
         _ = importlib.import_module(module_name)
     stores: dict[str, GuardStore] = {}
     hook_workers: dict[str, HookWorker] = {}
@@ -326,7 +327,10 @@ def _run_resident_hook_request(
     event_name = runtime_hook_event_name(parsed.payload)
     worker = hook_workers.get(store_key)
     if worker is None:
-        worker = HookWorker(store=store, wait_for_native_policy=False)
+        # HTTP admission already waits for the daemon-owned workspace ACK.
+        # Isolated workers consume that authenticated binding instead of
+        # racing another publisher inside the tool's review deadline.
+        worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
         hook_workers[store_key] = worker
     try:
         worker_payload = worker.review_http_payload(

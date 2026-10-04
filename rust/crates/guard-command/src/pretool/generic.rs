@@ -48,6 +48,27 @@ pub fn evaluate_pre_tool_envelope_with_context(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> PreToolResultV1 {
+    evaluate_pre_tool_envelope_with_execution_context(
+        harness,
+        event,
+        payload,
+        controls,
+        deadline,
+        crate::pretool::PathContext { home_dir, cwd },
+        None,
+    )
+}
+
+pub fn evaluate_pre_tool_envelope_with_execution_context(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+    context: super::PathContext<'_>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> PreToolResultV1 {
+    let super::PathContext { home_dir, cwd } = context;
     let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
@@ -118,7 +139,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             signals.tool_name.as_deref(),
             &signals.package_values,
             deadline,
-            (home_dir, cwd),
+            super::PathContext { home_dir, cwd },
         ),
         (Some(controls), _) => controls.apply_with_tool(
             None,
@@ -129,6 +150,50 @@ pub fn evaluate_pre_tool_envelope_with_context(
         ),
         _ => result,
     };
+    if event == "PreToolUse"
+        // Existing helper-context review may delegate only to enforced
+        // read-only containment below; do not replace that protection.
+        && result.reason_code != "native_git_helper_context_review"
+        && command_model.is_some_and(|model| {
+            let destination =
+                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd });
+            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd) };
+            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd });
+            model.segments.iter().enumerate().any(|(index, segment)| {
+                segment.executable.as_deref().is_some_and(|executable| {
+                    if super::executable_basename(executable) != "git" {
+                        return false;
+                    }
+                    let inspection = super::git_config::execution_free(
+                        executable,
+                        &segment.arguments,
+                        context,
+                        deadline,
+                        execution_environment,
+                    );
+                    !segment.environment_names.is_empty()
+                        || inspection == Some(false)
+                        // Only inspection operations have a configuration proof
+                        // to invalidate. Other Git operations retain their own
+                        // native review/permission floors, not this read floor.
+                        || (inspection.is_some()
+                            && index > 0
+                            && (0..index).any(|prior| !benign.contains(&prior)))
+                })
+            })
+        })
+        && matches!(
+            result.minimum_action.as_str(),
+            "allow" | "warn" | "review"
+        )
+    {
+        result.minimum_action = "require-reapproval".into();
+        result.policy_action = "require-reapproval".into();
+        result.decision = "deny".into();
+        result.explicitly_benign = false;
+        result.reason_code = "native_git_execution_context_review".into();
+        result.reason = "HOL Guard requires review because this Git read may execute a configured helper, or its effective configuration could not be verified.".into();
+    }
     let contained_test_reason =
         command_model.and_then(super::restricted_tests::readonly_test_reason);
     // The read-only credential-filtering backend currently exists on macOS.
@@ -401,13 +466,17 @@ fn evaluate_signals(
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
-        && super::safe_reads::bounded_file_write_target(&signals.path_values[0], home_dir, cwd)
+        && super::safe_reads::bounded_native_file_write_target(
+            &signals.path_values[0],
+            home_dir,
+            cwd,
+        )
     {
         return generic_result(
             action,
             "allow",
             "native_exact_safe_file_write",
-            "The Rust authority proved this ordinary file write stays inside the verified workspace or a registered worktree of the same repository.",
+            "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, or the verified user home and clears sensitive-path checks.",
         );
     }
     let (reason_code, reason) = review_reason(action_type);

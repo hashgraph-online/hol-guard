@@ -7122,8 +7122,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_read_only_ls_pipelin
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["approval_reuse"]["action"] == "block"
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_quoted_dev_null_redirection(

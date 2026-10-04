@@ -3,17 +3,32 @@ use guard_secure_fs::sensitive_path_family;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// Caller roots have explicit names; individual proofs still verify them on disk.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PathContext<'a> {
+    pub home_dir: Option<&'a str>,
+    pub cwd: Option<&'a str>,
+}
+
+mod git_config;
+mod git_probe;
+mod git_routes;
+pub(crate) use git_routes::git_route_within_workspace;
 mod pure_expression;
+mod read_paths;
 mod restricted_tests;
 mod safe_reads;
+mod safe_writes;
 mod search;
 mod segment_proof;
+mod stdin_filters;
 mod worktree_writes;
 
 pub mod generic;
 
 pub use generic::evaluate_pre_tool_envelope;
 pub use generic::evaluate_pre_tool_envelope_with_context;
+pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
 pub(crate) use segment_proof::benign_command_segments;
 
@@ -129,7 +144,11 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
     })
 }
 
-fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool {
+fn safe_git_arguments(
+    arguments: &[String],
+    allow_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
     // Git magic pathspec semantics are not proven by this classifier; retain review.
     if arguments
         .iter()
@@ -137,6 +156,11 @@ fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool 
     {
         return false;
     }
+    let Some(arguments) =
+        crate::command_compatibility::git_inspection_arguments(arguments, context)
+    else {
+        return false;
+    };
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };
@@ -245,7 +269,7 @@ fn safe_gh_arguments(arguments: &[String]) -> bool {
         || crate::command_compatibility::github_arguments_are_read_only(arguments)
 }
 
-fn safe_directory_target(target: &str) -> bool {
+pub(crate) fn safe_directory_target(target: &str) -> bool {
     let tilde_head = target
         .strip_prefix('~')
         .map(|rest| rest.split('/').next().unwrap_or(""));
@@ -263,13 +287,17 @@ fn safe_directory_target(target: &str) -> bool {
 }
 
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
-    exact_safe_command_with_context(model, allow_git_helper_context, (None, None))
+    exact_safe_command_with_context(
+        model,
+        allow_git_helper_context,
+        crate::pretool::PathContext::default(),
+    )
 }
 
 fn exact_safe_command_with_context(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,
-    context: (Option<&str>, Option<&str>),
+    context: PathContext<'_>,
 ) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
@@ -277,6 +305,9 @@ fn exact_safe_command_with_context(
         || !model.wrapper_chain.is_empty()
     {
         return false;
+    }
+    if segment_proof::exact_safe_cwd_compound(model, context) {
+        return true;
     }
     model.segments.iter().all(|segment| {
         segment_proof::exact_safe_segment_with_context(
@@ -343,7 +374,7 @@ pub(super) fn evaluate_pre_tool_with_context(
 ) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
-    let context = (home_dir, cwd);
+    let context = crate::pretool::PathContext { home_dir, cwd };
     if exact_safe_command_with_context(&model, false, context)
         && model.segments.iter().all(|segment| {
             segment

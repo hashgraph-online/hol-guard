@@ -195,7 +195,14 @@ impl CompiledNativeCommandControls {
         packages: &[String],
         deadline: Option<Instant>,
     ) -> PreToolResultV1 {
-        self.apply_with_tool_and_context(command, result, tool, packages, deadline, (None, None))
+        self.apply_with_tool_and_context(
+            command,
+            result,
+            tool,
+            packages,
+            deadline,
+            crate::pretool::PathContext::default(),
+        )
     }
 
     pub(crate) fn apply_with_tool_and_context(
@@ -205,12 +212,15 @@ impl CompiledNativeCommandControls {
         tool: Option<&str>,
         packages: &[String],
         deadline: Option<Instant>,
-        context: (Option<&str>, Option<&str>),
+        context: crate::pretool::PathContext<'_>,
     ) -> PreToolResultV1 {
         let observed = match command {
-            Some(command) => self
-                .program
-                .observe(command, &self.active_extensions, deadline),
+            Some(command) => self.program.observe_with_context(
+                command,
+                &self.active_extensions,
+                deadline,
+                context,
+            ),
             None => Ok(NativeCommandObservationBatchV1::default()),
         };
         let mut batch = match observed {
@@ -369,7 +379,7 @@ impl CompiledNativeCommandControls {
         &self,
         command: &CanonicalCommandV1,
         batch: &NativeCommandObservationBatchV1,
-        context: (Option<&str>, Option<&str>),
+        context: crate::pretool::PathContext<'_>,
     ) -> bool {
         if command.confidence != "exact"
             || command.path_overridden

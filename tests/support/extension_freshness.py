@@ -150,6 +150,18 @@ def pending_native_projection_regen() -> bool:
     return _regen_paths_absent(*_NATIVE_PROJECTION_PATHS)
 
 
+def pending_extension_directory_regen() -> bool:
+    if pending_contribution_regen():
+        return True
+    return _regen_paths_absent("docs/guard/extensions/README.md")
+
+
+requires_fresh_extension_directory = pytest.mark.skipif(
+    pending_extension_directory_regen(),
+    reason="extension directory README is regen-owned; enforced on main and regen PRs",
+)
+
+
 requires_fresh_projections = pytest.mark.skipif(
     pending_native_projection_regen(),
     reason=("checked-in projections are regen-owned; freshness is enforced on main and after maintainer regeneration"),

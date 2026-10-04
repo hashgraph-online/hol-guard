@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.contribos",
+  "version": "1.0.0",
+  "name": "ContribOS",
+  "description": "Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.adityatiwari101104",
+    "displayName": "Aditya Tiwari",
+    "url": "https://github.com/adityatiwari101104/contribos"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0F172A" },
+  "homepage": "https://github.com/adityatiwari101104/contribos",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "contribos"
+  },
+  "riskClasses": ["external-repo-analysis", "external-contribution-workflow"],
+  "tools": [
+    { "name": "contribos_policy", "state": "inherit" },
+    { "name": "contribos_brief", "state": "inherit" },
+    { "name": "contribos_setup", "state": "review" },
+    { "name": "contribos_diagnose", "state": "inherit" },
+    { "name": "contribos_check", "state": "inherit" },
+    { "name": "contribos_review", "state": "inherit" },
+    { "name": "contribos_claim", "state": "review" },
+    { "name": "contribos_tone", "state": "inherit" },
+    { "name": "contribos_find", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/adityatiwari101104/contribos",
+    "https://pypi.org/project/contribos/"
+  ],
+  "saferAlternatives": [
+    "Use offline flags where possible for policy and brief commands when network access is restricted."
+  ]
+}
