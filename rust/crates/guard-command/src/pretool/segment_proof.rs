@@ -90,6 +90,7 @@ pub(super) fn exact_safe_cwd_compound(
                     | "gh"
                     | "jq"
                     | "wc"
+                    | "od"
                     | "rg"
                     | "grep"
                     | "sed"
@@ -154,6 +155,8 @@ pub(crate) fn benign_command_segments(
                         && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
                     || (basename == "wc"
                         && safe_reads::safe_word_count_stdin_arguments(&segment.arguments))
+                    || (basename == "od"
+                        && safe_reads::safe_byte_dump_stdin_arguments(&segment.arguments))
                     || (basename == "grep"
                         && search::safe_grep_stdin_arguments(&segment.arguments))
                     || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
@@ -191,6 +194,7 @@ pub(crate) fn benign_command_segments(
                         | "grep"
                         | "sed"
                         | "wc"
+                        | "od"
                         | "stat"
                         | "test"
                         | "find"
@@ -304,6 +308,11 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments)
         }
         "wc" => safe_reads::safe_word_count_arguments(
+            &segment.arguments,
+            segment.pipeline_index > 0,
+            context,
+        ),
+        "od" => safe_reads::safe_byte_dump_arguments(
             &segment.arguments,
             segment.pipeline_index > 0,
             context,
