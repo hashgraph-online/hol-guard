@@ -75,7 +75,7 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
     monkeypatch.setattr(
         sys,
         "argv",
-        ["build_native_command_program.py", "--projections-only", "--compiler", str(extracted_compiler)],
+        ["build_native_command_program.py", "--compiler", str(extracted_compiler)],
     )
     assert generator["main"]() == 0
 
