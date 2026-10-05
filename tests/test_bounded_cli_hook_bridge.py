@@ -66,9 +66,7 @@ def test_prompt_timeout_never_releases_an_unreviewed_protected_prompt(
         )
     response = _json_object(output.getvalue())
     assert returncode == 0
-    if harness == "grok":
-        assert response == {}
-    elif harness == "copilot":
+    if harness == "copilot":
         assert response["behavior"] == "deny"
     else:
         assert response["decision"] == "block"
@@ -164,9 +162,7 @@ def test_outer_bounded_bridge_stamps_caller_environment_before_dispatch(
     )
     captured: dict[str, object] = {}
 
-    def fake_run(
-        config: dict[str, object], *, input_text: str, deadline_monotonic: float | None = None
-    ) -> int:
+    def fake_run(config: dict[str, object], *, input_text: str, deadline_monotonic: float | None = None) -> int:
         captured["config"] = config
         captured["input_text"] = input_text
         captured["deadline_monotonic"] = deadline_monotonic

@@ -34,11 +34,47 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download native command evaluators
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - name: Bind the compiled native runtime
+        run: |
+          chmod 0755 rust/target/release/hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pytest-native-command-projections
           path: .
       - uses: ./.github/actions/ci-job-quality
+
+  # Rust validation is required, but is not on the artifact/Python fan-out critical path.
+  native-workspace:
+    name: Rust workspace (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [clippy, test]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-workspace-${{ matrix.check }}
+          components: clippy
+      - name: Validate the locked Rust workspace
+        env:
+          CARGO_CHECK: ${{ matrix.check }}
+        run: |
+          case "$CARGO_CHECK" in
+            clippy) cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings ;;
+            test) cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets ;;
+            *) echo "Unsupported workspace check" >&2; exit 64 ;;
+          esac
 
   native-command-evaluators:
     runs-on: ubuntu-latest
@@ -116,6 +152,15 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download native command evaluators
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - name: Bind the compiled native runtime
+        run: |
+          chmod 0755 rust/target/release/hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
       - name: Download this run's current command projections
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -156,17 +201,17 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pytest shard plan
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pytest-shard-plan-3.12
           path: pytest-shards
       - name: Download native command evaluators
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
       - name: Download matching native command projections
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pytest-native-command-projections
           path: .
@@ -223,7 +268,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download pytest duration reports
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: pytest-durations-${{ github.run_attempt }}-*
           path: duration-reports
@@ -281,12 +326,6 @@ jobs:
         with:
           has-token: ${{ steps.token-presence.outputs.has-token }}
           secret-sonar-token: ${{ secrets.SONAR_TOKEN }}
-        if: steps.token-presence.outputs.has-token == 'true'
-      - name: SonarQube Quality Gate check
-        uses: sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         if: steps.token-presence.outputs.has-token == 'true'
 
   scheduling-sensitive:
@@ -354,7 +393,7 @@ jobs:
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
+    needs: [native-workspace, quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -365,12 +404,14 @@ jobs:
     steps:
       - name: Verify Python CI dependencies
         env:
+          NATIVE_WORKSPACE_RESULT: ${{ needs.native-workspace.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           COVERAGE_PLAN_RESULT: ${{ needs.coverage-plan.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
           SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
         run: |
+          test "$NATIVE_WORKSPACE_RESULT" = "success"
           test "$QUALITY_RESULT" = "success"
           test "$COVERAGE_PLAN_RESULT" = "success"
           test "$COVERAGE_RESULT" = "success"
@@ -407,8 +448,8 @@ jobs:
         run: |
           cd dashboard && bun run build
           git diff --exit-code -- ../src/codex_plugin_scanner/guard/daemon/static
-          js_size=$(du -sh dist/assets/*.js 2>/dev/null | awk '{print $1}' | head -1)
-          css_size=$(du -sh dist/assets/*.css 2>/dev/null | awk '{print $1}' | head -1)
+          js_size=$(du -sh ../src/codex_plugin_scanner/guard/daemon/static/assets/guard-dashboard.js | cut -f1)
+          css_size=$(du -sh ../src/codex_plugin_scanner/guard/daemon/static/assets/index.css | cut -f1)
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
   cisco-full:

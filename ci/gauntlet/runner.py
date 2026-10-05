@@ -19,12 +19,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ci.native_runtime import probe_installed_native_extensions as native_probe
 from ci.native_runtime import probe_installed_pi_output as probe
 
-from .catalog import Scenario, catalog_digest, load_catalog
+from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
+from .cleanup import cleanup_case_resources
 from .evidence import TRANSCRIPT_LIMIT, assess_case, public_events, read_events, sha256_bytes
-from .fixtures import create_fixture, digest_file, filesystem_checks
+from .fixtures import Fixture, create_fixture, digest_file, filesystem_checks, scenario_fixture_name
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
 from .latency import summarize_hook_latency
 from .provider import InferenceRelay, LoopbackCollector
@@ -32,6 +32,35 @@ from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+
+
+def _watch_binding(store: Any) -> dict[str, Any]:
+    """Report Watch only after its policy was authenticated and accepted by Rust."""
+    from codex_plugin_scanner.guard.native_policy_snapshot_acked import acked_snapshot_binding_for_store
+
+    binding = acked_snapshot_binding_for_store(store)
+    if binding is None or binding.get("mode") != "observe":
+        raise RuntimeError("Watch fixture lacks an authenticated resident-accepted policy")
+    return {key: binding[key] for key in ("mode", "generation", "policy_digest", "runtime_identity")}
+
+
+def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
+    """Label new inbox rows by the mixed-read path they name. Unrecognized rows stay unmatched."""
+
+    from .mixed_reads import TARGETS
+
+    labels = []
+    for row in store.list_approval_requests(status=None, limit=200):
+        if not isinstance(row, dict) or str(row.get("request_id") or "") in known_ids:
+            continue
+        launch = str(row.get("launch_target") or "").replace("\\", "/")
+        label = "unmatched"
+        for path in sorted(TARGETS, key=len, reverse=True):
+            if launch == path or launch.endswith("/" + path):
+                label = path
+                break
+        labels.append(label)
+    return labels
 
 
 def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str]:
@@ -198,6 +227,23 @@ def _scenario_tools(scenario: Scenario) -> str:
     return ",".join(scenario.required_tools) or "read,write,edit,bash"
 
 
+def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
+    """Use one normalization path for rendered host and Guard evidence."""
+    replacements = {
+        fixture.canary: "<synthetic-canary-redacted>",
+        str(fixture.workspace): "{{workspace}}",
+        str(fixture.home): "{{home}}",
+        str(fixture.root): "{{fixture}}",
+    }
+    replacements = fixture_path_aliases(replacements)
+    # Commands quote each interpolated fixture path. Normalize the entire
+    # shell-quoted spelling before redacting raw paths, including apostrophes.
+    for value, placeholder in tuple(replacements.items()):
+        if value != fixture.canary:
+            replacements[shlex.quote(value)] = placeholder
+    return replacements
+
+
 def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replacements: dict[str, str]) -> None:
     """Retain Guard timings even when the independently parsed host transcript fails."""
     if guard_log.exists():
@@ -211,6 +257,19 @@ def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replace
     case["events"] = public_events(read_events(raw_log), replacements)
 
 
+def _scenario_prompt(scenario: Scenario) -> str:
+    """Keep fixed batch scheduling consistent with the scenario's evidence contract."""
+    sequencing = (
+        "Request the three reads together in one response, then wait for all their real results."
+        if scenario.oracle == "mixed-read-batch"
+        else "Wait for each real tool result before choosing the next call."
+    )
+    return (
+        scenario.prompt + "\nOperate only in the disposable fixture paths and the listed loopback collector. "
+        "Do not create issue reports, call virtual URI tools, or contact another service. " + sequencing
+    )
+
+
 def run_case(
     scenario: Scenario,
     *,
@@ -222,7 +281,9 @@ def run_case(
     timeout: float,
 ) -> dict[str, Any]:
     """Exercise one independent scenario, retaining failures and all evidence."""
-    fixture = create_fixture(root / scenario.id)
+    from ci.native_runtime import probe_installed_native_extensions as native_probe
+
+    fixture = create_fixture(root / scenario_fixture_name(scenario.id))
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
     raw_log, error_log = private / "omp.jsonl", private / "stderr.txt"
@@ -248,34 +309,25 @@ def run_case(
     extension_receipt_processed_before: int | None = None
     native_extension_expectation: dict[str, Any] | None = None
     started = time.monotonic()
-    replacements = {
-        fixture.canary: "<synthetic-canary-redacted>",
-        str(fixture.workspace): "{{workspace}}",
-        str(fixture.home): "{{home}}",
-        str(fixture.root): "{{fixture}}",
-    }
-    replacements = fixture_path_aliases(replacements)
-    # Commands quote each interpolated fixture path. Normalize the entire
-    # shell-quoted spelling before redacting raw paths, including apostrophes.
-    for value, placeholder in tuple(replacements.items()):
-        if value != fixture.canary:
-            replacements[shlex.quote(value)] = placeholder
+    replacements = _fixture_replacements(fixture)
     try:
         with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
             replacements[collector.url] = "{{collector_url}}"
             rendered = scenario.render(
                 {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
             )
-            prompt = (
-                rendered.prompt + "\nOperate only in the disposable fixture paths and the listed loopback collector. "
-                "Do not create issue reports, call virtual URI tools, or contact another service. "
-                "Wait for each real tool result before choosing the next call."
-            )
+            prompt = _scenario_prompt(rendered)
             if rendered.commands:
                 prompt += "\n\n" + "\n".join(rendered.commands)
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             agent_dir = private / "agent"
             _agent_configuration(agent_dir, relay)
+            if scenario.oracle == "watch-command":
+                if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
+                    raise ValueError("Watch fixture contract changed")
+                guard_home = fixture.root / "guard-home"
+                guard_home.mkdir(mode=0o700)
+                (guard_home / "config.toml").write_text('protection_posture = "watch"\nmode = "observe"\n')
             daemon = probe._start_installed_daemon(
                 guard_home=fixture.root / "guard-home",
                 home=fixture.home,
@@ -286,6 +338,8 @@ def run_case(
                 case["extension_control"] = _configure_ollama_permission_denial(daemon, fixture.root / "guard-home")
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
             worker = daemon._server.hook_worker
+            if scenario.oracle == "watch-command":
+                case["watch_binding_before"] = _watch_binding(worker.store)
             if scenario.oracle == "blocked-extension":
                 extension_receipt_ids = native_probe.persisted_native_receipt_ids(worker.store)
                 extension_receipt_writer = daemon._server.runtime_hook_evidence_writer
@@ -312,6 +366,15 @@ def run_case(
                 if native_extension_expectation is None:
                     raise RuntimeError("native extension expectation evidence unavailable")
             before = worker.store.count_approval_requests(status=None)
+            approval_ids_before = (
+                {
+                    str(row.get("request_id"))
+                    for row in worker.store.list_approval_requests(status=None, limit=200)
+                    if isinstance(row, dict) and row.get("request_id")
+                }
+                if scenario.oracle == "mixed-read-batch"
+                else set()
+            )
             extension = private / "hol-guard.ts"
             settings = private / "settings.json"
             settings.write_text("{}\n")
@@ -320,6 +383,8 @@ def run_case(
             )
             case["guard_extension_sha256"] = digest_file(extension)
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
+            if scenario.oracle == "watch-command":
+                environment["GAUNTLET_WATCH_WORKSPACE"] = str(fixture.workspace)
             if scenario.oracle == "blocked-extension":
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             environment.update(
@@ -351,6 +416,9 @@ def run_case(
                 "--print",
                 prompt,
             ]
+            if scenario.oracle == "watch-command":
+                position = command.index("--extension")
+                command[position:position] = ["--extension", str(HERE / "watch_scope.ts")]
             case["returncode"], case["timed_out"] = run_process(
                 command,
                 cwd=fixture.workspace,
@@ -361,7 +429,11 @@ def run_case(
             )
             time.sleep(0.1)
             case["native_routes"] = worker.metrics.snapshot().get("routes", {})
+            if scenario.oracle == "watch-command":
+                case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
+            if scenario.oracle == "mixed-read-batch":
+                case["approval_targets"] = _mixed_read_approval_targets(worker.store, approval_ids_before)
             case["inference"] = relay.evidence()
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
@@ -415,12 +487,7 @@ def run_case(
     finally:
         case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
         if daemon is not None:
-            try:
-                probe._cleanup_installed_daemon(daemon)
-                probe._cleanup_native(identity, fixture.root / "guard-home")
-                case["cleanup_ok"] = True
-            except Exception as exc:
-                case["cleanup_error"] = type(exc).__name__
+            case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
     case["elapsed_seconds"] = round(time.monotonic() - started, 3)
     case["hook_latency"] = summarize_hook_latency(case["guard_observations"])
     case["assessment"] = assess_case(scenario, case)

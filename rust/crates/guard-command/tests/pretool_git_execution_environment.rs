@@ -13,7 +13,18 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     let _cleanup = FixtureCleanup(root.clone());
     std::fs::create_dir_all(&home).unwrap();
     std::fs::create_dir_all(&repository).unwrap();
-    assert!(std::process::Command::new("git")
+    let mut init = std::process::Command::new("git");
+    for name in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_NAMESPACE",
+    ] {
+        init.env_remove(name);
+    }
+    assert!(init
         .args(["init", "--quiet"])
         .arg(&repository)
         .status()
@@ -215,4 +226,86 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         git_config_no_system: true,
     };
     assert_eq!(evaluate(&context).decision, "deny");
+}
+
+#[test]
+fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
+    use guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context;
+    use guard_contracts::GuardExecutionEnvironmentV1;
+    let root = std::env::temp_dir().join(format!("guard-git-helpers-{}", std::process::id()));
+    let home = root.join("home");
+    let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    let mut init = std::process::Command::new("git");
+    for name in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_NAMESPACE",
+    ] {
+        init.env_remove(name);
+    }
+    assert!(init
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    let stamped = GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
+        environment_digest: "0".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: true,
+    };
+    let evaluate = |command: &str, context: Option<&GuardExecutionEnvironmentV1>| {
+        evaluate_pre_tool_envelope_with_execution_context(
+            "cursor",
+            "PreToolUse",
+            &json!({"tool_name":"Shell", "tool_input":{"command":command}}),
+            None,
+            None,
+            guard_command::pretool::PathContext {
+                home_dir: home.to_str(),
+                cwd: repository.to_str(),
+            },
+            context,
+        )
+    };
+    for command in ["git log -3 --oneline", "git diff", "git show HEAD"] {
+        let unstamped = evaluate(command, None);
+        assert_eq!(unstamped.decision, "deny", "{command}");
+        let verified = evaluate(command, Some(&stamped));
+        assert_eq!(
+            verified.decision, "allow",
+            "{command}: {} / {}",
+            verified.reason_code, verified.reason
+        );
+    }
+    let config = repository.join(".git/config");
+    let original = std::fs::read_to_string(&config).unwrap();
+    for helper in [
+        "[diff \"synthetic\"]\n\ttextconv = ./synthetic-never-execute\n",
+        "[diff \"synthetic\"]\n\tcommand = ./synthetic-never-execute\n",
+        "[diff]\n\texternal = ./synthetic-never-execute\n",
+    ] {
+        std::fs::write(&config, format!("{original}{helper}")).unwrap();
+        for command in ["git log -p -1", "git diff"] {
+            assert_eq!(
+                evaluate(command, Some(&stamped)).decision,
+                "deny",
+                "{command} with {helper}"
+            );
+        }
+    }
+    std::fs::write(&config, original).unwrap();
+    let assigned = evaluate("GIT_EXTERNAL_DIFF=./x git diff", Some(&stamped));
+    assert_eq!(assigned.decision, "deny");
 }

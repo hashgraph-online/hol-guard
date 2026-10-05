@@ -67,10 +67,10 @@ The daemon HTTP transport:
 ## Budgets
 
 ```python
-HOOK_ENGINE_TOTAL_BUDGET_MS = 9000      # Total budget under the 10s timeout
-HOOK_ENGINE_NORMAL_BUDGET_MS = 1000    # Normal decision target
-HOOK_SOURCE_FAST_PATH_BUDGET_MS = 250   # Source-read fast path budget
-HOOK_SCANNER_DEFAULT_BUDGET_MS = 750    # Scanner budget
+HOOK_ENGINE_TOTAL_BUDGET_MS = 9000  # Total budget under the 10s timeout
+HOOK_ENGINE_NORMAL_BUDGET_MS = 1000  # Normal decision target
+HOOK_SOURCE_FAST_PATH_BUDGET_MS = 250  # Source-read fast path budget
+HOOK_SCANNER_DEFAULT_BUDGET_MS = 750  # Scanner budget
 ARBITRARY_STDOUT_FULL_ALLOW_BYTES = 256 * 1024  # Max arbitrary stdout for full allow
 ```
 

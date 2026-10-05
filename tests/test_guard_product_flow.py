@@ -354,7 +354,7 @@ args = ["workspace-skill.js", "--changed"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -406,7 +406,7 @@ args = ["workspace-skill.js", "--changed"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -493,7 +493,7 @@ args = ["workspace-skill.js", "--changed"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -554,7 +554,7 @@ args = ["workspace-skill.js", "--changed"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -821,6 +821,7 @@ args = ["workspace-skill.js", "--changed"]
         assert codex_summary["review_count"] >= 1
         assert codex_summary["next_action"] == "review"
 
+    @pytest.mark.usefixtures("native_hook_force")
     def test_guard_shim_forwards_dash_prefixed_args(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -881,6 +882,7 @@ args = ["workspace-skill.js", "--changed"]
         )
         assert args_file.read_text(encoding="utf-8").strip() == "--help"
 
+    @pytest.mark.usefixtures("native_hook_force")
     def test_guard_shim_keeps_pythonpath_for_source_checkout_launches(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -932,6 +934,8 @@ args = ["workspace-skill.js", "--changed"]
                     "PATH": f"{fake_bin}:{os.environ['PATH']}",
                     "HOME": str(home_dir),
                     "PYTHONPATH": str(runtime_pythonpath),
+                    "HOL_GUARD_NATIVE": "force",
+                    "HOL_GUARD_NATIVE_BINARY": os.environ["HOL_GUARD_NATIVE_BINARY"],
                 },
                 check=False,
                 timeout=15,

@@ -82,7 +82,7 @@ pub(super) fn lower_catalog(
             .iter()
             .chain(mcp_sources.iter())
             .try_fold(0usize, |total, bytes| total.checked_add(bytes.len()))
-            .is_none_or(|size| size > MAX_PROGRAM_BYTES)
+            .is_none_or(|size| size > MAX_SOURCE_CATALOG_BYTES)
     {
         return Err("command_source_catalog_bytes_invalid");
     }
@@ -451,4 +451,29 @@ pub fn compile_addition_with_mcp(
     output.catalog_projection_kind = "addition-only-not-release-catalog".to_owned();
     output.base_program_digest = Some(base_digest);
     admit(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EXAMPLE_SOURCE: &[u8] =
+        include_bytes!("../tests/fixtures/command-source-example.v1.json");
+    const TRUST_MAP: &[u8] =
+        include_bytes!("../../../../contracts/extensions/trust-class-map.v1.json");
+
+    #[test]
+    fn source_catalog_between_program_and_source_limits_compiles() {
+        let mut source = EXAMPLE_SOURCE.to_vec();
+        source.resize(MAX_PROGRAM_BYTES + 1, b' ');
+        assert!(source.len() > MAX_PROGRAM_BYTES);
+        assert!(source.len() <= MAX_SOURCE_CATALOG_BYTES);
+
+        let output = compile_addition(&[source.as_slice()], TRUST_MAP)
+            .expect("a valid source catalog above 4 MiB must compile as an addition");
+        assert_eq!(
+            output.catalog_projection_kind,
+            "addition-only-not-release-catalog"
+        );
+    }
 }

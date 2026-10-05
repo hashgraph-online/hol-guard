@@ -1254,6 +1254,23 @@ def evaluate_native_artifact_hook(
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
         decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
         decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
+    elif scanner_raised_to_block:
+        # The scanner escalated a weaker package verdict to a block. Surface the
+        # escalated block copy rather than the generic block copy or the weaker
+        # package copy. The block title mirrors the package evaluator's own
+        # block title in `supply_chain_package_eval._finalize_package_request_evaluation`.
+        decision_v2_payload["user_title"] = "Critical install blocked"
+        if package_evaluation is not None:
+            decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
+            decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
+    if scanner_evidence and policy_action == "block" and scanner_risk_signals:
+        # The Cisco scanner contributed the decisive escalation signal. Surface
+        # the scanner's primary summary as the dashboard detail so the composed
+        # block copy reflects the escalation source rather than the package
+        # verdict's generic block summary. Covers both the Python compose path
+        # (scanner_raised_to_block) and the resident path (the native eval
+        # already escalated, so package_policy_action is itself block).
+        decision_v2_payload["dashboard_primary_detail"] = scanner_risk_signals[0]
     if has_compound_findings:
         action_phrase = {
             "allow": "allowed",

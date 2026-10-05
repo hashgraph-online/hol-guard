@@ -65,7 +65,10 @@ def native_review_policy_binding(
     if any(not isinstance(receipt.get(field), str) for field in ("policy_digest", "rule_digest", "runtime_identity")):
         raise ValueError("native_review_policy_binding_invalid")
     command_binding = receipt.get("command_extensions")
-    if not isinstance(command_binding, dict) or command_binding.get("uncertainty_count") != 0:
+    if not isinstance(command_binding, dict):
+        raise ValueError("native_review_policy_binding_invalid")
+    uncertainty_count = command_binding.get("uncertainty_count")
+    if type(uncertainty_count) is not int or uncertainty_count < 0:
         raise ValueError("native_review_policy_binding_invalid")
     return {
         "schema": _SCHEMA,

@@ -63,7 +63,7 @@ fn probe(
     if !home.is_dir() || !cwd.is_dir() || !clean_environment(execution_environment) {
         return None;
     }
-    let binary = trusted_git(executable, &home, &cwd, execution_environment)?;
+    let binary = trusted_command(executable, &home, &cwd, execution_environment)?;
     let mut command = Command::new(&binary);
     command.env_clear();
     #[cfg(windows)]
@@ -92,7 +92,9 @@ fn probe(
         .unwrap_or(declared_home);
     command
         .args(leading)
-        .current_dir(&cwd)
+        // Git for Windows rejects the `\\?\` prefix from canonicalize.
+        // The declared cwd is the path the agent process would use.
+        .current_dir(declared_cwd)
         .env("HOME", git_home)
         .env("USERPROFILE", git_home);
     let mut query = super::git_probe::copy_command(&command)?;
@@ -189,7 +191,7 @@ fn probe(
         || filters::unused(
             &binary,
             leading,
-            &cwd,
+            declared_cwd,
             git_home,
             execution_environment,
             deadline,
@@ -260,7 +262,7 @@ fn disabled_boolean(value: &str) -> bool {
     )
 }
 
-fn enabled_boolean(value: &str) -> bool {
+pub(super) fn enabled_boolean(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
         "true" | "yes" | "on" | "1"
@@ -313,7 +315,7 @@ fn git_pager_disabled(
     }
 }
 
-fn clean_environment(
+pub(super) fn clean_environment(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
     let names = match execution_environment {
@@ -372,7 +374,7 @@ fn clean_environment(
     })
 }
 
-fn trusted_git(
+pub(super) fn trusted_command(
     executable: &str,
     home: &Path,
     cwd: &Path,
@@ -397,7 +399,12 @@ fn trusted_git(
             } else {
                 cwd.join(directory)
             };
-            let candidate = directory.join(if cfg!(windows) { "git.exe" } else { "git" });
+            let command_name = if cfg!(windows) && supplied.extension().is_none() {
+                format!("{executable}.exe")
+            } else {
+                executable.to_owned()
+            };
+            let candidate = directory.join(command_name);
             if candidate.is_file() {
                 found = Some(fs::canonicalize(candidate).ok()?);
                 break;
@@ -405,9 +412,13 @@ fn trusted_git(
         }
         found?
     };
+    let canonical_temp = fs::canonicalize(std::env::temp_dir()).ok();
     if path.starts_with(home)
         || path.starts_with(cwd)
         || path.starts_with(std::env::temp_dir())
+        || canonical_temp
+            .as_deref()
+            .is_some_and(|directory| path.starts_with(directory))
         || path.starts_with("/tmp")
         || path.starts_with("/private/tmp")
     {

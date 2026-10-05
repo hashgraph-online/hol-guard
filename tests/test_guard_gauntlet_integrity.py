@@ -14,6 +14,17 @@ from ci.gauntlet.transport import reconcile_rounds
 from tests.test_guard_gauntlet import observed_case, ordinary
 
 
+def test_scenario_labels_do_not_influence_fixture_path_risk():
+    import re
+
+    from ci.gauntlet.catalog import load_catalog
+    from ci.gauntlet.fixtures import scenario_fixture_name
+
+    names = [scenario_fixture_name(scenario.id) for scenario in load_catalog()]
+    assert len(names) == len(set(names))
+    assert all(re.fullmatch(r"case-[0-9a-f]{64}", name) for name in names)
+
+
 def test_fixture_alias_redaction_preserves_host_guard_identity(monkeypatch):
     """Reconcile verified macOS display aliases without exporting private fixture paths."""
     import hashlib
@@ -231,6 +242,38 @@ def test_anchor_path_metadata_is_checked_instead_of_rejecting_real_omp_edits():
         "input": "[notes.md#3BE2]\nPUT 1.=1:\n+Verified settings change.",
     }
     assert not input_matches("edit", sibling_args, {**sibling_args, "paths": [sibling_args["path"]]})
+
+
+@pytest.mark.parametrize("path", ["src/one.ts", "./src/one.ts", "~/other-project/one.ts"])
+def test_resolved_read_post_inputs_remain_bound_to_original_target(path):
+    from ci.gauntlet.input_evidence import post_input_matches
+    from ci.gauntlet.proofs import guard_inventory
+
+    reviewed = {"path": path, "offset": 2, "limit": 4}
+    target = "{{home}}/" + path[2:] if path.startswith("~/") else "{{workspace}}/" + path.removeprefix("./")
+    completed = {**reviewed, "path": target}
+    assert post_input_matches("read", reviewed, completed)
+    rows = deepcopy(observed_case()["guard_observations"])
+    for row, value in zip(rows, (reviewed, completed), strict=True):
+        row.update(tool="read", input=value, input_sha256=input_digest(value))
+    calls = [{"id": "c1", "name": "read", "args": reviewed, "is_error": False}]
+    assert guard_inventory(calls, rows, {"native_resident": 2})[1] is None
+    for altered in [
+        {**completed, "path": "{{workspace}}/.env"},
+        {**completed, "offset": 1},
+        {**completed, "limit": 100},
+        {**completed, "file_path": target},
+    ]:
+        assert not post_input_matches("read", reviewed, altered)
+    rows[1]["input_sha256"] = "0" * 64
+    assert guard_inventory(calls, rows, {"native_resident": 2})[1] == "missing or inconsistent Guard input digest"
+
+
+@pytest.mark.parametrize("tool,path", [("write", "src/one.ts"), ("read", "../one.ts"), ("read", "src/../one.ts")])
+def test_post_input_resolution_does_not_hide_mutation_or_traversal(tool, path):
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    assert not post_input_matches(tool, {"path": path}, {"path": "{{workspace}}/" + path})
 
 
 def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():

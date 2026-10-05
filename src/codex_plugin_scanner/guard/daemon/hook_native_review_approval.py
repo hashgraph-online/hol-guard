@@ -164,6 +164,21 @@ def pause_native_pre_tool_for_approval(
     except (OSError, RuntimeError, TypeError, ValueError):
         ask = False
     if not ask:
+        # The agent stays on the silent block. The inbox row is a separate record.
+        queued = queue_native_pre_tool_review(
+            store,
+            harness=harness,
+            payload=payload,
+            native_result=native_result,
+            native_receipt=native_receipt,
+            workspace=workspace,
+            guard_home=guard_home,
+            home_dir=home_dir,
+        )
+        if queued is None:
+            _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
+        else:
+            _record_silent_native_review_event(store, queued)
         blocked = dict(native_result)
         blocked.update(
             decision="deny",
@@ -203,6 +218,35 @@ def pause_native_pre_tool_for_approval(
     response["prompted"] = True
     response["approval_center_url"] = _native_review_approval_center_url(store)
     return response
+
+
+def _record_silent_native_review_event(store: object, queued: Mapping[str, object]) -> None:
+    """Write the local creation event for a silent inbox row. Do not mark a prompt as shown."""
+
+    add_event = getattr(store, "add_event", None)
+    if not callable(add_event):
+        return
+    created_at = queued.get("created_at")
+    timestamp = created_at if isinstance(created_at, str) and created_at else datetime.now(tz=timezone.utc).isoformat()
+    try:
+        add_event(
+            "approval.created",
+            {
+                "request_id": queued.get("request_id"),
+                "harness": queued.get("harness"),
+                "artifact_id": queued.get("artifact_id"),
+                "artifact_name": queued.get("artifact_name"),
+                "artifact_type": queued.get("artifact_type"),
+                "policy_action": queued.get("policy_action"),
+                "recommended_scope": queued.get("recommended_scope"),
+                "source_scope": queued.get("source_scope"),
+                "workspace": queued.get("workspace"),
+                "publisher": queued.get("publisher"),
+            },
+            timestamp,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        _LOGGER.warning("Silent review inbox row saved without approval.created (%s)", type(error).__name__)
 
 
 def queue_native_pre_tool_review(

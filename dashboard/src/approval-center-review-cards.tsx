@@ -107,6 +107,7 @@ type ApprovalPasswordModalProps = {
   onSubmit: () => void;
   onCancel: () => void;
   submitLabel: string;
+  busy?: boolean;
 };
 
 function approvalProofModalTitle(locked: boolean, recentlySatisfied: boolean, needsPassword: boolean): string {
@@ -126,7 +127,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
-    false,
+    props.busy === true,
   );
   useEffect(() => {
     if (!gateLocked) return undefined;
@@ -156,17 +157,15 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) props.onCancel();
+      if (e.target === e.currentTarget && props.busy !== true) props.onCancel();
     },
-    [props.onCancel]
+    [props.onCancel, props.busy]
   );
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Enter" && !submitDisabled) {
-        e.preventDefault();
-        props.onSubmit();
-      }
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!submitDisabled) props.onSubmit();
     },
     [props.onSubmit, submitDisabled]
   );
@@ -175,12 +174,11 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
       onClick={handleBackdropClick}
-      onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
       aria-labelledby="approval-password-modal-title"
     >
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <form onSubmit={handleSubmit} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
         <div className="flex items-center gap-3">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10">
             <HiMiniKey className="h-5 w-5 text-brand-blue" aria-hidden="true" />
@@ -230,20 +228,20 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
           <button
             type="button"
             onClick={props.onCancel}
+            disabled={props.busy === true}
             className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
           >
             Go back
           </button>
           <button
-            type="button"
-            onClick={props.onSubmit}
+            type="submit"
             disabled={submitDisabled}
             className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {props.submitLabel}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
