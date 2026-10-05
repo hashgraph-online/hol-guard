@@ -92,6 +92,7 @@
       "command.mcp-contribos",
       "command.mcp-filesystem",
       "command.mcp-instapods",
+      "command.mcp-insumer",
       "command.mcp-loomdesk",
       "command.mcp-pr-ui-compare",
       "command.mcp-reaper",
