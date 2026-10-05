@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.runtime.restricted_node_test import (
+    _node_runtime_args,
     prepare_restricted_node_test,
     run_restricted_node_test,
 )
@@ -81,6 +82,12 @@ def test_linux_process_budget_counts_existing_threads(monkeypatch: pytest.Monkey
 def test_non_test_and_shell_forms_are_not_delegated(argv: list[str], tmp_path: Path) -> None:
     with pytest.raises(RestrictedPytestError):
         prepare_restricted_node_test(argv, workspace=tmp_path)
+
+
+def test_bounded_heap_option_is_preserved_for_direct_node_test() -> None:
+    assert _node_runtime_args(["node", "--max-old-space-size=12288", "--test"]) == ("--max-old-space-size=12288",)
+    with pytest.raises(RestrictedPytestError):
+        _node_runtime_args(["node", "--max-old-space-size=999999", "--test"])
 
 
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("node") is None, reason="requires Node and Seatbelt")

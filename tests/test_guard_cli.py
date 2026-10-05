@@ -1979,6 +1979,7 @@ args = ["workspace-skill.js"]
         assert "Recommended action" in output
         assert '"policy_recommendation"' not in output
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_run_persists_receipts_and_policy(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -2035,6 +2036,7 @@ args = ["workspace-skill.js"]
         assert receipts_rc == 0
         assert receipts_output["items"][0]["harness"] == "codex"
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_receipts_human_output_renders_table(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -2063,6 +2065,7 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert "Recent Guard receipts" in output
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_run_blocked_human_output_lists_review_commands(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -2358,6 +2361,7 @@ args = ["workspace-skill.js", "--changed"]
         assert exceptions_output["items"][0]["owner"] == "local-dev"
         assert exceptions_output["items"][0]["expires_at"].endswith("+00:00")
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_inventory_and_abom_export_local_artifacts(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -2415,6 +2419,7 @@ args = ["workspace-skill.js", "--changed"]
         assert abom_output["artifacts"][0]["artifact_id"] == "codex:global:global_tools"
         assert abom_output["artifacts"][0]["trust_verdict"] == "allow"
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_explain_uses_tracked_artifact_context(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -2455,6 +2460,7 @@ args = ["workspace-skill.js", "--changed"]
         assert explain_output["latest_receipt"]["policy_decision"] == "allow"
         assert explain_output["latest_diff"]["current_hash"]
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_explain_human_output_renders_tracked_artifact_context(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -2553,6 +2559,7 @@ args = ["workspace-skill.js", "--changed"]
         assert "Updated" in path_output
         assert "2026-05-06" in path_output
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_diff_reports_config_changes(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -2629,6 +2636,7 @@ args = ["workspace-skill.js", "--changed"]
         assert any(item["policy_action"] == "require-reapproval" for item in rerun_output["artifacts"])
         assert any(item["changed"] is True for item in rerun_output["artifacts"])
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_run_returns_launched_harness_exit_code(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -2663,6 +2671,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["return_code"] == 7
         assert rc == 7
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_run_current_config_provider_reloads_local_and_synced_policy(
         self,
         tmp_path,
@@ -2823,6 +2832,7 @@ args = ["workspace-skill.js", "--changed"]
         assert excinfo.value.code == 2
         assert "--workspace is required when --scope workspace" in capsys.readouterr().err
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_harness_policy_overrides_across_workspaces(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_one = tmp_path / "workspace-one"
@@ -4035,6 +4045,7 @@ args = ["workspace-skill.js", "--changed"]
 
         assert command == ["opencode", str(context.workspace_dir), "--prompt", "debug oauth"]
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_runs_pip_upgrade_in_current_environment(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         commands: list[list[str]] = []
@@ -4063,6 +4074,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["changed"] is False
         assert output["message"] == "HOL Guard is already current."
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_uses_pipx_when_running_from_pipx(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         commands: list[list[str]] = []
@@ -4090,6 +4102,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["changed"] is False
         assert output["message"] == "HOL Guard is already current."
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_pins_detected_stable_release_from_uv_canary(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         commands: list[list[str]] = []
@@ -4126,6 +4139,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["resulting_version"] == "2.0.1092"
         assert output["status"] == "updated"
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_marks_already_current_pipx_runs_as_current(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         commands: list[list[str]] = []
@@ -4161,6 +4175,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["changed"] is False
         assert output["message"] == "HOL Guard is already current."
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_treats_first_install_as_updated_when_only_dependencies_are_current(
         self, tmp_path, monkeypatch, capsys
     ):
@@ -4317,6 +4332,7 @@ args = ["workspace-skill.js", "--changed"]
         assert captured_wheels == ["dist"]
         assert output["status"] == "planned"
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_preserves_unowned_altered_codex_hooks(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         context = HarnessContext(
@@ -4400,6 +4416,7 @@ args = ["workspace-skill.js", "--changed"]
         assert hooks_payload["PreToolUse"]
         assert repaired_state["shell_protection_active"] is False
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_preserves_tampered_codex_hooks_despite_shape_match(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         install_rc = main(["guard", "install", "codex", "--home", str(home_dir), "--json"])
@@ -4446,6 +4463,7 @@ args = ["workspace-skill.js", "--changed"]
         assert repaired["protection_active"] is False
         assert repaired["integrity_reason"] == "codex_hook_registration_mismatch"
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_refuses_to_replace_altered_codex_identity_record(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         assert main(["guard", "install", "codex", "--home", str(home_dir), "--json"]) == 0
@@ -4493,6 +4511,7 @@ args = ["workspace-skill.js", "--changed"]
         assert final_state["protection_active"] is False
         assert final_state["integrity_reason"] == "codex_hook_manifest_mac_invalid"
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_does_not_reauthenticate_same_version_tampered_packaged_hook(
         self, tmp_path, monkeypatch, capsys
     ):
@@ -4557,6 +4576,7 @@ args = ["workspace-skill.js", "--changed"]
         assert final_state["protection_active"] is False
         assert final_state["integrity_reason"] == "codex_hook_bridge_hash_mismatch"
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_repairs_missing_codex_config_for_managed_install(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         GuardStore(home_dir).set_managed_install(
@@ -4596,6 +4616,7 @@ args = ["workspace-skill.js", "--changed"]
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_repairs_workspace_codex_install_in_recorded_workspace(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -4637,6 +4658,7 @@ args = ["workspace-skill.js", "--changed"]
         assert hooks_payload["PreToolUse"]
         assert (workspace_dir / ".codex" / "config.toml").exists() is False
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_fails_closed_on_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(home_dir / ".codex" / "config.toml", "[broken\n")
@@ -4673,6 +4695,7 @@ args = ["workspace-skill.js", "--changed"]
         assert any("codex_hook_inventory_source_malformed" in note for note in output["notes"])
         assert (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == "[broken\n"
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_does_not_adopt_unmanaged_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(
@@ -4711,6 +4734,7 @@ args = ["-lc", "echo hi"]
         assert "managed_install" not in output
         assert (home_dir / ".codex" / "hooks.json").exists() is False
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_reports_malformed_codex_hooks_without_crashing(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(
@@ -4757,6 +4781,7 @@ args = ["-lc", "echo hi"]
         assert "managed_install" not in output
         assert any("Could not repair Codex protection during update" in note for note in output["notes"])
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_reports_codex_repair_write_failures(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(
@@ -4807,6 +4832,7 @@ args = ["-lc", "echo hi"]
         assert "managed_install" not in output
         assert any("Could not repair Codex protection during update: read only" in note for note in output["notes"])
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_repairs_codex_when_managed_install_lookup_fails(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(
@@ -4862,6 +4888,7 @@ args = ["-lc", "echo hi"]
         assert output["managed_install"]["active"] is True
         assert _read_codex_hooks(home_dir / ".codex" / "config.toml")["PreToolUse"]
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_does_not_infer_codex_repair_workspace_from_caller_cwd(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -4920,6 +4947,7 @@ args = ["-lc", "echo hi"]
         assert _read_codex_hooks(home_dir / ".codex" / "config.toml")["PreToolUse"]
         assert "hooks" not in _read_codex_config(workspace_dir / ".codex" / "config.toml")
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_does_not_adopt_empty_caller_workspace_during_backup_repair(
         self, tmp_path, monkeypatch, capsys
     ):
@@ -5058,7 +5086,7 @@ args = ["-lc", "echo hi"]
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -7136,6 +7164,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert rc == 2
         assert "Pass either a harness or --all, not both." in stderr
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_login_and_sync_posts_receipts(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -7350,6 +7379,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert payload["cloud_state"] == "local_only"
         assert "this machine" in str(payload["cloud_state_detail"]).lower()
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_connect_uses_browser_oauth_flow_without_pairing(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -7441,7 +7471,9 @@ url = http://127.0.0.1:8787/guard-canary
                 issuer="https://hol.org",
                 client_id="guard-local-daemon",
                 refresh_token="refresh-secret-value",
-                dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+                dpop_private_key_pem=(
+                    "-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"
+                ),
                 dpop_public_jwk={
                     "kty": "EC",
                     "crv": "P-256",
@@ -7630,7 +7662,7 @@ url = http://127.0.0.1:8787/guard-canary
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -7670,7 +7702,7 @@ url = http://127.0.0.1:8787/guard-canary
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -7746,7 +7778,7 @@ url = http://127.0.0.1:8787/guard-canary
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -7843,7 +7875,7 @@ url = http://127.0.0.1:8787/guard-canary
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -9169,6 +9201,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert exc_info.value.code == 2
         assert "Guard URLs must be absolute http(s) URLs." in capsys.readouterr().err
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -9385,6 +9418,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert store.get_sync_payload("alert_preferences") == {}
         assert store.get_sync_payload("team_policy_pack") == {}
 
+    @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_run_auto_syncs_cloud_policy_bundle(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

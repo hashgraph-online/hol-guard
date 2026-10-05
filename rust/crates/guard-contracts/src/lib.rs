@@ -5,6 +5,12 @@ use serde_json::Value;
 
 mod approval_contracts;
 pub use approval_contracts::*;
+mod approval_gate;
+pub use approval_gate::*;
+mod approval_reuse;
+pub use approval_reuse::*;
+mod claim_approval_reuse;
+pub use claim_approval_reuse::*;
 mod native_hook_receipt;
 pub use native_hook_receipt::*;
 mod native_command_observations;
@@ -21,6 +27,46 @@ mod execution_environment;
 pub use execution_environment::*;
 mod context_digest;
 pub use context_digest::*;
+mod command_effect;
+pub use command_effect::*;
+mod canonical_json;
+pub use canonical_json::*;
+
+mod utc_timestamp;
+pub use utc_timestamp::*;
+
+mod native_runtime_values;
+pub use native_runtime_values::*;
+mod install_checks;
+pub use install_checks::*;
+mod generic_hook_payload;
+pub use generic_hook_payload::*;
+
+mod workflow_capability;
+pub use workflow_capability::*;
+mod workflow_capability_transitions;
+pub use workflow_capability_transitions::*;
+mod workflow_capability_authority_state;
+pub use workflow_capability_authority_state::*;
+
+mod signal_contract;
+pub use signal_contract::*;
+
+mod decision_lattice;
+pub use decision_lattice::*;
+
+mod authoritative_decision;
+pub use authoritative_decision::*;
+
+mod package_authority;
+pub use package_authority::*;
+
+mod contained_execution;
+pub use contained_execution::*;
+mod prompt_requests;
+pub use prompt_requests::*;
+mod business_action;
+pub use business_action::*;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";
@@ -297,6 +343,15 @@ pub struct RuntimeCapabilitiesV1 {
     pub build_sha: String,
     pub target: String,
     pub features: Vec<String>,
+    /// Packaged command identity of this binary. Empty when the program
+    /// cannot be loaded. The publisher uses these to bind a snapshot to the
+    /// runtime that will enforce it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub program_digest: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub catalog_digest: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub trust_digest: String,
 }
 
 #[cfg(test)]
