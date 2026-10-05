@@ -31,7 +31,7 @@ def _artifacts(source_root: Path) -> dict[str, str]:
     for relative_dir, pattern, destination_dir in _CONTRIBUTION_SOURCES:
         source_dir = source_root / relative_dir
         if not source_dir.is_dir():
-            continue
+            raise FileNotFoundError(f"required contribution directory is missing: {relative_dir}")
         for path in sorted(source_dir.glob(pattern)):
             if path.is_file() and not path.is_symlink():
                 artifacts[path.relative_to(source_root).as_posix()] = (
@@ -49,6 +49,12 @@ def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) 
         if destination_root is not None
         else source_root / "src/codex_plugin_scanner/guard/contracts/data"
     )
+    # Stale copies of removed contributions must not linger in a bundle: the
+    # contribution destinations hold only staged payloads, so reset them.
+    for _relative_dir, _pattern, destination_dir in _CONTRIBUTION_SOURCES:
+        staged_dir = data_root / destination_dir
+        if staged_dir.is_dir():
+            shutil.rmtree(staged_dir)
     staged: list[Path] = []
     for source_name, destination_name in _artifacts(source_root).items():
         source = source_root / source_name

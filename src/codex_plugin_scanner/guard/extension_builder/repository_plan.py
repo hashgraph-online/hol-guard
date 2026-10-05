@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import BUILDER_VERSION
 from .errors import BuilderError
-from .io import canonical_json, checked_path, digest, object_value, read_bytes, read_json, sha256, text_from_bytes
+from .io import canonical_json, checked_path, digest, object_value, parse_json, read_bytes, read_json, sha256, text_from_bytes
 from .kit import MAX_ARTIFACT_BYTES, Kit, build_kit
 from .models import Metadata, load_discovery
 from .repository_edits import (
@@ -97,6 +97,15 @@ def _read_optional(path: Path) -> bytes | None:
     return read_bytes(path, limit=MAX_ARTIFACT_BYTES) if path.exists() else None
 
 
+def _legacy_generated_test_path(path: str) -> bool:
+    if not path.startswith("tests/") or not path.endswith(".py"):
+        return False
+    name = path.rsplit("/", 1)[-1]
+    return name.startswith("test_generated_") or (
+        name.startswith("test_guard_mcp_") and name.endswith("_contribution.py")
+    )
+
+
 def _previous_kit(root: Path, metadata: Metadata) -> Kit | None:
     prefix = root / ownership_root(metadata)
     record = _read_optional(prefix / "record.json")
@@ -120,7 +129,24 @@ def _previous_kit(root: Path, metadata: Metadata) -> Kit | None:
     review = load_review(read_json(prefix / "review.json"), discovery)
     previous = build_kit(discovery, review)
     if record != ownership_record(previous):
-        raise conflict("The existing authoring ownership record does not match its reviewed source contracts.")
+        # Builders that emitted a per-MCP generated test module recorded it in
+        # managedFiles; current builders no longer generate that file. A record
+        # that differs only by those legacy test entries still proves ownership.
+        expected_payload = object_value(parse_json(ownership_record(previous)))
+        expected_managed = object_value(expected_payload.get("managedFiles"))
+        stored_managed = object_value(payload.get("managedFiles"))
+        extra = set(stored_managed) - set(expected_managed)
+        if (
+            not extra
+            or any(not _legacy_generated_test_path(path) for path in extra)
+            or {key: value for key, value in payload.items() if key != "managedFiles"}
+            != {key: value for key, value in expected_payload.items() if key != "managedFiles"}
+            or {path: stored_managed[path] for path in stored_managed if path not in extra}
+            != expected_managed
+        ):
+            raise conflict(
+                "The existing authoring ownership record does not match its reviewed source contracts."
+            )
     for path, expected in managed_files(previous).items():
         if _read_optional(root / path) != expected:
             raise conflict(

@@ -138,8 +138,9 @@ def edit_staging(content: str, metadata: Metadata) -> str:
     falls outside the scanned directories — an unknown layout is a conflict,
     not a silent skip.
     """
-    if "_CONTRIBUTION_SOURCES" not in content:
-        raise conflict("The staging script no longer enumerates contribution payloads.")
+    for token in ("_CONTRIBUTION_SOURCES = (", "def _artifacts", "def stage_artifacts"):
+        if token not in content:
+            raise conflict("The staging script no longer enumerates contribution payloads.")
     for source, _packaged in _artifact_mappings(metadata):
         if not source.startswith(("contributions/extensions/", "contributions/mcp-servers/")):
             # Command sources compile into the native program rather than
