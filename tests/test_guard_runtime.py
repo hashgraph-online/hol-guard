@@ -14593,8 +14593,7 @@ def test_runtime_hook_saved_v1_allow_satisfies_exact_unchanged_current_review(tm
         as_json=True,
     )
     store = GuardStore(home_dir)
-    first_receipt = store.list_receipts(limit=1)[0]
-    context_token = str(first_receipt["artifact_hash"])
+    context_token = str(first_output["artifact_hash"])
     store.upsert_policy(
         PolicyDecision(
             harness="codex",
