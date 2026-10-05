@@ -13,8 +13,8 @@ from codex_plugin_scanner.guard.runtime.command_database_matchers import (
     database_matcher_index_hints,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_rules import ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.command_rules import ExecutableMatcher
 from tests.command_extension_contracts import (
     assert_review_required_cases,
     assert_reviewed_command_cases,
@@ -167,6 +167,17 @@ def test_database_matcher_does_not_treat_attached_option_values_as_flags(tmp_pat
         required_flags_anywhere=frozenset({"-r"}),
     )
     command = parse_shell_command("db-admin -uroot drop production", cwd=tmp_path, home_dir=tmp_path)
+
+    assert matcher.match(command) == ()
+
+
+def test_database_matcher_rejects_combined_exit_flag_before_execution(tmp_path: Path) -> None:
+    matcher = LeadingSubcommandMatcher(
+        executables=frozenset({"db-admin"}),
+        subcommands=("run",),
+        forbidden_flags_before_delimiter=frozenset({"-h"}),
+    )
+    command = parse_shell_command("db-admin -vh run", cwd=tmp_path, home_dir=tmp_path)
 
     assert matcher.match(command) == ()
 

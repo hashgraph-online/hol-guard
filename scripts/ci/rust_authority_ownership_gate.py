@@ -74,11 +74,14 @@ TEMPORARY_PATHS: Final = (
     Path("rust/AUTHORITY_BATCH_2_FINAL"),
     Path("rust/AUTHORITY_FINAL"),
 )
+
+
 def _read(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise RuntimeError(f"required authority source is missing: {path}") from exc
+
 
 def _python_imports_function(path: Path, module_suffix: str, name: str) -> bool:
     tree = ast.parse(_read(path), filename=str(path))
@@ -232,28 +235,24 @@ def _pretool_gate() -> None:
     _assert_policy_floor_fail_closed(pretool)
     hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker.py"))
     native_hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker_native.py"))
-    if "review_pre_tool_native" not in hook:
+    if "return self._review_native_edge(" not in hook:
         raise RuntimeError("PreToolUse hook path is not bound to the native runtime")
     route = re.search(
         r'if event_name\s*==\s*"PreToolUse":[\s\S]*?return self\._review_pre_tool_http',
         hook,
     )
-    region = re.search(r'def _review_pre_tool_http\([\s\S]*?(?=\n    def _review_native_edge)', native_hook)
+    region = re.search(r"def _review_pre_tool_http\([\s\S]*?(?=\n    def _review_native_edge)", native_hook)
     if route is None or region is None:
         raise RuntimeError("daemon has no Rust PreToolUse authority route")
     if "self.engine.review(" in region.group(0):
         raise RuntimeError("PreToolUse can reach the Python HookReviewEngine")
-    if "native_pre_tool_unavailable" not in region.group(0):
+    if "native_hook_disabled" not in region.group(0) or "native_shadow_diagnostic_disabled" not in region.group(0):
+        raise RuntimeError("PreToolUse non-native modes do not fail closed")
+    edge_region = re.search(r"def _review_native_edge_with_snapshot\([\s\S]*?(?=\n    def _)", native_hook)
+    if edge_region is None or "native_pre_tool_unavailable" not in edge_region.group(0):
         raise RuntimeError("PreToolUse does not fail closed when native is unavailable")
-    if 'status.mode == "shadow"' not in region.group(0):
-        raise RuntimeError("PreToolUse does not isolate shadow Python rollback")
-    if 'raise HookWorkerUnsupported("native PreToolUse runtime is unavailable")' in region.group(0):
-        shadow_only = re.search(
-            r'if status\.mode == "shadow":\s*raise HookWorkerUnsupported\("native PreToolUse runtime is unavailable"\)',
-            region.group(0),
-        )
-        if shadow_only is None:
-            raise RuntimeError("PreToolUse unavailable path still falls through to Python")
+    if "evaluate_source_file_ref(" in native_hook or "self.engine.review(" in native_hook:
+        raise RuntimeError("native PreToolUse worker still calls a Python semantic evaluator")
 
     command_model = Path("src/codex_plugin_scanner/guard/native_command_model.py")
     if command_model.exists():
@@ -427,28 +426,42 @@ def _assert_policy_floor_fail_closed(path: Path) -> None:
 
 def _cli_gate() -> None:
     hook = _read(Path("src/codex_plugin_scanner/guard/cli/commands_hook.py"))
-    if "try_native_or_source_ref_hook" not in hook:
+    if "route_native_hook" not in hook:
         raise RuntimeError("CLI hook path does not consult native authority")
     path = Path("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py")
     tree = ast.parse(_read(path), filename=str(path))
     fn = next(
-        (
-            node
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "try_native_or_source_ref_hook"
-        ),
+        (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "route_native_hook"),
         None,
     )
     if fn is None:
         raise RuntimeError("CLI native authority helper is missing")
     calls = _ordered_call_names(fn)
-    try:
-        native_idx = calls.index("try_native_hook_authority")
-        source_idx = calls.index("_try_source_ref_fast_path")
-    except ValueError as exc:
-        raise RuntimeError("CLI hook path is missing native authority or source-ref routing") from exc
-    if native_idx > source_idx:
-        raise RuntimeError("CLI hook path consults Python source-ref review before native authority")
+    if "try_native_hook_authority" not in calls:
+        if "run_native_hook_pipeline" not in calls:
+            raise RuntimeError("CLI hook path is missing native authority routing")
+        pipeline_path = Path("src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py")
+        pipeline_tree = ast.parse(_read(pipeline_path), filename=str(pipeline_path))
+        pipeline_fn = next(
+            (
+                node
+                for node in pipeline_tree.body
+                if isinstance(node, ast.FunctionDef) and node.name == "run_native_hook_pipeline"
+            ),
+            None,
+        )
+        if pipeline_fn is None:
+            raise RuntimeError("CLI native pipeline dispatcher is missing")
+        pipeline_calls = _ordered_call_names(pipeline_fn) + [
+            child.func.attr
+            for child in ast.walk(pipeline_fn)
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute)
+        ]
+        if "review_native_edge_decision" not in pipeline_calls:
+            raise RuntimeError("CLI native pipeline does not reach the native edge authority")
+    for retired in ("_try_source_ref_fast_path", "record_python_semantic_hook_route", "evaluate_source_file_ref"):
+        if retired in calls:
+            raise RuntimeError(f"CLI hook path still calls retired Python route {retired}")
     native_cli = _read(path)
     if "HookReviewEngine" in native_cli or "evaluate_command(" in native_cli:
         raise RuntimeError("CLI native authority path still imports a Python semantic replica")

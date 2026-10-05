@@ -89,11 +89,28 @@ class StoreStorageMaintenanceMixin:
                 detail_limit=receipt_detail_limit,
                 batch_size=batch_size,
             )
-            native_decision_receipts_deleted = _delete_native_decision_receipt_batch(
+            tool_budget = max(1, batch_size // 2)
+            tool_receipts_deleted = _delete_native_decision_receipt_batch(
                 connection,
                 cutoff=now - timedelta(days=detail_retain_days),
                 detail_limit=receipt_detail_limit,
-                batch_size=batch_size,
+                batch_size=tool_budget,
+            )
+            prompt_budget = batch_size - tool_receipts_deleted
+            prompt_receipts_deleted = (
+                _delete_native_decision_receipt_batch(
+                    connection,
+                    cutoff=now - timedelta(days=detail_retain_days),
+                    detail_limit=receipt_detail_limit,
+                    batch_size=prompt_budget,
+                    prompt=True,
+                )
+                if prompt_budget
+                else 0
+            )
+            native_decision_receipts_deleted = tool_receipts_deleted + prompt_receipts_deleted
+            native_receipts_complete = tool_receipts_deleted < tool_budget and (
+                prompt_budget <= 0 or prompt_receipts_deleted < prompt_budget
             )
             guard_events_deleted = _delete_guard_event_batch(
                 connection,
@@ -108,14 +125,11 @@ class StoreStorageMaintenanceMixin:
                 batch_size=batch_size,
             )
             pages_reclaimed = _reclaim_free_pages(connection, batch_size=batch_size)
-            completed = all(
-                count < batch_size
-                for count in (
-                    receipts_archived,
-                    native_decision_receipts_deleted,
-                    guard_events_deleted,
-                    cloud_events_deleted,
-                )
+            completed = (
+                receipts_archived < batch_size
+                and native_receipts_complete
+                and guard_events_deleted < batch_size
+                and cloud_events_deleted < batch_size
             )
             connection.execute(
                 """
@@ -254,18 +268,20 @@ def _delete_native_decision_receipt_batch(
     cutoff: datetime,
     detail_limit: int,
     batch_size: int,
+    prompt: bool = False,
 ) -> int:
+    table = "native_prompt_decision_receipts" if prompt else "native_hook_decision_receipts"
     boundary = _rowid_boundary(
         connection,
-        table="native_hook_decision_receipts",
+        table=table,
         detail_limit=detail_limit,
     )
     result = connection.execute(
-        """
-        delete from native_hook_decision_receipts
+        f"""
+        delete from {table}
         where rowid in (
           select rowid
-          from native_hook_decision_receipts
+          from {table}
           where recorded_at < ? or (? is not null and rowid <= ?)
           order by recorded_at, rowid
           limit ?

@@ -46,6 +46,7 @@ from ..runtime.local_cli_identity import (
     recognize_operator_cli,
 )
 from ..runtime.local_mcp_probe import (
+    McpProbeError,
     is_strict_package_mcp_launcher,
     looks_like_mcp_launch,
     mcp_launch_tokens,
@@ -70,26 +71,19 @@ from ..runtime.package_json_script_memory import (
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
 from ..runtime.skill_workflow_preflight import preflight_skill_dependencies
+from .local_cli_api_contract import LOCAL_CLI_API_SCHEMA as _LOCAL_CLI_API_SCHEMA
+from .local_cli_api_contract import LocalCliApiError
 from .local_cli_continuity_api import decorate_local_cli_continuity
 from .local_cli_mcp_store import bound_mcp_observation, stored_mcp_recognition
+from .local_cli_registry_setup import registry_setup as reviewed_registry_setup
 from .mcp_discovery_jobs import DiscoveryJobError, DiscoveryStageError, McpDiscoveryJobs
+from .mcp_registry_undo import RegistrySetupUndo
 
 if TYPE_CHECKING:
     from ..store import GuardStore
 
-_LOCAL_CLI_API_SCHEMA = "guard.daemon.local-clis.v1"
 _VALID_STATES = frozenset({"allowed", "blocked", "unset"})
 _DISCOVERY_TTL_SECONDS = 30.0
-
-
-class LocalCliApiError(Exception):
-    def __init__(self, status: int, code: str, message: str | None = None) -> None:
-        self.status = status
-        self.code = code
-        super().__init__(message or code)
-
-    def to_payload(self) -> dict[str, object]:
-        return {"error": self.code, "message": str(self)}
 
 
 def _client_discovery_job_id(payload: dict[str, object]) -> str | None:
@@ -103,10 +97,14 @@ def _client_discovery_job_id(payload: dict[str, object]) -> str | None:
 
 class LocalCliApiService:
     def __init__(self, *, store: GuardStore) -> None:
+        from ..runtime.codex_host_inventory import CodexHostInventoryCache
+
         self._store = store
+        self._codex_host_inventory = CodexHostInventoryCache()
         self._discovery_cache: tuple[float, tuple[DiscoveredHarnessMcpServer, ...]] | None = None
         self._discovery_jobs = McpDiscoveryJobs()
         self._registry_setup_lock = threading.Lock()
+        self._registry_setup_undo = RegistrySetupUndo(store)
         self._skill_index_lock = threading.Lock()
         self._skill_records: dict[str, LocalSkillRecord] = {}
         self._skill_issues: list[dict[str, str]] = []
@@ -315,6 +313,13 @@ class LocalCliApiService:
                 if not isinstance(job_id, str) or len(job_id) != 32 or any(c not in "0123456789abcdef" for c in job_id):
                     raise LocalCliApiError(400, "invalid_discovery_job")
                 return self._discovery_jobs.read(job_id, cancel=payload.get("cancel") is True)
+            if payload.get("operation") == "codex-host-connections":
+                return self._discovery_jobs.start(
+                    "inventory:codex-host",
+                    lambda cancel: self._codex_host_inventory.refresh(codex_home=Path.home() / ".codex", cancel=cancel),
+                    reuse_seconds=0 if payload.get("force_refresh") is True else 30,
+                    requested_job_id=_client_discovery_job_id(payload),
+                )
             if payload.get("operation") == "configured-connections":
 
                 def discover(cancel: threading.Event) -> None:
@@ -353,7 +358,7 @@ class LocalCliApiService:
             def refresh(cancel: threading.Event) -> None:
                 response = self.recognize({"cli_id": cli_id, "refresh": True}, cancel=cancel)
                 if not cancel.is_set() and response.get("help_status") == "failed":
-                    raise LocalCliApiError(503, "discovery_failed")
+                    raise DiscoveryStageError(str(response.get("discovery_error", "discovery_failed")))
 
             return self._discovery_jobs.start(
                 cli_id,
@@ -439,87 +444,7 @@ class LocalCliApiService:
         return {"schema_version": _LOCAL_CLI_API_SCHEMA, **result}
 
     def registry_setup(self, payload: dict[str, object]) -> dict[str, object]:
-        from ..runtime.mcp_registry_setup import (
-            install_codex_package_mcp,
-            install_codex_remote_mcp,
-            reviewed_codex_package_candidate,
-            reviewed_codex_setup_candidate,
-        )
-
-        operation = payload.get("operation")
-        if operation not in {"preview", "apply"}:
-            raise LocalCliApiError(400, "invalid_registry_setup_operation")
-        kind = payload.get("kind", "remote")
-        if kind not in ("remote", "package"):
-            raise LocalCliApiError(400, "invalid_registry_setup_kind")
-        package_setup = kind == "package"
-        try:
-            candidate = (
-                reviewed_codex_package_candidate(payload) if package_setup else reviewed_codex_setup_candidate(payload)
-            )
-        except ValueError as error:
-            raise LocalCliApiError(
-                409, str(error), "Registry listing changed or cannot be used for Codex setup."
-            ) from error
-        if operation == "preview":
-            return {
-                "schema_version": _LOCAL_CLI_API_SCHEMA,
-                **candidate,
-                "permissions_granted": False,
-                "host_change_applied": False,
-                "next_action": "Review the exact Codex launch recipe and confirm setup.",
-            }
-        if (
-            payload.get("selection_digest") != candidate["selection_digest"]
-            or payload.get("confirm_host_change") is not True
-        ):
-            raise LocalCliApiError(409, "registry_setup_review_changed", "Review this connection again before setup.")
-        session_nonce = self._required_string(payload, "session_nonce")
-        action = "codex-mcp-package-setup" if package_setup else "codex-mcp-remote-setup"
-        subject = action + ":" + str(candidate["selection_digest"])
-        try:
-            grant = require_local_cli_trust(
-                self._store.guard_home,
-                approval_gate_input=input_from_mapping(payload),
-                action=action,
-                subject=subject,
-                session_nonce=session_nonce,
-            )
-            consume_local_cli_trust_grant(
-                self._store.guard_home,
-                grant,
-                action=action,
-                subject=subject,
-                session_nonce=session_nonce,
-            )
-        except ApprovalGateError as error:
-            raise LocalCliApiError(error.status, error.code, str(error)) from error
-        try:
-            with self._registry_setup_lock:
-                configured = (
-                    install_codex_package_mcp(candidate) if package_setup else install_codex_remote_mcp(candidate)
-                )
-        except ValueError as error:
-            message = (
-                "Codex may have changed its connection. Check the host configuration before retrying."
-                if str(error) == "codex_setup_outcome_uncertain"
-                else "Codex could not add this connection. Review its host configuration and retry."
-            )
-            raise LocalCliApiError(409, str(error), message) from error
-        return {
-            "schema_version": _LOCAL_CLI_API_SCHEMA,
-            "host": "codex",
-            "kind": "package" if package_setup else "remote",
-            "setup_name": configured,
-            "host_change_applied": True,
-            "permissions_granted": False,
-            "next_action": (
-                "Restart Codex. On first use, Codex may download and run the pinned package. "
-                "Complete provider-owned sign-in if prompted, then check host connections in Guard."
-                if package_setup
-                else "Restart Codex, complete provider-owned sign-in if prompted, then check host connections in Guard."
-            ),
-        }
+        return reviewed_registry_setup(self._store, self._registry_setup_undo, self._registry_setup_lock, payload)
 
     def mcp_skills(self, payload: dict[str, object]) -> dict[str, object]:
         cli_id = self._required_string(payload, "cli_id")
@@ -606,6 +531,7 @@ class LocalCliApiService:
             "revision": revision,
             "native_publication": local_cli_publication_status(self._store.guard_home, revision),
             "items": items,
+            "host_inventory": self._codex_host_inventory.read(),
             "cloud": decorate_local_cli_continuity(self._store, items),
         }
 
@@ -696,7 +622,7 @@ class LocalCliApiService:
         cancel: threading.Event | None = None,
     ) -> dict[str, object] | None:
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
-        if tokens is None or not looks_like_mcp_launch(tokens, command_text=command, cwd=home_dir, home_dir=home_dir):
+        if tokens is None:
             return None
         servers = self._discovered_servers()
         launch_identity = build_mcp_server_identity(
@@ -705,15 +631,31 @@ class LocalCliApiService:
             args=tuple(tokens[1:]),
             transport="stdio",
         )
+        stored_observation = self._store.find_local_mcp_observation(cli_id=cli_id) if cli_id else None
+        stored_server_hash = (
+            stored_observation.get("server_identity_hash") if isinstance(stored_observation, dict) else None
+        )
+        stored_source_label = stored_observation.get("source_label") if isinstance(stored_observation, dict) else None
         selected_server = discovered_server_for_observation(
             servers,
             cli_id=cli_id,
             server_command=launch_identity.command,
             args_hash=launch_identity.args_hash,
+            server_identity_hash=stored_server_hash if isinstance(stored_server_hash, str) else None,
+            source_label=stored_source_label if isinstance(stored_source_label, str) else None,
         )
-        extra_env = extra_env_for_mcp_launch(servers, command=command, cli_id=cli_id)
+        # A known connection remains MCP even when its script no longer exists.
+        if selected_server is None and not looks_like_mcp_launch(
+            tokens, command_text=command, cwd=home_dir, home_dir=home_dir
+        ):
+            return None
+        extra_env = extra_env_for_mcp_launch(
+            servers, command=command, cli_id=selected_server.identity.cli_id if selected_server else cli_id
+        )
         provisional_id = (
-            selected_server.identity.cli_id
+            cli_id
+            if cli_id and isinstance(stored_observation, dict)
+            else selected_server.identity.cli_id
             if selected_server is not None
             else (cli_id or f"local-cli.mcp-{launch_identity.identity_hash[:8]}")
         )
@@ -724,25 +666,21 @@ class LocalCliApiService:
         catalog_before = snapshot_before.get("mcp_catalog")
         prior_revision = catalog_before.get("revision", 0) if isinstance(catalog_before, dict) else 0
         expected_catalog_revision = prior_revision if type(prior_revision) is int and prior_revision >= 0 else 0
+        failure_code = "discovery_failed"
         try:
-            probed = (
-                probe_stdio_mcp_server(
-                    command,
-                    cwd=home_dir,
-                    home_dir=home_dir,
-                    extra_env=extra_env,
-                    cancel=cancel,
-                    connection_identity_hash=selected_server.identity.identity_hash if selected_server else None,
-                )
-                if cancel is not None
-                else probe_stdio_mcp_server(
-                    command,
-                    cwd=home_dir,
-                    home_dir=home_dir,
-                    extra_env=extra_env,
-                    connection_identity_hash=selected_server.identity.identity_hash if selected_server else None,
-                )
+            probed = probe_stdio_mcp_server(
+                command,
+                cwd=home_dir,
+                home_dir=home_dir,
+                extra_env=extra_env,
+                cancel=cancel,
+                connection_identity_hash=selected_server.identity.identity_hash if selected_server else None,
+                report_failure=selected_server is not None,
+                guard_home=self._store.guard_home,
             )
+        except McpProbeError as error:
+            failure_code = error.code
+            probed = None
         except (OSError, RuntimeError, TimeoutError, ValueError):
             probed = None
         if cancel is not None and cancel.is_set():
@@ -769,13 +707,15 @@ class LocalCliApiService:
                             identity_hash=identity_hash,
                             seen_at=utc_now(),
                         )
-                        return self._recognize_payload(
+                        response = self._recognize_payload(
                             stored_id,
                             item,
                             "failed",
                             "Guard could not refresh this connector. "
                             "Known tools and choices were kept. Try listing again.",
                         )
+                        response["discovery_error"] = failure_code
+                        return response
                 return stored
             if is_strict_package_mcp_launcher(tokens):
                 launcher = Path(tokens[0]).name

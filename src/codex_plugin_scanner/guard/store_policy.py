@@ -52,6 +52,7 @@ from .models import GUARD_ACTION_VALUES
 from .runtime.approval_context import approval_context_tokens_validation_reason
 from .store_base import *
 from .store_event_receipts import _local_once_approval_is_reusable, _verify_local_once_approval
+from .store_local_once_authority import LOCAL_ONCE_LEGACY_AUTHORITY_KIND
 
 _NON_CONSUMING_POLICY_MATCH_LIMIT = 256
 _APPROVAL_REUSE_DIAGNOSTIC_LIMIT = 32
@@ -64,7 +65,7 @@ _POLICY_LOOKUP_COLUMNS = """
 _LOCAL_REUSE_DIAGNOSTIC_COLUMNS = """
     approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher,
     action, created_at, expires_at, claimed_at, integrity_version, payload_hash, payload_mac,
-    integrity_key_id, signed_at
+    integrity_key_id, signed_at, authority_kind
 """
 _POLICY_REUSE_DIAGNOSTIC_COLUMNS = _POLICY_LOOKUP_COLUMNS
 
@@ -386,8 +387,9 @@ def _bounded_local_approval_reuse_diagnostic_rows(
     probe_groups: list[list[_SqlProbe]] = [
         [
             (
-                "claimed_at is null and action = 'allow' and harness = ? and artifact_id = ?",
-                (harness, identity_selector),
+                "claimed_at is null and action = 'allow' and (authority_kind is null or authority_kind = ?) "
+                "and harness = ? and artifact_id = ?",
+                (LOCAL_ONCE_LEGACY_AUTHORITY_KIND, harness, identity_selector),
                 "idx_guard_local_once_diagnostic_artifact",
             )
         ]
@@ -395,8 +397,9 @@ def _bounded_local_approval_reuse_diagnostic_rows(
     ]
     if artifact_hash is not None:
         hash_predicate, hash_parameters = _append_exclusions(
-            "claimed_at is null and action = 'allow' and harness = ? and artifact_hash = ?",
-            (harness, artifact_hash),
+            "claimed_at is null and action = 'allow' and (authority_kind is null or authority_kind = ?) "
+            "and harness = ? and artifact_hash = ?",
+            (LOCAL_ONCE_LEGACY_AUTHORITY_KIND, harness, artifact_hash),
             column="artifact_id",
             values=identity_selectors,
         )
@@ -2154,6 +2157,8 @@ class StorePolicyMixin:
         approval_id = decision.get("approval_id")
         decision_id = decision.get("decision_id")
         if isinstance(approval_id, str) and approval_id:
+            if decision.get("authority_kind") != LOCAL_ONCE_LEGACY_AUTHORITY_KIND:
+                return False
             claim_disposition = self.approval_reuse_claim_disposition(decision)
             if claim_disposition is None:
                 return False
@@ -2314,8 +2319,60 @@ class StorePolicyMixin:
         stale content/context without treating a near match as permission.
         """
 
+        reason, _stored_hash = self.approval_reuse_diagnostic(
+            harness,
+            artifact_id,
+            artifact_hash,
+            workspace,
+            publisher,
+            now=now,
+        )
+        return reason
+
+    def approval_reuse_diagnostic(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        now: str | None = None,
+    ) -> tuple[str | None, str | None]:
+        """Diagnose a saved-allow miss and expose the matched row's hash.
+
+        Returns ``(reason, stored_artifact_hash)``.  The stored hash is needed
+        by emit layers that must distinguish a rejected approval bound to the
+        current context-token contract from stale pre-token (legacy) evidence.
+        """
+
+        from .native_context import bind_context_digest_home, reset_context_digest_home
+
+        # This is a read-only diagnostic: the binding must not leak into the
+        # caller's context after return.
+        binding_token = bind_context_digest_home(self.guard_home, remember=False)
+        try:
+            return self._approval_reuse_diagnostic_inner(
+                harness,
+                artifact_id,
+                artifact_hash,
+                workspace,
+                publisher,
+                now=now,
+            )
+        finally:
+            reset_context_digest_home(binding_token)
+
+    def _approval_reuse_diagnostic_inner(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        now: str | None = None,
+    ) -> tuple[str | None, str | None]:
         if artifact_id is None:
-            return None
+            return None, None
         current_time = _canonical_utc_timestamp(now or _now())
         workspace_key = _workspace_policy_key(workspace)
         artifact_family = _artifact_family_key(artifact_id)
@@ -2354,7 +2411,13 @@ class StorePolicyMixin:
                     key_id=local_integrity_key_id,
                 )
                 if integrity_result.status != "valid":
-                    return "approval_reuse_integrity_failure"
+                    return "approval_reuse_integrity_failure", (
+                        str(row["artifact_hash"]) if row["artifact_hash"] is not None else None
+                    )
+                if row["authority_kind"] is None:
+                    return "approval_reuse_integrity_failure", (
+                        str(row["artifact_hash"]) if row["artifact_hash"] is not None else None
+                    )
         for row in (*local_rows, *policy_rows):
             row_keys = set(row.keys())
             if "claimed_at" in row_keys and row["claimed_at"] is not None:
@@ -2385,25 +2448,25 @@ class StorePolicyMixin:
                     policy_integrity_state,
                     source=str(row["source"]),
                 ):
-                    return "approval_reuse_integrity_failure"
+                    return "approval_reuse_integrity_failure", stored_artifact_hash
             expires_at = str(row["expires_at"]) if row["expires_at"] is not None else None
             if expires_at is not None and _timestamp_has_expired(expires_at, now=current_time):
-                return "approval_reuse_expired"
+                return "approval_reuse_expired", stored_artifact_hash
             if _is_approval_context_token(stored_artifact_hash) or _is_approval_context_token(artifact_hash):
                 context_reason = approval_context_tokens_validation_reason(stored_artifact_hash, artifact_hash)
                 if context_reason is not None:
-                    return context_reason
+                    return context_reason, stored_artifact_hash
             if stored_artifact_hash is not None and artifact_hash is not None and stored_artifact_hash != artifact_hash:
-                return "approval_reuse_content_changed"
+                return "approval_reuse_content_changed", stored_artifact_hash
             stored_workspace = str(row["workspace"]) if row["workspace"] is not None else None
             stored_publisher = str(row["publisher"]) if row["publisher"] is not None else None
             if stored_workspace is not None and stored_workspace not in {workspace, workspace_key}:
-                return "approval_reuse_identity_changed"
+                return "approval_reuse_identity_changed", stored_artifact_hash
             if stored_publisher is not None and stored_publisher != publisher:
-                return "approval_reuse_identity_changed"
+                return "approval_reuse_identity_changed", stored_artifact_hash
             if not same_identity:
-                return "approval_reuse_identity_changed"
-        return None
+                return "approval_reuse_identity_changed", stored_artifact_hash
+        return None, None
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:

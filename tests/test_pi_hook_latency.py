@@ -17,11 +17,12 @@ from typing import Protocol, cast
 import pytest
 
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
 from codex_plugin_scanner.guard.daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 class _DaemonInternals(Protocol):
@@ -73,6 +74,7 @@ def _pi_hook_request(*, daemon: GuardDaemonServer, guard_home: str, call_id: str
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_review_required_pi_hook_returns_before_worker_deadline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -125,6 +127,7 @@ def test_review_required_pi_hook_returns_before_worker_deadline(
     assert elapsed < 1.45 * coverage_scale
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -132,17 +135,17 @@ def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
     first_started = threading.Event()
     release_first = threading.Event()
 
-    def fake_review(**kwargs: object) -> HookProcessReview:
+    def fake_review(**kwargs: object) -> dict[str, object]:
         payload = kwargs["payload"]
         assert isinstance(payload, dict)
         if payload["tool_call_id"] == "first":
             first_started.set()
             assert release_first.wait(timeout=2)
-        return HookProcessReview({"decision": "allow"}, None)
+        return {"decision": "allow"}
 
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    monkeypatch.setattr(_daemon_internals(daemon).hook_process_runner, "review", fake_review)
+    monkeypatch.setattr(_daemon_internals(daemon).hook_worker, "review_http_payload", fake_review)
     daemon.start()
     _daemon_internals(daemon).runtime_hook_process_scheduler.set_active_limit(2)
     first_result: list[dict[str, object]] = []

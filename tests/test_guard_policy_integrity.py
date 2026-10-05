@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import itertools
 import json
 import os
 import pickle
@@ -552,7 +553,10 @@ def test_trust_backend_check_separates_startup_and_runtime_timeouts(
 ) -> None:
     sleep_delays: list[float] = []
     join_timeouts: list[float | None] = []
-    monotonic_values = iter((100.0, 103.5))
+    # time.monotonic is patched globally, so unrelated in-process calls (e.g.
+    # coverage instrumentation) can consume values; repeat the last one so
+    # incidental callers cannot exhaust the deterministic sequence.
+    monotonic_values = itertools.chain((100.0, 103.5), itertools.repeat(103.5))
 
     class FakeProcess:
         def __init__(self, args: tuple[str, str, str]) -> None:

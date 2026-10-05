@@ -9,13 +9,15 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.trusted_local_tool_jq import safe_jq_arguments
 from codex_plugin_scanner.guard.trusted_local_tools import (
     local_tool_approval_eligibility,
     parse_local_tool_grant_selection,
 )
+from tests.conftest import guard_commands_module
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _write_event(
@@ -236,10 +238,12 @@ def test_indefinite_trust_is_limited_to_package_profiles(
         )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_impeccable_package_request_exposes_trust_controls_in_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    native_hook_force: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -362,17 +366,20 @@ def test_local_tool_trust_rejects_jq_file_inputs(
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_local_tool_trust_allows_variable_read_queries_and_invalidates_changed_bytes(
     tmp_path: Path,
     local_tool_workspace: tuple[Path, Path],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    native_hook_force: Path,
 ) -> None:
     workspace, tool = local_tool_workspace
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     _ = (guard_home / "config.toml").write_text(
         'mode = "enforce"\nsecurity_level = "balanced"\ndefault_action = "require-reapproval"\n'
+        'blocked_request_mode = "ask"\n'
     )
     monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
 

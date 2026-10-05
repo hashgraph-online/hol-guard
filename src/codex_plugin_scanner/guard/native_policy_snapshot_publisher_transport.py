@@ -9,12 +9,38 @@ from typing import Any
 from .native_policy_snapshot_codec import _strict_json_loads_v3, _valid_digest_v3
 from .native_policy_snapshot_constants import (
     _MAX_ACK_BYTES,
+    _PUBLISH_STARTUP_TIMEOUT_SECONDS,
     _PUBLISH_TIMEOUT_SECONDS,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION,
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_contract import _policy_snapshot_push_bytes_v3
 from .native_policy_snapshot_generation import native_policy_snapshot_v3
+
+
+def _stamp_runtime_program_digest(
+    command_extensions: Mapping[str, object],
+    capabilities: Any,
+) -> Mapping[str, object]:
+    """Bind the snapshot to the running runtime's packaged program.
+
+    Checked-in program metadata is validated before this copy. Catalog and
+    trust digests do not rotate with crate sources, so they must still match
+    the runtime. Only ``program_digest`` is overwritten, and only then.
+    """
+
+    program = getattr(capabilities, "program_digest", "")
+    catalog = getattr(capabilities, "catalog_digest", "")
+    trust = getattr(capabilities, "trust_digest", "")
+    if not (_valid_digest_v3(program) and _valid_digest_v3(catalog) and _valid_digest_v3(trust)):
+        return command_extensions
+    if command_extensions.get("catalog_digest") != catalog or command_extensions.get("trust_digest") != trust:
+        return command_extensions
+    if command_extensions.get("program_digest") == program:
+        return command_extensions
+    stamped = dict(command_extensions)
+    stamped["program_digest"] = program
+    return stamped
 
 
 def _decode_ack_v3(output: bytes | None) -> dict[str, object] | None:
@@ -87,7 +113,20 @@ def _publish_snapshot_v3(
     from .native_runtime import _isolated_environment
 
     recovery_attempted = False
+    bound_extensions = _stamp_runtime_program_digest(command_extensions, capabilities)
     while True:
+        # A cold or replacement resident needs the Rust startup allowance.
+        # The warm publication deadline cannot truncate startup and then
+        # consume the restart circuit on otherwise valid policy pushes.
+        publish_timeout = (
+            _PUBLISH_STARTUP_TIMEOUT_SECONDS
+            if (
+                getattr(publisher, "_snapshot", None) is None
+                or getattr(publisher, "_resident_startup_required", False)
+                or renew_after_generation is not None
+            )
+            else _PUBLISH_TIMEOUT_SECONDS
+        )
         snapshot = native_policy_snapshot_v3(
             config=config,
             guard_home=publisher.guard_home,
@@ -95,17 +134,17 @@ def _publish_snapshot_v3(
             rule_digest=capabilities.rule_digest,
             policy_integrity_key=master_key,
             issued_at_ms=int(publisher._wall_clock() * 1_000),
-            deadline_monotonic=publisher._monotonic_clock() + _PUBLISH_TIMEOUT_SECONDS,
+            deadline_monotonic=publisher._monotonic_clock() + publish_timeout,
             renew_after_generation=renew_after_generation,
-            command_extensions=command_extensions,
+            command_extensions=bound_extensions,
         )
-        encoded = _policy_snapshot_push_bytes_v3(snapshot)
+        encoded = _policy_snapshot_push_bytes_v3(snapshot, deadline_budget_ms=int(publish_timeout * 1_000))
         output = client(
             executable=identity.path,
             guard_home=publisher.guard_home,
             environment=_isolated_environment(),
             payload=encoded,
-            deadline_monotonic=time.monotonic() + _PUBLISH_TIMEOUT_SECONDS,
+            deadline_monotonic=time.monotonic() + publish_timeout,
         )
         ack = _ack_from_resident_output(output)
         if ack is None:

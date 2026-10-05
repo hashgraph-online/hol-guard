@@ -562,6 +562,9 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     reason = classification.get("reason")
     if isinstance(reason, str) and reason:
         console.print(Panel(Text(reason), title="Why", border_style=border_style))
+    recovery = classification.get("recovery")
+    if isinstance(recovery, str) and recovery:
+        console.print(Panel(Text(recovery), title="Next step", border_style=border_style))
     if extensions:
         alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
         if alternatives:
@@ -644,6 +647,9 @@ def _plain_text_command_inspection(payload: PayloadDict) -> str:
         f"Reason: {classification.get('reason') or ''}",
         "Policy: Not evaluated; this inspection creates no approvals or receipts.",
     ]
+    recovery = classification.get("recovery")
+    if isinstance(recovery, str) and recovery:
+        lines.append(f"Recovery: {recovery}")
     if extensions:
         lines.insert(3, f"Extension: {extensions[0].get('extension_id') or 'unknown'}")
     if rules:
@@ -850,9 +856,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
         name, protection_off = _protection_status_copy(payload, "protected")
-        protection_line = (
-            f"[bold red]protection mode: {name} (off)[/bold red]" if protection_off else f"protection mode: {name}"
-        )
+        protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
         console.print(
             Panel.fit(
                 f"[bold]HOL Guard doctor[/bold]\n{protection_line}\n{len(tables)} local tables checked",
@@ -915,7 +919,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         name, protection_off = _protection_status_copy(payload, "")
         if name:
             value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
-            summary.add_row("Protection mode", value)
+            summary.add_row("Protection", value)
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:
             warning_text = "\n".join(
@@ -2773,8 +2777,7 @@ def _build_approval_table(items: list[dict[str, object]], *, title: str | None) 
 def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
     body = Table.grid(padding=(0, 1))
     body.add_row("Command", _command_text(runtime_probe.get("command")))
-    body.add_row("Check succeeded", _bool_label(bool(runtime_probe.get("ok"))))
-    body.add_row("Scope", "Passive check; no Guard evaluation verified")
+    body.add_row("Succeeded", _bool_label(bool(runtime_probe.get("ok"))))
     if runtime_probe.get("return_code") is not None:
         body.add_row("Return code", str(runtime_probe.get("return_code")))
     if runtime_probe.get("reported_artifacts") is not None:
@@ -2785,7 +2788,7 @@ def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
         stdout = _clean_terminal_output(str(runtime_probe.get("stdout")))
         preview = "\n".join(stdout.splitlines()[:6])
         body.add_row("stdout", preview)
-    return Panel(body, title="Passive probe", border_style="magenta")
+    return Panel(body, title="Runtime probe", border_style="magenta")
 
 
 def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:

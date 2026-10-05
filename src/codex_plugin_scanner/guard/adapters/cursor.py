@@ -6,24 +6,39 @@ import json
 import sys
 from hashlib import sha256
 from pathlib import Path
+from typing import cast
 
 from ..aibom_detection import enrich_mcp_server_metadata, extend_detection_with_workspace_aibom
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
-from ..shims import ensure_guard_shim_path_in_shell_profile, install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
+from ..shims import (
+    ensure_guard_shim_path_in_shell_profile,
+    install_guard_shim,
+    prepare_guard_shim,
+    prepare_guard_shim_shell_profile,
+    remove_guard_shim,
+)
+from .base import (
+    HarnessAdapter,
+    HarnessContext,
+    PreparedHarnessInstall,
+    _ensure_path_within_root,
+    _json_payload,
+    _run_command_probe,
+)
 from .cursor_cli import (
     CURSOR_CLI_SHIM_COMMANDS,
     cursor_cli_command_available,
     resolve_cursor_cli_entry,
 )
 from .cursor_hook_config import detect_managed_cursor_hook_artifact
-from .cursor_hooks import cursor_hooks_path, install_cursor_hooks, uninstall_cursor_hooks
+from .cursor_hooks import cursor_hooks_path, install_cursor_hooks, prepare_cursor_hooks, uninstall_cursor_hooks
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
     managed_stdio_servers,
+    observable_stdio_servers_with_proxy,
     proxy_cli_args,
     proxy_process_env,
     skipped_stdio_server_names,
@@ -71,11 +86,28 @@ class CursorHarnessAdapter(HarnessAdapter):
 
         return context.home_dir / ".cursor" / "mcp.json"
 
-    def detect(self, context: HarnessContext) -> HarnessDetection:
+    def detect(
+        self,
+        context: HarnessContext,
+        *,
+        config_contents: dict[Path, bytes | None] | None = None,
+    ) -> HarnessDetection:
+        def captured_payload(path: Path) -> dict[str, object]:
+            if config_contents is None:
+                return _json_payload(path)
+            raw = config_contents[path]
+            if raw is None:
+                return {}
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                return {}
+            return payload if isinstance(payload, dict) else {}
+
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
         for config_path in self._editor_config_paths(context):
-            payload = _json_payload(config_path)
+            payload = captured_payload(config_path)
             if not payload:
                 continue
             found_paths.append(str(config_path))
@@ -86,6 +118,7 @@ class CursorHarnessAdapter(HarnessAdapter):
             for name, server_config in mcp_servers.items():
                 if not isinstance(name, str) or not isinstance(server_config, dict):
                     continue
+                managed_origin = self._managed_mcp_origin(context, config_path, scope, name)
                 args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
                 command = server_config.get("command")
                 env_payload = server_config.get("env")
@@ -142,11 +175,12 @@ class CursorHarnessAdapter(HarnessAdapter):
                             url=url if isinstance(url, str) else None,
                             transport="http" if isinstance(url, str) else "stdio",
                             metadata=metadata,
+                            runtime_private_metadata=dict(managed_origin),
                         )
                     )
                 )
         hooks_path = cursor_hooks_path(context)
-        hook_artifact = detect_managed_cursor_hook_artifact(hooks_path, _json_payload(hooks_path))
+        hook_artifact = detect_managed_cursor_hook_artifact(hooks_path, captured_payload(hooks_path))
         if hook_artifact is not None:
             found_paths.append(hook_artifact.config_path)
             artifacts.append(hook_artifact)
@@ -186,6 +220,137 @@ class CursorHarnessAdapter(HarnessAdapter):
             raise ValueError(f"Unsupported Cursor surface: {surface}")
         return self._install_editor(context)
 
+    def prepare_install(self, context: HarnessContext, *, surface: str = "editor") -> PreparedHarnessInstall:
+        """Prepare every selected surface before any binding or profile publication."""
+        from ..runtime_transition import RuntimeTransition
+
+        if surface == "cli":
+            return self._prepare_cli(context)
+        if surface == "all":
+            editor, cli = self._prepare_editor(context), self._prepare_cli(context)
+            prepared = PreparedHarnessInstall(
+                (*editor.files, *cli.files), self._all_install_manifest(editor.manifest, cli.manifest)
+            )
+            RuntimeTransition._compare({"files": [change.payload() for change in prepared.files]}, "before")
+            return prepared
+        if surface != "editor":
+            raise ValueError(f"Unsupported Cursor surface: {surface}")
+        return self._prepare_editor(context)
+
+    def _prepare_editor(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import RuntimeTransition, TransitionFile
+
+        target = self._target_editor_config_path(context)
+        backup, state_path = self._backup_path(target, context), self._state_path(target, context)
+        _ensure_path_within_root(context.home_dir, target, label="Cursor editor")
+        for path in (backup, state_path):
+            _ensure_path_within_root(context.guard_home, path, label="Cursor lifecycle")
+        paths = {*self._editor_config_paths(context), cursor_hooks_path(context), backup, state_path}
+        contents = {path: _snapshot(path) for path in paths}
+        original = contents[target]
+        payload = json.loads(original) if original is not None else {}
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"Guard refused to overwrite non-object Cursor editor config at {target}")
+        detection = self.detect(context, config_contents=contents)
+        managed_servers = managed_stdio_servers(detection)
+        previous = _json_payload(state_path)
+        previous_origins = previous.get("managed_origins")
+        origins = dict(cast(dict[str, list[str]], previous_origins)) if isinstance(previous_origins, dict) else {}
+        for server in observable_stdio_servers_with_proxy(detection):
+            if server.source_scope == "project":
+                origins[server.name] = [server.source_scope, server.config_path]
+        for server in managed_servers:
+            if server.source_scope == "project":
+                origins[server.name] = [server.source_scope, server.config_path]
+            else:
+                origins.pop(server.name, None)
+        servers = payload.get("mcpServers")
+        normalized = dict(servers) if isinstance(servers, dict) else {}
+        for name, config in tuple(normalized.items()):
+            if not isinstance(name, str) or not isinstance(config, dict):
+                continue
+            command = config.get("command")
+            args = tuple(str(value) for value in config.get("args", []) if isinstance(value, str))
+            if is_guard_proxy_command(command if isinstance(command, str) else None, args):
+                normalized[name] = self._refresh_guard_proxy_entry(config)
+        for server in managed_servers:
+            normalized[server.name] = self._proxy_server_entry(context, server)
+        payload["mcpServers"] = normalized
+        hooks = prepare_cursor_hooks(context)
+        files = list(hooks.files)
+        previous_state = _json_payload(state_path)
+        previous_origins = previous_state.get("managed_origins")
+        origins = dict(cast(dict[str, list[str]], previous_origins)) if isinstance(previous_origins, dict) else {}
+        for server in observable_stdio_servers_with_proxy(detection):
+            if server.source_scope == "project":
+                origins[server.name] = [server.source_scope, server.config_path]
+        for server in managed_servers:
+            if server.source_scope == "project":
+                origins[server.name] = [server.source_scope, server.config_path]
+            else:
+                origins.pop(server.name, None)
+        state: dict[str, object] = {
+            "managed_config_path": str(target),
+            "backup_path": str(backup),
+            "surface": "editor",
+            "workspace_dir": str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None,
+            "managed_origins": origins,
+        }
+        after = {
+            target: (json.dumps(payload, indent=2) + "\n").encode("utf-8"),
+            state_path: (json.dumps(state, indent=2) + "\n").encode("utf-8"),
+            backup: contents[backup]
+            if contents[backup] is not None
+            else (
+                json.dumps(
+                    {
+                        "existed": original is not None,
+                        "content": original.decode("utf-8") if original is not None else None,
+                    },
+                    indent=2,
+                )
+                + "\n"
+            ).encode("utf-8"),
+        }
+        for path in self._editor_config_paths(context):
+            if path not in after:
+                after[path] = contents[path]
+        for path, data in after.items():
+            mode = path.stat().st_mode & 0o777 if contents[path] is not None else 0o600
+            files.append(
+                TransitionFile(
+                    path.resolve(strict=False), contents[path], data, before_mode=mode, after_mode=mode, no_follow=True
+                )
+            )
+        notes = [
+            "Guard Cursor editor MCP proxies added to the global Cursor mcp.json config.",
+            "Guard native Cursor hooks installed globally for shell, MCP, and file-read interception.",
+        ]
+        if context.workspace_dir is not None:
+            notes.append(
+                "Workspace policy context uses the detected project directory; "
+                "Guard does not write project-local hook files."
+            )
+        manifest = {
+            "harness": self.harness,
+            "active": True,
+            "surface": "editor",
+            "managed_config_path": str(target),
+            "backup_path": str(backup),
+            "state_path": str(state_path),
+            "managed_servers": [server.name for server in managed_servers],
+            "skipped_servers": list(skipped_stdio_server_names(detection)),
+            "managed_hooks_path": hooks.manifest.get("managed_hooks_path"),
+            "managed_hook_script_path": hooks.manifest.get("managed_hook_script_path"),
+            "guard_cli_identity": hooks.manifest.get("guard_cli_identity"),
+            "hook_script_sha256": hooks.manifest.get("hook_script_sha256"),
+            "notes": notes,
+        }
+        prepared = PreparedHarnessInstall(tuple(files), manifest)
+        RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
+        return prepared
+
     def uninstall(self, context: HarnessContext, *, surface: str = "editor") -> dict[str, object]:
         if surface == "cli":
             return self._uninstall_cli(context)
@@ -198,6 +363,13 @@ class CursorHarnessAdapter(HarnessAdapter):
     def _install_all(self, context: HarnessContext) -> dict[str, object]:
         editor_manifest = self._install_editor(context)
         cli_manifest = self._install_cli(context)
+        return self._all_install_manifest(editor_manifest, cli_manifest)
+
+    def _all_install_manifest(
+        self,
+        editor_manifest: dict[str, object],
+        cli_manifest: dict[str, object],
+    ) -> dict[str, object]:
         return {
             "harness": self.harness,
             "active": True,
@@ -251,17 +423,26 @@ class CursorHarnessAdapter(HarnessAdapter):
         _ensure_path_within_root(context.guard_home, state_path, label="Cursor state")
         state_path.parent.mkdir(parents=True, exist_ok=True)
         workspace_dir = str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
+        previous = _json_payload(state_path)
+        previous_origins = previous.get("managed_origins")
+        origins = dict(cast(dict[str, list[str]], previous_origins)) if isinstance(previous_origins, dict) else {}
+        for server in observable_stdio_servers_with_proxy(detection):
+            if server.source_scope == "project":
+                origins[server.name] = [server.source_scope, server.config_path]
+        for server in managed_servers:
+            if server.source_scope == "project":
+                origins[server.name] = [server.source_scope, server.config_path]
+            else:
+                origins.pop(server.name, None)
+        state = {
+            "managed_config_path": str(target_path),
+            "backup_path": str(backup_path),
+            "surface": "editor",
+            "workspace_dir": workspace_dir,
+            "managed_origins": origins,
+        }
         state_path.write_text(
-            json.dumps(
-                {
-                    "managed_config_path": str(target_path),
-                    "backup_path": str(backup_path),
-                    "surface": "editor",
-                    "workspace_dir": workspace_dir,
-                },
-                indent=2,
-            )
-            + "\n",
+            json.dumps(state, indent=2) + "\n",
             encoding="utf-8",
         )
         payload = self._strict_json_object(target_path, label="Cursor editor config", recover_missing=True)
@@ -359,6 +540,31 @@ class CursorHarnessAdapter(HarnessAdapter):
             display_name="Cursor CLI (cursor agent)",
         )
         profile = ensure_guard_shim_path_in_shell_profile(context)
+        return self._cli_install_manifest(context, agent_shim, cursor_shim, profile)
+
+    def _prepare_cli(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..runtime_transition import RuntimeTransition
+
+        agent = prepare_guard_shim(
+            self.harness, context, launcher_name="cursor-agent", display_name="Cursor CLI (cursor-agent)"
+        )
+        cursor = prepare_guard_shim(
+            self.harness, context, launcher_name="cursor", display_name="Cursor CLI (cursor agent)"
+        )
+        profile = prepare_guard_shim_shell_profile(context)
+        files = (*agent.files, *cursor.files, *profile.files)
+        RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
+        return PreparedHarnessInstall(
+            files, self._cli_install_manifest(context, agent.manifest, cursor.manifest, profile.manifest)
+        )
+
+    def _cli_install_manifest(
+        self,
+        context: HarnessContext,
+        agent_shim: dict[str, object],
+        cursor_shim: dict[str, object],
+        profile: dict[str, object],
+    ) -> dict[str, object]:
         raw_agent_notes = agent_shim.get("notes")
         agent_notes = (
             [str(note) for note in raw_agent_notes if isinstance(note, str)]
@@ -489,5 +695,38 @@ class CursorHarnessAdapter(HarnessAdapter):
         target = str(target_path.resolve())
         digest = sha256(target.encode("utf-8")).hexdigest()[:12]
         return context.guard_home / "managed" / "cursor" / f"{digest}.state.json"
+
+    def _managed_mcp_origin(
+        self,
+        context: HarnessContext,
+        config_path: Path,
+        scope: str,
+        server_name: str,
+    ) -> dict[str, object]:
+        if scope != "global" or config_path != self._target_editor_config_path(context):
+            return {}
+        state = _json_payload(self._state_path(config_path, context))
+        managed_origins = state.get("managed_origins")
+        origin = managed_origins.get(server_name) if isinstance(managed_origins, dict) else None
+        if "managed_origins" not in state:
+            # Older installs recorded only the active workspace. Resolve that
+            # bounded legacy origin before a reinstall rewrites the state.
+            workspace = state.get("workspace_dir")
+            if isinstance(workspace, str) and Path(workspace).is_absolute():
+                origin = ["project", str(Path(workspace) / ".cursor" / "mcp.json")]
+        if (
+            state.get("managed_config_path") != str(config_path)
+            or state.get("surface") != "editor"
+            or not isinstance(origin, list)
+            or len(origin) != 2
+            or not all(isinstance(value, str) for value in origin)
+            or origin[0] != "project"
+            or not Path(origin[1]).is_absolute()
+        ):
+            return {}
+        return {
+            "managed_mcp_origin": tuple(origin),
+            "managed_guard_home": str(context.guard_home),
+        }
 
     _backup_payload = staticmethod(load_backup_payload)

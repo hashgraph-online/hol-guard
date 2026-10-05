@@ -21,13 +21,12 @@ _CURSOR_UNAVAILABLE_DENY: dict[str, object] = {
     "agent_message": _CURSOR_UNAVAILABLE_MESSAGE,
 }
 
-# Native review covers PreToolUse and PostToolUse. Lifecycle events are inventory
-# only: fail-closing them freezes the conversation without adding an enforcement
-# boundary. When native review cannot complete, PreToolUse and PostToolUse continue
-# so the session stays moving. Completed policy and secret blocks still protect.
+# Native review covers tool events and supported prompt callbacks. Other
+# lifecycle events remain inventory-only: failing them closed freezes a turn
+# without adding enforcement. Unreviewable prompts pause protected hosts;
+# acknowledged Watch and monitor-only prompt callbacks continue without enforcement.
 LIFECYCLE_OBSERVE_EVENTS = frozenset(
     {
-        "UserPromptSubmit",
         "SessionStart",
         "SessionEnd",
         "SubagentStart",
@@ -48,19 +47,23 @@ def _compact_hook_event_name(event_name: str) -> str:
 
 _LIFECYCLE_CANONICAL_BY_COMPACT = {
     **{_compact_hook_event_name(name): name for name in LIFECYCLE_OBSERVE_EVENTS},
+    "userpromptsubmit": "UserPromptSubmit",
     "userpromptsubmitted": "UserPromptSubmit",
     "subagentend": "SubagentStop",
 }
 
 
 def lifecycle_event_is_observe_only(event_name: str) -> bool:
-    return _compact_hook_event_name(event_name) in _LIFECYCLE_CANONICAL_BY_COMPACT
+    compact = _compact_hook_event_name(event_name)
+    return compact in _LIFECYCLE_CANONICAL_BY_COMPACT and compact not in {"userpromptsubmit", "userpromptsubmitted"}
 
 
 def hook_event_pauses_when_unavailable(event_name: str) -> bool:
     """True when native miss must pause the harness instead of continuing the turn."""
 
     compact = _compact_hook_event_name(event_name)
+    if compact in {"userpromptsubmit", "userpromptsubmitted"}:
+        return True
     if compact in _LIFECYCLE_CANONICAL_BY_COMPACT:
         return False
     if compact in {"posttooluse", "posttool"} or compact.startswith("after"):
@@ -187,11 +190,20 @@ def availability_harness_response(
 ) -> dict[str, object]:
     """Render a schema-valid harness result when native review is unavailable."""
 
-    from .hook_launcher_recovery import hook_action_is_launcher_recovery_safe
-    from .hook_worker_responses import observe_lifecycle_fail_safe_response
+    from .hook_worker_responses import harness_json_from_native_prompt, observe_lifecycle_fail_safe_response
 
-    del guard_home, recording_only
+    del guard_home
     canonical_lifecycle = _LIFECYCLE_CANONICAL_BY_COMPACT.get(_compact_hook_event_name(event_name))
+    if canonical_lifecycle == "UserPromptSubmit" and not recording_only:
+        return harness_json_from_native_prompt(
+            harness,
+            {
+                "decision": "deny",
+                "minimum_action": "block",
+                "reason_code": "native_prompt_unavailable",
+                "reason": "HOL Guard could not complete native prompt review safely.",
+            },
+        )
     if canonical_lifecycle is not None:
         return observe_lifecycle_fail_safe_response(
             harness,
@@ -209,25 +221,19 @@ def availability_harness_response(
         )
     compact = _compact_hook_event_name(event_name)
     pre_tool_event = compact in {"pretooluse", "pretool"} or compact.startswith("before")
-    if pre_tool_event and reason_code.strip() in _INTEGRITY_FAIL_CLOSED_REASON_CODES:
-        from .hook_worker_responses import integrity_fail_closed_pre_tool_response
-
-        if hook_action_is_launcher_recovery_safe(payload, workspace=workspace, home_dir=home_dir):
+    if pre_tool_event:
+        if recording_only and reason_code.strip() not in _INTEGRITY_FAIL_CLOSED_REASON_CODES:
             return recording_only_pre_tool_response(
                 harness,
                 reason_code=reason_code,
                 reason=reason,
             )
+        from .hook_worker_responses import integrity_fail_closed_pre_tool_response
+
         return integrity_fail_closed_pre_tool_response(
             harness,
             reason=reason,
             reason_code=reason_code,
-        )
-    if pre_tool_event:
-        return recording_only_pre_tool_response(
-            harness,
-            reason_code=reason_code,
-            reason=reason,
         )
     return observe_lifecycle_fail_safe_response(
         harness,
@@ -245,13 +251,21 @@ def cursor_fallback_permission(
     guard_home: Path | None = None,
     recording_only: bool = False,
 ) -> tuple[dict[str, object], int]:
-    """Return Cursor hook stdout when daemon or native review cannot complete."""
+    """Deny protected Cursor actions when no evaluator supplies a decision.
+
+    Retain legacy keyword arguments without accepting them as mode authority.
+    """
 
     del payload, workspace, home_dir, guard_home, recording_only
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
-    return {"permission": "allow"}, 0
+    reason = "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+    return {
+        "permission": "deny",
+        "user_message": reason,
+        "agent_message": reason,
+    }, 2
 
 
 def cursor_unparseable_input_permission(
@@ -259,14 +273,22 @@ def cursor_unparseable_input_permission(
     *,
     recording_only: bool = False,
 ) -> tuple[dict[str, object], int]:
-    """Keep Cursor moving when stdin is empty or invalid but the event is known."""
+    """Deny unparsed actions unless the caller supplies acknowledged mode authority.
+
+    Set recording_only only after independently verifying acknowledged mode
+    authority. A local configuration flag alone cannot establish it. Generated
+    hooks with unparsed input cannot establish it and use the protected default.
+    """
 
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
-    if recording_only or compact in {"", "beforereadfile"}:
+    if recording_only:
         return {"permission": "allow"}, 0
-    return dict(_CURSOR_UNAVAILABLE_DENY), 2
+    return {
+        "permission": "deny",
+        "user_message": "Guard could not process this hook request safely. Retry or repair Guard from a terminal.",
+    }, 2
 
 
 __all__ = [

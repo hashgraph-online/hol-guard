@@ -49,7 +49,11 @@ jobs:
         run: uv run --no-sync python scripts/ci/python_hook_semantic_callgraph_gate.py --root .
       - name: Enforce native receipt persistence contract at exact HEAD
         run: uv run --no-sync python scripts/ci/native_receipt_persistence_gate.py --root . --json native-receipt-persistence.json
+      - name: Build source compiler for package projections
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
       - name: Prove source and built artifact capability ownership
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
         run: |
           PACKAGE_ARTIFACT_DIR=$(mktemp -d)
           uv build --wheel --sdist --out-dir "$PACKAGE_ARTIFACT_DIR"
@@ -60,7 +64,10 @@ jobs:
           uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
             --root . --artifact "$BUILT_WHEEL" --artifact "$BUILT_SDIST" \
             --json python-capability-cleanup.json
+      # Retain standalone qualification unless the required main CI already runs this proof.
       - name: Compile and lint complete Rust workspace
+        if: >-
+          !((github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
@@ -68,9 +75,14 @@ jobs:
           cargo fmt --manifest-path rust/Cargo.toml --all --check
           cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
           cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - name: Build native ownership runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
           rust/target/release/hol-guard-runtime self-test --json
       - name: Run compiled PreToolUse adversarial integration
         run: |

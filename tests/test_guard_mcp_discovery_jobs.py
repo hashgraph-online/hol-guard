@@ -109,6 +109,35 @@ def test_cancel_before_start_launches_nothing(tmp_path: Path):
     assert not marker.exists()
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        "mcp_launch_failed",
+        "mcp_transport_failed",
+        "mcp_initialize_failed",
+        "mcp_protocol_unsupported",
+        "mcp_capability_rejected",
+    ],
+)
+def test_refresh_job_preserves_safe_probe_failure_codes(tmp_path, monkeypatch, code):
+    store = GuardStore(tmp_path / "home")
+    identity = UnlistedCliIdentity("local-cli.mcp-test", "Fixture", "executable", "c" * 64, "Fixture", None)
+    store.record_local_cli_observation(identity, seen_at="2026-09-27T12:00:00Z", surface="mcp")
+    service = LocalCliApiService(store=store)
+    monkeypatch.setattr(
+        service, "recognize", lambda *_args, **_kwargs: {"help_status": "failed", "discovery_error": code}
+    )
+    before = store.list_local_cli_items()
+    try:
+        job = service.refresh_job({"cli_id": identity.cli_id, "confirm_process_start": True})
+        result = _finished(service._discovery_jobs, str(job["job_id"]))
+        assert result["state"] == "failed"
+        assert result["error"] == code
+        assert store.list_local_cli_items() == before
+    finally:
+        assert service._discovery_jobs.close()
+
+
 def test_refresh_api_requires_process_consent_and_cancel_does_not_mutate_grants(tmp_path: Path, monkeypatch):
     store = GuardStore(tmp_path / "home")
     identity = UnlistedCliIdentity(

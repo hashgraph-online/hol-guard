@@ -104,6 +104,7 @@ def test_fallback_environment_drops_import_virtualenv_project_and_loader_control
     }
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_verified_fallback_ignores_workspace_and_ambient_python_imports(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -416,7 +417,7 @@ def test_isolated_process_returns_when_tree_termination_cannot_be_confirmed(
         input_text="",
         cwd=tmp_path,
         environment={},
-        timeout_seconds=0,
+        timeout_seconds=0.01,
     )
     elapsed = time.monotonic() - started_at
     latched = run_isolated_hook_process(

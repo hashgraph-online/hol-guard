@@ -18,15 +18,14 @@ from ..codex_hook_launch_runtime import (
     isolated_hook_environment,
     run_isolated_hook_process,
 )
+from ..hook_execution_environment import stamp_hook_input_text
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from .claude_daemon_hook_transport import authenticated_claude_hook_response
 from .claude_daemon_state import daemon_port_from_state, state_path_for_query
 from .codex_daemon_hook_auth import _DaemonResponseError
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
-_DEGRADED_DAEMON_MESSAGE = (
-    "HOL Guard could not reach the local daemon ({reason}) and continued this action without native review."
-)
+_DEGRADED_DAEMON_MESSAGE = "HOL Guard could not complete native review ({reason}) and denied this action."
 _RISKY_PROMPT_SYSTEM_MESSAGE = (
     "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude "
     "asks to continue, HOL Guard will route the decision through a branded approval prompt."
@@ -76,7 +75,7 @@ def main(
             event = "PreToolUse"
         sys.stdout.write(_limit_denied("hook input", event))
     else:
-        data = body.strip() or "{}"
+        data = stamp_hook_input_text(body.strip() or "{}")
         try:
             state_path = state_path_for_query(state_path, query)
         except ValueError as error:
@@ -309,21 +308,13 @@ def _deny_event(event: str, message: str) -> str:
 
 def _degraded(reason: str, data: str) -> str:
     event = _event_name(data)
-    message = _DEGRADED_DAEMON_MESSAGE.format(reason=reason)
     if event == "UserPromptSubmit":
         return _degraded_prompt(data)
-    if event == "PreToolUse":
-        return json.dumps(
-            {
-                "continue": True,
-                "hookSpecificOutput": {
-                    "hookEventName": event,
-                    "permissionDecision": "allow",
-                    "permissionDecisionReason": message,
-                },
-            },
-            separators=(",", ":"),
-        )
+    if event == "PreToolUse" or event.startswith("Permission"):
+        # An unavailable or malformed evaluator grants no execution authority.
+        # This bridge has no authenticated Watch snapshot to authorize a bypass.
+        message = _DEGRADED_DAEMON_MESSAGE.format(reason=reason)
+        return _deny_event(event, message)
     return "{}"
 
 
@@ -352,6 +343,25 @@ def _valid_hook_json_or_degraded(output: str, *, reason: str, data: str) -> str:
         return _degraded(reason, data)
     if not isinstance(decoded, dict):
         return _degraded(reason, data)
+    event = _event_name(data)
+    if event == "PreToolUse":
+        hook_output = decoded.get("hookSpecificOutput")
+        if (
+            not isinstance(hook_output, dict)
+            or hook_output.get("hookEventName") != event
+            or hook_output.get("permissionDecision") not in ("allow", "ask", "deny")
+        ):
+            return _degraded(reason, data)
+    elif event.startswith("Permission"):
+        hook_output = decoded.get("hookSpecificOutput")
+        decision = hook_output.get("decision") if isinstance(hook_output, dict) else None
+        if (
+            not isinstance(hook_output, dict)
+            or hook_output.get("hookEventName") != event
+            or not isinstance(decision, dict)
+            or decision.get("behavior") not in ("allow", "deny")
+        ):
+            return _degraded(reason, data)
     return trimmed
 
 

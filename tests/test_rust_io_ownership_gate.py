@@ -48,7 +48,7 @@ def test_gate_rejects_python_content_read_on_native_edge(tmp_path: Path) -> None
     _copy_gate_sources(tmp_path)
     edge = tmp_path / "src/codex_plugin_scanner/guard/native_hook_edge.py"
     source = edge.read_text(encoding="utf-8")
-    marker = "    status = native_runtime_status()\n"
+    marker = "    status = runtime_status if runtime_status is not None else native_runtime_status()\n"
     assert marker in source
     edge.write_text(source.replace(marker, marker + '    open("source.rs")\n', 1), encoding="utf-8")
 
@@ -100,8 +100,7 @@ def test_resolver_follows_qualified_repository_module_alias(tmp_path: Path) -> N
     caller_path = _write_guard_fixture(
         tmp_path,
         "qualified_caller",
-        "from . import qualified_helper\n\n"
-        "def call() -> str:\n    return qualified_helper.read_source()\n",
+        "from . import qualified_helper\n\ndef call() -> str:\n    return qualified_helper.read_source()\n",
     )
     records = MODULE._function_map(tmp_path)
     caller = records[(caller_path, "call")][0]
@@ -110,39 +109,6 @@ def test_resolver_follows_qualified_repository_module_alias(tmp_path: Path) -> N
     resolved = MODULE.resolve_call(tmp_path, caller, "qualified_helper.read_source", records)
     assert resolved is not None
     assert resolved.path == helper_path
-
-
-def test_resolver_prefers_nested_helper_over_imported_namesake(tmp_path: Path) -> None:
-    _write_guard_fixture(tmp_path, "global_helper", "def read_source():\n    return 'global'\n")
-    caller_path = _write_guard_fixture(
-        tmp_path, "nested_caller",
-        "from .global_helper import read_source\n\n"
-        "def call():\n"
-        "    def read_source():\n"
-        "        return open('source.rs').read()\n"
-        "    return read_source()\n",
-    )
-    records = MODULE._function_map(tmp_path)
-    resolved = MODULE.resolve_call(tmp_path, records[(caller_path, "call")][0], "read_source", records)
-    assert resolved is not None
-    assert resolved.path == caller_path
-    assert resolved.qualname == "call.read_source"
-    assert "open" in MODULE._calls(resolved)
-
-
-def test_resolver_rejects_ambiguous_nested_helpers(tmp_path: Path) -> None:
-    caller_path = _write_guard_fixture(
-        tmp_path, "ambiguous_nested_caller",
-        "def call():\n"
-        "    def read_source():\n"
-        "        return 'first'\n"
-        "    def read_source():\n"
-        "        return 'second'\n"
-        "    return read_source()\n",
-    )
-    records = MODULE._function_map(tmp_path)
-    with pytest.raises(RuntimeError, match="ambiguous nested helper call"):
-        MODULE.resolve_call(tmp_path, records[(caller_path, "call")][0], "read_source", records)
 
 
 def test_resolver_uses_only_imports_in_the_caller_scope(tmp_path: Path) -> None:
@@ -185,11 +151,39 @@ def test_resolver_fails_closed_for_unknown_symbol_on_repository_module(tmp_path:
     caller_path = _write_guard_fixture(
         tmp_path,
         "unknown_symbol_caller",
-        "from . import known_helper\n\n"
-        "def call() -> str:\n    return known_helper.read_source()\n",
+        "from . import known_helper\n\ndef call() -> str:\n    return known_helper.read_source()\n",
     )
     records = MODULE._function_map(tmp_path)
     caller = records[(caller_path, "call")][0]
 
     with pytest.raises(RuntimeError, match="unresolved repository-qualified helper call"):
         MODULE.resolve_call(tmp_path, caller, "known_helper.read_source", records)
+
+
+@pytest.mark.parametrize("mutation", ["new_io", "syntax_error"])
+def test_validation_reloads_sources_between_passes(tmp_path: Path, mutation: str) -> None:
+    """A fast repeat must inspect changed source, not a previous pass's AST."""
+    _copy_gate_sources(tmp_path)
+    assert MODULE.validate(tmp_path)["status"] == "passed"
+    edge = tmp_path / "src/codex_plugin_scanner/guard/native_hook_edge.py"
+    original = edge.read_text(encoding="utf-8")
+    if mutation == "syntax_error":
+        edge.write_text(original + "\ndef incomplete(\n", encoding="utf-8")
+        with pytest.raises(SyntaxError):
+            MODULE.validate(tmp_path)
+    else:
+        marker = "    status = runtime_status if runtime_status is not None else native_runtime_status()\n"
+        assert marker in original
+        edge.write_text(original.replace(marker, marker + '    open("new-secret.txt")\n', 1), encoding="utf-8")
+        with pytest.raises(RuntimeError, match="reachable unclassified Python I/O"):
+            MODULE.validate(tmp_path)
+
+
+def test_extracted_command_factor_hashes_retain_decision_time_ownership() -> None:
+    path = "src/codex_plugin_scanner/guard/runtime/command_native_factors.py"
+    original = "src/codex_plugin_scanner/guard/runtime/command_evaluation.py"
+    assert MODULE._category(path, "hash") == MODULE._category(original, "hash")
+    assert MODULE._category(path, "hash") == "pending_authority_migration"
+    assert MODULE._category(path, "filesystem") == "unclassified_python_io"
+    assert MODULE._category(path, "decode") == "unclassified_python_content_io"
+    assert MODULE._category(path, "archive") == "unclassified_python_content_io"

@@ -15,17 +15,7 @@ SLEEP_SECONDS = 5.0
 VERIFY_SCRIPT = Path(__file__).with_name("verify_native_runtime_release.py")
 
 
-# PyPI can show a release to one read and hide it from the next while the
-# upload is still propagating. Those states are incomplete, not a byte mismatch.
-_PROPAGATION_ERRORS = (
-    "Registry release is absent",
-    "Base Guard release is not present yet",
-)
-
-
 def is_retryable_incomplete_error(stderr: str) -> bool:
-    if any(message in stderr for message in _PROPAGATION_ERRORS):
-        return True
     return "missing=" in stderr and "extra=[]" in stderr and "mismatched=[]" in stderr
 
 

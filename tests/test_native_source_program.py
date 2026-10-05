@@ -82,8 +82,12 @@ def example(compiler: Path, build: dict) -> dict:
 
 
 def test_checked_in_program_matches_native_authoring(compiler: Path, compiled: dict) -> None:
+    """Verify checked in program matches native authoring."""
     checked_in = json.loads((ROOT / "contracts/extensions/native-command-program.v1.json").read_bytes())
-    assert checked_in == compiled["program"]
+    assert checked_in == compiled["program"], (
+        "Stage current projections before testing: python scripts/ci/verify_native_command_program.py "
+        "--compiler rust/target/release/guard-command-source"
+    )
     result = subprocess.run(
         [str(compiler), "evaluate-batch"],
         input=canonical(

@@ -1,0 +1,117 @@
+name: CI sonar
+description: Run the sonar checks inside the existing CI job.
+inputs:
+  has-token:
+    description: Explicit has-token from the calling job.
+    required: true
+  secret-sonar-token:
+    description: Explicit secret-sonar-token from the calling job.
+    required: true
+runs:
+  using: composite
+  steps:
+  - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+    with:
+      python-version: ${{ env.CI_PYTHON_VERSION }}
+    if: inputs.has-token == 'true'
+  - name: Set up uv
+    id: setup-uv-primary
+    continue-on-error: true
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+    if: inputs.has-token == 'true'
+  - name: Retry uv setup after transient download failure
+    if: inputs.has-token == 'true' && (steps.setup-uv-primary.outcome == 'failure')
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - run: uv sync --frozen --no-dev --group ci-test --python ${{ env.CI_PYTHON_VERSION }}
+    if: inputs.has-token == 'true'
+    shell: bash
+  - name: Cache Sonar analyzer downloads
+    uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+    with:
+      path: ${{ runner.temp }}/sonar/cache
+      key: sonar-analyzers-${{ runner.os }}-${{ hashFiles('sonar-project.properties') }}
+    if: inputs.has-token == 'true'
+  - name: Initialize pinned Rust analysis toolchain
+    shell: bash
+    run: bash scripts/ci/setup_sonar_rust.sh
+    if: inputs.has-token == 'true'
+  - name: Cache Rust analysis dependencies
+    uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+    with:
+      workspaces: rust
+      shared-key: sonar
+      save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: inputs.has-token == 'true'
+  - name: Check Rust workspace with pinned Clippy
+    shell: bash
+    run: cargo clippy --manifest-path rust/Cargo.toml --locked --workspace
+    if: inputs.has-token == 'true'
+  - name: Generate current-checkout Rust coverage
+    shell: bash
+    run: bash scripts/ci/prepare_sonar_rust_coverage.sh
+    if: inputs.has-token == 'true'
+  - name: Install pinned Sonar scanner CLI
+    uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
+    with:
+      args: --version
+    env:
+      SONAR_USER_HOME: ${{ runner.temp }}/sonar
+    if: inputs.has-token == 'true'
+  - name: Wait for successful pytest coverage producers
+    id: coverage-selection
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    run: uv run --no-sync python scripts/ci/select_pytest_coverage.py --output coverage-selection.json
+    if: inputs.has-token == 'true'
+    shell: bash
+  - name: Download pytest coverage data
+    uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+    with:
+      artifact-ids: ${{ steps.coverage-selection.outputs.artifact-ids }}
+      path: coverage-data
+    if: inputs.has-token == 'true'
+  - name: Prepare Python coverage
+    shell: bash
+    run: bash scripts/ci/prepare_sonar_analysis.sh
+    if: inputs.has-token == 'true'
+  - name: Analyze with SonarQube Cloud
+    uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
+    with:
+      args: -Dsonar.python.analysis.threads=4
+    env:
+      SONAR_USER_HOME: ${{ runner.temp }}/sonar
+      SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
+      SONAR_SCANNER_JAVA_OPTS: -Xmx6g
+    if: inputs.has-token == 'true'
+  - name: Check standard Sonar gate for PRs and qualification
+    if: inputs.has-token == 'true' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
+    uses: sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa
+    with:
+      pollingTimeoutSec: 280
+    env:
+      SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
+  - name: SonarQube Quality Gate check
+    if: inputs.has-token == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    shell: bash
+    # Composite steps lack timeout-minutes; the process cap backs up the client deadline.
+    run: timeout --signal=TERM --kill-after=5s 300s python -m scripts.ci.check_sonar_quality
+    env:
+      SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
+  - name: Preserve analysis-specific quality evidence
+    if: always() && inputs.has-token == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+    with:
+      name: sonar-quality-evidence-${{ github.run_attempt }}
+      path: sonar-quality-evidence/
+      if-no-files-found: warn
+      retention-days: 14

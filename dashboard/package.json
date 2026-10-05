@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:mcp-setup": "tsx src/protection-center/mcp-setup-receipts.test.ts",
     "test:operator-health": "bun src/operator-health.test.tsx",
     "test:native-review-contract": "tsx src/native-review-contract.test.ts",
     "build": "vite build",

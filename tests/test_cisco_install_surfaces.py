@@ -6,8 +6,11 @@ import sys
 from importlib.metadata import metadata
 from pathlib import Path
 
+import yaml
 from packaging.markers import default_environment
 from packaging.requirements import Requirement
+
+from tests.support.ci_workflow import expand_ci_job_actions
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -52,7 +55,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "python-multipart==0.0.32" in override_entries
     assert "starlette==1.3.1" in override_entries
     assert "tokenizers==0.23.1" in override_entries
-    assert "urllib3==2.7.0" in override_entries
+    assert "urllib3==2.8.0" in override_entries
     assert "cisco-ai-a2a-scanner" not in dependencies
     assert "cisco-ai-a2a-scanner" not in cisco_extra
     assert "rich>=14.0,<15" in dependency_entries
@@ -108,7 +111,9 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
 
 
 def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
-    ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    """Verify repo controlled surfaces prefer cisco extra where supported."""
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
+    ci_workflow = "\n".join([*jobs, *(step.get("run", "") for job in jobs.values() for step in job["steps"])])
     publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
@@ -116,8 +121,8 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
 
     assert "cisco-full" in ci_workflow
     assert "python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
-    assert "uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13" in ci_workflow
-    assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
+    assert "uv sync --frozen --no-dev --group ci-test --extra cisco --group cisco-mcp --python 3.13" in ci_workflow
+    assert "uv sync --frozen --no-dev --group ci-test --python ${{ matrix.python-version }}" in ci_workflow
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
     assert "scripts/ci/generate_release_notes.py" in publish_workflow
     release_notes_script = (ROOT / "scripts" / "ci" / "generate_release_notes.py").read_text(encoding="utf-8")

@@ -270,6 +270,9 @@ def _native_prompt_context(artifact: GuardArtifact) -> str:
     )
 
 def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
+    guidance = response_payload.get("blocked_request_guidance")
+    if isinstance(guidance, str) and guidance.strip():
+        return guidance.strip()
     decision_message = _decision_v2_harness_message(response_payload)
     if decision_message is not None and _should_use_decision_v2_harness_message(response_payload, decision_message):
         return decision_message
@@ -308,6 +311,32 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
             f"HOL Guard blocked {harness_label}'s attempt to use {tool_name} for {path_class} to protect your "
             "local secrets. "
             "This request cannot continue in the current approval flow."
+        )
+    request_signals = artifact.metadata.get("runtime_request_signals")
+    if (
+        response_payload.get("policy_action")
+        in {"review", "require-reapproval", "sandbox-required", "block"}
+        and isinstance(request_signals, list)
+        and "tool output contains credential-looking material" in request_signals
+    ):
+        secret_source = artifact.metadata.get("secret_source_family")
+        if isinstance(secret_source, str) and secret_source.strip():
+            return (
+                "HOL Guard blocked this tool output because it contains sensitive content from "
+                f"{secret_source.strip()}. The command already ran; review the flagged output "
+                "in the approval center before trusting it."
+            )
+        request_summary = artifact.metadata.get("runtime_request_summary")
+        if (
+            isinstance(request_summary, str)
+            and request_summary.strip()
+            and not request_summary.startswith("Requests a sensitive native tool action")
+        ):
+            return request_summary.strip()
+        return (
+            "HOL Guard blocked this tool output because it may contain sensitive content. "
+            "The command already ran; review the flagged output in the approval center "
+            "before trusting it."
         )
     risk_summary = response_payload.get("risk_summary")
     if isinstance(risk_summary, str) and risk_summary.strip():
@@ -473,7 +502,8 @@ def _append_guard_context_args(command: list[str], args: argparse.Namespace) -> 
 
 def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
     stream = output_stream or sys.stdout
-    stream.write(f"{json.dumps(payload, separators=(',', ':'))}\n")
+    # stdout is the harness delivery channel; approval payloads must reach the operator.
+    stream.write(f"{json.dumps(payload, separators=(',', ':'))}\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
 def _emit_copilot_hook_response(

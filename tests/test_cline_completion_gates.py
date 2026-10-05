@@ -25,6 +25,8 @@ from codex_plugin_scanner.guard.product_model import (
     export_product_model_v1,
 )
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _context(tmp_path: Path) -> HarnessContext:
     home = tmp_path / "home"
@@ -275,7 +277,8 @@ def test_plugin_ready_requires_block_and_replacement_proofs(tmp_path: Path) -> N
     assert state["ready"] is True
 
 
-def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) -> None:
+@pytest.mark.usefixtures("native_hook_force")
+def test_real_guard_policy_blocks_cline_env_read_without_prompt_by_default(tmp_path: Path) -> None:
     context = _context(tmp_path)
     secret_path = context.workspace_dir / ".env"
     secret_name = "OPENAI_" + "API_KEY"
@@ -318,11 +321,13 @@ def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) ->
     )
     assert result.returncode == 1, result.stdout + result.stderr
     response = json.loads(result.stdout)
-    assert response["policy_action"] == "require-reapproval"
+    assert response["policy_action"] == "block"
+    assert "safe, permitted alternative" in response["blocked_request_guidance"]
     assert response["artifact_id"].startswith("cline:project:file-read:")
     assert response["policy_composition"]["current_config_action"] == "require-reapproval"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_real_guard_policy_withholds_cline_credential_output(tmp_path: Path) -> None:
     context = _context(tmp_path)
     source_path = context.workspace_dir / "public.txt"
@@ -363,7 +368,8 @@ def test_real_guard_policy_withholds_cline_credential_output(tmp_path: Path) -> 
     )
     assert result.returncode == 1, result.stdout + result.stderr
     response = json.loads(result.stdout)
-    assert response["policy_action"] == "require-reapproval"
+    assert response["policy_action"] == "block"
+    assert "safe, permitted alternative" in response["blocked_request_guidance"]
     assert ":tool-output:" in response["artifact_id"]
     assert response["policy_composition"]["current_config_action"] == "require-reapproval"
     serialized = json.dumps(response)

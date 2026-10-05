@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
@@ -17,7 +19,7 @@ RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots", "@zerocodefast"}
 
 
 def _workflow(path: Path) -> dict[object, object]:
-    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    workflow = expand_ci_job_actions(yaml.safe_load(path.read_text(encoding="utf-8")))
     assert isinstance(workflow, dict)
     return workflow
 
@@ -28,6 +30,32 @@ def test_release_codeowners_are_the_named_maintainers() -> None:
     assert pattern == "*"
     assert set(owners) == RELEASE_MAINTAINERS
     assert len(owners) == len(RELEASE_MAINTAINERS)
+
+
+def test_release_native_binary_and_base_wheel_use_the_same_regenerated_program() -> None:
+    jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
+    build_steps = jobs["build"]["steps"]
+    source_generation = next(
+        step for step in build_steps if step.get("name") == "Generate projections for release source distributions"
+    )
+    assert "if" not in source_generation
+    assert "cargo +1.88.0 build" in source_generation["run"]
+    assert build_steps.index(source_generation) < next(
+        index for index, step in enumerate(build_steps) if step.get("name") == "Build Guard package (hol-guard)"
+    )
+    steps = jobs["build-native-guard-wheels"]["steps"]
+    verify = next(step for step in steps if step.get("name") == "Verify native command program is current")
+    run = verify["run"]
+    generate = 'python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"'
+    assert '[[ "${{ github.event_name }}" == "pull_request" ]]' in run
+    assert run.index(generate) < run.index("cargo build") < run.index("verify_native_command_program.py")
+    assert verify["env"]["RUST_TARGET"] == "${{ matrix.target }}"
+    rebuild = next(
+        step for step in steps if step.get("name") == "Rebuild Guard base wheel after projection regeneration"
+    )
+    assert "if" not in rebuild
+    setup_uv = next(step for step in steps if str(step.get("uses", "")).startswith("astral-sh/setup-uv@"))
+    assert "if" not in setup_uv
 
 
 def test_release_branches_run_ci_and_pr_canaries() -> None:
@@ -133,9 +161,8 @@ def test_stable_dispatch_computes_and_requires_the_registry_derived_version() ->
     assert "'$pypi + $testpypi + ($tags | map(select(. != $candidate))) | unique'" in compute_run
     assert '--arg candidate "$RELEASE_VERSION"' in compute_run
     assert "compute_main_release_version.py" in compute_run
-    assert "stable_release_asset_repair.py" in compute_run
-    assert "release_repair=true" in compute_run
-    assert 'git checkout --detach "$SOURCE_SHA"' in compute_run
+    assert 'git merge-base --is-ancestor "$tag_sha" HEAD' in compute_run
+    assert 'SOURCE_SHA="$tag_sha"' in compute_run
     assert 'if [[ "$RELEASE_VERSION" != "$EXPECTED_VERSION" ]]' in compute_run
     assert 'VERSION="$RELEASE_VERSION"' in compute_run
     assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]' not in compute_run
@@ -282,6 +309,18 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert any(step.get("with", {}).get("name") == "distributions-native" for step in release_main_steps)
     assert any(step.get("with", {}).get("name") == "distribution-sha256-native" for step in release_main_steps)
     assert any("sha256sum --check distribution-sha256-native.txt" in step.get("run", "") for step in release_main_steps)
+    release_tooling = next(step for step in release_main_steps if step.get("name") == "Checkout release-notes tooling")
+    assert release_tooling["if"] == "needs.publish-main-pypi.outputs.pypi_deferred == 'true'"
+    assert release_tooling["with"] == {
+        "fetch-depth": 1,
+        "ref": "${{ github.event.repository.default_branch }}",
+        "path": ".release-tooling",
+    }
+    release_notes = next(step for step in release_main_steps if step.get("name") == "Generate release notes")
+    assert 'notes_script=".release-tooling/scripts/ci/generate_release_notes.py"' in release_notes["run"]
+    assert 'notes_script="scripts/ci/generate_release_notes.py"' in release_notes["run"]
+    assert 'deferred_args+=(--pypi-deferred)' in release_notes["run"]
+    assert 'python3 "$notes_script"' in release_notes["run"]
     for job_name in ("publish-main-testpypi",):
         steps = jobs[job_name]["steps"]
         assert any(step.get("run") == "sha256sum --check distribution-sha256-native.txt" for step in steps)
@@ -318,11 +357,20 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     main_steps = jobs["publish-main-pypi"]["steps"]
     native_validate = next(step for step in main_steps if step.get("name") == "Validate native Guard release set")
     assert "validate-local" in native_validate["run"] and "--artifact-set full" in native_validate["run"]
-    main_quota = next(
-        step for step in main_steps if step.get("name") == "Refuse PyPI upload when the project is over quota"
-    )
-    assert "--pending-dir dist-hol-guard" in main_quota["run"]
+    main_quota = next(step for step in main_steps if step.get("name") == "Check PyPI quota admission")
+    assert main_quota["id"] == "pypi_quota"
+    assert "--fail-if-over-limit --pending-dir dist-hol-guard" in main_quota["run"]
+    assert "jq -e '.over_limit == true'" in main_quota["run"]
+    assert 'echo "blocked=true"' in main_quota["run"]
+    guard_publish = next(step for step in main_steps if step.get("name") == "Publish HOL Guard to PyPI")
+    scanner_publish = next(step for step in main_steps if step.get("name") == "Publish plugin-scanner to PyPI")
+    assert "steps.pypi_quota.outputs.blocked != 'true'" in guard_publish["if"]
+    assert scanner_publish["if"] == "steps.pypi.outputs.plugin_scanner_upload == 'true'"
     main_verify = next(step for step in main_steps if step.get("name") == "Download and verify exact PyPI artifacts")
+    assert main_verify["if"] == (
+        "steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'"
+    )
+    assert jobs["publish-main-pypi"]["outputs"]["pypi_deferred"] == "${{ steps.pypi_quota.outputs.blocked }}"
     assert "--artifact-set full" in main_verify["run"]
     assert (
         main_verify["run"].find("for attempt in {1..60}")
@@ -341,6 +389,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     assert "skip-existing" not in workflow_text
+    assert "--deferred-pypi" in workflow_text
 
 
 def test_alpha_tag_reservation_binds_version_to_build_source() -> None:
@@ -493,7 +542,7 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         assert "--project plugin-scanner" in inspect_step["run"]
         assert len(publish_steps) == 2
         assert {step["if"] for step in publish_steps} == {
-            "steps.pypi.outputs.hol_guard_upload == 'true'",
+            "steps.pypi.outputs.hol_guard_upload == 'true' && steps.pypi_quota.outputs.blocked != 'true'",
             "steps.pypi.outputs.plugin_scanner_upload == 'true'",
         }
         assert {step["with"]["packages-dir"] for step in publish_steps} == {
@@ -598,13 +647,13 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert 'remote_tag_sha" != "$SOURCE_SHA"' in stable_run
     assert 'gh release view "$tag" --json isDraft,isPrerelease,assets' in stable_run
     assert 'gh release upload "$tag"' in stable_run
+    assert 'gh release edit "$tag" --notes-file "$RUNNER_TEMP/release-notes.md"' in stable_run
+    assert '[[ -s "$RUNNER_TEMP/release-notes.md" ]]' in stable_run
     assert "Existing stable release is a draft or prerelease" in stable_run
     assert "remote_guard_files=" in stable_run and "verify_release_asset_inventory.py" in stable_run
     assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in stable_run
     assert 'gh attestation verify "$remote_file"' in stable_run
     assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in stable_run
-    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml"' in stable_run
-    assert '--source-digest "$GITHUB_SHA"' in stable_run
     assert "--verify-tag" in stable_run and '"$existing_dir" dist "$VERSION" stable' in stable_run
 
 

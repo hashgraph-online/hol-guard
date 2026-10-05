@@ -18,6 +18,8 @@ from codex_plugin_scanner.guard.adapters.claude_code import (
     _shell_command,
 )
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -376,6 +378,7 @@ def test_claude_daemon_hook_bridge_delegates_to_authenticated_transport(tmp_path
     assert captured["timeout_seconds"] == claude_daemon_hook_bridge._DAEMON_IO_TIMEOUT_SECONDS
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
@@ -392,11 +395,17 @@ def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
 
     assert result.returncode == 0
     assert result.stderr == ""
-    assert json.loads(result.stdout) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
+    payload = json.loads(result.stdout)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert payload.get("decision") != "block"
+    assert payload.get("continue") is not False
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon_miss(tmp_path):
     context = _build_context(tmp_path)
+    context.guard_home.mkdir(parents=True, exist_ok=True)
+    (context.guard_home / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command(context)
 
@@ -424,8 +433,11 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
     context = _build_context(tmp_path)
+    context.guard_home.mkdir(parents=True, exist_ok=True)
+    (context.guard_home / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command(context)
 
@@ -448,7 +460,7 @@ def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_
     assert result.returncode == 0
     assert result.stderr == ""
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask", payload
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):

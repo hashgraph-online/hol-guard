@@ -1,6 +1,6 @@
 [package]
 name = "hol-guard-runtime"
-version.workspace = true
+version = "3.16.3"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
@@ -21,21 +21,34 @@ hex.workspace = true
 fs2.workspace = true
 libc.workspace = true
 ring.workspace = true
+rusqlite.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true
+aes.workspace = true
+base64ct.workspace = true
+cbc.workspace = true
+hmac.workspace = true
 sha2.workspace = true
+sha1.workspace = true
+pbkdf2.workspace = true
+base32ct.workspace = true
 sysinfo.workspace = true
+guard-archive = { version = "0.1.0", path = "../guard-archive" }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["signal"] }
+nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+guard-seatbelt = { path = "../guard-seatbelt" }
 libproc = "0.14.11"
 security-framework = "3.7.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-permissions.workspace = true
+
+[target.'cfg(all(unix, target_os = "linux"))'.dependencies]
+seccompiler = "0.5.0"
 
 [lints]
 workspace = true
