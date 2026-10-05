@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Older releases are preserved in the [changelog archive](docs/changelog-archive.md).
 
+## [3.25.2](https://github.com/hashgraph-online/hol-guard/compare/v3.25.1...v3.25.2) (2026-10-05)
+
+
+### Bug Fixes
+
+* **ci:** raise native source envelope budget to 8 MiB ([#3583](https://github.com/hashgraph-online/hol-guard/issues/3583)) ([7a175a9](https://github.com/hashgraph-online/hol-guard/commit/7a175a9b33d3c219b9a8bfc165d2409e72fc4525))
+* **ci:** repair portable regressions and stale acceptance gates ([#3568](https://github.com/hashgraph-online/hol-guard/issues/3568)) ([bc11643](https://github.com/hashgraph-online/hol-guard/commit/bc1164301cf5b85e6b1927e9a05c27c2968381d0))
+* **native:** stop hard-blocking commands Guard cannot fully attribute ([6d09164](https://github.com/hashgraph-online/hol-guard/commit/6d091642f4d428631c1901ac7016543ffe341086))
+
 ## [3.25.1](https://github.com/hashgraph-online/hol-guard/compare/v3.25.0...v3.25.1) (2026-10-05)
 
 
