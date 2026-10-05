@@ -35,7 +35,8 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
         destination = source_root / source_name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
-    (source_root / "contributions/extensions").mkdir(parents=True, exist_ok=True)
+    for family in ("extensions", "mcp-servers"):
+        (source_root / "contributions" / family).mkdir(parents=True, exist_ok=True)
     shutil.copyfile(
         ROOT / "contributions/extensions/command.blitcp.json",
         source_root / "contributions/extensions/command.blitcp.json",
