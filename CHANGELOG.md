@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Older releases are preserved in the [changelog archive](docs/changelog-archive.md).
 
+## [3.26.0](https://github.com/hashgraph-online/hol-guard/compare/v3.25.2...v3.26.0) (2026-10-05)
+
+
+### Features
+
+* **extensions:** add opt-in gog command risk rules ([#3594](https://github.com/hashgraph-online/hol-guard/issues/3594)) ([0e65873](https://github.com/hashgraph-online/hol-guard/commit/0e65873b4ba3c14a57a00c83787de3ed2a34ba22))
+* **extensions:** give command.faf-cli a catalog icon ([#3591](https://github.com/hashgraph-online/hol-guard/issues/3591)) ([c4b7ac2](https://github.com/hashgraph-online/hol-guard/commit/c4b7ac215543d18987b2f72c1b1875ea7ff4a7bb))
+* **mcp:** add InsumerAPI MCP server contribution ([#3597](https://github.com/hashgraph-online/hol-guard/issues/3597)) ([065a5fc](https://github.com/hashgraph-online/hol-guard/commit/065a5fc57a83fde54a81c15478992912cbb39dfd))
+* **mcp:** support tightening-only native server contributions ([#3578](https://github.com/hashgraph-online/hol-guard/issues/3578)) ([06ea3ee](https://github.com/hashgraph-online/hol-guard/commit/06ea3ee6f47f99ac348dee621408ffab43ea0511))
+
+
+### Bug Fixes
+
+* **ci:** eliminate remaining Sonar reliability findings ([#3600](https://github.com/hashgraph-online/hol-guard/issues/3600)) ([cda8273](https://github.com/hashgraph-online/hol-guard/commit/cda827390b3ed9640c1c7ded0d223b19d3f8c2b6))
+* **ci:** prevent healthy coverage shards from timing out ([#3608](https://github.com/hashgraph-online/hol-guard/issues/3608)) ([00682e4](https://github.com/hashgraph-online/hol-guard/commit/00682e4175bee950baf00b921c4bda7d8a70f1fd))
+* **ci:** resolve Sonar reliability regressions ([#3587](https://github.com/hashgraph-online/hol-guard/issues/3587)) ([5af2ac7](https://github.com/hashgraph-online/hol-guard/commit/5af2ac7babb0c6d5dd599885278e0d0226546cf4))
+* **extensions:** unblock contribution friction — bare executable matchers, enumerated staging, no per-MCP tests ([#3598](https://github.com/hashgraph-online/hol-guard/issues/3598)) ([e6a3a85](https://github.com/hashgraph-online/hol-guard/commit/e6a3a85e6ca2465ee631d147db686a036c82420f))
+* **guard:** recover native residents and prepare Grok prompt hooks ([#3577](https://github.com/hashgraph-online/hol-guard/issues/3577)) ([3e15307](https://github.com/hashgraph-online/hol-guard/commit/3e1530744a01c5ffc70fb6fda91689a68bec61c0))
+* **guard:** retain process-query output within the original deadline ([f8500d2](https://github.com/hashgraph-online/hol-guard/commit/f8500d220ac29952766cda786d13b2ea4e9d593e))
+
 ## [3.25.2](https://github.com/hashgraph-online/hol-guard/compare/v3.25.1...v3.25.2) (2026-10-05)
 
 

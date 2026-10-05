@@ -284,7 +284,7 @@ from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_opti
 from .hook_process_runner import HookProcessRunner
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
-from .hook_worker_responses import prepare_native_hook_policy
+from .hook_worker_responses import _hook_harness_is_unmanaged, prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiService
@@ -6333,13 +6333,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         first tool call does not spend its short host deadline on cold startup.
         """
 
-        del default_harness
         params = parse_qs(query)
         workspace_candidate = self._normalized_hook_workspace_string(
             params.get("workspace", [None])[-1] or payload.get("workspace") or payload.get("cwd")
         )
         try:
             _ = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            if _hook_harness_is_unmanaged(self._daemon_server(), default_harness):
+                self._write_json(
+                    {"ready": True, "native_required": False, "workspace_acknowledged": False, "worker_ready": True},
+                    extra_headers={"Cache-Control": "no-store"},
+                )
+                return
             workspace = self._validated_hook_directory_string(
                 "workspace",
                 workspace_candidate,
@@ -6418,15 +6423,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         from .hook_request_parsing import (
             HookPayloadReferenceError,
             hook_payload_reference_size,
+            runtime_hook_event_name,
         )
 
+        grok_prompt = default_harness == "grok" and runtime_hook_event_name(payload) == "UserPromptSubmit"
+        admission_seconds = 10.0 if grok_prompt else _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
         transport_deadline = self._daemon_server().request_deadline(
             self.request,
-            _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS,
+            admission_seconds,
         )
         params = parse_qs(query)
+        hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
         remaining_hint = _runtime_hook_remaining_hint(payload)
-        hinted_deadline = RuntimeHookDeadline.from_remaining_hint(remaining_hint)
+        if grok_prompt and hint_missing:
+            remaining_hint = admission_seconds
+        hinted_deadline = (
+            RuntimeHookDeadline.from_remaining_hint(
+                remaining_hint,
+                monotonic=lambda: transport_deadline - admission_seconds,
+                maximum_budget_seconds=10.0,
+            )
+            if grok_prompt
+            else RuntimeHookDeadline.from_remaining_hint(remaining_hint)
+        )
         hook_deadline = RuntimeHookDeadline(expires_at=min(hinted_deadline.expires_at, transport_deadline))
         hook_env = _runtime_hook_env_overlay_from_payload(payload)
         payload = {key: value for key, value in payload.items() if key != "hook_env"}

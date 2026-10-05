@@ -182,7 +182,9 @@ jobs:
     name: coverage (3.12, ${{ matrix.shard-index }})
     needs: [coverage-plan, native-command-evaluators]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Includes checkout/setup plus the instrumented shard. Five minutes can
+    # cancel a healthy shard before it produces the coverage artifact Sonar needs.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

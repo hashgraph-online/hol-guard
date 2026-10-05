@@ -459,3 +459,7 @@ pub(crate) fn publish_state(
 #[cfg(test)]
 #[path = "resident_state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resident_state_discovery_tests.rs"]
+mod discovery_tests;

@@ -206,7 +206,8 @@ def test_generated_grok_observer_has_short_transport_budget(
 
     monkeypatch.setattr(module, "_http_json", unavailable)
     assert module._post_hook(json.dumps({"hook_event_name": event_name})) is None
-    assert budgets == ([1.0] if event_name == "SessionStart" else [5.0])
+    expected = {"SessionStart": 1.0, "UserPromptSubmit": 10.0, "PreToolUse": 5.0}
+    assert budgets == pytest.approx([expected[event_name]], abs=0.01)
 
 
 def test_generated_client_copies_grok_approval_metadata(tmp_path: Path) -> None:

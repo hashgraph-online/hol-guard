@@ -298,8 +298,10 @@ class TestZCodeInstallUninstall:
         payload = json.loads(config_path.read_text(encoding="utf-8"))
         hooks = payload["hooks"]
         # Current ZCode requires hook groups nested under hooks.events; the
-        # legacy flat layout makes ZCode reject the whole config file.
-        assert set(hooks.keys()) == {"events"}
+        # legacy flat layout makes ZCode reject the whole config file. The
+        # runtime only registers hooks when the root opts in with enabled.
+        assert set(hooks.keys()) == {"events", "enabled"}
+        assert hooks["enabled"] is True
         events = hooks["events"]
         assert set(events.keys()) == {"PreToolUse", "UserPromptSubmit"}
         pretool_matchers = {

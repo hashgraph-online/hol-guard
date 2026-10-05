@@ -29,8 +29,10 @@ def _without_guard_token_fragment(text: str) -> str:
 def _without_raw_approval_url(message: str, review_url: str) -> str:
     without_raw_url = message.replace(review_url, "").strip()
     without_raw_url = re.sub(r":\s*\.(?=\s|$)", ".", without_raw_url)
-    without_raw_url = re.sub(r"[\s:;,]*\.\s*$", ".", without_raw_url)
-    return without_raw_url.rstrip(" :;,")
+    trimmed = without_raw_url.rstrip()
+    if trimmed.endswith("."):
+        trimmed = trimmed[:-1].rstrip(" \t\r\n:;,") + "."
+    return trimmed.rstrip(" :;,")
 
 
 def approval_review_url_from_payload(payload: Mapping[str, object]) -> str | None:
