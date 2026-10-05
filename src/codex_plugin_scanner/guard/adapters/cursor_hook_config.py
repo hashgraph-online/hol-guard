@@ -41,9 +41,8 @@ def _frozen_cursor_hook_launcher() -> str:
 
 
 def _isolated_python_candidates() -> tuple[str, ...]:
-    if sys.platform == "darwin" or sys.platform.startswith("linux"):
-        return ("/usr/bin/python3",)
-    return ()
+    candidates = ["/usr/bin/python3"] if sys.platform == "darwin" or sys.platform.startswith("linux") else []
+    return tuple(candidates)
 
 
 def _isolated_python_is_usable(path: Path) -> bool:

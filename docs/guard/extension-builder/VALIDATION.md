@@ -202,7 +202,7 @@ support; it is not permission to restore a Python fallback.
 Validation does not certify every flag combination, dynamic plugin, server
 scope, upstream version, executable, or Windows shell interpretation. Source
 and fixture limits reject excessive input instead of truncating it. The
-current native budgets include 4 MiB source/build input, 4 MiB compiled
+current native budgets include 8 MiB source/build input, 4 MiB compiled
 program, 32 matcher depth, 16,384 matcher nodes, 512 extensions, 1,024 rules,
 and 64 safe variants per rule; adapter-specific limits live in the versioned
 contracts.
