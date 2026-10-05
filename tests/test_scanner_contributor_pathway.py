@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.checks.security import _first_hardcoded_secret_line
-from codex_plugin_scanner.checks.skill_curl_context import is_read_only_curl, read_only_curl_spans
+from codex_plugin_scanner.checks.skill_curl_context import _parse_fence_boundary, is_read_only_curl, read_only_curl_spans
 from codex_plugin_scanner.checks.skill_security import _local_skill_instruction_findings
 from codex_plugin_scanner.models import ScanResult, build_severity_counts
 from codex_plugin_scanner.reporting import should_fail_for_severity
@@ -140,6 +140,13 @@ def test_key_derived_screen_credentials_remain_findings(key: str) -> None:
     value = re.sub(r"([a-z])([A-Z])", r"\1-\2", key).lower()
     content = f"screens: {{{key}: '{value}', Home: 'home', ForgotPassword: 'forgot-password'}}"
     assert _first_hardcoded_secret_line(Path("navigation.ts"), content) is not None
+
+
+def test_fence_boundary_parser_handles_supported_endings_and_rejects_short_fences() -> None:
+    assert _parse_fence_boundary("   ```bash\n") == ("```", "bash")
+    assert _parse_fence_boundary("~~~~\r\n") == ("~~~~", "")
+    assert _parse_fence_boundary("``bash\n") is None
+    assert _parse_fence_boundary("not-a-fence\n") is None
 
 
 def test_raw_crlf_retrieval_fence_has_the_same_classification() -> None:

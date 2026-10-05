@@ -9,7 +9,17 @@ from pathlib import Path
 
 from . import BUILDER_VERSION
 from .errors import BuilderError
-from .io import canonical_json, checked_path, digest, object_value, read_bytes, read_json, sha256, text_from_bytes
+from .io import (
+    canonical_json,
+    checked_path,
+    digest,
+    object_value,
+    parse_json,
+    read_bytes,
+    read_json,
+    sha256,
+    text_from_bytes,
+)
 from .kit import MAX_ARTIFACT_BYTES, Kit, build_kit
 from .models import Metadata, load_discovery
 from .repository_edits import (
@@ -32,10 +42,12 @@ PLAN_SCHEMA = "guard.extension-integration-plan.v1"
 class Change:
     path: str
     before: bytes | None
-    after: bytes
+    after: bytes | None
 
     def to_dict(self) -> dict[str, object]:
-        if self.before is None:
+        if self.after is None:
+            action = "delete"
+        elif self.before is None:
             action = "create"
         elif self.before == self.after:
             action = "unchanged"
@@ -45,7 +57,7 @@ class Change:
             "path": self.path,
             "action": action,
             "beforeSha256": sha256(self.before) if self.before is not None else None,
-            "afterSha256": sha256(self.after),
+            "afterSha256": sha256(self.after) if self.after is not None else None,
         }
 
 
@@ -97,11 +109,20 @@ def _read_optional(path: Path) -> bytes | None:
     return read_bytes(path, limit=MAX_ARTIFACT_BYTES) if path.exists() else None
 
 
-def _previous_kit(root: Path, metadata: Metadata) -> Kit | None:
+def _legacy_generated_test_path(path: str) -> bool:
+    if not path.startswith("tests/") or not path.endswith(".py"):
+        return False
+    name = path.rsplit("/", 1)[-1]
+    return name.startswith("test_generated_") or (
+        name.startswith("test_guard_mcp_") and name.endswith("_contribution.py")
+    )
+
+
+def _previous_kit(root: Path, metadata: Metadata) -> tuple[Kit | None, dict[str, str]]:
     prefix = root / ownership_root(metadata)
     record = _read_optional(prefix / "record.json")
     if record is None:
-        return None
+        return None, {}
     payload = object_value(read_json(prefix / "record.json"))
     if payload.get("schemaVersion") != OWNERSHIP_SCHEMA or payload.get("builderVersion") != BUILDER_VERSION:
         raise conflict("The prior authoring record uses an unsupported builder contract; migrate it explicitly.")
@@ -119,14 +140,30 @@ def _previous_kit(root: Path, metadata: Metadata) -> Kit | None:
         raise conflict("The existing authoring record belongs to a different contribution.")
     review = load_review(read_json(prefix / "review.json"), discovery)
     previous = build_kit(discovery, review)
+    legacy_orphans: dict[str, str] = {}
     if record != ownership_record(previous):
-        raise conflict("The existing authoring ownership record does not match its reviewed source contracts.")
+        # Builders that emitted a per-MCP generated test module recorded it in
+        # managedFiles; current builders no longer generate that file. A record
+        # that differs only by those legacy test entries still proves ownership.
+        expected_payload = object_value(parse_json(ownership_record(previous)))
+        expected_managed = object_value(expected_payload.get("managedFiles"))
+        stored_managed = object_value(payload.get("managedFiles"))
+        extra = set(stored_managed) - set(expected_managed)
+        if (
+            not extra
+            or any(not _legacy_generated_test_path(path) for path in extra)
+            or {key: value for key, value in payload.items() if key != "managedFiles"}
+            != {key: value for key, value in expected_payload.items() if key != "managedFiles"}
+            or {path: stored_managed[path] for path in stored_managed if path not in extra} != expected_managed
+        ):
+            raise conflict("The existing authoring ownership record does not match its reviewed source contracts.")
+        legacy_orphans = {path: str(stored_managed[path]) for path in extra}
     for path, expected in managed_files(previous).items():
         if _read_optional(root / path) != expected:
             raise conflict(
                 "An installed generated file was edited or removed; preserve it and resolve the conflict manually."
             )
-    return previous
+    return previous, legacy_orphans
 
 
 def _executable_identity(value: str) -> str:
@@ -229,7 +266,7 @@ def plan_repository(kit: Kit, repository: Path) -> IntegrationPlan:
     if verified.files != kit.files:
         raise BuilderError("kit_changed", "Only a reproducible, validated kit can be integrated.")
     metadata = kit.discovery.metadata
-    previous = _previous_kit(root, metadata)
+    previous, legacy_orphans = _previous_kit(root, metadata)
     shared = _shared_files(root, metadata)
     classes = trust_members(shared[TRUST_PATH])
     if previous is None and any(metadata.catalog_id in values for values in classes.values()):
@@ -249,6 +286,13 @@ def plan_repository(kit: Kit, repository: Path) -> IntegrationPlan:
         changes.append(Change(path, before, after))
     for path, after in _edited_shared(shared, metadata).items():
         changes.append(Change(path, shared[path].encode("utf-8"), after.encode("utf-8")))
+    # Legacy generated test modules are no longer managed outputs: remove each
+    # accepted orphan only while its contents still match the ownership digest,
+    # so a contributor-edited file is never deleted.
+    for path, expected_digest in sorted(legacy_orphans.items()):
+        before = _read_optional(root / path)
+        if before is not None and sha256(before) == expected_digest:
+            changes.append(Change(path, before, None))
     return IntegrationPlan(
         root, metadata.contribution_id, kit.revision, tuple(sorted(changes, key=lambda item: item.path))
     )
