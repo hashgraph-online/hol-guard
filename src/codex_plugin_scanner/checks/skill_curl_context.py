@@ -31,9 +31,7 @@ def _parse_fence_boundary(line: str) -> tuple[str, str] | None:
     if not body or body[0] not in {"`", "~"}:
         return None
     marker = body[0]
-    width = 0
-    while width < len(body) and body[width] == marker:
-        width += 1
+    width = len(body) - len(body.lstrip(marker))
     if width < 3:
         return None
     return body[:width], body[width:]
