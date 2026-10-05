@@ -116,6 +116,21 @@ pub(crate) fn verify_windows_private_file(file: &File) -> Result<(), String> {
     windows_security::verify_private_file(file)
 }
 
+#[cfg(windows)]
+fn surfaced_state_write_error(error: std::io::Error) -> String {
+    let message = error.to_string();
+    if (1..=128).contains(&message.len())
+        && message.starts_with("native_")
+        && message
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        message
+    } else {
+        "native_resident_state_write_failed".to_owned()
+    }
+}
+
 pub(crate) fn private_file(
     path: &Path,
     create_new: bool,
@@ -134,18 +149,14 @@ pub(crate) fn private_file(
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let mut file = windows_security::open_private_file(path, private_root)
-                    .map_err(|_| "native_resident_state_write_failed".to_owned())?;
+                    .map_err(surfaced_state_write_error)?;
                 windows_security::repair_private_file(&mut file)?;
                 if !create_new {
-                    file.set_len(0)
-                        .map_err(|_| "native_resident_state_write_failed".to_owned())?;
+                    file.set_len(0).map_err(surfaced_state_write_error)?;
                 }
                 file
             }
-            Err(_) if create_new => {
-                return Err("native_resident_state_write_failed".to_owned());
-            }
-            Err(_) => return Err("native_resident_state_write_failed".to_owned()),
+            Err(error) => return Err(surfaced_state_write_error(error)),
         };
         // CREATE_NEW already created an empty file; the existing-object case
         // returned above before opening or mutating it.
@@ -297,10 +308,10 @@ pub(crate) fn ensure_private_directory_under(
     {
         let resolved =
             windows_security::ensure_private_directory_path(path, private_root, protect_windows)?;
-        let private_root = private_root
+        let canonical_root = private_root
             .canonicalize()
             .map_err(|_| "native_resident_state_dir_outside_user_profile".to_owned())?;
-        if !resolved.starts_with(&private_root) {
+        if !guard_runtime_windows_process::path_is_within(&resolved, &canonical_root) {
             return Err("native_resident_state_dir_outside_user_profile".to_owned());
         }
         Ok(resolved)

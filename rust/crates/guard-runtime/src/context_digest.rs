@@ -397,6 +397,24 @@ fn evaluate_request(
             write_canonical_json(&Value::Array(argv_values), &mut material)?;
             result.digest = Some(digest_bytes(&material));
         }
+        ContextDigestKindV1::CanonicalSha256 { material, prefix } => {
+            // canonical_sha256: CPython-exact canonical JSON -> sha256. The
+            // material arrives as a JSON value; write_canonical_json enforces
+            // sort_keys / (",",":") / ensure_ascii / allow_nan=false, so the
+            // digest is byte-identical to json.dumps(...).encode() + sha256.
+            let mut material_bytes = Vec::with_capacity(256);
+            write_canonical_json(material, &mut material_bytes)?;
+            let hex = digest_bytes(&material_bytes);
+            result.digest = Some(match prefix {
+                Some(p) => format!("{p}{hex}"),
+                None => hex,
+            });
+        }
+        ContextDigestKindV1::OpaqueMaterialDigest { material } => {
+            // opaque_material_digest: sha256 over raw UTF-8 string bytes —
+            // NO JSON serialization (module specifiers, source text, h:s:n).
+            result.digest = Some(digest_bytes(material.as_bytes()));
+        }
     }
     Ok(())
 }

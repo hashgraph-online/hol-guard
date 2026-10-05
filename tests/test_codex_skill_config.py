@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.aibom_detection import (
     discover_codex_skill_artifacts,
@@ -21,6 +23,8 @@ from codex_plugin_scanner.guard.runtime.decisions import (
 )
 from codex_plugin_scanner.guard.runtime.runner import _detection_with_prompt_artifacts, evaluate_detection
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
 
 def test_load_codex_skill_config_rules_merges_home_and_workspace(tmp_path: Path) -> None:

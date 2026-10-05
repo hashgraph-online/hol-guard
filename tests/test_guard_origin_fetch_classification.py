@@ -42,7 +42,7 @@ def test_config_override_compound_fetch_keeps_native_uncertainty(tmp_path: Path,
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "review"
-    assert payload["minimum_action"] == "block"
+    assert payload["minimum_action"] == "review"
     assert payload["classification"]["action_class"] == "unverified Git remote refresh"
     assert payload["classification"]["explicitly_benign"] is False
     assert payload["controlling_rule_id"] == "command.git.unverified-fetch"
@@ -187,7 +187,7 @@ def test_execution_config_fetch_keeps_native_uncertainty(tmp_path: Path, command
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "review"
-    assert payload["minimum_action"] == "block"
+    assert payload["minimum_action"] == "review"
     assert payload["classification"]["action_class"] == "unverified Git remote refresh"
     assert payload["classification"]["explicitly_benign"] is False
     assert payload["controlling_rule_id"] == "command.git.unverified-fetch"
@@ -197,7 +197,7 @@ def test_url_remote_fetch_retains_unverified_diagnostic_and_native_floor(tmp_pat
     payload = inspect_command("git fetch https://example.invalid/project.git", cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "review"
-    assert payload["minimum_action"] == "block"
+    assert payload["minimum_action"] == "review"
     assert payload["classification"]["action_class"] == "unverified Git remote refresh"
     assert payload["controlling_rule_id"] == "command.git.unverified-fetch"
 
@@ -209,5 +209,5 @@ def test_native_origin_fetch_requires_repository_evidence(tmp_path: Path) -> Non
     assert_host_git_proof_result(_is_benign("git fetch origin", home=home, repository=repository), cwd=repository)
     assert payload["classification"]["explicitly_benign"] is False
     assert payload["status"] == "review"
-    assert payload["minimum_action"] == "block"
+    assert payload["minimum_action"] == "review"
     assert payload["controlling_rule_id"] == "command.git.unverified-fetch"

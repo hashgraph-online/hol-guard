@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Literal, TypeGuard, cast
 
 from ..file_identity import content_stat_identity
+from ..native_context import _UNBOUND_PREFIX, context_opaque_digest, context_sha256_digest
 from .env_wrapper import parse_env_wrapper
 from .extension_control_runtime import current_extension_control_binding_digest
 
@@ -63,13 +64,6 @@ class ApprovalContextToken:
 
 class NativeContextDigestUnavailableError(RuntimeError):
     """The native context-digest authority is required but unreachable."""
-
-
-_UNBOUND_PREFIX = "guard-context-unbound:"
-
-
-def is_unbound_context_digest(value: object) -> bool:
-    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
 
 
 def _unbound_context_digest(label: str, *, material: object) -> str:
@@ -410,7 +404,9 @@ def build_runtime_executable_identity(
     if require_executable and os.name != "nt" and metadata.st_mode & 0o111 == 0:
         return with_launch_cwd(_unreusable_executable_identity(command, status="not_executable", path=canonical))
     stat_key = _executable_stat_key(metadata)
-    digest, hash_status, shebang, shebang_status = _cached_executable_hash(str(canonical), stat_key)
+    digest, hash_status, shebang, shebang_status = _cached_executable_hash(
+        str(canonical), stat_key, expected_birthtime_ns=getattr(metadata, "st_birthtime_ns", None)
+    )
     final_path_chain = _executable_path_chain_snapshot(launch_path)
     if final_path_chain is None or final_path_chain != initial_path_chain:
         return with_launch_cwd(_unreusable_executable_identity(command, status="path_changed", path=launch_path))
@@ -440,7 +436,7 @@ def build_runtime_executable_identity(
     else:
         identity["sha256"] = digest
     if shebang is not None:
-        identity["shebang_sha256"] = hashlib.sha256(shebang.encode("utf-8")).hexdigest()
+        identity["shebang_sha256"] = context_opaque_digest(shebang, unbound_label="shebang")
     return with_launch_cwd(identity)
 
 
@@ -490,7 +486,9 @@ def _executable_path_chain_snapshot(path: Path) -> tuple[tuple[tuple[str, object
                 "mode": stat.S_IMODE(metadata.st_mode),
                 "modified_time_ns": metadata.st_mtime_ns,
                 "path": current_text,
-                "target_sha256": hashlib.sha256(target.encode("utf-8")).hexdigest() if target is not None else None,
+                "target_sha256": (
+                    context_opaque_digest(target, unbound_label="path-target") if target is not None else None
+                ),
             }
             snapshots.append(tuple(sorted(snapshot.items())))
     return tuple(snapshots) if snapshots else None
@@ -882,20 +880,24 @@ def _normalized_launch_cwd(cwd: Path | None) -> Path:
 
 
 def _opaque_identity_digest(material: str) -> str:
-    """Return a stable launch-identity digest, not a credential verifier."""
+    """Return a stable launch-identity digest, not a credential verifier.
 
-    # Launch material can contain password-like values, but this digest is used
-    # only for exact approval-context change detection. It is never used to
-    # authenticate a secret, so a password KDF would be the wrong primitive.
-    # codeql[py/weak-sensitive-data-hashing]
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+    Launch material can contain password-like values, but this digest is used
+    only for exact approval-context change detection. It is never used to
+    authenticate a secret, so a password KDF would be the wrong primitive.
+    codeql[py/weak-sensitive-data-hashing]
+
+    Hash authority lives in the native ``opaque_material_digest`` op; the
+    unbound degrade still fails every equality/validation check.
+    """
+    return context_opaque_digest(material, unbound_label="opaque-identity")
 
 
 def _launch_argv_digest(argv: Sequence[str]) -> str:
-    # Stays local until the launch-identity filesystem slice migrates; the
-    # native ``launch_argv_digest`` kind is already parity-verified.
+    # Native ``opaque_material_digest`` over the canonical argv JSON text —
+    # byte-identical to _opaque_identity_digest(json.dumps(argv)).
     material = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":"))
-    return _opaque_identity_digest(material)
+    return context_opaque_digest(material, unbound_label="launch-argv")
 
 
 def _runtime_entrypoint_identity(
@@ -1052,7 +1054,7 @@ def _direct_executable_runtime_entrypoint_identity(
         "launcher": launcher_identity,
         "script_args_sha256": _launch_argv_digest(launch_args),
         "shebang_args_sha256": _launch_argv_digest(shebang_args),
-        "shebang_sha256": hashlib.sha256(executable_shebang.encode("utf-8")).hexdigest(),
+        "shebang_sha256": context_opaque_digest(executable_shebang, unbound_label="shebang"),
         "status": "verified",
     }
     if launcher_name not in {"env", "env.exe"}:
@@ -1105,7 +1107,7 @@ def _direct_executable_runtime_entrypoint_identity(
 
     env_command = _env_shebang_command(shebang_args)
     search_path = launch_env.get("PATH")
-    result["search_path_sha256"] = hashlib.sha256((search_path or "").encode("utf-8")).hexdigest()
+    result["search_path_sha256"] = context_opaque_digest(search_path or "", unbound_label="search-path")
     if env_command is None:
         result.update(
             _unproven_runtime_entrypoint(
@@ -1239,6 +1241,7 @@ def _raw_shebang_for_identity(identity: Mapping[str, object]) -> tuple[str | Non
     digest, hash_status, shebang, shebang_status = _cached_executable_hash(
         path,
         _executable_stat_key(metadata),
+        expected_birthtime_ns=getattr(metadata, "st_birthtime_ns", None),
     )
     if (
         hash_status != "verified"
@@ -1692,19 +1695,19 @@ def _unproven_runtime_entrypoint(
 
 
 def _runtime_launch_verification_digest(identity: object) -> str | None:
-    """Hash launch identity while ignoring only deliberate instability nonces."""
+    """Hash launch identity while ignoring only deliberate instability nonces.
 
+    The canonical-JSON SHA-256 is owned by the native ``canonical_sha256`` op;
+    the serialization-guard stays so non-JSON identity still returns ``None``
+    rather than surfacing a transport error.
+    """
+
+    material = _without_runtime_reuse_nonces(identity)
     try:
-        material = json.dumps(
-            _without_runtime_reuse_nonces(identity),
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        ).encode("utf-8")
+        json.dumps(material, ensure_ascii=True, allow_nan=False)
     except (TypeError, ValueError):
         return None
-    return hashlib.sha256(material).hexdigest()
+    return context_sha256_digest(material, unbound_label="launch-verification")
 
 
 def _runtime_identity_contains_reuse_nonce(value: object) -> bool:
@@ -1743,6 +1746,8 @@ def _without_runtime_reuse_nonces(value: object) -> object:
 def _cached_executable_hash(
     path: str,
     expected_stat: tuple[int, int, int, int, int, int],
+    *,
+    expected_birthtime_ns: int | None = None,
 ) -> tuple[str | None, str, str | None, str]:
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -1752,7 +1757,21 @@ def _cached_executable_hash(
     try:
         opened_stat = os.fstat(descriptor)
         observed_stat = _executable_stat_key(opened_stat)
-        if observed_stat != expected_stat or not stat.S_ISREG(opened_stat.st_mode):
+        path_stat = expected_stat
+        descriptor_stat = observed_stat
+        opened_birthtime_ns = getattr(opened_stat, "st_birthtime_ns", None)
+        if os.name == "nt":
+            # stat derives executable bits from the filename; fstat cannot.
+            # Keep file type and read/write bits equal across both APIs.
+            path_stat = (*path_stat[:5], path_stat[5] & ~0o111)
+            descriptor_stat = (*descriptor_stat[:5], descriptor_stat[5] & ~0o111)
+        if os.name == "nt" and expected_birthtime_ns is not None and opened_birthtime_ns is not None:
+            # Windows stat reports creation time in ctime, while fstat may
+            # report ChangeTime. Compare birthtime across APIs only; retain
+            # the full descriptor ChangeTime check across the actual read.
+            path_stat = (*path_stat[:4], expected_birthtime_ns, path_stat[5])
+            descriptor_stat = (*descriptor_stat[:4], opened_birthtime_ns, descriptor_stat[5])
+        if descriptor_stat != path_stat or not stat.S_ISREG(opened_stat.st_mode):
             return None, "identity_raced", None, "unverified"
         if opened_stat.st_size > _MAX_EXECUTABLE_HASH_BYTES:
             return None, "too_large", None, "unverified"

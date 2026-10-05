@@ -179,7 +179,7 @@ def select_previous_tag(tags: Iterable[str], current_version: str, channel: str)
     return max(candidates)[1] if candidates else None
 
 
-def resolve_previous_release(repo: str, tag: str) -> "PreviousRelease":
+def resolve_previous_release(repo: str, tag: str) -> PreviousRelease:
     """Authoritative per-tag lookup via the GitHub CLI.
 
     One API call, no pagination window: asking about the specific candidate
@@ -207,11 +207,7 @@ def resolve_previous_release(repo: str, tag: str) -> "PreviousRelease":
         payload = json.loads(result.stdout)
     except json.JSONDecodeError:
         return PreviousRelease(status="unavailable")
-    if (
-        isinstance(payload, dict)
-        and payload.get("tag_name") == tag
-        and payload.get("draft") is not True
-    ):
+    if isinstance(payload, dict) and payload.get("tag_name") == tag and payload.get("draft") is not True:
         return PreviousRelease(
             status="published",
             tag=tag,
@@ -284,9 +280,7 @@ def load_changes(end_ref: str, start_ref: str | None, cwd: str | None = None) ->
         sha, subject, author = line.split("\x1f", maxsplit=2)
         if subject.startswith("Merge ") and not MERGE_COMMIT_PATTERN.match(subject):
             continue
-        changes.append(
-            Change(sha=sha, subject=subject, author=author, type="internal", description=subject)
-        )
+        changes.append(Change(sha=sha, subject=subject, author=author, type="internal", description=subject))
     for change in changes:
         parsed = parse_subject(change.pr_title or change.subject)
         if parsed:
@@ -448,7 +442,9 @@ def render_condensed_sections(changes: Sequence[Change], repo: str) -> str:
     lines = ["## Changes by category", ""]
     lines.extend(f"- **{title}**: {count}" for title, count in counts)
     lines.append("")
-    lines.append(f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha}).")
+    lines.append(
+        f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha})."
+    )
     return "\n".join(lines)
 
 
@@ -462,6 +458,7 @@ def render_notes(
     previous_tag: str | None,
     source_sha: str,
     previous_release: PreviousRelease | None = None,
+    pypi_deferred: bool = False,
 ) -> str:
     """Render the full release-notes body for one Guard release.
 
@@ -506,11 +503,7 @@ def render_notes(
             since = f" since tag `{previous_tag}` (previous tag has no published release)"
         lines.append(f"**{' • '.join(heading_stats)}**{since}." if heading_stats else f"Released{since}.")
     elif heading_stats:
-        scope_note = (
-            " — the first release on this channel, covering the full history to this point"
-            if changes
-            else ""
-        )
+        scope_note = " — the first release on this channel, covering the full history to this point" if changes else ""
         lines.append(f"**{' • '.join(heading_stats)}**{scope_note}.")
     lines.append("")
 
@@ -528,17 +521,24 @@ def render_notes(
 
     lines.append("## Install")
     lines.append("")
-    lines.append("Install this release:")
-    lines.append("")
-    lines.append("```bash")
-    lines.append(f'uv tool install "hol-guard[cisco]=={version}"')
-    lines.append("```")
+    if pypi_deferred:
+        lines.append(
+            "PyPI publication is pending quota availability. Download the verified wheel "
+            f"from the [GitHub release assets](https://github.com/{repo}/releases/tag/{tag}) and install it locally:"
+        )
+        lines.append("")
+        lines.append("```bash")
+        lines.append(f'uv tool install "./hol_guard-{version}-py3-none-any.whl[cisco]"')
+        lines.append("```")
+    else:
+        lines.append("Install this release:")
+        lines.append("")
+        lines.append("```bash")
+        lines.append(f'uv tool install "hol-guard[cisco]=={version}"')
+        lines.append("```")
     lines.append("")
     if previous_tag:
-        comparison = (
-            f"[{previous_tag}...{tag}]"
-            f"(https://github.com/{repo}/compare/{previous_tag}...{tag})"
-        )
+        comparison = f"[{previous_tag}...{tag}](https://github.com/{repo}/compare/{previous_tag}...{tag})"
         if published_release:
             lines.append(f"**Full changelog**: {comparison}")
         elif previous_release is not None and previous_release.status == "unavailable":
@@ -571,6 +571,11 @@ def main() -> int:
     parser.add_argument("--source-sha", default=None, help="Release commit; defaults to resolving --tag")
     parser.add_argument("--end-ref", default=None, help="Git ref covering the release commits (default: tag/sha)")
     parser.add_argument("--output", default=None, help="Write notes here instead of stdout")
+    parser.add_argument(
+        "--pypi-deferred",
+        action="store_true",
+        help="Render local GitHub-asset installation instructions while PyPI publication is pending",
+    )
     parser.add_argument(
         "--skip-pr-metadata",
         action="store_true",
@@ -624,6 +629,7 @@ def main() -> int:
         previous_tag=previous_tag,
         source_sha=source_sha,
         previous_release=previous_release,
+        pypi_deferred=args.pypi_deferred,
     )
     if args.output:
         with open(args.output, "w", encoding="utf-8") as handle:

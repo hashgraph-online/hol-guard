@@ -33,6 +33,8 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 @pytest.fixture(autouse=True)
 def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2697,7 +2699,9 @@ def test_consumer_current_allow_detects_tampered_block_moved_out_of_exact_lookup
     assert item["approval_reuse_reason_code"] == "approval_reuse_integrity_failure"
 
 
-def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(tmp_path: Path, native_context_digest: Path) -> None:
+def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     store = GuardStore(tmp_path / "guard-home")

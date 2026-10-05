@@ -12,8 +12,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.extension_freshness import requires_fresh_decision_diff, requires_fresh_projections
-
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"
 NODE_DOMAIN = b"hol-guard.native-command-matcher.v1\0"
@@ -83,11 +81,13 @@ def example(compiler: Path, build: dict) -> dict:
     return request
 
 
-@requires_fresh_projections
-@requires_fresh_decision_diff
 def test_checked_in_program_matches_native_authoring(compiler: Path, compiled: dict) -> None:
+    """Verify checked in program matches native authoring."""
     checked_in = json.loads((ROOT / "contracts/extensions/native-command-program.v1.json").read_bytes())
-    assert checked_in == compiled["program"]
+    assert checked_in == compiled["program"], (
+        "Stage current projections before testing: python scripts/ci/verify_native_command_program.py "
+        "--compiler rust/target/release/guard-command-source"
+    )
     result = subprocess.run(
         [str(compiler), "evaluate-batch"],
         input=canonical(
@@ -191,9 +191,21 @@ def test_depth_and_configuration_limits(compiler: Path, example: dict) -> None:
     assert invoke(compiler, example).returncode != 0
 
 
+def test_native_input_above_legacy_budget_is_accepted(compiler: Path, build: dict) -> None:
+    payload = canonical(build)
+    legacy_limit = 4 * 1024 * 1024
+    current_limit = 8 * 1024 * 1024
+    if len(payload) <= legacy_limit:
+        payload += b" " * (legacy_limit + 1 - len(payload))
+    assert legacy_limit < len(payload) <= current_limit
+
+    result = subprocess.run([str(compiler), "compile"], input=payload, capture_output=True, timeout=60)
+    assert result.returncode == 0, result.stderr.decode(errors="replace") + result.stdout.decode(errors="replace")
+
+
 def test_native_input_byte_budget(compiler: Path, example: dict) -> None:
     result = subprocess.run(
-        [str(compiler), "compile"], input=canonical(example) + b" " * (4 * 1024 * 1024), capture_output=True, timeout=60
+        [str(compiler), "compile"], input=canonical(example) + b" " * (8 * 1024 * 1024), capture_output=True, timeout=60
     )
     assert result.returncode != 0
 

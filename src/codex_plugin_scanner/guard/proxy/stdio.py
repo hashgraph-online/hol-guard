@@ -23,6 +23,7 @@ from ..approvals import (
     first_approval_url,
     queue_blocked_approvals,
 )
+from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig, resolve_risk_action
 from ..consumer import artifact_hash
@@ -820,7 +821,9 @@ class StdioGuardProxy:
                             source_scope=runtime_artifact.source_scope,
                             approval_source=(
                                 "approval_center"
-                                if policy_action == "require-reapproval" and self.approval_center_url is not None
+                                if policy_action == "require-reapproval"
+                                and self.approval_center_url is not None
+                                and asks_for_approval(self.guard_config)
                                 else "policy"
                             ),
                             scanner_evidence=reuse_evidence,
@@ -840,10 +843,55 @@ class StdioGuardProxy:
                         "guardPolicyAction": policy_action,
                         "transportOutcome": "not-forwarded",
                     }
+                    if not asks_for_approval(self.guard_config):
+                        non_forward_message = safe_alternative_reason(
+                            _sensitive_read_non_forward_message(
+                                "block",
+                                tool_name=tool_name,
+                                path_class=sensitive_request.path_match.path_class,
+                            )
+                        )
+                        response_data["guardPolicyAction"] = "block"
+                        if (
+                            self.guard_store is not None
+                            and not terminal_policy_action
+                            and policy_action in {"review", "require-reapproval"}
+                        ):
+                            from ..approvals import record_unprompted_review
+
+                            record_unprompted_review(
+                                detection=HarnessDetection(
+                                    harness=self.harness,
+                                    installed=True,
+                                    command_available=True,
+                                    config_paths=(runtime_artifact.config_path,),
+                                    artifacts=(runtime_artifact,),
+                                ),
+                                evaluation={
+                                    "artifacts": [
+                                        {
+                                            "artifact_id": runtime_artifact.artifact_id,
+                                            "artifact_name": runtime_artifact.name,
+                                            "artifact_hash": runtime_artifact_hash,
+                                            "policy_action": policy_action,
+                                            "changed_fields": ["file_read_request"],
+                                            "artifact_type": runtime_artifact.artifact_type,
+                                            "source_scope": runtime_artifact.source_scope,
+                                            "config_path": runtime_artifact.config_path,
+                                            "launch_target": runtime_artifact.metadata.get("request_summary"),
+                                            "scanner_evidence": list(reuse_evidence),
+                                        }
+                                    ]
+                                },
+                                store=self.guard_store,
+                                approval_center_url=self.approval_center_url,
+                                redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),
+                            )
                     if (
                         self.guard_store is not None
                         and self.approval_center_url is not None
                         and not terminal_policy_action
+                        and asks_for_approval(self.guard_config)
                     ):
                         event["approval_requests"] = queue_blocked_approvals(
                             redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),

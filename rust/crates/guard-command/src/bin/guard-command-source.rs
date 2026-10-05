@@ -8,6 +8,13 @@ use serde_json::{json, Value};
 use std::io::{Read, Write};
 
 fn run(arguments: &[String]) -> Result<Value, &'static str> {
+    if arguments == ["export-built"] {
+        return serde_json::from_slice(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/native-command-build.v1.json"
+        )))
+        .map_err(|_| "command_source_build_output_invalid");
+    }
     if arguments == ["schema"] {
         return Ok(source_schema());
     }
@@ -34,7 +41,7 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     }
     let mut bytes = Vec::new();
     std::io::stdin()
-        .take(4 * 1024 * 1024 + 1)
+        .take(8 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "command_source_input_read_failed")?;
     if operation == "test" {

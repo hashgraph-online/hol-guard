@@ -55,7 +55,16 @@ pub(super) fn run(state_base: &Path) -> Result<(), String> {
             Ok(lease) => {
                 match super::client_request_with_lease(state_base, &payload, timeout, lease) {
                     Ok(response) => response,
-                    Err(error) => crate::resident_protocol::safe_error_response(&error, false),
+                    Err(error) => {
+                        let should_exit = error == "native_resident_update_in_progress"
+                            || error == "native_resident_runtime_identity_mismatch";
+                        let response = crate::resident_protocol::safe_error_response(&error, false);
+                        if should_exit {
+                            write_frame(&mut output, &response)?;
+                            return Ok(());
+                        }
+                        response
+                    }
                 }
             }
             Err(error) => crate::resident_protocol::safe_error_response(error, false),

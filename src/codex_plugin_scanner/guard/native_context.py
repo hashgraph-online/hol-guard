@@ -25,7 +25,7 @@ from .directory_path_authority import canonical_guard_home_path
 from .fork_safety import forget_in_child
 from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
-from .native_runtime import _isolated_environment, native_runtime_status
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,
@@ -69,6 +69,58 @@ _last_bound_home: Path | None = None
 _RESULT_CACHE_LOCK = threading.Lock()
 _RESULT_CACHE: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
 _RESULT_CACHE_MAX = 256
+# ``native_runtime_status()`` re-reads and SHA-256-hashes the whole runtime
+# binary per call.  Batch digest sites (``environment_material`` hashes one
+# value per env var, launch verification re-hashes argv/shebang/search-path)
+# would otherwise re-validate the binary once per digest — tens of MB of
+# rehashing and per-call resident probes inside a single launch.  Memoize the
+# status snapshot for a short window so a burst of digests shares one probe.
+# A cached result is only reused while the binary's (size, mtime_ns) still
+# matches the memoized identity — a binary replaced inside the TTL is
+# re-validated on the next digest rather than served from the stale snapshot.
+_STATUS_MEMO_LOCK = threading.Lock()
+_STATUS_MEMO_TTL_SECONDS = 0.1
+# (timestamp, status, status-callable-identity) — the callable identity lets
+# tests monkeypatch ``native_runtime_status`` and always get a fresh probe,
+# while a production burst keeps sharing the real probe's snapshot.
+_status_memo: tuple[float, NativeRuntimeStatus, object] | None = None
+
+
+def _status_binary_unchanged(status: NativeRuntimeStatus) -> bool:
+    """True while the on-disk binary still matches the memoized identity.
+
+    ``stat()`` is cheap relative to re-hashing the whole binary, so checking
+    ``size``/``mtime_ns`` per memo read keeps the reused status honest against
+    a mid-window binary swap without paying the full re-validation cost.
+    """
+
+    identity = status.identity
+    if identity is None:
+        # No binary was validated (mode=off / unavailable).  There is nothing
+        # to keep fresh, so the snapshot is reusable for the TTL.
+        return True
+    try:
+        meta = Path(identity.path).stat()
+    except OSError:
+        return False
+    return meta.st_size == identity.size and meta.st_mtime_ns == identity.mtime_ns
+
+
+def _native_runtime_status_memo() -> NativeRuntimeStatus:
+    global _status_memo
+    probe = native_runtime_status
+    with _STATUS_MEMO_LOCK:
+        if (
+            _status_memo is not None
+            and _status_memo[2] is probe
+            and time.monotonic() - _status_memo[0] < _STATUS_MEMO_TTL_SECONDS
+            and _status_binary_unchanged(_status_memo[1])
+        ):
+            return _status_memo[1]
+    status = probe()
+    with _STATUS_MEMO_LOCK:
+        _status_memo = (time.monotonic(), status, probe)
+    return status
 
 
 forget_in_child(_RESULT_CACHE)
@@ -95,6 +147,17 @@ def context_digest_guard_home() -> Path | None:
         return bound
     with _LAST_BOUND_LOCK:
         return _last_bound_home
+
+
+def _resolve_digest_home(guard_home: Path | None) -> Path:
+    if guard_home is not None:
+        return guard_home
+    bound = context_digest_guard_home()
+    if bound is not None:
+        return bound
+    from .runtime.approval_context import _context_digest_guard_home
+
+    return _context_digest_guard_home(str(Path.home()))
 
 
 @contextmanager
@@ -137,6 +200,8 @@ _OK_OUTPUT_FIELD: dict[str, str] = {
     "configured_environment_hash": "digest",
     "configured_headers_hash": "digest",
     "launch_argv_digest": "digest",
+    "canonical_sha256": "digest",
+    "opaque_material_digest": "digest",
 }
 _OK_NULLABLE_OUTPUT_FIELD: dict[str, str] = {
     "validate_approval_context": "validation_reason",
@@ -194,7 +259,7 @@ def native_context_digest(
     carries ``status``/``code`` plus the kind-specific output field.
     """
 
-    status = native_runtime_status()
+    status = _native_runtime_status_memo()
     if (
         status.mode == "off"
         or not status.available
@@ -301,10 +366,101 @@ def native_context_digest(
     return decoded
 
 
+_UNBOUND_PREFIX = "guard-context-unbound:"
+
+
+def is_unbound_context_digest(value: object) -> bool:
+    """``True`` for degraded digests emitted when the resident is unavailable."""
+    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
+
+
+def _unbound_material_digest(material: object) -> str:
+    # Integrity digest over guard material (env values / launch identity / PATH), not a
+    # password hash — parity-pinned to the pre-migration hashlib baseline for byte-identical
+    # persisted approval rows. codeql[py/weak-sensitive-data-hashing] false positive.
+    return hashlib.sha256(_canonical_material_bytes(material)).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
+
+
+def _canonical_material_bytes(material: object) -> bytes:
+    return json.dumps(
+        material,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        default=str,
+    ).encode("utf-8")
+
+
+def context_sha256_digest(
+    material: object,
+    *,
+    prefix: str | None = None,
+    guard_home: Path | None = None,
+    unbound_label: str = "canonical-sha256",
+    strict: bool = True,
+) -> str:
+    """Canonical-JSON SHA-256 via the resident op.
+
+    ``strict=True`` (default, for enforcement digests that gate equality):
+    degrade to a ``guard-context-unbound:`` digest that fails every
+    equality/validation check against a worker-issued value.
+
+    ``strict=False`` (for identity/dedup digests that always produced a hex
+    digest before this migration): degrade to the byte-identical local
+    canonical hash so callers keep working when the resident is absent.  The
+    value is byte-for-byte the same output the worker returns.
+    """
+
+    home = _resolve_digest_home(guard_home)
+    result = native_context_digest(
+        "canonical_sha256",
+        {"material": material, "prefix": prefix},
+        guard_home=home,
+    )
+    digest = result.get("digest") if isinstance(result, dict) else None
+    if isinstance(digest, str) and digest:
+        return digest
+    if strict:
+        return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
+    local = hashlib.sha256(_canonical_material_bytes(material)).hexdigest()
+    return f"{prefix or ''}{local}"
+
+
+def context_opaque_digest(
+    material: str,
+    *,
+    guard_home: Path | None = None,
+    unbound_label: str = "opaque-material",
+    strict: bool = True,
+) -> str:
+    """UTF-8-string SHA-256 via the resident op.
+
+    For raw string material (module specifiers, source text, ``h:s:n`` keys,
+    shebang lines) — the bytes hashed are exactly ``material.encode("utf-8")``.
+    ``strict`` semantics match :func:`context_sha256_digest`.
+    """
+
+    home = _resolve_digest_home(guard_home)
+    result = native_context_digest(
+        "opaque_material_digest",
+        {"material": material},
+        guard_home=home,
+    )
+    digest = result.get("digest") if isinstance(result, dict) else None
+    if isinstance(digest, str) and digest:
+        return digest
+    if strict:
+        return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
+
+
 __all__ = [
     "bind_context_digest_home",
     "bound_context_digest_home",
     "context_digest_guard_home",
+    "context_opaque_digest",
+    "context_sha256_digest",
+    "is_unbound_context_digest",
     "native_context_digest",
     "reset_context_digest_home",
 ]

@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from tests.pi_extension_response_source_support import (
+    _generated_output_text_keys,
     _generated_preprocessing_helper,
     _generated_structured_helper,
     _strip_generated_types,
@@ -26,6 +27,8 @@ def _run_generated_fixture(source: str) -> dict[str, object]:
     run_guard = _strip_generated_types(source[run_start:run_end])
 
     javascript = f"""\
+import {{ createHash }} from "node:crypto";
+
 const GUARD_DAEMON_TIMEOUT_MS = 3100;
 const GUARD_HOME = "/tmp/omp-hook-contract/guard-home";
 const GUARD_HOME_DIR_IS_DEFAULT = true;
@@ -42,7 +45,7 @@ const GUARD_OBJECT_KEY_LIMIT = 24;
 const GUARD_MAX_DEPTH = 24;
 const GUARD_MAX_SERIALIZED_PAYLOAD_CHARS = 24000;
 const GUARD_MAX_SERIALIZED_RESPONSE_CHARS = 12 * GUARD_TEXT_LIMIT_CHARS + GUARD_MAX_SERIALIZED_PAYLOAD_CHARS;
-const OUTPUT_TEXT_KEYS = ["stdout", "stderr", "output", "content", "result", "message", "text"];
+{_generated_output_text_keys(source)}
 const GUARD_ARGS = [];
 const GUARD_CLI_WRAPPER_COMMAND = "hol-guard";
 const GUARD_CLI_WRAPPER_ARGS = [];
@@ -242,7 +245,7 @@ console.log(JSON.stringify(result));
 
 
 def _run_generated_tool_result_fixture(source: str) -> dict[str, object]:
-    handler_start = source.index('  pi.on("tool_result"')
+    handler_start = source.index('  pi.on("tool_result", async (event, ctx) => {')
     handler_end = source.index("\n  });\n}", handler_start) + len("\n  });")
     handler = source[handler_start:handler_end]
     for old, new in {
@@ -250,6 +253,7 @@ def _run_generated_tool_result_fixture(source: str) -> dict[str, object]:
         "(event as { toolInput?: Record<string, unknown> })": "event",
         "(event as { arguments?: Record<string, unknown> })": "event",
         "event as Record<string, unknown>": "event",
+        " as Record<string, unknown>": "",
         "const guardPayload: Record<string, unknown>": "const guardPayload",
         " as string": "",
     }.items():
@@ -272,6 +276,9 @@ const GUARD_STRUCTURED_MAX_BYTES = 64 * 1024;
 const GUARD_STRUCTURED_MAX_DEPTH = 8;
 const GUARD_STRUCTURED_MAX_NODES = 128;
 const GUARD_STRUCTURED_MAX_FIELDS = 64;
+const GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES = new Set([
+  "read", "read_file", "open_file", "view", "view_file", "cat_file", "Read", "View"
+]);
 const blockedToolResults = new Map();
 const handlers = {{}};
 const notifications = [];
@@ -281,6 +288,8 @@ let guardResponse = {{ decision: "allow", model_output_action: "allow_original" 
 {_generated_structured_helper(source)}
 
 function sourceFileRefForPostToolUse() {{ return null; }}
+// Containment lifecycle is exercised separately with its real request map.
+function cleanupContainedTestRequest() {{}}
 function toolCallIdKey(value) {{ return typeof value === "string" && value.trim() ? value.trim() : null; }}
 function modelVisibleBlockedReason(reason) {{ return `blocked: ${{reason}}`; }}
 function blockedToolResult(reason, details) {{

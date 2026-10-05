@@ -7,6 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import native_execution as _native_execution
 from .containment_execution_support import (
     contained_process_effect_decision as _contained_decision,
 )
@@ -64,6 +65,15 @@ def try_execute_contained_typescript(
     if intent is None or len(intent.local_executions) != 1:
         return None
     local_execution = intent.local_executions[0]
+    native_result = _native_execution.contained_typescript_execute_native(
+        workspace,
+        manager.strip().lower(),
+        argv,
+        guard_home=guard_home,
+        evidence=local_execution.to_dict(),
+    )
+    if native_result is not None:
+        return native_result
     evidence = local_execution.typescript_launch
     if evidence is None or evidence.status != "complete" or evidence.direct_silent_verification:
         return None

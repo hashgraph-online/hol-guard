@@ -9,12 +9,16 @@ from pathlib import Path
 from time import process_time
 from unittest.mock import patch
 
+import pytest
+
 from codex_plugin_scanner.guard.cli.commands_support_codex_prompt_attachments import (
     _ATTACHMENT_SCAN_CHUNK_BYTES,
     _ATTACHMENT_SCAN_MAX_BYTES,
     _classify_stream_window,
     _codex_prompt_attachment_artifact,
 )
+
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
 
 def _attachment(home: Path, content: str) -> Path:
@@ -104,7 +108,7 @@ def test_repeated_attachment_windows_reuse_guarded_classification() -> None:
             inherited_secret_read_state=None,
         ) == ((), None)
 
-    classify.assert_called_once_with("Routine release note.")
+    classify.assert_called_once_with("Routine release note.", guard_home=None)
 
 
 def test_large_benign_codex_attachment_has_bounded_peak_memory(tmp_path: Path) -> None:
@@ -125,6 +129,31 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_prompt_attachments im
 )
 
 attachment, home = map(Path, sys.argv[1:])
+import os
+from codex_plugin_scanner.guard import native_prompt
+from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+# Provision the real native owner before measuring the streaming scan, just as
+# the original test excluded interpreter and module initialization.
+os.environ["HOL_GUARD_NATIVE"] = "force"
+guard_home = home / "native-prompt-memory-home"
+(guard_home / "native-runtime").mkdir(parents=True, mode=0o700)
+guard_home.chmod(0o700)
+provision_native_policy_verifier_key(guard_home, b"m" * 32)
+native_prompt.resolve_guard_home = lambda: guard_home
+from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+original_analyze = native_prompt.analyze
+native_failure = None
+def measured_analyze(subop, **kwargs):
+    global native_failure
+    try:
+        return original_analyze(subop, **kwargs)
+    except native_prompt.NativePromptAnalysisError:
+        native_failure = native_resident_client_failure_code() or "native_response_unavailable"
+        raise
+native_prompt.analyze = measured_analyze
+assert native_prompt.extract_prompt_requests("Routine release note.") == []
 tracemalloc.start()
 try:
     artifact = _codex_prompt_attachment_artifact(
@@ -135,7 +164,12 @@ try:
     _, peak_bytes = tracemalloc.get_traced_memory()
 finally:
     tracemalloc.stop()
-print(json.dumps({"no_artifact": artifact is None, "peak_bytes": peak_bytes}))
+    close_native_residents(guard_home)
+print(json.dumps({
+    "no_artifact": artifact is None,
+    "peak_bytes": peak_bytes,
+    "native_failure": native_failure,
+}))
 """,
             str(attachment),
             str(tmp_path),
@@ -146,7 +180,7 @@ print(json.dumps({"no_artifact": artifact is None, "peak_bytes": peak_bytes}))
         timeout=30,
     )
     result = json.loads(measured.stdout)
-    assert result["no_artifact"] is True
+    assert result["no_artifact"] is True, result
     assert result["peak_bytes"] < 2 * 1024 * 1024
 
 

@@ -18,10 +18,8 @@ def test_migrate_guard_home_state_preserves_custom_extension_authority(tmp_path:
         connection.execute("create table migration_probe (value text)")
     canonical_home.mkdir(parents=True)
     with sqlite3.connect(canonical_home / "guard.db") as connection:
-        connection.execute(
-            "create table extension_control_authority_snapshot (singleton integer, layers_json text)"
-        )
-        connection.execute("insert into extension_control_authority_snapshot values (1, '[{\"kind\":\"local\"}]')")
+        connection.execute("create table extension_control_authority_snapshot (singleton integer, layers_json text)")
+        connection.execute('insert into extension_control_authority_snapshot values (1, \'[{"kind":"local"}]\')')
 
     _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
 

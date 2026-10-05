@@ -2350,6 +2350,42 @@
    "replacement_nodes": [],
    "status": "obsolete_implementation_assertion",
    "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_native_execution_review_boundaries.py::test_expected_prompt_transport_errors_fall_back",
+   "replacement_nodes": [
+    "tests/test_native_execution_review_boundaries.py::test_prompt_transport_errors_are_explicit",
+    "tests/test_native_prompt_cutover.py::test_missing_or_malformed_authority_cannot_start_harness"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The retired assertion required Python semantic fallback. Native unavailability must stop the request; malformed response and no-launch behavior remain covered."
+  },
+  {
+   "old_node": "tests/test_native_execution_review_boundaries.py::test_prompt_extraction_falls_back_on_any_malformed_item",
+   "replacement_nodes": [
+    "tests/test_native_execution_review_boundaries.py::test_prompt_extraction_rejects_every_malformed_native_result",
+    "tests/test_native_prompt_cutover.py::test_missing_or_malformed_authority_cannot_start_harness"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The retired assertion required Python semantic fallback. Native unavailability must stop the request; malformed response and no-launch behavior remain covered."
+  },
+  {
+   "old_node": "tests/test_native_execution_review_boundaries.py::test_artifacts_fall_back_on_any_malformed_item",
+   "replacement_nodes": [
+    "tests/test_native_execution_review_boundaries.py::test_artifact_translation_rejects_partial_native_results",
+    "tests/test_native_prompt_cutover.py::test_missing_or_malformed_authority_cannot_start_harness"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The retired assertion required Python semantic fallback. Native unavailability must stop the request; malformed response and no-launch behavior remain covered."
+  },
+  {
+   "old_node": "tests/test_sonar_remaining_regexes.py::test_redundant_alternatives_keep_match_spans_and_groups",
+   "replacement_nodes": [
+    "tests/test_sonar_remaining_regexes.py::test_retained_service_regex_alternatives_keep_match_spans_and_groups",
+    "rust/crates/guard-command/src/prompt_analysis.rs::prompt_regex_span_vectors_match_native_patterns"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Split the mixed regex suite: retained Python service patterns keep their checks; deleted prompt patterns are verified by fixed language-neutral span vectors against the native owner."
   }
  ],
  "preserved_tests": [

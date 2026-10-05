@@ -4,11 +4,9 @@ import multiprocessing
 import os
 import signal
 import subprocess
-import sys
 import threading
 import time
 from contextlib import suppress
-from pathlib import Path
 from typing import final
 
 import pytest
@@ -23,28 +21,7 @@ from codex_plugin_scanner.guard.daemon.hook_process_worker import (
     retire_worker_slot,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-
-
-def _spawn_term_ignoring_descendant(ready_path: str, escaped_path: str) -> None:
-    os.setsid()
-    child_code = (
-        "import signal,time;"
-        "from pathlib import Path;"
-        "signal.signal(signal.SIGTERM, signal.SIG_IGN);"
-        f"Path({ready_path!r}).touch();"
-        "time.sleep(1);"
-        f"Path({escaped_path!r}).touch()"
-    )
-    _ = subprocess.Popen(
-        [sys.executable, "-c", child_code],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    deadline = time.monotonic() + 2
-    while not Path(ready_path).is_file() and time.monotonic() < deadline:
-        time.sleep(0.01)
-    time.sleep(10)
+from tests.fixtures.hook_retirement_process import spawn_term_ignoring_descendant
 
 
 @final
@@ -110,33 +87,35 @@ def test_retirement_kills_descendant_that_ignores_term(tmp_path) -> None:
     ready_path = tmp_path / "descendant-ready"
     escaped_path = tmp_path / "descendant-escaped"
     process = multiprocessing.get_context("spawn").Process(
-        target=_spawn_term_ignoring_descendant,
+        target=spawn_term_ignoring_descendant,
         args=(str(ready_path), str(escaped_path)),
     )
     process.start()
     process_group_id = process.pid
     assert process_group_id is not None
-    deadline = time.monotonic() + 3
-    while not ready_path.is_file() and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert ready_path.is_file()
-    slot = HookWorkerSlot(
-        process=process,
-        connection=_SlowConnection(
-            entered=[0],
-            entered_lock=threading.Lock(),
-            all_entered=threading.Event(),
-        ),
-        isolation_ready=True,
-    )
-
     try:
+        deadline = time.monotonic() + 3
+        while not ready_path.is_file() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready_path.is_file()
+        slot = HookWorkerSlot(
+            process=process,
+            connection=_SlowConnection(
+                entered=[0],
+                entered_lock=threading.Lock(),
+                all_entered=threading.Event(),
+            ),
+            isolation_ready=True,
+        )
         assert retire_worker_slot(slot)
         time.sleep(1.1)
         assert not escaped_path.exists()
     finally:
         with suppress(OSError, ProcessLookupError):
-            os.killpg(process_group_id, getattr(signal, "SIGKILL", 9))
+            if os.getpgid(process_group_id) == process_group_id:
+                os.killpg(process_group_id, getattr(signal, "SIGKILL", 9))
+        if process.is_alive():
+            process.kill()
         process.join(timeout=1)
 
 

@@ -1,17 +1,93 @@
 #![forbid(unsafe_code)]
+pub mod action_lattice;
+pub mod approval_reuse;
+pub mod business_gmail_plain;
+pub mod business_gmail_wire;
+pub mod business_gws_command;
+pub mod business_input;
+pub mod canonical_command;
 mod command_ascii_comparison;
+mod command_candidate_common;
 mod command_common_cli_matchers;
 pub mod command_compatibility;
+mod command_contained_routine_candidates;
+mod command_critical_floors;
+#[cfg(test)]
+mod command_critical_floors_tests;
 mod command_database_matchers;
+pub mod command_decision_adapter;
+pub mod command_evaluation;
+#[cfg(test)]
+mod command_evaluation_tests;
+mod command_launcher_floors;
+pub mod command_model;
 mod command_operand_matchers;
 mod command_option_parsing;
+mod command_segment_parsing;
+#[cfg(unix)]
+pub mod command_shell_read_factors;
 mod command_specialized_matchers;
+mod command_structure;
 mod command_structured_matchers;
+mod command_tokens;
+mod command_verified_read_candidates;
+#[cfg(test)]
+mod command_verified_read_candidates_tests;
+mod command_workspace_write_candidates;
+mod data_flow;
+pub mod effect_decision;
+mod env_wrapper;
 mod executable_flag_contract;
+pub mod extension_control;
+pub mod extension_evidence;
+pub mod extension_trust;
+mod github_capability_contract;
+#[cfg(test)]
+mod github_capability_contract_tests;
+mod github_capability_interaction;
+mod github_command_capabilities;
+#[cfg(test)]
+mod github_command_capabilities_tests;
+pub mod github_workflow_approval_record;
+pub mod github_workflow_authorization;
+pub mod github_workflow_operations;
+mod home_path_text;
+pub mod homebrew_intent;
+pub mod jsonc;
+#[cfg(unix)]
+pub mod launch_identity;
+#[cfg(unix)]
+pub mod launch_identity_binding;
+pub mod launch_identity_environment;
+pub mod native_command_catalog;
 pub mod native_command_controls;
+pub mod native_command_extension_evidence;
+#[cfg(test)]
+mod native_command_extension_evidence_tests;
 pub mod native_command_program;
+pub mod npm_source_spec;
+pub mod package_execution_context;
+pub mod package_intent_common;
+pub mod package_intent_parser;
+pub mod package_manager_command;
+pub mod package_manifest_diff;
 mod parser_wrappers;
 pub mod pretool;
+#[cfg(unix)]
+mod runtime_read_paths;
+mod shell_command_wrappers;
+mod shell_execution_context;
+mod shell_execution_context_support;
+mod shell_read_literal_wrapper;
+mod shell_secret_read_flow;
+mod shell_secret_read_support;
+#[cfg(unix)]
+pub mod shell_secret_reads;
+mod shell_structure;
+pub mod typescript_launch_evidence;
+
+pub use command_evaluation::{evaluate_command, CompositeCommandEvaluation};
+pub use command_model::parse_shell_command;
 
 use serde::{Deserialize, Serialize};
 
@@ -77,6 +153,13 @@ pub struct CanonicalCommandV1 {
     pub uncertainty_reason: Option<String>,
     pub path_overridden: bool,
     pub parser_profile: String,
+    /// Python `CanonicalCommand.security_identity` — the authoritative
+    /// `command-security-v2:` digest serialized on `to_dict`. The wire omits
+    /// embedded-command `text` and redirect spans, so the identity cannot be
+    /// re-derived from the public model; the resident path supplies it. Empty
+    /// string on the pure-native path → `from_v1` recomputes it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub security_identity: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,6 +307,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
         uncertainty_reason: None,
         path_overridden,
         parser_profile: parser_profile.to_owned(),
+        security_identity: String::new(),
     })
 }
 
@@ -240,6 +324,7 @@ fn uncertain(request: &CommandModelRequestV1, raw: &str, reason: &str) -> Canoni
         uncertainty_reason: Some(reason.to_owned()),
         path_overridden: false,
         parser_profile: "posix-simple-v1".to_owned(),
+        security_identity: String::new(),
     }
 }
 
@@ -303,7 +388,11 @@ fn split_execution_segments(
             {
                 return Err("non_posix_quoting_not_yet_supported");
             }
-            '<' | '>' if is_stderr_to_stdout_redirect(&chars, index) => {}
+            '<' | '>'
+                if is_stderr_to_stdout_redirect(&chars, index, preserve_unquoted_backslash) => {}
+            '>' if index.checked_sub(1).is_some_and(|start| {
+                is_stderr_to_null_redirect(&chars, start, preserve_unquoted_backslash)
+            }) => {}
             '<' | '>' => return Err("command_redirect_not_yet_supported"),
             '(' | ')' => return Err("compound_shell_not_yet_supported"),
             '{' | '}'
@@ -317,7 +406,7 @@ fn split_execution_segments(
                 return Err("compound_shell_not_yet_supported");
             }
             '&' => {
-                if is_stderr_to_stdout_redirect(&chars, index) {
+                if is_stderr_to_stdout_redirect(&chars, index, preserve_unquoted_backslash) {
                     index += 1;
                     continue;
                 }
@@ -442,7 +531,7 @@ fn trimmed_bounds(chars: &[char], start: usize, end: usize) -> Option<(usize, us
     (left < right).then_some((left, right))
 }
 
-fn is_stderr_to_stdout_redirect(chars: &[char], index: usize) -> bool {
+fn is_stderr_to_stdout_redirect(chars: &[char], index: usize, preserve_backslash: bool) -> bool {
     let start = match chars.get(index) {
         Some('&') => index.checked_sub(2),
         Some('>') => index.checked_sub(1),
@@ -455,10 +544,35 @@ fn is_stderr_to_stdout_redirect(chars: &[char], index: usize) -> bool {
         return false;
     };
     redirect == ['2', '>', '&', '1']
-        && (start == 0 || is_shell_token_whitespace(chars[start - 1]))
+        && starts_at_shell_token_boundary(chars, start, preserve_backslash)
         && chars.get(start + 4).is_none_or(|value| {
             is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
         })
+}
+
+fn is_stderr_to_null_redirect(chars: &[char], start: usize, preserve_backslash: bool) -> bool {
+    // Only Unix's fixed stderr sink is inert; arbitrary paths and descriptors
+    // must still pass through the unsupported-redirection guard.
+    cfg!(unix)
+        && chars.get(start..start.saturating_add(11))
+            == Some(&['2', '>', '/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l'])
+        && starts_at_shell_token_boundary(chars, start, preserve_backslash)
+        && chars.get(start + 11).is_none_or(|value| {
+            is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
+        })
+}
+
+fn starts_at_shell_token_boundary(chars: &[char], start: usize, preserve_backslash: bool) -> bool {
+    start == 0
+        || (is_shell_token_whitespace(chars[start - 1])
+            && (preserve_backslash
+                || chars[..start - 1]
+                    .iter()
+                    .rev()
+                    .take_while(|value| **value == '\\')
+                    .count()
+                    % 2
+                    == 0))
 }
 
 fn is_plain_cd_target(value: &str) -> bool {
@@ -500,14 +614,19 @@ fn push_segment(
     Ok(())
 }
 
-fn shell_tokens(command: &str, preserve_backslash: bool) -> Result<Vec<String>, &'static str> {
+pub(crate) fn shell_tokens(
+    command: &str,
+    preserve_backslash: bool,
+) -> Result<Vec<String>, &'static str> {
     let mut tokens = Vec::new();
     let mut token = String::new();
     let mut token_started = false;
     let mut quote = Quote::None;
     let mut escaped = false;
 
-    for current in command.chars() {
+    let chars: Vec<char> = command.chars().collect();
+    let mut characters = chars.iter().copied().enumerate();
+    while let Some((index, current)) = characters.next() {
         if escaped {
             if quote == Quote::Double && current != '"' && current != '\\' {
                 token.push('\\');
@@ -538,6 +657,15 @@ fn shell_tokens(command: &str, preserve_backslash: bool) -> Result<Vec<String>, 
                 }
             }
             Quote::None => match current {
+                '2' if !token_started
+                    && is_stderr_to_null_redirect(&chars, index, preserve_backslash) =>
+                {
+                    // A shell redirection is not an argv operand. Preserve it
+                    // in segment.text/spans, but exclude it from argument proofs.
+                    for _ in 0..10 {
+                        characters.next();
+                    }
+                }
                 '\'' => {
                     quote = Quote::Single;
                     token_started = true;
@@ -766,6 +894,44 @@ mod tests {
         assert_eq!(parsed.segments[0].span.end, 18);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn parses_only_literal_stderr_null_sink_without_changing_quoted_arguments() {
+        let parsed = parse_command(&request("ls -la src 2>/dev/null; echo done")).unwrap();
+        assert_eq!(parsed.confidence, "exact");
+        assert_eq!(parsed.segments[0].arguments, ["-la", "src"]);
+        assert_eq!(parsed.segments[0].text, "ls -la src 2>/dev/null");
+        let quoted = parse_command(&request("echo '2>/dev/null'")).unwrap();
+        assert_eq!(quoted.segments[0].arguments, ["2>/dev/null"]);
+        for command in [
+            "ls 2>/dev/null.env",
+            "ls 2>/dev/null/other",
+            "ls 12>/dev/null",
+            "ls 2>>/dev/null",
+            "ls >/dev/null",
+            "ls 2> .env",
+            "ls src2>/dev/null",
+            "cat foo\\ 2>/dev/null",
+            "cat foo\\\n2>/dev/null",
+            "cat foo\\ 2>&1",
+        ] {
+            assert_ne!(
+                parse_command(&request(command)).unwrap().confidence,
+                "exact",
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn redirect_boundary_respects_backslash_profile() {
+        let escaped: Vec<char> = "foo\\ 2>&1".chars().collect();
+        assert!(!starts_at_shell_token_boundary(&escaped, 5, false));
+        assert!(starts_at_shell_token_boundary(&escaped, 5, true));
+        let paired: Vec<char> = "foo\\\\ 2>&1".chars().collect();
+        assert!(starts_at_shell_token_boundary(&paired, 6, false));
+    }
+
     #[test]
     fn preserves_quotes_environment_and_path_override() {
         let parsed = parse_command(&request("FOO=bar PATH=/tmp tool --name 'two words'")).unwrap();
@@ -894,3 +1060,53 @@ mod tests {
         assert!(parsed.segments.is_empty());
     }
 }
+
+// RTM-019 pending modules — compile signal only until legs complete
+pub mod audit_receipt;
+pub mod cloud_audit_sync;
+#[cfg(unix)]
+pub mod guard_run_launch;
+pub mod install_time_event;
+pub mod local_supply_chain;
+pub mod package_approval;
+pub mod package_policy_override;
+pub mod package_protect_projection;
+pub mod prompt_analysis;
+pub mod redacted_command_tokens;
+pub mod supply_chain_package_eval;
+pub mod target_identities;
+pub mod workspace_inventory;
+
+// RTM-014/017/020/023 pending modules — compile signal only until legs complete.
+pub mod aibom_reporting;
+pub mod aibom_trust_metadata;
+pub mod archive_inspection;
+pub mod command_operation_classification;
+pub mod composition_rules;
+#[cfg(unix)]
+pub mod contained_execution;
+pub mod data_flow_rules;
+pub mod decisions;
+pub mod detectors;
+#[cfg(unix)]
+pub mod direct_vitest;
+pub mod false_positive_rules;
+pub mod hook_evidence_writer;
+pub mod hook_responses;
+pub mod inventory_contract;
+pub mod linux_artifact_supply_chain;
+pub mod local_mcp_stdio;
+pub mod mcp_decision;
+pub mod restricted_archive;
+#[cfg(unix)]
+pub mod restricted_pytest;
+pub mod resume_template;
+pub mod review_event_outbox;
+pub mod review_event_outbox_schema;
+#[cfg(unix)]
+pub mod sandbox;
+pub mod shims;
+pub mod signals;
+pub mod supply_chain_bundle;
+pub mod supply_chain_package_identity;
+pub mod supply_chain_support;

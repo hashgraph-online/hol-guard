@@ -17,8 +17,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 from codex_plugin_scanner.guard.runtime.extension_control_contract import CONTROL_SCHEMA_VERSION
 from codex_plugin_scanner.guard.runtime.extension_control_limits import advertised_extension_control_limits
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.support.extension_freshness import requires_fresh_projections
+from scripts.ci.check_extension_fixture_isolation import command_source_paths
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "extension-controls" / "catalog-baseline.v1.json"
 _API_SCHEMA = "guard.daemon.extension-controls.v1"
@@ -64,12 +65,41 @@ def _identity_snapshot() -> dict[str, object]:
     }
 
 
-@requires_fresh_projections
-def test_catalog_identity_matches_generated_baseline_fixture() -> None:
+def test_catalog_identity_matches_authored_sources_and_stable_api_contract() -> None:
+    """Verify catalog identity matches authored sources and stable API contract."""
     baseline = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     actual = _identity_snapshot()
-    for key, value in actual.items():
-        assert baseline[key] == value, f"canonical extension-control baseline changed at {key}"
+    # Validate completeness against authored inputs, not another generated
+    # copy of the catalog. Stable API shapes retain their reviewed fixture.
+    root = Path(__file__).resolve().parents[1]
+    expected_ids = {json.loads(path.read_bytes())["extension"]["extension_id"] for path in command_source_paths(root)}
+    for path in (root / "contributions/mcp-servers").glob("*.json"):
+        source_id = json.loads(path.read_bytes())["id"]
+        assert source_id.startswith("mcp.")
+        expected_ids.add(catalog_id_for_mcp_id(source_id))
+    assert set(actual["extension_ids"]) == expected_ids, (
+        "Stage current projections before testing: python scripts/ci/verify_native_command_program.py "
+        "--compiler rust/target/release/guard-command-source"
+    )
+    assert actual["extension_count"] == len(expected_ids)
+    registry = {item.extension_id: item for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
+    for path in command_source_paths(root):
+        source = json.loads(path.read_bytes())["extension"]
+        extension = registry[source["extension_id"]]
+        permissions = {item.permission_id: item for item in extension.permissions}
+        assert set(permissions) == {item["permission_id"] for item in source["permissions"]}
+        assert {item.rule_id for item in extension.rules} == {item["rule_id"] for item in source["rules"]}
+        for expected in source["permissions"]:
+            permission = permissions[expected["permission_id"]]
+            for key in ("baseline_floor", "default_enabled", "configurable", "example_command", "family"):
+                assert getattr(permission, key) == expected.get(key), (path.name, key)
+            assert set(permission.rule_ids) == {
+                rule["rule_id"] for rule in source["rules"] if rule["permission_id"] == permission.permission_id
+            }
+    assert actual["permission_count"] == len(set(actual["permission_ids"]))
+    assert actual["rule_count"] == len(set(actual["rule_ids"]))
+    assert set(actual["permission_examples"]) == set(actual["permission_ids"])
+    assert set(actual["permission_families"]) <= set(actual["permission_ids"])
     assert baseline["daemon_api_schema"] == _API_SCHEMA
     assert baseline["extension_schema_version"] == COMMAND_EXTENSION_SCHEMA_VERSION
     assert baseline["control_schema_version"] == CONTROL_SCHEMA_VERSION

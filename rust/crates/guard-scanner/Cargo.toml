@@ -7,7 +7,17 @@ rust-version.workspace = true
 
 [dependencies]
 guard-rules = { path = "../guard-rules" }
+hex.workspace = true
+hmac.workspace = true
 regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+# `precommit` ports the Python `dir_fd` filesystem operations (openat/fstatat/
+# renameat/unlinkat); those primitives are POSIX-only.
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
 
 [lints]
 workspace = true
