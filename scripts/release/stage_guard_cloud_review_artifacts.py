@@ -34,9 +34,7 @@ def _artifacts(source_root: Path) -> dict[str, str]:
             raise FileNotFoundError(f"required contribution directory is missing: {relative_dir}")
         for path in sorted(source_dir.glob(pattern)):
             if path.is_file() and not path.is_symlink():
-                artifacts[path.relative_to(source_root).as_posix()] = (
-                    f"{destination_dir}/{path.name}"
-                )
+                artifacts[path.relative_to(source_root).as_posix()] = f"{destination_dir}/{path.name}"
     return artifacts
 
 
