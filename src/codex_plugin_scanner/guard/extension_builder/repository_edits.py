@@ -141,6 +141,10 @@ def edit_staging(content: str, metadata: Metadata) -> str:
     if "_CONTRIBUTION_SOURCES" not in content:
         raise conflict("The staging script no longer enumerates contribution payloads.")
     for source, _packaged in _artifact_mappings(metadata):
+        if not source.startswith(("contributions/extensions/", "contributions/mcp-servers/")):
+            # Command sources compile into the native program rather than
+            # staging individually; only descriptor payloads are enumerated.
+            continue
         name = source.rsplit("/", 1)[-1]
         covered = (
             source.startswith("contributions/extensions/") and name.startswith("command.")
