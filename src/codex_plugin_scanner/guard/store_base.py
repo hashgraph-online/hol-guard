@@ -1181,11 +1181,24 @@ def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
 
 def _set_private_mode(path: Path, mode: int) -> None:
     if os.name == "nt":
+        if path.is_dir():
+            _set_windows_private_directory(path)
         return
     try:
         os.chmod(path, mode)
     except OSError as exc:
         _store_logger.debug("Could not set private mode %o on %s: %s", mode, path, exc)
+        return
+
+
+def _set_windows_private_directory(path: Path) -> None:
+    from .native_policy_snapshot import NativePolicySnapshotError
+    from .native_policy_snapshot_windows_state import _windows_ensure_private_directory
+
+    try:
+        _windows_ensure_private_directory(path)
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _store_logger.debug("Could not set Windows private directory on %s: %s", path, exc)
         return
 
 

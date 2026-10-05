@@ -102,7 +102,7 @@ fn audited_inventory_is_exactly_the_null_matcher_catalog_subset() {
         .filter(|rule| rule["matcher"].is_null())
         .map(|rule| rule["rule_id"].as_str().unwrap())
         .collect();
-    assert_eq!(actual.len(), 42);
+    assert_eq!(actual.len(), 43);
     assert_eq!(actual, expected);
 }
 

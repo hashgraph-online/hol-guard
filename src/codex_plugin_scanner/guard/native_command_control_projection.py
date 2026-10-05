@@ -114,7 +114,10 @@ def _read_control_projection_locked(
     from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
     # All leases are released before the caller performs resident push IPC.
-    with store._extension_control_authority_lock(shared=read_only):
+    # Reuse connection setup only within this fenced projection. Each store
+    # method retains its own transaction; authority and floors are reverified
+    # on every call, and the connection closes before resident push IPC.
+    with store._extension_control_authority_lock(shared=read_only), store.connection_scope():
         view = store.read_extension_control_authority_for_registry(
             BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=read_only
         )

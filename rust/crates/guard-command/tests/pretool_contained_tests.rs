@@ -14,6 +14,39 @@ fn classify(harness: &str, command: &str) -> guard_contracts::PreToolResultV1 {
 }
 
 #[test]
+fn isolated_python_inline_code_requires_containment_not_unrestricted_allow() {
+    for flags in ["-I", "-S", "-I -S", "-S -I", "-IS", "-SI"] {
+        let command = format!("python3 {flags} -c 'print(1)'");
+        let result = classify("omp", &command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(result.minimum_action, "sandbox-required", "{command}");
+            assert_eq!(
+                result.reason_code, "native_python_eval_readonly_containment_required",
+                "{command}"
+            );
+        }
+    }
+    for command in [
+        "python3 -I -m arbitrary",
+        "python3 -S file.py",
+        "python3 -W ignore -c 'print(1)'",
+        "python3 -I -I -c 'print(1)'",
+        "python3 -IS -S -c 'print(1)'",
+        "python3 -I -S -c 'print(1)' extra",
+        "PYTHONPATH=/tmp python3 -I -S -c 'print(1)'",
+        "python3 -I -S -c 'print(1)' && rm -rf /",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert_ne!(
+            result.reason_code, "native_python_eval_readonly_containment_required",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn local_transform_service_is_containment_only_and_argv_bounded() {
     let command = "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.4 --ping";
     let result = classify("omp", command);

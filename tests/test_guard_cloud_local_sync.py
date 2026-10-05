@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
@@ -414,6 +415,25 @@ def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypa
     build_runtime_snapshot(store=store, approval_center_url=None)
 
     assert calls == 1
+
+
+def test_runtime_snapshot_reuses_one_store_connection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    opened = 0
+    original = sqlite3.connect
+
+    def counted_connect(*args, **kwargs):
+        nonlocal opened
+        opened += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", counted_connect)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert opened == 1
+    assert snapshot["pending_count"] == 0
+    assert snapshot["device"]["local_registered"] is True
 
 
 def test_runtime_snapshot_exposes_safe_trust_status(tmp_path: Path) -> None:

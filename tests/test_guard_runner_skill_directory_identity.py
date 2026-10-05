@@ -13,6 +13,8 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 def test_fresh_approval_survives_unchanged_incomplete_skill_redetection(
     tmp_path: Path,

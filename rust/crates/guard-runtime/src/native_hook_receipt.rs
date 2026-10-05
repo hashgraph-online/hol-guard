@@ -31,6 +31,7 @@ struct DecisionReceiptInputs<'a> {
     request_id: &'a str,
     request_digest: &'a str,
     execution_intent_digest: Option<&'a str>,
+    business_review_binding: Option<&'a str>,
     harness: &'a str,
     event_name: &'a str,
     payload_kind: &'a GuardHookPayloadKindV2,
@@ -90,6 +91,9 @@ fn build_decision_receipt(
         identity["command_extensions"] = serde_json::to_value(binding)
             .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
     }
+    if let Some(binding) = inputs.business_review_binding {
+        identity["business_review_binding"] = Value::String(binding.to_owned());
+    }
     if !inputs.prompt_risk_classes.is_empty() {
         identity["prompt_risk_classes"] = serde_json::to_value(inputs.prompt_risk_classes)
             .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
@@ -105,6 +109,7 @@ fn build_decision_receipt(
         request_id: inputs.request_id.to_owned(),
         request_digest: inputs.request_digest.to_owned(),
         execution_intent_digest: inputs.execution_intent_digest.map(ToOwned::to_owned),
+        business_review_binding: inputs.business_review_binding.map(ToOwned::to_owned),
         harness: inputs.harness.to_owned(),
         event_name: inputs.event_name.to_owned(),
         payload_kind: inputs.payload_kind.clone(),
@@ -149,6 +154,7 @@ pub(crate) fn receipt_from_pre_tool(
             request_id: identity.request_id,
             request_digest: identity.request_digest,
             execution_intent_digest: identity.execution_intent_digest,
+            business_review_binding: None,
             harness,
             event_name: &result.action.event,
             payload_kind,
@@ -183,6 +189,7 @@ pub(crate) fn receipt_from_post_tool(
             request_id: identity.request_id,
             request_digest: identity.request_digest,
             execution_intent_digest: identity.execution_intent_digest,
+            business_review_binding: None,
             harness,
             event_name: "PostToolUse",
             payload_kind,
@@ -225,6 +232,13 @@ mod tests {
     }
 
     fn receipt(identity: &NativeReceiptIdentity<'_>) -> NativeHookDecisionReceiptV1 {
+        receipt_with_business_binding(identity, None)
+    }
+
+    fn receipt_with_business_binding(
+        identity: &NativeReceiptIdentity<'_>,
+        business_review_binding: Option<&str>,
+    ) -> NativeHookDecisionReceiptV1 {
         build_decision_receipt(
             &envelope(),
             None,
@@ -232,6 +246,7 @@ mod tests {
                 request_id: identity.request_id,
                 request_digest: identity.request_digest,
                 execution_intent_digest: identity.execution_intent_digest,
+                business_review_binding,
                 harness: "codex",
                 event_name: "PreToolUse",
                 payload_kind: &GuardHookPayloadKindV2::Inline,
@@ -247,6 +262,26 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn business_review_binding_changes_decision_identity() {
+        let identity = NativeReceiptIdentity {
+            request_id: "request",
+            request_digest: &"a".repeat(64),
+            execution_intent_digest: None,
+        };
+        let ordinary = receipt(&identity);
+        let first = receipt_with_business_binding(&identity, Some(&"b".repeat(64)));
+        let second = receipt_with_business_binding(&identity, Some(&"c".repeat(64)));
+        assert_ne!(ordinary.decision_id, first.decision_id);
+        assert_ne!(first.decision_id, second.decision_id);
+        assert_eq!(first.business_review_binding, Some("b".repeat(64)));
+        // Shared vector with the thin Python receipt validator.
+        assert_eq!(
+            first.decision_id,
+            "c3613993d236fb3d798bcbcd227fb80875328e5bb072590151e17bad67b424ed"
+        );
     }
 
     #[test]

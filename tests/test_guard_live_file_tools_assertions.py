@@ -84,9 +84,7 @@ def test_outside_cwd_anchored_edit_uses_actual_host_home(tmp_path, monkeypatch):
 def test_string_replacement_edit_validates_target_and_contents(tmp_path, path_key):
     workspace = prepare_workspace(tmp_path)
     events = file_events()
-    events[6]["args"] = {
-        path_key: "copy.txt", "old_string": "fixture-before", "new_string": "fixture-after"
-    }
+    events[6]["args"] = {path_key: "copy.txt", "old_string": "fixture-before", "new_string": "fixture-after"}
     assert_file_tools(events, workspace)
     events[6]["args"][path_key] = "other.txt"
     with pytest.raises(AssertionError, match="target"):

@@ -21,15 +21,23 @@ hex.workspace = true
 fs2.workspace = true
 libc.workspace = true
 ring.workspace = true
+rusqlite.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true
+aes.workspace = true
+base64ct.workspace = true
+cbc.workspace = true
+hmac.workspace = true
 sha2.workspace = true
+sha1.workspace = true
+pbkdf2.workspace = true
+base32ct.workspace = true
 sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["signal", "resource", "socket", "net"] }
+nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 guard-seatbelt = { path = "../guard-seatbelt" }

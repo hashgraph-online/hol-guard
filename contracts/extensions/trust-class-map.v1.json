@@ -78,12 +78,15 @@
       "command.storage.minio"
     ],
     "external": [
+      "command.appimg",
       "command.blitcp",
       "command.cloudg",
       "command.cogext",
+      "command.cs",
       "command.ctty",
       "command.digline",
       "command.errand",
+      "command.faf-cli",
       "command.genclave",
       "command.gitsync",
       "command.mcp-contribos",
@@ -99,9 +102,11 @@
       "command.routed",
       "command.skill-base",
       "command.skill-sunset",
+      "command.snoboard",
       "command.syngraphe",
       "command.tui-runner",
-      "command.uivoid"
+      "command.uivoid",
+      "command.vttforge"
     ]
   }
 }
