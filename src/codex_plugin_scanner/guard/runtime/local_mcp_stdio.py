@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shlex
 import signal
 import subprocess
 import tempfile
@@ -13,6 +14,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal, TypeGuard
 
 from .local_mcp_probe_env import (
@@ -51,6 +53,41 @@ class McpCatalogResult:
     skills_reason: str | None = None
 
 
+def _native_catalog_result(payload: dict[str, object]) -> McpCatalogResult | None:
+    """Accept only a well-typed native catalog; malformed payloads use Python."""
+    if payload.get("status") != "ok":
+        reason = payload.get("reason", "native_failed")
+        return McpCatalogResult(reason=reason) if reason is None or isinstance(reason, str) else None
+    tools = payload.get("tools")
+    protocol_version = payload.get("protocol_version")
+    server_info = payload.get("server_info")
+    capabilities = payload.get("capabilities")
+    if not isinstance(tools, list) or len(tools) > MAX_MCP_PROBE_TOOLS:
+        return None
+    if any(not isinstance(tool, dict) or any(not isinstance(key, str) for key in tool) for tool in tools):
+        return None
+    if protocol_version is not None and not isinstance(protocol_version, str):
+        return None
+    if server_info is not None and not isinstance(server_info, dict):
+        return None
+    if capabilities is not None and not isinstance(capabilities, dict):
+        return None
+    return McpCatalogResult(
+        tools=tuple(tools),
+        complete=True,
+        protocol_version=protocol_version,
+        server_info=server_info,
+        capabilities=capabilities,
+    )
+
+
+def _shlex_join_safe(argv: list[str]) -> str:
+    try:
+        return shlex.join(argv)
+    except Exception:
+        return " ".join(argv)
+
+
 def run_mcp_catalog(
     argv: Sequence[str],
     *,
@@ -58,6 +95,7 @@ def run_mcp_catalog(
     extra_env: Mapping[str, str] | None = None,
     cancel: threading.Event | None = None,
     connection_identity_hash: str | None = None,
+    guard_home: Path | None = None,
 ) -> McpCatalogResult:
     """Discover tools while retaining bounded partial results and their cause."""
 
@@ -65,6 +103,21 @@ def run_mcp_catalog(
         return McpCatalogResult(reason="invalid_launch")
     if cancel is not None and cancel.is_set():
         return McpCatalogResult(reason="cancelled")
+    from .. import native_execution as _native_execution
+    from ..config import resolve_guard_home
+
+    _native_result = _native_execution.mcp_stdio_probe_native(
+        _shlex_join_safe(list(argv)),
+        cwd=Path.cwd(),
+        extra_env=extra_env,
+        guard_home=guard_home if guard_home is not None else resolve_guard_home(),
+        timeout_seconds=timeout,
+        connection_identity_hash=connection_identity_hash,
+    )
+    if _native_result is not None:
+        native_catalog = _native_catalog_result(_native_result)
+        if native_catalog is not None:
+            return native_catalog
     try:
         with tempfile.TemporaryDirectory(prefix="hol-guard-mcp-probe-") as tmp:
             return _exchange_tools_list(

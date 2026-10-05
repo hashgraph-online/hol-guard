@@ -85,6 +85,35 @@ pub fn accept_retry_delay(consecutive_failures: u32, error: &io::Error) -> Durat
     }
 }
 
+// An idle nonblocking listener is not a transport failure. Poll with the same
+// bounded lifecycle cadence as the old sleep, but wake immediately on a client.
+#[cfg(unix)]
+pub fn wait_for_accept_ready(listener: &impl std::os::fd::AsFd) -> io::Result<bool> {
+    use nix::errno::Errno;
+    use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+
+    let timeout = PollTimeout::try_from(ACCEPT_BACKOFF_MIN)
+        .map_err(|_| io::Error::other("native_accept_poll_timeout_invalid"))?;
+    let mut descriptors = [PollFd::new(listener.as_fd(), PollFlags::POLLIN)];
+    match poll(&mut descriptors, timeout) {
+        Ok(_) => accept_readiness(descriptors[0].revents()),
+        // Return to the caller's owner/shutdown/deadline checks after a signal.
+        Err(Errno::EINTR) => Ok(false),
+        Err(error) => Err(io::Error::from_raw_os_error(error as i32)),
+    }
+}
+
+#[cfg(unix)]
+fn accept_readiness(events: Option<nix::poll::PollFlags>) -> io::Result<bool> {
+    use nix::poll::PollFlags;
+
+    let events = events.ok_or_else(|| io::Error::other("native_accept_poll_invalid"))?;
+    if events.intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL) {
+        return Err(io::Error::other("native_accept_poll_failed"));
+    }
+    Ok(events.contains(PollFlags::POLLIN))
+}
+
 pub fn read_error(error: &io::Error, fallback: &'static str) -> String {
     match classify_io_error(error) {
         IoFailureClass::ClientAbort => "native_client_disconnected".to_owned(),
@@ -149,5 +178,54 @@ mod tests {
         let error = io::Error::new(io::ErrorKind::NetworkDown, "fixture");
         assert_eq!(classify_io_error(&error), IoFailureClass::NetworkChange);
         assert!(accept_retry_delay(100, &error) <= ACCEPT_BACKOFF_MAX);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn accept_readiness_rejects_errors_even_when_readable() {
+        use nix::poll::PollFlags;
+
+        assert!(!accept_readiness(Some(PollFlags::empty())).unwrap());
+        assert!(accept_readiness(Some(PollFlags::POLLIN)).unwrap());
+        assert!(accept_readiness(None).is_err());
+        for error in [PollFlags::POLLERR, PollFlags::POLLHUP, PollFlags::POLLNVAL] {
+            assert!(accept_readiness(Some(error)).is_err());
+            assert!(accept_readiness(Some(error | PollFlags::POLLIN)).is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn idle_poll_times_out_and_readiness_does_not_consume_input() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+
+        let (mut reader, mut writer) = UnixStream::pair().unwrap();
+        reader.set_nonblocking(true).unwrap();
+        assert!(!wait_for_accept_ready(&reader).unwrap());
+        writer.write_all(b"x").unwrap();
+        assert!(wait_for_accept_ready(&reader).unwrap());
+        assert!(wait_for_accept_ready(&reader).unwrap());
+        let mut byte = [0];
+        reader.read_exact(&mut byte).unwrap();
+        assert_eq!(byte, *b"x");
+        assert!(!wait_for_accept_ready(&reader).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pending_connection_wakes_listener_without_accepting_it() {
+        use std::net::{Ipv4Addr, TcpListener, TcpStream};
+
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        assert!(!wait_for_accept_ready(&listener).unwrap());
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        assert!(wait_for_accept_ready(&listener).unwrap());
+        let (accepted, peer) = listener.accept().unwrap();
+        assert_eq!(peer, client.local_addr().unwrap());
+        drop(accepted);
+        drop(client);
+        assert!(!wait_for_accept_ready(&listener).unwrap());
     }
 }

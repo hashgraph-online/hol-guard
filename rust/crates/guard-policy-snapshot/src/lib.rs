@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
+pub mod business_match;
+pub mod business_policy;
+
 #[path = "policy_snapshot_canonical.rs"]
 mod canonical;
 #[path = "policy_snapshot_crypto.rs"]
@@ -24,6 +27,12 @@ pub use crypto::{
     policy_digest, verifier_key_id,
 };
 
+pub mod local_authority_integrity;
+pub mod policy_integrity;
+
+#[cfg(test)]
+#[path = "business_policy_tests.rs"]
+mod business_policy_tests;
 #[cfg(test)]
 #[path = "policy_snapshot_tests.rs"]
 mod tests;
@@ -146,6 +155,12 @@ pub struct PolicySnapshotV3 {
     pub effective_policy: EffectiveNativePolicyV3,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_extensions: Option<guard_contracts::NativeCommandControlBindingV1>,
+    #[serde(
+        default,
+        deserialize_with = "business_policy::present_binding",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub business_policy: Option<business_policy::BusinessPolicyBindingV1>,
     pub issued_at_ms: u64,
     pub expires_at_ms: u64,
     pub integrity: SnapshotIntegrityV3,
@@ -288,6 +303,9 @@ pub fn validate_v3(
     }
     validate_scope(&snapshot.scope_contract)?;
     validate_effective_policy(&snapshot.effective_policy)?;
+    if let Some(binding) = &snapshot.business_policy {
+        binding.validate()?;
+    }
     if let Some(binding) = &snapshot.command_extensions {
         binding.validate().map_err(|_| SnapshotError::Policy)?;
     }

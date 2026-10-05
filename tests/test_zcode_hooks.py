@@ -158,9 +158,10 @@ class TestZCodeHookResponses:
             policy_action="block",
             reason="HOL Guard requires the native command extension policy before this action can execute.",
         )
-        assert "hol-guard command controls acknowledge-degraded" in payload["hookSpecificOutput"][
-            "permissionDecisionReason"
-        ]
+        assert (
+            "hol-guard command controls acknowledge-degraded"
+            in payload["hookSpecificOutput"]["permissionDecisionReason"]
+        )
 
     def test_should_block_flags_blocking_actions(self) -> None:
         assert zcode_hook_should_block(policy_action="review")

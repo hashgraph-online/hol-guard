@@ -1,4 +1,5 @@
 """Cancelled startup must retain every live process until containment succeeds."""
+
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,10 @@ from codex_plugin_scanner.guard.daemon.hook_process_spawner import spawn_hook_wo
 @pytest.mark.parametrize("failure_type", [RuntimeError, KeyboardInterrupt])
 @pytest.mark.parametrize("boundary", ["isolation", "retirement"])
 def test_cancelled_spawn_keeps_actual_worker_owned_when_cleanup_raises(
-    tmp_path: Path, monkeypatch, failure_type, boundary,
+    tmp_path: Path,
+    monkeypatch,
+    failure_type,
+    boundary,
 ):
     runner = HookProcessRunner(guard_home=tmp_path / "guard-home", process_limit=1)
     generation = runner._generation
@@ -35,8 +39,9 @@ def test_cancelled_spawn_keeps_actual_worker_owned_when_cleanup_raises(
             else:
                 fault.setattr(runner, "_retire_slot", interrupted)
             with pytest.raises(failure_type, match="cleanup interruption"):
-                creation.start_hook_worker_slot(runner, generation=generation,
-                                                spawn=cancelled_spawn, isolation_timeout=1)
+                creation.start_hook_worker_slot(
+                    runner, generation=generation, spawn=cancelled_spawn, isolation_timeout=1
+                )
         assert len(spawned) == 1
         slot = spawned[0]
         assert runner._all_slots.get(slot.process.pid) is slot, "a cancelled live child must remain owned"

@@ -143,6 +143,7 @@ from ..action_lattice import (
 )
 from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..retry_lineage import capture_retry_lineage
 from ..runtime.actions import _command_detail
 from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -632,6 +633,7 @@ def _should_relax_configured_default(
     harness: str = "codex",
     has_narrow_override: bool,
     home_dir: Path | None,
+    guard_home: Path | None = None,
     payload: Mapping[str, object],
     runtime_artifact_checked: bool = False,
     runtime_workspace: Path | None,
@@ -643,7 +645,7 @@ def _should_relax_configured_default(
         prompt_text = payload.get("prompt")
         if not isinstance(prompt_text, str) or not prompt_text.strip():
             return False
-        if extract_prompt_requests(prompt_text):
+        if extract_prompt_requests(prompt_text, guard_home=guard_home):
             return False
         if (
             _codex_prompt_credential_file_artifact(
@@ -659,6 +661,7 @@ def _should_relax_configured_default(
             or _codex_prompt_attachment_artifact(
                 prompt_text=prompt_text,
                 home_dir=home_dir,
+                guard_home=guard_home,
                 config_path="<runtime>",
             )
             is None
@@ -720,6 +723,8 @@ def run_native_generic_payload(
 
     bind_context_digest_home(getattr(store, "guard_home", None))
     payload_map = dict(payload)
+    payload_map.pop("blocked_request_guidance", None)
+    blocked_request_guidance: str | None = None
     artifact_id = _coalesce_string(
         getattr(args, "artifact_id", None),
         payload_map.get("artifact_id"),
@@ -766,6 +771,7 @@ def run_native_generic_payload(
         harness=args.harness,
         has_narrow_override=configured_narrow_override is not None,
         home_dir=home_dir,
+        guard_home=store.guard_home,
         payload=payload_map,
         runtime_artifact_checked=runtime_artifact_checked,
         runtime_workspace=runtime_workspace,
@@ -1153,9 +1159,89 @@ def run_native_generic_payload(
                 }
             )
     hook_event_name = hook_event_name or "PreToolUse"
+    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+
+    silent_review_action: str | None = None
+    silent_review_reason = ""
+    if (
+        hook_is_pre_event(hook_event_name)
+        and policy_action in {"review", "require-reapproval"}
+        and not asks_for_approval(config)
+    ):
+        if approval_reuse.status == "rejected":
+            policy_reason = "A saved approval does not cover this action under current protection."
+        elif configured_policy_normalization.action in {"review", "require-reapproval"}:
+            policy_reason = "Current local policy requires review for this action."
+        elif cli_action_normalization is not None and cli_action_normalization.action in {
+            "review",
+            "require-reapproval",
+        }:
+            policy_reason = "The trusted hook invocation requires review for this action."
+        else:
+            policy_reason = "No applicable policy or valid saved approval allows this action."
+        silent_review_action = policy_action
+        silent_review_reason = policy_reason
+        policy_action = "block"
+        payload_map.update(
+            policy_action="block",
+            approval_requests=[],
+            prompted=False,
+        )
+        blocked_request_guidance = safe_alternative_reason(policy_reason)
+        payload_map["blocked_request_guidance"] = blocked_request_guidance
     changed_capabilities = _string_list(payload_map.get("changed_capabilities"))
     if not changed_capabilities and isinstance(payload_map.get("event"), str):
         changed_capabilities = [str(payload_map["event"])]
+    if silent_review_action is not None:
+        from ..approvals import record_unprompted_review
+
+        redacted_command_text = _command_detail(command_text, home_dir=home_dir)
+        config_path = str(runtime_workspace) if runtime_workspace is not None else ""
+        silent_artifact = GuardArtifact(
+            artifact_id=artifact_id,
+            name=artifact_name,
+            harness=args.harness,
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=config_path,
+            command=redacted_command_text,
+            metadata={
+                "action_class": "unmatched tool action",
+                "request_summary": "Guard recorded a blocked review without prompting.",
+            },
+        )
+        record_unprompted_review(
+            detection=HarnessDetection(
+                harness=args.harness,
+                installed=True,
+                command_available=True,
+                config_paths=(config_path,),
+                artifacts=(silent_artifact,),
+            ),
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact_id,
+                        "artifact_name": artifact_name,
+                        "artifact_hash": runtime_artifact_hash,
+                        "artifact_type": silent_artifact.artifact_type,
+                        "source_scope": silent_artifact.source_scope,
+                        "config_path": config_path,
+                        "policy_action": silent_review_action,
+                        "changed_fields": changed_capabilities or ["tool_action"],
+                        "launch_target": redacted_command_text,
+                        "risk_summary": silent_review_reason,
+                        "action_envelope_json": (
+                            action_envelope.with_pre_execution_result(None).to_dict()
+                            if action_envelope is not None
+                            else None
+                        ),
+                    }
+                ]
+            },
+            store=store,
+            redaction_level=config.receipt_redaction_level,
+        )
     should_record_generic_hook_receipt = not (
         args.harness == "codex"
         and hook_event_name == "PreToolUse"
@@ -1218,9 +1304,13 @@ def run_native_generic_payload(
             payload=payload_map,
             policy_action=cast(GuardAction, policy_action),
             receipt_id=command_activity_receipt_id,
-            prompted=command_activity_was_prompted(
-                cast(GuardAction, policy_action),
-                command_activity_reuse_status,
+            prompted=(
+                False
+                if blocked_request_guidance is not None
+                else command_activity_was_prompted(
+                    cast(GuardAction, policy_action),
+                    command_activity_reuse_status,
+                )
             ),
             approval_reuse_status=command_activity_reuse_status,
             cwd=runtime_workspace,
@@ -1236,7 +1326,11 @@ def run_native_generic_payload(
     if _should_emit_copilot_hook_response(args):
         _emit_copilot_hook_response(
             policy_action=policy_action,
-            reason=_copilot_hook_reason(payload_map.get("permission_decision_reason")),
+            reason=(
+                blocked_request_guidance
+                if blocked_request_guidance is not None
+                else _copilot_hook_reason(payload_map.get("permission_decision_reason"))
+            ),
             output_stream=output_stream,
         )
         return 0
@@ -1294,6 +1388,20 @@ def run_native_generic_payload(
                 "request_summary": "Guard requires approval because no command rule matched this tool action.",
             },
         )
+        queued_at = _now()
+        hook_metadata: dict[str, object] = {
+            "tool_name": str(payload_map.get("tool_name", "")),
+            "hook_event_name": hook_event_name,
+            "workspace": str(runtime_workspace) if runtime_workspace else None,
+        }
+        retry_lineage = capture_retry_lineage(
+            payload_map,
+            harness=str(args.harness),
+            workspace=str(runtime_workspace) if runtime_workspace else None,
+            action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
+        )
+        if retry_lineage is not None:
+            hook_metadata["retry_lineage"] = retry_lineage
         queued = queue_blocked_approvals(
             detection=HarnessDetection(
                 harness=args.harness,
@@ -1328,14 +1436,22 @@ def run_native_generic_payload(
             },
             store=store,
             approval_center_url=approval_center_url,
-            now=_now(),
+            now=queued_at,
             redaction_level=config.receipt_redaction_level,
+            continuation_operation={
+                "created_at": queued_at,
+                "harness": args.harness,
+                "metadata": hook_metadata,
+                "status": "waiting_on_approval",
+                "updated_at": queued_at,
+            },
         )
         payload_map["approval_requests"] = queued
         payload_map["approval_center_url"] = approval_center_url
     _localize_pending_approval_copy(payload_map, harness=args.harness)
     incoming_reason = (
-        daemon_failure_reason
+        blocked_request_guidance
+        or daemon_failure_reason
         or _decision_v2_harness_message(payload_map)
         or payload_map.get("permission_decision_reason")
     )
@@ -1432,6 +1548,9 @@ def run_native_generic_payload(
     }
     if isinstance(payload_map.get("approval_requests"), list):
         hook_envelope["approval_requests"] = payload_map["approval_requests"]
+    if blocked_request_guidance is not None:
+        hook_envelope["blocked_request_guidance"] = blocked_request_guidance
+        hook_envelope["prompted"] = False
     if getattr(args, "json", False) and output_stream is None:
         json_result = _native_hook_json_document(
             args,

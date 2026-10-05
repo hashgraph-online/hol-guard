@@ -17,6 +17,8 @@ from codex_plugin_scanner.guard.trusted_local_tools import (
 )
 from tests.conftest import guard_commands_module
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _write_event(
     path: Path,
@@ -377,6 +379,7 @@ def test_local_tool_trust_allows_variable_read_queries_and_invalidates_changed_b
     guard_home.mkdir()
     _ = (guard_home / "config.toml").write_text(
         'mode = "enforce"\nsecurity_level = "balanced"\ndefault_action = "require-reapproval"\n'
+        'blocked_request_mode = "ask"\n'
     )
     monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
 

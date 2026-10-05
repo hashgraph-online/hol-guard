@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 
-import { composeCommand, runCommand, safeProjectName, type CommandResult } from "./lab-process";
+import { composeCommand, REPO_ROOT, runCommand, safeProjectName, type CommandResult } from "./lab-process";
 import { runInstalledPlaywright } from "./installed-playwright";
 import { fetchLabGet, fetchLabIdempotent } from "./relay-fetch";
-import { readyFromLogs } from "./runner";
+import { readyFromLogs, resolveWheel } from "./runner";
 import { readDashboardSession } from "./session-handoff";
 import { teardownLab } from "./teardown";
 
@@ -12,6 +13,19 @@ function result(stdout = "", exitCode = 0): CommandResult {
 }
 
 describe("command extension analytics Dockerlabs orchestration", () => {
+  test("requires an explicit native wheel instead of building a pure wheel", () => {
+    const original = Bun.env.HOL_GUARD_WHEEL;
+    try {
+      delete Bun.env.HOL_GUARD_WHEEL;
+      expect(() => resolveWheel()).toThrow("native-injected wheel");
+      Bun.env.HOL_GUARD_WHEEL = resolve(REPO_ROOT, "dist/synthetic.whl");
+      expect(resolveWheel()).toBe("dist/synthetic.whl");
+    } finally {
+      if (original === undefined) delete Bun.env.HOL_GUARD_WHEEL;
+      else Bun.env.HOL_GUARD_WHEEL = original;
+    }
+  });
+
   test("normalizes bounded compose project names", () => {
     expect(safeProjectName("Guard Command Analytics 42")).toBe("guard-command-analytics-42");
     expect(() => safeProjectName("../")).toThrow("invalid Dockerlabs project name");
@@ -236,8 +250,8 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(dockerignore).toContain("tcp_relay.py");
     expect(compose).not.toContain("../../src");
     expect(compose).toContain("internal: true");
-    expect(compose).toContain('HOL_GUARD_NATIVE: "off"');
-    expect(compose).toContain('HOL_GUARD_PYTHON_ORACLE: "1"');
+    expect(compose).toContain('HOL_GUARD_NATIVE: "auto"');
+    expect(compose).not.toContain("HOL_GUARD_PYTHON_ORACLE");
     expect(compose).toContain("no-new-privileges:true");
     expect(compose).not.toContain("SYS_ADMIN");
     expect(compose).not.toContain("seccomp:unconfined");

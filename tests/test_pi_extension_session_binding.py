@@ -47,6 +47,8 @@ function handlerAbortSignal(ctx) { return ctx.signal; }
 function approvalContinuationActivity() { return undefined; }
 function continuationIsActive(activity) { return !activity || activity(); }
 function approvalContinuationFailureReason(_response, result) { return `continuation-${result}`; }
+async function ensureGuardWorkspaceReady() { return { ready: true }; }
+function readinessFailureReason(readiness) { return `readiness-${readiness.reasonCode}`; }
 async function runGuard(payload) { captured = payload; return {}; }
 """
         + fragment

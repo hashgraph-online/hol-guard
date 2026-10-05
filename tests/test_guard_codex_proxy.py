@@ -19,6 +19,8 @@ from codex_plugin_scanner.guard.proxy.stdio import ProxyIoTimeoutError, _readlin
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_tool_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _child_command(marker_path: Path, tool_name: str = "dangerous_delete") -> list[str]:
     return [
@@ -385,7 +387,10 @@ def test_composio_inline_approval_is_single_use_without_ending_proxy_session(tmp
     proxy = CodexMcpGuardProxy(
         server_name="composio",
         command=_child_command(marker_path, "COMPOSIO_MULTI_EXECUTE_TOOL"),
-        context=context, store=store, config=config, source_scope="project",
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
     approvals = []
@@ -394,16 +399,31 @@ def test_composio_inline_approval_is_single_use_without_ending_proxy_session(tmp
         approvals.append(request)
         return {"action": "accept", "content": {"decision": "approve"}}
 
-    result = proxy.run_session([
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {"elicitation": {}}}},
-        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-        {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "COMPOSIO_MULTI_EXECUTE_TOOL", "arguments": {"tools": []},
-        }},
-        {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "COMPOSIO_MULTI_EXECUTE_TOOL", "arguments": {"tools": []},
-        }},
-    ], inline_approval_callback=approve)
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {"elicitation": {}}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "COMPOSIO_MULTI_EXECUTE_TOOL",
+                    "arguments": {"tools": []},
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "COMPOSIO_MULTI_EXECUTE_TOOL",
+                    "arguments": {"tools": []},
+                },
+            },
+        ],
+        inline_approval_callback=approve,
+    )
     assert len(result["responses"]) == 4
     assert len(approvals) == 2
     assert "error" not in result["responses"][3]

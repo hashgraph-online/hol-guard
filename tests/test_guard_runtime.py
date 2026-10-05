@@ -96,7 +96,13 @@ from tests.policy_bundle_signing_helpers import (
 )
 from tests.support.network import stub_authenticated_urlopen
 
-pytestmark = pytest.mark.usefixtures("native_hook_force")
+pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("native_hook_force")]
+
+pytestmark = [
+    *(pytestmark if isinstance(pytestmark, list) else [pytestmark]),
+    pytest.mark.usefixtures("native_prompt_runtime"),
+]
+
 
 COPILOT_NATIVE_DENY_COMMANDS = (
     """node -e "require('fs').unlinkSync('dangerous-marker.json')" """,
@@ -3230,6 +3236,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n')
         event = {
             "event": "PostToolUse",
             "tool_name": "Bash",
@@ -3613,7 +3620,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 1, output
         assert output["approval_requests"]
 
     def test_codex_post_tool_use_blocks_ripgrep_preprocessor_with_secret_like_output(
@@ -3798,6 +3805,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n')
         event = {
             "event": "PostToolUse",
             "tool_name": "Bash",
@@ -6722,7 +6730,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_apply_dele
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
-def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_optional_chain_apply_delete_bypass(
+def test_guard_hook_blocks_node_inline_optional_chain_apply_delete_bypass_for_copilot(
     tmp_path,
     capsys,
     monkeypatch,
@@ -6757,10 +6765,19 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_optional_c
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
-    assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    # Parser availability can select direct denial or approval review. Both
+    # routes must prevent execution; exit zero alone does not mean allow.
+    assert rc in {0, 1}
+    decision = output["hookSpecificOutput"]["permissionDecision"]
+    assert decision in {"deny", "ask"}
+    reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "hol guard" in reason
+    if rc == 0:
+        assert decision == "deny"
+        assert output["policy_action"] == "block"
+        assert "approve it in hol guard, then retry." not in reason
+    else:
+        assert "approve it in hol guard, then retry." in reason
 
 
 def test_guard_hook_emits_copilot_native_ask_response_for_env_split_string_find_delete(
@@ -7119,8 +7136,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_read_only_ls_pipelin
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["approval_reuse"]["action"] == "block"
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_quoted_dev_null_redirection(
@@ -7255,8 +7272,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_node_transfor
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["approval_reuse"]["action"] == "block"
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_node_string_literal_with_dotted_mutator_text(
@@ -7445,8 +7462,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_mixed_case_no
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["approval_reuse"]["action"] == "block"
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_ask_response_for_node_print_followed_by_eval_flag(
@@ -7850,8 +7867,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_perl_sleep_wait(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["approval_reuse"]["action"] == "block"
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
 
 
 @pytest.mark.usefixtures("native_command_artifact_reviews")
@@ -8294,6 +8311,7 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n')
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
@@ -8323,7 +8341,7 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     assert rc == 0
     assert output["behavior"] == "deny"
     assert output["interrupt"] is True
-    assert "HOL Guard blocked" in output["message"]
+    assert "Call shape implies filesystem path access" in output["message"]
     assert "danger_lab:dangerous_delete" in output["message"]
     assert "http://127.0.0.1:4455/requests/" in output["message"]
     events = GuardStore(home_dir).list_guard_events_v1(uploaded=False)
@@ -13983,8 +14001,8 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
                         workspace=None,
                         reason="approved from test",
                     )
-                if not store.list_approval_requests(limit=10):
-                    return
+                # Detection may queue the next artifact after this batch drains.
+                # Keep servicing requests until the launch under test finishes.
             threading.Event().wait(0.03)
 
     worker = threading.Thread(target=resolve_pending, daemon=True)
@@ -15334,6 +15352,14 @@ def test_runtime_hook_package_without_workspace_invalidates_allow_after_lockfile
 
 
 def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_path, capsys, monkeypatch):
+    # The approval CLI refuses mutations invoked inside a known agent hook
+    # context (self-approval defense). Clear ambient harness markers so the
+    # in-process approve below runs as the operator path it simulates.
+    from codex_plugin_scanner.guard.runtime.self_approval import _AGENT_ENV_MARKERS
+
+    for marker in _AGENT_ENV_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -19151,7 +19177,11 @@ def _codex_browser_approval_context_token(*, current_action: str) -> str:
     )
 
 
-def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path, monkeypatch, native_context_digest: Path):
+def test_codex_browser_approval_decision_updates_daemon_operation_status(
+    tmp_path,
+    monkeypatch,
+    native_context_digest: Path,
+):
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
@@ -19217,7 +19247,11 @@ def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_pat
     assert payload["continuation"]["resolution_action"] == "allow"
 
 
-def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path, monkeypatch, native_context_digest: Path):
+def test_codex_browser_block_decision_updates_daemon_operation_status(
+    tmp_path,
+    monkeypatch,
+    native_context_digest: Path,
+):
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)

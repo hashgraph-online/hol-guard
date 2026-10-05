@@ -21,13 +21,15 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
+from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
     HarnessContext,
+    PreparedHarnessInstall,
     _command_available,
     _ensure_path_within_root,
     _json_payload,
@@ -59,6 +61,7 @@ from .zcode_config import (
     append_marketplace_artifacts,
     append_plugin_manifest_artifacts,
     dedupe_hook_entries,
+    hook_event_groups,
     is_guard_managed_hook_command,
 )
 
@@ -69,6 +72,10 @@ _GUARD_HOOK_STATUS_MESSAGE = "HOL Guard runtime policy enforcement"
 _ZCODE_PRETOOL_TIMEOUT_SECONDS = 30
 _ZCODE_PROMPT_TIMEOUT_SECONDS = 30
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
+
+
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionFile
 
 
 class ZCodeHarnessAdapter(HarnessAdapter):
@@ -101,7 +108,10 @@ class ZCodeHarnessAdapter(HarnessAdapter):
 
     @classmethod
     def _config_path(cls, context: HarnessContext) -> Path:
-        return cls._cli_root(context) / ZCODE_CLI_CONFIG_FILE
+        root = cls._cli_root(context)
+        settings = root / "setting.json"
+        # Current CLI releases migrate config.json once, then ignore it.
+        return settings if settings.exists() else root / ZCODE_CLI_CONFIG_FILE
 
     @classmethod
     def _plugins_root(cls, context: HarnessContext) -> Path:
@@ -258,7 +268,9 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         return state_dir, backup_path, state_path
 
     @staticmethod
-    def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    def _hook_command_parts(
+        context: HarnessContext, *, prepared_files: list[TransitionFile] | None = None
+    ) -> tuple[str, ...]:
         guard_args = [
             "guard",
             "hook",
@@ -278,6 +290,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             cli_args=guard_args,
             harness="zcode",
             timeout_seconds=_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS,
+            prepared_files=prepared_files,
         )
 
     @staticmethod
@@ -291,62 +304,115 @@ class ZCodeHarnessAdapter(HarnessAdapter):
 
         return f"{hook_command} # {GUARD_MANAGED_MARKER}"
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = install_guard_shim(
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        prepared_shim = prepare_guard_shim(
             self.harness,
             context,
             launcher_name=self.launcher_name,
             display_name="zcode",
         )
+        shim_manifest = prepared_shim.manifest
         config_path = self._config_path(context)
         _ensure_path_within_root(self._zcode_home_dir(context), config_path, label="ZCode")
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        payload = _json_payload(config_path)
+        config_before = _snapshot(config_path)
+        payload = json.loads(config_before.decode("utf-8")) if config_before is not None else {}
+        if not isinstance(payload, dict):
+            raise ValueError("ZCode config must be a JSON object.")
         if not isinstance(payload.get("mcp"), dict):
             payload["mcp"] = {}
         if not isinstance(payload.get("plugins"), dict):
             payload["plugins"] = {}
 
-        state_dir, backup_path, state_path = self._managed_state_paths(context)
-        state_dir.mkdir(parents=True, exist_ok=True)
-        if config_path.is_file() and not backup_path.exists():
-            import shutil
+        _state_dir, backup_path, state_path = self._managed_state_paths(context)
+        backup_before = _snapshot(backup_path)
+        state_before = _snapshot(state_path)
 
-            shutil.copy2(config_path, backup_path)
-
-        hook_command = _shell_command(self._hook_command_parts(context))
+        hook_files: list[TransitionFile] = []
+        hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
         managed_hook_command = self._managed_command_wrapper(hook_command)
         hooks = payload.get("hooks")
         if not isinstance(hooks, dict):
             hooks = {}
         payload["hooks"] = hooks
+        enabled_before = {"present": "enabled" in hooks, "value": hooks.get("enabled")}
+        previous_state = _json_payload(state_path) if state_before is not None else {}
+        if previous_state.get("managed_config_path") == str(config_path):
+            recorded_enabled = previous_state.get("hooks_enabled_before")
+            if (
+                isinstance(recorded_enabled, dict)
+                and isinstance(recorded_enabled.get("present"), bool)
+                and "value" in recorded_enabled
+                and (not recorded_enabled["present"] or isinstance(recorded_enabled.get("value"), bool))
+            ):
+                enabled_before = recorded_enabled
+
+        if config_path.name == "setting.json" and hooks.get("enabled") is False:
+            groups = hook_event_groups(hooks)
+            if any(self._prune_managed_entries(entries) for entries in groups.values()):
+                raise ValueError("ZCode user hooks are disabled; explicitly enable them before installing Guard.")
 
         self._sync_managed_hook_groups(hooks, managed_hook_command)
-        config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-        state_path.write_text(
-            json.dumps({"managed_config_path": str(config_path)}, indent=2) + "\n",
-            encoding="utf-8",
+        if config_path.name == "setting.json":
+            hooks["enabled"] = True
+        config_mode = config_path.stat().st_mode & 0o777 if config_before is not None else 0o644
+        backup_mode = backup_path.stat().st_mode & 0o777 if backup_before is not None else config_mode
+        state_mode = state_path.stat().st_mode & 0o777 if state_before is not None else 0o644
+        state_after = (
+            json.dumps({"managed_config_path": str(config_path), "hooks_enabled_before": enabled_before}, indent=2)
+            + "\n"
+        ).encode("utf-8")
+        files = (
+            *prepared_shim.files,
+            *hook_files,
+            TransitionFile(
+                backup_path.resolve(strict=False),
+                backup_before,
+                backup_before if backup_before is not None else config_before,
+                before_mode=backup_mode,
+                after_mode=backup_mode,
+            ),
+            TransitionFile(
+                config_path.resolve(strict=False),
+                config_before,
+                (json.dumps(payload, indent=2) + "\n").encode("utf-8"),
+                before_mode=config_mode,
+                after_mode=config_mode,
+            ),
+            TransitionFile(
+                state_path.resolve(strict=False),
+                state_before,
+                state_after,
+                before_mode=state_mode,
+                after_mode=state_mode,
+            ),
         )
+        for change in files:
+            change.payload()
 
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
         )
-        return {
+        manifest: dict[str, object] = {
             "harness": self.harness,
             "active": True,
             "config_path": str(config_path),
             **shim_manifest,
             "notes": [
-                "Guard hook entries added to ~/.zcode/cli/config.json under the hooks.events section",
+                "Guard hook entries added to the active ZCode CLI settings under hooks.events",
                 "User mcp, plugins, and any pre-existing hooks were preserved",
                 "Legacy flat hook groups were migrated into hooks.events for current ZCode",
                 "Hook entries carry a statusMessage label rendered by ZCode's Hooks settings UI",
                 *shim_notes,
             ],
         }
+        return PreparedHarnessInstall(files, manifest)
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(
@@ -355,20 +421,40 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             launcher_name=self.launcher_name,
             display_name="zcode",
         )
+        _state_dir, _backup_path, state_path = self._managed_state_paths(context)
+        state = _json_payload(state_path) if state_path.is_file() else {}
         config_path = self._config_path(context)
-        if config_path.is_file():
-            _ensure_path_within_root(self._zcode_home_dir(context), config_path, label="ZCode")
-            payload = _json_payload(config_path)
+        # Migration can copy managed hooks to settings after a legacy install.
+        for candidate in (self._cli_root(context) / "setting.json", self._cli_root(context) / ZCODE_CLI_CONFIG_FILE):
+            if not candidate.is_file():
+                continue
+            _ensure_path_within_root(self._zcode_home_dir(context), candidate, label="ZCode")
+            payload = _json_payload(candidate)
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
+                hooks_before = json.dumps(hooks, sort_keys=True)
                 self._prune_managed_hook_groups(hooks)
+                original = state.get("hooks_enabled_before")
+                if (
+                    state.get("managed_config_path") == str(candidate)
+                    and isinstance(original, dict)
+                    and isinstance(original.get("present"), bool)
+                    and "value" in original
+                    and (not original["present"] or isinstance(original.get("value"), bool))
+                    and hooks.get("enabled") is True
+                ):
+                    if original.get("present"):
+                        hooks["enabled"] = original.get("value")
+                    else:
+                        hooks.pop("enabled", None)
+                if json.dumps(hooks, sort_keys=True) == hooks_before:
+                    continue
                 if not hooks:
                     payload.pop("hooks", None)
                 else:
                     payload["hooks"] = hooks
-                config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+                candidate.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
-        _state_dir, _backup_path, state_path = self._managed_state_paths(context)
         if state_path.is_file():
             state_path.unlink()
 
@@ -382,7 +468,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             "config_path": str(config_path),
             **shim_manifest,
             "notes": [
-                "Guard-managed hook entries removed from ~/.zcode/cli/config.json",
+                "Guard-managed hook entries removed from the active ZCode CLI settings",
                 "User mcp, plugins, and any pre-existing hooks were preserved",
                 *shim_notes,
             ],

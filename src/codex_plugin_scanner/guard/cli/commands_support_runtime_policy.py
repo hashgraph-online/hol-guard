@@ -19,13 +19,13 @@ if TYPE_CHECKING:
 
 from ..action_lattice import coerce_guard_action
 from ..models import GuardAction
+from ..native_context import is_unbound_context_digest
 from ..proxy._env import _build_scrubbed_env
 from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
     build_approval_context_token,
     build_configured_environment_hash,
     build_runtime_launch_identity,
-    is_unbound_context_digest,
 )
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord

@@ -414,7 +414,7 @@ function buildConsequenceSummary(settings: GuardSettings): string {
     const postureLabel = PROTECTION_POSTURE_COPY[posture].label;
     return `Using custom rules on top of ${postureLabel}.`;
   }
-  return "Guard stops dangerous actions automatically and asks once about new or unknown work.";
+  return "Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate.";
 }
 
 export function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
@@ -589,7 +589,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, []);
 
   const handleStringChange = useCallback(
-    (key: keyof GuardSettings) => (event: ChangeEvent<HTMLSelectElement>) => {
+    (key: keyof GuardSettings) => (event: ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
       setDraft((value) => value === null ? value : { ...value, [key]: event.target.value });
       setSaveError(null);
     },
@@ -1461,7 +1461,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       <WorkspacePageHeader
         eyebrow="This machine"
         title="Protection"
-        description="Guard stops dangerous actions automatically and asks once about new or unknown work."
+        description="Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       />
       {selectedPosture === "watch" ? (
         <WatchProtectionBanner onTurnProtectionOn={handleTurnProtectionOn} />
@@ -1617,6 +1617,33 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
         {activeTab === "approval" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-4">
+            <SettingsFormSection
+              title="When Guard blocks a request"
+              description="Applies to every harness. Blocked actions stay blocked in either mode."
+            >
+              <fieldset className="space-y-3 py-3">
+                <legend className="sr-only">Blocked request behavior</legend>
+                {[
+                  { value: "safe-alternative", label: "Find a safe alternative (default)", description: "The agent receives the block reason and continues with a permitted approach. No approval prompt opens. Guard still saves the block in the inbox." },
+                  { value: "ask", label: "Ask me for approval", description: "Pause for an approval questionnaire in the harness or Guard. Decisions that require review can be approved; hard blocks stay blocked." },
+                ].map((option) => (
+                  <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-blue">
+                    <input
+                      type="radio"
+                      name="blocked-request-mode"
+                      value={option.value}
+                      checked={(draft.blocked_request_mode ?? "safe-alternative") === option.value}
+                      onChange={handleStringChange("blocked_request_mode")}
+                      className="mt-1 h-4 w-4 shrink-0 accent-brand-blue"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-brand-dark">{option.label}</span>
+                      <span className="mt-1 block text-sm text-slate-600">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            </SettingsFormSection>
             {!approvalGateEnabled ? (
               <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
                 <p className="text-sm text-brand-dark">
@@ -1626,7 +1653,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 </p>
               </div>
             ) : null}
-            <SettingsFormSection
+            {draft.blocked_request_mode === "ask" && <SettingsFormSection
               title="Where Guard asks"
               description="This only chooses the surface for Ask once. It does not change what Guard stops."
             >
@@ -1638,7 +1665,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                   onChange={handleStringChange("approval_surface_policy")}
                   options={surfacePolicyOptions}
                 />
-                {draft.approval_surface_policy === "attention-aware" ? (
+                {draft.approval_surface_policy === "attention-aware" && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block">
                       <span className="text-sm font-medium text-brand-dark">Browser delay (seconds)</span>
@@ -1652,9 +1679,9 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                       />
                     </label>
                   </div>
-                ) : null}
+                )}
               </div>
-            </SettingsFormSection>
+            </SettingsFormSection>}
             <ApprovalGateCard
               enabled={approvalGateEnabled}
               gateConfig={draft.approval_gate ?? null}

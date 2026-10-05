@@ -12,7 +12,7 @@ import pytest
 
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 
-pytest_plugins = ["tests.bundle_first_cloud"]
+pytest_plugins = ["tests.bundle_first_cloud", "tests.approval_mode_fixtures"]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"
@@ -94,6 +94,30 @@ class _GuardCommandsProxy:
 guard_commands_module = _GuardCommandsProxy()
 
 
+def _resolve_native_hook_runtime() -> Path:
+    """Resolve the caller-pinned runtime path used by native hook tests.
+
+    A source-tree ``target/release`` or ``target/debug`` binary may belong to
+    another checkout revision. Requiring the explicit CI/local override keeps
+    stale native artifacts from being selected silently. The caller remains
+    responsible for building and provenance-verifying the selected runtime.
+    """
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if not binary:
+        pytest.fail(
+            "HOL_GUARD_NATIVE_BINARY must explicitly name the compiled Rust runtime; "
+            "native retirement proof cannot select a source-tree fallback"
+        )
+    runtime = Path(binary).expanduser()
+    if not runtime.is_file():
+        pytest.fail(f"HOL_GUARD_NATIVE_BINARY does not name an existing runtime file: {runtime}")
+    try:
+        return runtime.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        pytest.fail(f"HOL_GUARD_NATIVE_BINARY could not be resolved: {runtime} ({exc})")
+
+
 @pytest.fixture
 def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     """Drive hook entrypoints through the compiled native runtime.
@@ -104,17 +128,7 @@ def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     There is no Python fallback, so the runtime is required, not skipped.
     """
 
-    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
-    if binary:
-        runtime = Path(binary).expanduser()
-    else:
-        root = Path(__file__).resolve().parents[1]
-        runtime = root / "rust" / "target" / "release" / "hol-guard-runtime"
-        if not runtime.is_file():
-            runtime = root / "rust" / "target" / "debug" / "hol-guard-runtime"
-    if not runtime.is_file():
-        pytest.fail("HOL_GUARD_NATIVE_BINARY must name the compiled Rust runtime; native retirement proof cannot skip")
-    runtime = runtime.resolve(strict=True)
+    runtime = _resolve_native_hook_runtime()
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
     return runtime
@@ -232,6 +246,56 @@ def _ambient_context_digest_home(
 
 
 @pytest.fixture
+def native_prompt_runtime(
+    _native_context_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    """Exercise prompt behavior through the real authenticated native resident.
+
+    The test suite's independent off-mode hooks stay unchanged. This fixture
+    supplies only the prompt RPC's runtime and session transport directory;
+    no prompt classification or result is mocked.
+    """
+    from codex_plugin_scanner.guard import native_context, native_execution, native_prompt
+    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+    from codex_plugin_scanner.guard.native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+    from codex_plugin_scanner.guard.runtime import runner
+
+    runtime: Path | None = None
+    analyze = native_prompt.analyze
+    provisioned: set[Path] = set()
+
+    def invoke(subop: str, **kwargs):
+        nonlocal runtime
+        if runtime is None:
+            runtime = _resolve_native_hook_runtime()
+        home = kwargs.get("guard_home")
+        if home is None:
+            kwargs["guard_home"] = _native_context_home
+        elif home != _native_context_home and home not in provisioned:
+            home.mkdir(parents=True, mode=0o700, exist_ok=True)
+            state_dir = home / "native-runtime"
+            state_dir.mkdir(mode=0o700, exist_ok=True)
+            # Never replace an existing test's authority or repair deliberately
+            # invalid state. The native client validates existing keys itself.
+            if not (state_dir / NATIVE_POLICY_VERIFIER_KEY_NAME).exists():
+                provision_native_policy_verifier_key(home, b"p" * 32)
+            provisioned.add(home)
+        with monkeypatch.context() as transport:
+            transport.setattr(native_execution, "native_runtime_status", native_context.native_runtime_status)
+            return analyze(subop, **kwargs)
+
+    monkeypatch.setattr(native_prompt, "analyze", invoke)
+    monkeypatch.setattr(runner, "_prompt_analyze_native", invoke)
+    try:
+        yield
+    finally:
+        for home in provisioned:
+            close_native_residents(home)
+
+
+@pytest.fixture
 def native_context_digest(
     monkeypatch: pytest.MonkeyPatch,
     _native_context_home: Path,
@@ -336,6 +400,42 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
 
 
 @pytest.fixture(autouse=True)
+def _close_native_policy_publishers_before_monkeypatch_restore(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    """Join native snapshot publishers created by test-owned workers."""
+    del monkeypatch
+    from codex_plugin_scanner.guard import native_policy_snapshot
+
+    with native_policy_snapshot._PUBLISHER_LOCK:
+        existing_publishers = {
+            id(publisher) for registered in native_policy_snapshot._PUBLISHERS.values() for publisher in registered
+        }
+    yield
+
+    with native_policy_snapshot._PUBLISHER_LOCK:
+        publishers = tuple(
+            publisher
+            for registered in native_policy_snapshot._PUBLISHERS.values()
+            for publisher in registered
+            if id(publisher) not in existing_publishers
+        )
+    live_publishers: list[str] = []
+    for publisher in publishers:
+        publisher.close(timeout_seconds=5.0)
+        thread = getattr(publisher, "_thread", None)
+        if isinstance(thread, threading.Thread) and thread.is_alive():
+            with native_policy_snapshot._PUBLISHER_LOCK:
+                native_policy_snapshot._PUBLISHERS.setdefault(
+                    native_policy_snapshot._publisher_key(Path(publisher.guard_home)),
+                    set(),
+                ).add(publisher)
+            live_publishers.append(f"{publisher.guard_home}:{thread.name}")
+    if live_publishers:
+        raise AssertionError("native policy publisher thread(s) survived test teardown: " + ", ".join(live_publishers))
+
+
+@pytest.fixture(autouse=True)
 def _reset_guard_sync_resolver_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """Undo any _resolve_guard_sync_auth_context override leaked by _seed_guard_cloud."""
     from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -401,7 +501,11 @@ def _isolate_daemon_background_refresh_workers(
         )
     if request.node.get_closest_marker("daemon_service_workers") is None:
         monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
-        monkeypatch.setattr(daemon_server, "start_cloud_sync_sync_worker", lambda _store, existing: existing)
+        monkeypatch.setattr(
+            daemon_server,
+            "start_cloud_sync_sync_worker",
+            lambda _store, existing, *, on_authority_changed=None: existing,
+        )
 
 
 class _FakeSystemKeyringModule:

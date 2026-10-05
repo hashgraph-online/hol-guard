@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 import runpy
@@ -13,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
-from tests.support.extension_freshness import requires_fresh_decision_diff, requires_fresh_projections
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"
@@ -89,11 +89,17 @@ def test_extension_directory_renders_all_canonical_sources(
         "implementation_digest": compiled["implementation_digest"],
     }
     registry = load_generated_command_catalog_bytes(canonical(catalog), canonical(program))
-    renderer = runpy.run_path(str(ROOT / "scripts/render_command_extension_directory.py"))
-    monkeypatch.setitem(renderer["render_catalog"].__globals__, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", registry)
+    spec = importlib.util.spec_from_file_location(
+        "render_pending_extension_directory", ROOT / "scripts/render_command_extension_directory.py"
+    )
+    assert spec is not None and spec.loader is not None
+    renderer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(renderer)
+    monkeypatch.setattr(renderer, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", registry)
     current = (ROOT / "docs/guard/extensions/README.md").read_text(encoding="utf-8")
-    rendered = renderer["render_document"](current)
-    assert renderer["render_document"](rendered) == rendered
+    rendered = renderer.render_document(current)
+    assert renderer.render_document(rendered) == rendered
+    # Canonical trust classes are required schema fields; missing metadata must fail.
     for source in build["sources"]:
         extension = source["extension"]
         identity = extension["extension_id"]
@@ -102,8 +108,10 @@ def test_extension_directory_renders_all_canonical_sources(
         assert f"| `{identity}` | {description} | {len(extension['rules'])} |" in rendered
         if identity in build["trust"]["classes"]["external"]:
             assert f"| `{identity}` | {description} | {len(extension['rules'])} | External opt-in |" in rendered
-    assert rendered.split(renderer["START_MARKER"], 1)[0] == current.split(renderer["START_MARKER"], 1)[0]
-    assert rendered.split(renderer["END_MARKER"], 1)[1] == current.split(renderer["END_MARKER"], 1)[1]
+    # Exactly one marker pair is part of the directory contract.
+    assert rendered.count(renderer.START_MARKER) == rendered.count(renderer.END_MARKER) == 1
+    assert rendered.split(renderer.START_MARKER, 1)[0] == current.split(renderer.START_MARKER, 1)[0]
+    assert rendered.split(renderer.END_MARKER, 1)[1] == current.split(renderer.END_MARKER, 1)[1]
 
 
 @pytest.fixture
@@ -115,11 +123,13 @@ def example(compiler: Path, build: dict) -> dict:
     return request
 
 
-@requires_fresh_projections
-@requires_fresh_decision_diff
 def test_checked_in_program_matches_native_authoring(compiler: Path, compiled: dict) -> None:
+    """Verify checked in program matches native authoring."""
     checked_in = json.loads((ROOT / "contracts/extensions/native-command-program.v1.json").read_bytes())
-    assert checked_in == compiled["program"]
+    assert checked_in == compiled["program"], (
+        "Stage current projections before testing: python scripts/ci/verify_native_command_program.py "
+        "--compiler rust/target/release/guard-command-source"
+    )
     result = subprocess.run(
         [str(compiler), "evaluate-batch"],
         input=canonical(

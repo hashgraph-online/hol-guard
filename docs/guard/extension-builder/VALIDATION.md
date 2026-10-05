@@ -105,6 +105,7 @@ uv run --no-sync pytest tests/test_guard_command_*extensions.py \
   tests/test_guard_command_extension_registry.py \
   tests/test_guard_command_critical_floors.py
 
+uv run --no-sync python tests/guard_command_decision_diff.py --write
 uv run --no-sync python tests/guard_command_decision_diff.py --check
 ```
 

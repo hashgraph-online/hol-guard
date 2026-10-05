@@ -89,6 +89,22 @@ pub enum ContextDigestKindV1 {
     },
     /// Stable launch-identity digest over the raw argv list.
     LaunchArgvDigest { argv: Vec<String> },
+    /// Canonical-JSON SHA-256 over caller-supplied material.
+    ///
+    /// `material` is serialized through the CPython-exact canonical writer
+    /// (`sort_keys`, separators `(",",":")`, `ensure_ascii`, `allow_nan=false`)
+    /// and hashed. `prefix`, when present, is prepended to the hex digest
+    /// (e.g. `"sha256:"` for shell-execution context keys). The transport is
+    /// a JSON value — raw bytes are NOT representable; use
+    /// `OpaqueMaterialDigest` for UTF-8 string material.
+    CanonicalSha256 {
+        material: Value,
+        prefix: Option<String>,
+    },
+    /// SHA-256 over the UTF-8 bytes of a string (no JSON serialization).
+    /// Covers `_opaque_identity_digest`-style digests where the material is
+    /// already a string (module specifier, source text, `h:s:n` server key).
+    OpaqueMaterialDigest { material: String },
 }
 
 // `deny_unknown_fields` cannot combine with `flatten` (serde rejects the

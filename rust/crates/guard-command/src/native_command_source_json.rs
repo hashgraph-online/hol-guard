@@ -10,6 +10,12 @@ const MAX_VALUES: usize = 1_000_000;
 // Matcher depth itself is independently limited to 32 during lowering.
 const MAX_JSON_DEPTH: usize = 96;
 
+/// Compact validated JSON without discarding duplicate keys before validation.
+/// The source byte, depth, item, value and string bounds still apply.
+pub fn canonicalize_source_json(bytes: &[u8]) -> Result<Vec<u8>, &'static str> {
+    serde_json::to_vec(&decode(bytes)?).map_err(|_| "command_source_encoding_failed")
+}
+
 pub(super) fn decode(bytes: &[u8]) -> Result<Value, &'static str> {
     if bytes.is_empty() || bytes.len() > MAX_SOURCE_BYTES {
         return Err("command_source_bytes_invalid");
@@ -111,6 +117,19 @@ impl<'de> Visitor<'de> for Seed<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compacts_source_json_after_rejecting_ambiguous_keys() {
+        let input = br#"{
+            "description": "spaces and \"quoted\" text",
+            "rules": [1, 2]
+        }"#;
+        let compact = canonicalize_source_json(input).unwrap();
+        assert!(compact.len() < input.len());
+        assert_eq!(decode(&compact).unwrap(), decode(input).unwrap());
+        assert!(canonicalize_source_json(br#"{"rule":1,"rule":2}"#).is_err());
+        assert!(canonicalize_source_json(&vec![b' '; MAX_SOURCE_BYTES + 1]).is_err());
+    }
 
     #[test]
     fn rejects_ambiguous_and_unbounded_source_json() {

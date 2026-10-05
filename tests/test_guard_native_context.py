@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import multiprocessing
+import os
 from pathlib import Path
 
 import pytest
@@ -336,7 +337,7 @@ def test_native_context_digest_propagates_worker_error(tmp_path: Path, monkeypat
             }
         ).encode("utf-8")
 
-    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "_native_runtime_status_memo", lambda: _status())
     monkeypatch.setattr(native_context, "native_resident_client_request", _client)
     monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
     result = native_context.native_context_digest("launch_argv_digest", {"argv": [42]}, guard_home=tmp_path)
@@ -398,3 +399,114 @@ def test_bind_context_digest_home_does_not_inherit_held_lock_across_fork(tmp_pat
         child.join(timeout=5)
     assert child.exitcode == 0
     assert results.get(timeout=1) == "bound"
+
+
+def test_native_runtime_status_memo_shares_one_probe_within_ttl(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A digest burst (environment_material hashes one value per env var) must
+    # not re-probe the runtime status per digest — memoize the snapshot so the
+    # burst shares one binary validation.  The status must point at a real
+    # on-disk binary so the per-read (size, mtime_ns) freshness check passes.
+    native_context._status_memo = None
+    calls = []
+    binary = tmp_path / "hol-guard-runtime"
+    binary.write_bytes(b"stable-binary")
+    st = binary.stat()
+    status = NativeRuntimeStatus(
+        mode="force",
+        available=True,
+        compatible=True,
+        reason="ok",
+        identity=NativeRuntimeIdentity(path=binary, size=st.st_size, mtime_ns=st.st_mtime_ns, sha256="ab" * 32),
+        capabilities=NativeRuntimeCapabilities(
+            protocol_version=2,
+            runtime_version="0.0.0",
+            rule_digest="cd" * 32,
+            build_sha="ef" * 32,
+            target="test",
+            features=_FEATURES,
+        ),
+    )
+
+    def _probe() -> NativeRuntimeStatus:
+        calls.append(1)
+        return status
+
+    monkeypatch.setattr(native_context, "native_runtime_status", _probe)
+    first = native_context._native_runtime_status_memo()
+    second = native_context._native_runtime_status_memo()
+    assert first is status
+    assert second is status
+    assert len(calls) == 1
+
+
+def test_native_runtime_status_memo_reprobes_when_probe_replaced(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A monkeypatched ``native_runtime_status`` has a different callable
+    # identity, so a memoized snapshot from the prior probe must not mask it —
+    # each new probe gets a fresh call within its own TTL.
+    native_context._status_memo = None
+    first_status = _status()
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: first_status)
+    assert native_context._native_runtime_status_memo() is first_status
+
+    second_status = _status(mode="off", available=False)
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: second_status)
+    assert native_context._native_runtime_status_memo() is second_status
+
+
+def test_native_runtime_status_memo_reprobes_when_binary_swapped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A binary replaced inside the TTL must not keep the stale status — the
+    # memo re-validates on (size, mtime_ns) change instead of trusting the
+    # previously-checked path.
+    binary = tmp_path / "hol-guard-runtime"
+    binary.write_bytes(b"old-binary")
+    stat = binary.stat()
+    identity = NativeRuntimeIdentity(
+        path=binary,
+        size=stat.st_size,
+        mtime_ns=stat.st_mtime_ns,
+        sha256="ab" * 32,
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=2,
+        runtime_version="0.0.0",
+        rule_digest="cd" * 32,
+        build_sha="ef" * 32,
+        target="test",
+        features=_FEATURES,
+    )
+    first_status = NativeRuntimeStatus(
+        mode="force",
+        available=True,
+        compatible=True,
+        reason="ok",
+        identity=identity,
+        capabilities=capabilities,
+    )
+    second_status = NativeRuntimeStatus(
+        mode="force",
+        available=True,
+        compatible=True,
+        reason="ok",
+        identity=None,
+        capabilities=None,
+    )
+    statuses = iter([first_status, second_status])
+    calls = []
+
+    def _probe() -> NativeRuntimeStatus:
+        calls.append(1)
+        return next(statuses)
+
+    monkeypatch.setattr(native_context, "native_runtime_status", _probe)
+    native_context._status_memo = None
+    assert native_context._native_runtime_status_memo() is first_status
+
+    # Swap the binary: new bytes => different size + mtime_ns.
+    binary.write_bytes(b"replaced-binary-longer-content")
+    os.utime(binary, ns=(stat.st_atime_ns + 1_000_000, stat.st_mtime_ns + 1_000_000))
+    assert native_context._native_runtime_status_memo() is second_status
+    assert len(calls) == 2

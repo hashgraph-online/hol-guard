@@ -25,6 +25,7 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
+      - uses: ./.github/actions/stage-command-projections
       - name: Install locked test tools
         run: uv sync --frozen --extra dev --python 3.12
       - name: Validate release verifier and regression contracts

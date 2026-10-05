@@ -7,7 +7,7 @@ from pathlib import Path
 from types import ModuleType
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from tests.support.extension_freshness import requires_fresh_projections
+from tests.support.extension_freshness import requires_fresh_extension_directory
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "render_command_extension_directory.py"
@@ -22,7 +22,7 @@ def _load_renderer() -> ModuleType:
     return module
 
 
-@requires_fresh_projections
+@requires_fresh_extension_directory
 def test_extension_directory_matches_canonical_registry() -> None:
     """Check the committed snapshot when projections are fresh.
 

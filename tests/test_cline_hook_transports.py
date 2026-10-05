@@ -495,9 +495,7 @@ def test_generated_plugin_withholds_unserializable_posttool_output(tmp_path: Pat
 
 
 @pytest.mark.parametrize("decision", [{"decision": "allow"}, {"decision": "allow", "policy_action": "allow"}])
-def test_generated_plugin_withholds_allow_without_model_output_action(
-    tmp_path: Path, decision: dict[str, str]
-) -> None:
+def test_generated_plugin_withholds_allow_without_model_output_action(tmp_path: Path, decision: dict[str, str]) -> None:
     context = _context(tmp_path)
     _activate(context, "plugin")
     guard = tmp_path / "replacement_guard.py"

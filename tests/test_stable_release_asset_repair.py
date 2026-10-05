@@ -61,3 +61,28 @@ def test_complete_or_older_release_is_not_republished() -> None:
         latest_pypi="3.7.2",
         asset_names=(),
     )
+
+
+def test_complete_release_absent_from_pypi_can_resume_deferred_publication() -> None:
+    assert stable_dispatch_is_allowed(
+        requested="3.7.2",
+        expected_next="3.7.3",
+        latest_pypi="3.7.1",
+        asset_names=COMPLETE,
+        deferred_pypi=True,
+    )
+    assert not stable_dispatch_is_allowed(
+        requested="3.7.2",
+        expected_next="3.7.3",
+        latest_pypi="3.7.1",
+        asset_names=(),
+        deferred_pypi=True,
+    )
+    assert not stable_dispatch_is_allowed(
+        requested="3.7.2",
+        expected_next="3.7.3",
+        latest_pypi="3.7.1",
+        asset_names=COMPLETE,
+        release_missing=True,
+        deferred_pypi=True,
+    )

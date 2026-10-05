@@ -7,6 +7,7 @@ identities. This development command is never called on the hook hot path.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -48,7 +49,9 @@ def build_request() -> dict:
     ]
     mcp_paths = sorted((ROOT / "contributions/mcp-servers").glob("*.json"))
     paths = source_paths + mcp_paths
-    if len(paths) > 512 or sum(path.stat().st_size for path in paths) > 4 * 1024 * 1024:
+    # Bound disk reads separately from the compact native envelope. Pretty JSON
+    # must not spend the compiler budget on insignificant formatting.
+    if len(paths) > 512 or sum(path.stat().st_size for path in paths) > 8 * 1024 * 1024:
         raise ValueError("canonical source catalog exceeds native input budget")
     for path in source_paths:
         source = read_object(path)
@@ -57,17 +60,63 @@ def build_request() -> dict:
         sources.append(source)
     if not sources:
         raise ValueError("canonical command sources are missing")
-    return {
+    request = {
         "schema": "guard.command-extension-build.v1",
         "sources": sources,
         "mcp_sources": [read_object(path) for path in mcp_paths],
         "trust": read_object(ROOT / "contracts/extensions/trust-class-map.v1.json"),
     }
+    if len(canonical_bytes(request)) > 4 * 1024 * 1024:
+        raise ValueError("canonical source catalog exceeds native input budget")
+    return request
+
+
+def _implementation_files(directory: Path) -> set[Path]:
+    """Match the native walk: reject links before selecting regular sources."""
+    if directory.is_symlink():
+        raise ValueError("invalid native implementation input")
+    selected = set()
+    for path in directory.rglob("*"):
+        if path.is_symlink():
+            raise ValueError("invalid native implementation input")
+        if path.is_file() and path.suffix in (".rs", ".json"):
+            selected.add(path)
+    return selected
+
+
+def implementation_digest() -> str:
+    """Mirror the Rust build fingerprint, not its compilation or admission logic."""
+    workspace = ROOT / "rust"
+    paths = {workspace / "Cargo.lock", workspace / "Cargo.toml"}
+    for crate in (workspace / "crates").iterdir():
+        if crate.is_symlink():
+            raise ValueError("invalid native implementation input")
+        for name in ("Cargo.toml", "build.rs"):
+            if (crate / name).is_file():
+                paths.add(crate / name)
+        if (crate / "src").is_dir():
+            paths.update(_implementation_files(crate / "src"))
+    paths.update(_implementation_files(workspace / "build_support"))
+    digest = hashlib.sha256(b"hol-guard.native-source-implementation.v1\0")
+    for path in sorted(paths, key=lambda item: item.relative_to(workspace).as_posix()):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("invalid native implementation input")
+        name = path.relative_to(workspace).as_posix().encode()
+        content = path.read_bytes().replace(b"\r\n", b"\n")
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
 
 
 def main() -> int:
+    """Build or strictly check projections bound to current native implementation and authored sources."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Reject a missing or stale checked-in artifact.")
+    parser.add_argument("--check", action="store_true", help="Reject a missing or stale generated artifact.")
+    parser.add_argument(
+        "--projections-only", action="store_true", help="Stage package inputs without rewriting published descriptors."
+    )
     parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")
     args = parser.parse_args()
     command = (
@@ -98,6 +147,11 @@ def main() -> int:
     compiled = json.loads(completed.stdout)
     if compiled["catalog_projection_kind"] != "complete":
         raise ValueError("release generation requires a complete catalog")
+    if compiled["implementation_digest"] != implementation_digest():
+        raise ValueError("source compiler does not match the current native implementation; rebuild it")
+    built = subprocess.run([*command[:-1], "export-built"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
+    if built.returncode or json.loads(built.stdout) != compiled:
+        raise ValueError("source compiler does not embed the current authored sources; rebuild it before staging")
     program = compiled["program"]
     catalog = {
         "schema": "guard.command-catalog.v1",
@@ -115,7 +169,7 @@ def main() -> int:
     if any(parent.is_symlink() for parent in (package_directory, *package_directory.parents) if parent != ROOT):
         raise ValueError("package resource directory cannot traverse a symlink")
     outputs.update({package_directory / path.name: content for path, content in tuple(outputs.items())})
-    for descriptor in compiled["descriptors"]:
+    for descriptor in () if args.projections_only else compiled["descriptors"]:
         identity = descriptor["id"]
         if "/" in identity or "\\" in identity or not identity.startswith("command."):
             raise ValueError("invalid generated descriptor identity")
@@ -123,7 +177,9 @@ def main() -> int:
     descriptor_directory = ROOT / "contributions/extensions"
     expected_descriptors = {path for path in outputs if path.parent == descriptor_directory}
     unexpected_descriptors = sorted(
-        path for path in descriptor_directory.glob("command.*.json") if path not in expected_descriptors
+        path
+        for path in descriptor_directory.glob("command.*.json")
+        if not args.projections_only and path not in expected_descriptors
     )
     if any(not path.is_file() or path.is_symlink() for path in unexpected_descriptors):
         raise ValueError("unexpected generated descriptor destination is not a regular file")

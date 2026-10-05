@@ -10,7 +10,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .runtime.approval_context import build_configured_environment_hash, is_unbound_context_digest
+from .native_context import is_unbound_context_digest
+from .runtime.approval_context import build_configured_environment_hash
 from .runtime.composio_contract import composio_tool_role
 from .runtime.composio_discovery import ComposioActionSchema
 from .runtime.composio_workflows import ComposioWorkflowProposal
