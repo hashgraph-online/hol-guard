@@ -9,7 +9,17 @@ from pathlib import Path
 
 from . import BUILDER_VERSION
 from .errors import BuilderError
-from .io import canonical_json, checked_path, digest, object_value, parse_json, read_bytes, read_json, sha256, text_from_bytes
+from .io import (
+    canonical_json,
+    checked_path,
+    digest,
+    object_value,
+    parse_json,
+    read_bytes,
+    read_json,
+    sha256,
+    text_from_bytes,
+)
 from .kit import MAX_ARTIFACT_BYTES, Kit, build_kit
 from .models import Metadata, load_discovery
 from .repository_edits import (
