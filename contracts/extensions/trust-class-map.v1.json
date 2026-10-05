@@ -81,6 +81,7 @@
       "command.appimg",
       "command.blitcp",
       "command.cloudg",
+      "command.codesage",
       "command.cogext",
       "command.cs",
       "command.ctty",
