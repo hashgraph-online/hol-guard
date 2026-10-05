@@ -59,7 +59,33 @@ def acceptance_source(root: Path) -> dict:
         .replace("noodle", "hol-ci-fixture")
         .replace("Noodle", "HOL CI Fixture")
     )
-    source["extension"]["homepage"] = "https://example.com/hol-ci-fixture"
+    extension = source["extension"]
+    extension["homepage"] = "https://example.com/hol-ci-fixture"
+    # The acceptance source only needs one review path and one help-safe path.
+    # Keep this temporary fixture intentionally lean so testing a new source does
+    # not consume the production compiler's 4 MiB canonical-input safety margin.
+    extension["safer_alternatives"] = ["Review first."]
+    extension["description"] = "CI source-only acceptance."
+    extension["name"] = "CI fixture"
+    extension["action_classes"] = ["CI execution"]
+
+    permission = extension["permissions"][0]
+    permission["action_classes"] = ["CI execution"]
+    permission["label"] = "CI run"
+    permission["description"] = "CI source-only acceptance."
+    permission["example_command"] = "hol-ci-fixture request run demo"
+    permission["safer_guidance"] = ["Review first."]
+
+    rule = extension["rules"][0]
+    rule["action_classes"] = ["CI execution"]
+    rule["title"] = "CI run"
+    rule["description"] = "CI source-only acceptance."
+    rule["safer_alternatives"] = ["Review first."]
+    rule["matcher"]["matchers"] = rule["matcher"]["matchers"][:1]
+    rule["safe_variants"][0]["matcher"]["matchers"] = rule["safe_variants"][0]["matcher"]["matchers"][:1]
+    rule["safe_variants"][0]["title"] = "Help"
+    for matcher in (rule["matcher"]["matchers"][0], rule["safe_variants"][0]["matcher"]["matchers"][0]):
+        matcher["config"]["executables"] = ["hol-ci-fixture"]
     return source
 
 
@@ -229,7 +255,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     trust["classes"]["external"].sort()
     # Keep synthetic-fixture formatting from exhausting the production input budget.
     source_path.write_text(json.dumps(source, separators=(",", ":")) + "\n")
-    trust_path.write_text(json.dumps(trust, indent=2) + "\n")
+    trust_path.write_text(json.dumps(trust, separators=(",", ":")) + "\n")
     fixture = {
         "schema": "guard.command-extension-fixtures.v1",
         "build": {
