@@ -38,7 +38,7 @@ def _jobs() -> list[dict[str, object]]:
 
 
 def _run(
-    snapshots: list[list[dict[str, object]]], *, timeout_seconds: float = barrier._DEFAULT_TIMEOUT_SECONDS
+    snapshots: list[list[dict[str, object]]], *, timeout_seconds: float = barrier._DEFAULT_TIMEOUT_SECONDS, plan_skippable: bool = False
 ) -> tuple[list[str], list[str]]:
     now = [0.0]
     calls: list[str] = []
@@ -63,6 +63,7 @@ def _run(
         sleep=sleep,
         log=logs.append,
         timeout_seconds=timeout_seconds,
+        plan_skippable=plan_skippable,
     )
     return calls, logs
 
@@ -287,6 +288,34 @@ def test_stops_immediately_when_planning_failed(conclusion: str) -> None:
 def test_missing_shard_and_partial_reruns_expire_without_accepting_old_coverage(completed_shards: int) -> None:
     with pytest.raises(barrier.ShardWaitError, match="Timed out"):
         _run([_jobs()[:completed_shards]], timeout_seconds=10)
+
+def _prereqs(plan_conclusion: str) -> list[dict[str, object]]:
+    """The push-run job graph: plan is only scheduled on pull_request events."""
+    return [
+        dict(_job(2000), name="plan", conclusion=plan_conclusion),
+        dict(_job(2001), name="coverage-plan"),
+        dict(_job(2002), name="native-command-evaluators"),
+    ]
+
+
+def test_push_run_accepts_skipped_change_planner() -> None:
+    # On push the `plan` job is `if: pull_request`, so it is always skipped.
+    # A skipped planner must not block coverage selection on a push run.
+    _, logs = _run([_prereqs("skipped") + _jobs()], plan_skippable=True)
+    assert logs[-1].startswith(f"All {barrier.SHARD_COUNT} Python coverage shards succeeded")
+
+
+@pytest.mark.parametrize("conclusion", ["skipped", "failure", "cancelled"])
+def test_pull_request_run_still_rejects_non_success_planner(conclusion: str) -> None:
+    # plan_skippable=False (pull_request): any non-success planner fails the barrier.
+    with pytest.raises(barrier.ShardWaitError, match=f"Change planner completed with {conclusion}"):
+        _run([_prereqs(conclusion) + _jobs()], plan_skippable=False)
+
+
+def test_plan_failure_still_fails_when_skippable_on_push() -> None:
+    # Even with skippable enabled, a genuinely-failed planner is not papered over.
+    with pytest.raises(barrier.ShardWaitError, match="Change planner completed with failure"):
+        _run([_prereqs("failure") + _jobs()], plan_skippable=True)
 
 
 @pytest.mark.parametrize("payload", [None, {}, {"total_count": True, "jobs": []}, {"total_count": 101, "jobs": []}])
