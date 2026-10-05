@@ -495,12 +495,12 @@
           "op": "any.v1"
         },
         "native_capability": null,
-        "permission_id": "command.api-gateway.permission.delete",
+        "permission_id": "command.ci-remediation-demo.permission.delete",
         "risk_classes": [
           "destructive_shell",
           "network_egress"
         ],
-        "rule_id": "command.api-gateway.delete",
+        "rule_id": "command.ci-remediation-demo.rule.delete",
         "rule_version": "1.0.0",
         "safe_variants": [
           {
