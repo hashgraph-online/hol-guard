@@ -283,6 +283,7 @@ from .extension_control_api import ExtensionControlApiError, ExtensionControlApi
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
 from .hook_process_runner import HookProcessRunner
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
+from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 from .hook_worker_responses import prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
@@ -448,6 +449,7 @@ _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
 _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS = 3.0
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
 _RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS = 2.75
+_RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS = WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS = 5.0
 _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
@@ -543,6 +545,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     containment_health_cache: dict[str, object] | None
     containment_health_cache_monotonic: float
     containment_health_cache_lock: threading.Lock
+    containment_health_refreshing: bool
+    containment_health_refresh_event: threading.Event
+    containment_health_generation: int
+    containment_health_completed_generation: int
     network_supervisor: NetworkSupervisor
     active_hook_requests: int
     rejected_hook_requests: int
@@ -667,6 +673,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.containment_health_refreshing = False
+        self.containment_health_refresh_event = threading.Event()
+        self.containment_health_generation = 0
+        self.containment_health_completed_generation = 0
         self.network_supervisor = NetworkSupervisor()
         self.active_hook_requests = 0
         self.rejected_hook_requests = 0
@@ -2487,6 +2497,72 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> str | None
 
 _GuardDaemonHttpServer = _GuardDaemonHTTPServer
 
+_CONTAINMENT_HEALTH_CACHE_SECONDS = 10.0
+
+
+def cached_containment_health(
+    server: _GuardDaemonHttpServer,
+    *,
+    force_refresh: bool,
+    probe: Callable[[], dict[str, object]],
+) -> dict[str, object] | None:
+    """Return containment health without holding the cache lock across the probe.
+
+    A fresh cache is shared. When the cache is due, one caller runs the probe
+    and everyone else keeps the previous payload. Callers only wait together
+    when no payload exists yet.
+    """
+
+    arrived_generation: int | None = None
+    probe_generation = 0
+    while True:
+        with server.containment_health_cache_lock:
+            if arrived_generation is None:
+                arrived_generation = server.containment_health_generation
+            cached = server.containment_health_cache
+            age = time.monotonic() - server.containment_health_cache_monotonic
+            if cached is not None and age <= _CONTAINMENT_HEALTH_CACHE_SECONDS and not force_refresh:
+                return dict(cached)
+            if server.containment_health_refreshing:
+                if cached is not None and not force_refresh:
+                    return dict(cached)
+                event = server.containment_health_refresh_event
+                run_probe = False
+            else:
+                event = threading.Event()
+                server.containment_health_refresh_event = event
+                server.containment_health_refreshing = True
+                server.containment_health_generation += 1
+                probe_generation = server.containment_health_generation
+                run_probe = True
+        if not run_probe:
+            event.wait()
+            with server.containment_health_cache_lock:
+                done = server.containment_health_completed_generation
+                if force_refresh and arrived_generation is not None and done <= arrived_generation:
+                    continue
+                return None if server.containment_health_cache is None else dict(server.containment_health_cache)
+        break
+    payload: dict[str, object] | None = None
+    failed = False
+    try:
+        payload = probe()
+    except (OSError, RuntimeError, TypeError, ValueError):
+        payload = None
+        failed = True
+    except BaseException:
+        failed = True
+        raise
+    finally:
+        with server.containment_health_cache_lock:
+            if failed or payload is not None:
+                server.containment_health_cache = None if payload is None else dict(payload)
+                server.containment_health_cache_monotonic = time.monotonic()
+            server.containment_health_refreshing = False
+            server.containment_health_completed_generation = probe_generation
+            event.set()
+    return None if payload is None else dict(payload)
+
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
@@ -3162,6 +3238,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
             self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
+            return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
+            self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])
             return
         if parsed.path == "/v1/clients/attach":
             self._handle_client_attach(payload)
@@ -6240,6 +6319,101 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             status=410,
         )
 
+    def _handle_hook_readiness(
+        self,
+        payload: dict[str, object],
+        query: str,
+        *,
+        default_harness: str,
+    ) -> None:
+        """Prepare the active workspace before a host's timed hook starts.
+
+        This route is deliberately separate from semantic hook review. It gives
+        the native publisher and isolated worker the existing setup budget so a
+        first tool call does not spend its short host deadline on cold startup.
+        """
+
+        del default_harness
+        params = parse_qs(query)
+        workspace_candidate = self._normalized_hook_workspace_string(
+            params.get("workspace", [None])[-1] or payload.get("workspace") or payload.get("cwd")
+        )
+        try:
+            _ = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            workspace = self._validated_hook_directory_string(
+                "workspace",
+                workspace_candidate,
+                roots=self._hook_safe_roots(),
+            )
+        except _HookPathValidationError as error:
+            self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+            self._write_json(
+                {"ready": False, "reason_code": f"invalid_{error.parameter.replace('-', '_')}"},
+                status=400,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        if workspace is None:
+            self._write_json(
+                {"ready": False, "reason_code": "workspace_required"},
+                status=400,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        if not _native_mode_requires_rust():
+            self._write_json(
+                {
+                    "ready": True,
+                    "native_required": False,
+                    "workspace_acknowledged": False,
+                    "worker_ready": True,
+                },
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        daemon_server = self._daemon_server()
+        readiness_deadline = time.monotonic() + _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS
+        try:
+            prepared_policy = daemon_server.hook_worker.prepare_workspace_policy(
+                Path(workspace),
+                deadline=readiness_deadline,
+            )
+        except Exception:
+            daemon_server.diagnostics.record_exception("native_workspace_readiness_failed")
+            prepared_policy = None
+        if not isinstance(prepared_policy, dict):
+            self._write_json(
+                {"ready": False, "reason_code": "native_policy_not_ready"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        remaining_seconds = max(0.0, readiness_deadline - time.monotonic())
+        worker_ready = daemon_server.hook_process_runner.wait_for_capacity(
+            minimum_workers=1,
+            timeout_seconds=remaining_seconds,
+        )
+        if not worker_ready:
+            self._write_json(
+                {"ready": False, "reason_code": "native_worker_not_ready"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        self._write_json(
+            {
+                "ready": True,
+                "native_required": True,
+                "native_route": "native_resident",
+                "workspace_acknowledged": True,
+                "worker_ready": True,
+            },
+            extra_headers={"Cache-Control": "no-store"},
+        )
+
     def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
         from .hook_request_parsing import (
             HookPayloadReferenceError,
@@ -7793,22 +7967,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _containment_health_payload(self, *, force_refresh: bool = False) -> dict[str, object] | None:
         from ..runtime.containment_health import probe_containment_health
 
-        server = self._daemon_server()
-        with server.containment_health_cache_lock:
-            age = time.monotonic() - server.containment_health_cache_monotonic
-            if not force_refresh and server.containment_health_cache is not None and age <= 10.0:
-                return dict(server.containment_health_cache)
-            try:
-                payload = probe_containment_health(
-                    daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
-                ).to_dict()
-            except (OSError, RuntimeError, TypeError, ValueError):
-                server.containment_health_cache = None
-                server.containment_health_cache_monotonic = time.monotonic()
-                return None
-            server.containment_health_cache = payload
-            server.containment_health_cache_monotonic = time.monotonic()
-            return dict(payload)
+        def probe() -> dict[str, object]:
+            return probe_containment_health(
+                daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
+            ).to_dict()
+
+        return cached_containment_health(self._daemon_server(), force_refresh=force_refresh, probe=probe)
 
     def _detailed_healthz_payload(self) -> dict[str, object]:
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]

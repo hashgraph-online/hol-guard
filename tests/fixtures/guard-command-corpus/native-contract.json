@@ -1248,7 +1248,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git apply fallback attributes all fifteen compatibility owners as uncertain",
+      "basis": "inherited Git apply fallback attributes all sixteen compatibility owners as uncertain",
       "expected": {
         "decision_plane_floor": "block",
         "evaluation_error": null,
@@ -1272,7 +1272,8 @@
           "command.git.reflog",
           "command.git.remote",
           "command.git.show",
-          "command.git.status"
+          "command.git.status",
+          "command.git.worktree"
         ]
       },
       "group_id": "workflow:workspace-patch-write:patch-apply|all",

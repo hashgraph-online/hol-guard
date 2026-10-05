@@ -1,6 +1,7 @@
 """Inline analysis receives enforcement, not unrestricted interpreter consent."""
 
 import json
+import shlex
 import shutil
 import sys
 from pathlib import Path
@@ -18,6 +19,11 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import READ_ONLY
     [
         ["python3", "file.py"],
         ["python3", "-c", "print(1)", "extra"],
+        ["python3", "-I", "-m", "arbitrary"],
+        ["python3", "-S", "file.py"],
+        ["python3", "-W", "ignore", "-c", "print(1)"],
+        ["python3", "-I", "-I", "-c", "print(1)"],
+        ["python3", "-IS", "-S", "-c", "print(1)"],
         ["node", "-p", "1"],
         ["node", "--require", "preload.js", "-e", "1"],
         ["sh", "-c", "echo ok"],
@@ -28,10 +34,25 @@ def test_other_execution_shapes_do_not_inherit_inline_profile(argv, tmp_path):
         inline.prepare_restricted_inline_eval(argv, workspace=tmp_path)
 
 
+def test_node_inline_eval_preserves_bounded_heap_option() -> None:
+    assert inline.is_inline_eval(["node", "--max-old-space-size=12288", "-e", "1+1"])
+    assert inline.is_inline_eval(["nodejs", "--max-old-space-size=12288", "--eval", "1+1"])
+    with pytest.raises(RestrictedPytestError):
+        inline.is_inline_eval(["node", "--max-old-space-size=999999", "-e", "1+1"])
+
+
+@pytest.mark.parametrize("flags", [[], ["-I"], ["-S"], ["-I", "-S"], ["-S", "-I"], ["-IS"], ["-SI"]])
+def test_python_inline_eval_accepts_only_bounded_isolation_flags(flags):
+    argv = ["python3", *flags, "-c", "print(1)"]
+    assert inline.is_inline_eval(argv)
+    assert inline._python_runtime_args(argv) == tuple(flags)
+
+
 @pytest.mark.parametrize(
     "runtime,flag,profile",
     [
         ("python3", "-c", "python-eval-readonly-v1"),
+        ("python3", "-I -S -c", "python-eval-readonly-v1"),
         ("node", "-e", "node-eval-readonly-v1"),
     ],
 )
@@ -40,7 +61,7 @@ def test_original_and_resolved_eval_need_independent_native_authority(
     monkeypatch, tmp_path, runtime, flag, profile, failure
 ):
     resolved = f"/usr/bin/{runtime}"
-    plan = SimpleNamespace(profile_version=profile, command=(resolved, flag, "synthetic analysis"))
+    plan = SimpleNamespace(profile_version=profile, command=(resolved, *shlex.split(flag), "synthetic analysis"))
     monkeypatch.setattr(sink, "prepare_restricted_inline_eval", lambda *args, **kwargs: plan)
     calls, executed = [], []
     monkeypatch.setattr(sink, "run_restricted_inline_eval", lambda *args, **kwargs: executed.append(args) or 0)
@@ -72,8 +93,10 @@ def test_original_and_resolved_eval_need_independent_native_authority(
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Actual macOS execution boundary")
-@pytest.mark.parametrize("runtime", ["python3", "node"])
-def test_actual_eval_computes_data_but_cannot_read_credentials_or_mutate_source(tmp_path, runtime, monkeypatch):
+@pytest.mark.parametrize(
+    "runtime,flags", [("python3", []), ("python3", ["-I", "-S"]), ("python3", ["-IS"]), ("node", [])]
+)
+def test_actual_eval_computes_data_but_cannot_read_credentials_or_mutate_source(tmp_path, runtime, flags, monkeypatch):
     if shutil.which(runtime) is None:
         pytest.skip(f"{runtime} is unavailable")
     monkeypatch.delenv("PYTHONPATH", raising=False)
@@ -116,7 +139,7 @@ print("guard-python-eval-boundary-verified")
             ),
             None,
         )
-        argv = [str(system_python) if system_python else runtime, "-c", code]
+        argv = [str(system_python) if system_python else runtime, *flags, "-c", code]
     else:
         code = """const fs=require('node:fs'), assert=require('node:assert'), cp=require('node:child_process');
 assert.equal(JSON.parse(fs.readFileSync('data.json')).values.reduce((a,b)=>a+b),6);
@@ -128,6 +151,7 @@ for(const action of [()=>fs.readFileSync('.env'),()=>fs.writeFileSync('source.tx
 console.log('guard-node-eval-boundary-verified');"""
         argv = [runtime, "-e", code]
     plan = inline.prepare_restricted_inline_eval(argv, workspace=tmp_path)
+    assert plan.command[1 : 1 + len(flags)] == tuple(flags)
     assert inline.run_restricted_inline_eval(plan, timeout_seconds=20, authorize_capability=lambda argv: None) == 0
     assert source.read_text() == "original"
     assert (directory / "ordinary.txt").read_text() == "original"

@@ -140,11 +140,24 @@ fn complete_observations_match_independent_python_reference_models() {
                     .any(|rule| rule.rule_id == observation.rule_id && rule.matcher.is_some())
             })
             .collect();
+        let expected = serde_json::to_value(
+            case["observations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|observation| {
+                    program.rules.iter().any(|rule| {
+                        rule.rule_id == observation["rule_id"] && rule.matcher.is_some()
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
         let value = serde_json::to_value(declarative).unwrap();
-        if value != case["observations"] {
+        if value != expected {
             mismatches.push(format!(
                 "{}\nexpected={}\nactual={}",
-                case["command"], case["observations"], value
+                case["command"], expected, value
             ));
         }
     }

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, cast
 
+from . import native_execution as _native_execution
 from .containment_execution_support import load_current_containment_health as _load_current_containment_health
 from .runtime.contained_execution_common import (
     canonical_existing_directory as _canonical_directory,
@@ -96,6 +97,24 @@ def try_execute_contained_workspace_write(
 
     try:
         canonical_workspace = _canonical_directory(workspace)
+        _safe_relative(source, canonical_workspace, must_exist=True)
+        if target is not None:
+            _safe_relative(target, canonical_workspace, must_exist=False)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+
+    native_result = _native_execution.contained_workspace_write_execute_native(
+        canonical_workspace,
+        guard_home=guard_home,
+        operation=operation,
+        source=source,
+        target=target,
+        environment=dict(_clean_environment(environment or dict(os.environ))),
+        timeout_seconds=timeout_seconds,
+    )
+    if native_result is not None:
+        return native_result
+    try:
         invocation = _invocation(operation, source, target, canonical_workspace, environment or dict(os.environ))
         executable, argv, source_path, target_path = invocation
         workspace_digest, inputs = complete_workspace_snapshot(canonical_workspace)

@@ -311,7 +311,7 @@ def test_refusal_never_creates_authority_or_overwrites_prior_evidence(transition
 def test_finalize_requires_terminal_exact_live_generation_and_preserves_archived_status(
     transition,
     monkeypatch,
-    state,  # noqa: F811 -- shared fixture
+    state,
 ):
     from codex_plugin_scanner.guard.runtime_transition import TransitionError
 

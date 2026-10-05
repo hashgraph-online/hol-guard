@@ -14,6 +14,61 @@ fn classify(harness: &str, command: &str) -> guard_contracts::PreToolResultV1 {
 }
 
 #[test]
+fn isolated_python_inline_code_requires_containment_not_unrestricted_allow() {
+    for flags in ["-I", "-S", "-I -S", "-S -I", "-IS", "-SI"] {
+        let command = format!("python3 {flags} -c 'print(1)'");
+        let result = classify("omp", &command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(result.minimum_action, "sandbox-required", "{command}");
+            assert_eq!(
+                result.reason_code, "native_python_eval_readonly_containment_required",
+                "{command}"
+            );
+        }
+    }
+    for command in [
+        "python3 -I -m arbitrary",
+        "python3 -S file.py",
+        "python3 -W ignore -c 'print(1)'",
+        "python3 -I -I -c 'print(1)'",
+        "python3 -IS -S -c 'print(1)'",
+        "python3 -I -S -c 'print(1)' extra",
+        "PYTHONPATH=/tmp python3 -I -S -c 'print(1)'",
+        "python3 -I -S -c 'print(1)' && rm -rf /",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert_ne!(
+            result.reason_code, "native_python_eval_readonly_containment_required",
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn local_transform_service_is_containment_only_and_argv_bounded() {
+    let command = "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.4 --ping";
+    let result = classify("omp", command);
+    assert_ne!(result.decision, "allow");
+    if cfg!(target_os = "macos") {
+        assert_eq!(
+            result.reason_code,
+            "native_vitest_readonly_containment_required"
+        );
+        assert_eq!(result.minimum_action, "sandbox-required");
+    }
+    for command in [
+        "esbuild --service=0.25.4 --ping",
+        "/outside/esbuild --service=0.25.4 --ping",
+        "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=evil --ping",
+        "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.4 --ping --outfile=app.js",
+    ] {
+        assert_ne!(classify("omp", command).reason_code, "native_vitest_readonly_containment_required");
+    }
+}
+
+#[test]
 fn direct_pytest_requires_real_containment_never_direct_allow() {
     for command in [
         "python3 -m pytest -q",
@@ -90,6 +145,7 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
     for command in [
         "node --test",
         "node --test tests/test.mjs",
+        "node --max-old-space-size=12288 --test tests/test.mjs",
         "nodejs --test -q",
         "/usr/bin/node --test test.mjs",
     ] {
@@ -105,6 +161,8 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
     for command in [
         "node script.mjs",
         "node --test-other",
+        "node --max-old-space-size=999999 --test tests/test.mjs",
+        "node --max-old-space-size=12288 --require=evil --test tests/test.mjs",
         "node --test > .env",
         "node --test && rm -rf /",
         "node --test $(cat .env)",
@@ -287,6 +345,7 @@ fn local_lint_typecheck_requires_actual_protected_execution() {
         "eslint src",
         "node /home/tester/project/node_modules/eslint/bin/eslint.js src",
         "node /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
+        "node --max-old-space-size=12288 /home/tester/project/node_modules/typescript/bin/tsc --noEmit --incremental false",
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny", "{command}");
@@ -305,6 +364,9 @@ fn local_lint_typecheck_requires_actual_protected_execution() {
         "eslint --output-file=.env src",
         "bunx tsc --noEmit && rm -rf /",
         "NODE_OPTIONS=--require=x eslint src",
+        "node --require=evil /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
+        "node --max-old-space-size=999999 /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
+        "node --max-old-space-size=12288 --require=evil /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
     ] {
         assert_ne!(
             classify("omp", command).reason_code,

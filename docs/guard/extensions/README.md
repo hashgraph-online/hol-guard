@@ -145,12 +145,15 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
+| `command.appimg` | Conservative operation knowledge compiled from a contributor inventory. | 17 | External opt-in |
 | `command.blitcp` | Reviews blitcp copies that leave the host, elevate privileges, or skip verification. | 4 | External opt-in |
 | `command.cloudg` | Reviews cloud credential use, security scanner execution, and Terraform file generation through the CloudG CLI. | 3 | External opt-in |
 | `command.cogext` | Reviews the cogext CLI's mutating commitment operations (add, fulfill, fail). Read-only commands (extract, list, get, stats) are not matched and remain automatic. Note: `cogext add` may initialize ~/.cogext on a fresh machine; that side effect is covered structurally because `add` is in the reviewed set. | 3 | External opt-in |
+| `command.cs` | Reviews cs (Claude Sessions) commands that launch Claude Code in another folder, write pin or archive files, or send session text to a model for a recap. Read-only commands (ls, show) are not matched. | 4 | External opt-in |
 | `command.ctty` | Reviews ctty remote execution (batch exec and bare-host SSH), file transfers (put/get/scp), SFTP/FTP/WebDAV mutations, and local inventory writes (add/edit/move/import), while leaving read-only inspection unmatched. | 7 | External opt-in |
 | `command.digline` | Reviews digline commands that spend model calls, write under .digline/, or expose a way to change the approved baseline. digline is a regression gate for LLM applications, the approved reference lives in your repo. | 6 | External opt-in |
 | `command.errand` | Requires Errand 0.4.2 or later. Reviews job execution (any operand-bearing invocation) and `fetch --apply`; flag-only and help invocations remain automatic. Conservative port of the v1 detector: declarative matchers cannot exclude known read-only subcommands, so operand-bearing calls like `errand ps` also review. | 2 | External opt-in |
+| `command.faf-cli` | Reviews faf-cli commands that write agent instruction files (AGENTS.md, CLAUDE.md, .cursorrules, GEMINI.md, Copilot instructions), add an MCP server to an agent's config, install git hooks, git drivers or CI workflows, send project context off the machine, or rewrite faf's own project files (project.faf, .fafb, soul.fafm, cards). Read-only commands (score, check, dna, context, drift, log, diff, convert, search, share, wjttc, info, formats, demo) are not matched by this extension; Guard's default handling for commands no rule matches still applies to them. Covers the `faf` and `faf-cli` executables; npx, bunx, pnpx, pnpm, yarn, npm exec, yarn exec, npm x, bun x, pnpm dlx and yarn dlx launches of either bin name; and versioned launches (`pkg@tag`) of the `faf-cli` npm package. | 5 | External opt-in |
 | `command.framework.laravel` | Reviews destructive Artisan database wipes, migration resets, and queue purges. | 5 | Built in |
 | `command.genclave` | Reviews gEnclave (ge) security enclave operations that mutate credentials, modify access policies, or unlock persistent sessions. | 3 | External opt-in |
 | `command.gitsync` | Reviews gitsync's live mirror sync, server-side webhook rewrites, and service install/uninstall. `check`, `status`, and plain `hooks` do not match any rule here; Guard's default floor still applies to them since gitsync is not on the built-in safe-command list and no rule in this extension matches those subcommands. Every mutating subcommand covered here always requires review, even with --help, -h or --dry-run present, because gitsync's flag parser can silently drop those flags depending on argument order and this matcher engine cannot detect when that happened. | 2 | External opt-in |
@@ -159,8 +162,10 @@ Protection model meanings:
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
 | `command.skill-base` | Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version. | 1 | External opt-in |
+| `command.snoboard` | Reviews snoboard commands that write initiative.md or fetch from origin. validate, status, and next-number without --fetch only read and are not matched. fix --dry-run, --help, and --version exit without writing. Upstream CLI 0.1.0. | 3 | External opt-in |
 | `command.syngraphe` | Reviews shared repository context initialization, document creation, state archiving, and agent policy creation through syngraphe or syg. | 4 | External opt-in |
 | `command.uivoid` | Reviews uivoid commands that create or reconfigure a live MCP server mapped from an existing API, rotate the credential it calls that API with, or write local session and skill files a later command or agent session will trust. | 5 | External opt-in |
+| `command.vttforge` | Reviews VTTForge CLI commands that write a project: the scaffold, lint fixes, and the v14 migration written in place. The audit, the lint report and the migration preview stay unreviewed. | 3 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 

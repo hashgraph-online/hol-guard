@@ -74,9 +74,14 @@ fn ordinary_copies_keep_source_and_destination_risk_boundaries() {
     }
     std::os::unix::fs::symlink(project.join(".env"), project.join("alias.ts")).unwrap();
     std::os::unix::fs::symlink(&outside, project.join("escaped")).unwrap();
+    std::fs::hard_link(outside.join("source.ts"), outside.join("hardlink.ts")).unwrap();
+    for directory in [outside.join("bin"), outside.join("Library/LaunchAgents")] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
     let home = std::fs::canonicalize(&home).unwrap();
     let project = std::fs::canonicalize(&project).unwrap();
     let linked = std::fs::canonicalize(&linked).unwrap();
+    let outside = std::fs::canonicalize(&outside).unwrap();
     let temporary = Path::new("/tmp").join(format!("guard-copy-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&temporary);
     std::fs::create_dir(&temporary).unwrap();
@@ -90,6 +95,8 @@ fn ordinary_copies_keep_source_and_destination_risk_boundaries() {
         "cp source.ts copied.ts".to_owned(),
         "cp -- auth.ts copied.ts".to_owned(),
         "cp ~/outside/source.ts ~/project/copied.ts".to_owned(),
+        "cp source.ts ~/outside/copied.ts".to_owned(),
+        format!("cp source.ts {}/copied.ts", outside.display()),
         format!(
             "cp {}/source.ts {}/copied.ts",
             project.display(),
@@ -106,7 +113,11 @@ fn ordinary_copies_keep_source_and_destination_risk_boundaries() {
         "cp source.ts .env",
         "cp source.ts alias.ts",
         "cp source.ts escaped/copied.ts",
-        "cp source.ts ~/outside/copied.ts",
+        "cp source.ts ~/outside/hardlink.ts",
+        "cp source.ts ~/outside/.env",
+        "cp source.ts ~/outside/credentials.txt",
+        "cp source.ts ~/outside/bin/tool",
+        "cp source.ts ~/outside/Library/LaunchAgents/tool.plist",
         "cp source.ts .git/config",
         "cp -r source.ts copied.ts",
         "cp -f source.ts copied.ts",

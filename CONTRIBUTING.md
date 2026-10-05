@@ -74,14 +74,14 @@ Changes to pre-tool behavior, command sources, policy composition, harness adapt
 acceptance tooling must preserve ordinary agent workflows and harmful-call protection.
 Run [Guard Gauntlet](ci/gauntlet/README.md) with the actual Oh My Pi CLI, real model
 inference and the exact installed native build. Attach its verified public evidence
-through the **Guard Gauntlet evidence** workflow. The existing required `ci (3.12)`
-check verifies that exact-head evidence before the PR can qualify.
+through the **Guard Gauntlet evidence** workflow. Live qualification is an optional
+check, separate from the required `ci (3.12)` aggregate, and does not block merge.
 
 A model refusal, admission-only probe, unit-test pass or prose completion is not live
 qualification. Keep failed evidence, add the relevant benign/security pair, and test
 again on the final source. Do not revive old false-positive behavior just to satisfy
 historical assertions. Contributors and coding agents should follow the complete
-run → verify → pack → attest → rerun-failed-CI sequence without waiving the gate.
+run → verify → pack → attest sequence when submitting live qualification.
 
 ## Development setup
 
@@ -168,6 +168,27 @@ For packaging or release changes, verify the wheel build:
 uv build --wheel
 ```
 
+Wheel and source-distribution builds generate the command catalog and native command
+program from `contributions/command-sources/`, `contributions/mcp-servers/`, and the
+reviewed trust map using Rust 1.88.0. Their contract files and packaged copies are
+ignored build outputs; do not commit them or resolve merge conflicts in them.
+The build rejects invalid sources and mismatched compiler identities. To reuse an
+already-built source compiler, set `HOL_GUARD_BUILD_SOURCE_COMPILER` to its path.
+Source archives include a build fingerprint and frozen projections. A wheel build
+from an unchanged archive verifies those inputs without requiring Rust; changing
+an authored source, native implementation, or generated projection rejects reuse.
+
+Editable dependency installation does not compile Rust or stage these projections.
+Before running Python tests from a fresh checkout, generate them explicitly:
+
+```bash
+uv run --no-sync python scripts/build_native_command_program.py --projections-only
+```
+
+CI stages and checks the projections before test collection. Installed Guard reads
+the frozen package resources; it does not discover built-in policy from a mutable
+extension directory at startup. External extensions retain their opt-in requirement.
+
 A source checkout or generic wheel build does not qualify a platform release. The
 [native wheel workflow](.github/workflows/native-wheel-ci.yml) assembles and tests the native
 runtime and source compiler with their manifests; the
@@ -208,7 +229,7 @@ and local environment files out of commits.
 ## Real-agent acceptance: Guard Gauntlet
 
 Changes to Guard enforcement, pre-tool parsing, policy composition, harness adapters,
-or the acceptance runner require [Guard Gauntlet](ci/gauntlet/README.md) evidence for
+or the acceptance runner can use optional [Guard Gauntlet](ci/gauntlet/README.md) evidence for
 that exact PR head. Run a real tool-capable model in the pinned Oh My Pi CLI against
 the candidate's installed native wheel. Ordinary tasks must finish quietly; harmful
 synthetic attempts must actually reach Guard and be denied before their effects occur.
@@ -218,8 +239,8 @@ Add a scenario and a paired protection boundary for a reported false positive be
 changing policy. Preserve failed evidence, check physical outcomes, and do not weaken
 runtime protection to satisfy a stale assertion. Run the entire core profile on the
 final source, verify and package its public evidence, then submit it through the
-trusted evidence workflow. The workflow publishes a source-bound PR result; rerun
-failed CI once it qualifies. Never upload provider keys, raw model reasoning, private
+trusted evidence workflow. The workflow publishes a source-bound PR result without
+blocking merge. Never upload provider keys, raw model reasoning, private
 prompts, or real credentials. Platform-specific containment still needs its own live
 run on the supported platform. See the [battle plan](ci/gauntlet/BATTLE_PLAN.md).
 

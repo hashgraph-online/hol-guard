@@ -47,8 +47,12 @@ For a command extension, contributors submit these files together in the same ch
    synthetic local controls, the expected action, the owning rule, and the
    expected effective segments. Cases are data; they never invoke the target
    executable.
-3. The external entry for the extension ID in
-   `contracts/extensions/trust-class-map.v1.json`.
+
+Extension builder CI adds missing IDs to the shared trust map as external/opt-in
+before installing dependencies and compiling Rust. Contributors do not need to
+edit that shared list or pull unrelated main changes to refresh generated
+catalogs. Existing reviewed trust classifications are never promoted or changed
+by this preparation step.
 
 The compiler derives these projections. Contributors do not edit or include
 them as independent inputs:
@@ -58,10 +62,12 @@ them as independent inputs:
 - `contracts/extensions/native-command-program.v1.json`;
 - `contracts/extensions/command-catalog.v1.json`.
 
-After source review, a maintainer runs the preparation command to validate the
-exact source/fixture binding and synchronize the derived files:
+After source review, a maintainer stages missing external defaults, then runs
+the preparation command to validate the exact source/fixture binding and
+synchronize the derived files. CI does this on the PR merge checkout:
 
 ```sh
+python scripts/refresh_extension_artifacts.py --trust-only
 uv run --no-sync python scripts/prepare_extension_contribution.py \
   --source contributions/command-sources/command.<name>.json \
   --fixture tests/fixtures/command-source-<slug>.v1.json
@@ -151,8 +157,8 @@ uv run --no-sync python scripts/render_command_extension_directory.py --check
 
 Maintainers commit the canonical sources, reviewed trust changes, generated
 descriptors, program/catalog artifacts, and changed public directory files
-together after preparation. Contributors need only submit the source, fixture,
-and trust-map inputs.
+together after preparation. Contributors need only submit the source and fixture;
+shared trust-map defaults and generated projections are maintainer-owned.
 Release packaging supplies the native compiler and its identity manifest from
 the platform build; an installed compiler does not fall back to a checkout.
 

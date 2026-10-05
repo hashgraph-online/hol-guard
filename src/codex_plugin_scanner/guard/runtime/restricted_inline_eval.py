@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .restricted_node_capabilities import linux_node_environment
-from .restricted_node_test import prepare_restricted_node_test
+from .restricted_node_test import _node_runtime_args, prepare_restricted_node_test
 from .restricted_pytest import prepare_restricted_pytest
 from .restricted_pytest_model import (
     NODE_EVAL_READ_ONLY_PROFILE_VERSION,
@@ -22,11 +22,32 @@ from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _
 from .restricted_pytest_validation import _normalized_command
 
 
+def _python_runtime_args(command: Sequence[str]) -> tuple[str, ...] | None:
+    """Accept only capability-reducing isolation flags before direct inline code."""
+    flags = 0
+    index = 1
+    bits_by_flag = {"-I": 1, "-S": 2, "-IS": 3, "-SI": 3}
+    while index < len(command) and command[index] in bits_by_flag:
+        bits = bits_by_flag[command[index]]
+        if flags & bits:
+            return None
+        flags |= bits
+        index += 1
+    if len(command) != index + 2 or command[index] != "-c":
+        return None
+    return tuple(command[1:index])
+
+
 def is_inline_eval(command: Sequence[str]) -> bool:
-    return len(command) == 3 and (
-        (re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", Path(command[0]).name) is not None and command[1] == "-c")
-        or (Path(command[0]).name in {"node", "nodejs"} and command[1] in {"-e", "--eval"})
-    )
+    if not command:
+        return False
+    if re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", Path(command[0]).name) is not None:
+        return _python_runtime_args(command) is not None
+    if Path(command[0]).name not in {"node", "nodejs"}:
+        return False
+    runtime_args = _node_runtime_args(command)
+    eval_index = 1 + len(runtime_args)
+    return len(command) == eval_index + 2 and command[eval_index] in {"-e", "--eval"}
 
 
 def prepare_restricted_inline_eval(command: Sequence[str], *, workspace: Path) -> RestrictedPytestPlan:
@@ -34,6 +55,8 @@ def prepare_restricted_inline_eval(command: Sequence[str], *, workspace: Path) -
     if not is_inline_eval(argv):
         raise RestrictedPytestError("inline_eval_invalid_command", "Protected evaluation requires direct inline argv.")
     node = Path(argv[0]).name in {"node", "nodejs"}
+    runtime_args = _node_runtime_args(argv) if node else _python_runtime_args(argv) or ()
+    eval_index = 1 + len(runtime_args)
     # Reuse runtime/backend validation only; neither preparation executes tests
     # or requires pytest installed. Launch the resolved native image, not PATH.
     base = (
@@ -46,7 +69,7 @@ def prepare_restricted_inline_eval(command: Sequence[str], *, workspace: Path) -
     return replace(
         base,
         profile_version=NODE_EVAL_READ_ONLY_PROFILE_VERSION if node else PYTHON_EVAL_READ_ONLY_PROFILE_VERSION,
-        command=(str(base.executable), *argv[1:]),
+        command=(str(base.executable), *runtime_args, *argv[eval_index:]),
     )
 
 
