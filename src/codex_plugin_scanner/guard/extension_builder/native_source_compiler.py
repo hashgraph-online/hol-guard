@@ -22,7 +22,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import BinaryIO
 
-_MAX_INPUT_BYTES = 4 * 1024 * 1024
+_MAX_INPUT_BYTES = 8 * 1024 * 1024
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
 _MAX_COMPILER_BYTES = 128 * 1024 * 1024

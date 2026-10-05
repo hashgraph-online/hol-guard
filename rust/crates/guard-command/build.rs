@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const MAX_INPUT_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_INPUT_BYTES: u64 = 8 * 1024 * 1024;
 
 fn read_input(root: &Path, path: &Path) -> String {
     let relative = path.strip_prefix(root).expect("input inside source tree");
