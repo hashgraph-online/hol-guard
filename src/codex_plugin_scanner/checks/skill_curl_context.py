@@ -16,6 +16,8 @@ _READ_ONLY_CURL_FLAGS = {
     "--compressed",
     "--no-progress-meter",
 }
+
+
 def _parse_fence_boundary(line: str) -> tuple[str, str] | None:
     """Parse one Markdown fence boundary without regex backtracking."""
 
