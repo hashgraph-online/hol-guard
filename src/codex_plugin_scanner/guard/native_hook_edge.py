@@ -325,6 +325,7 @@ def review_raw_hook_native(
     request_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Return a typed Rust edge result, or fail closed without reinterpretation."""
+    record_native_resident_client_failure_code(None)
     if request_id is not None and (
         not isinstance(request_id, str) or re.fullmatch(r"[a-z0-9][a-z0-9_.:-]{0,255}", request_id) is None
     ):

@@ -100,8 +100,8 @@ Current Guard support in this repo:
   - rejects relative, current-directory, workspace, unsafe-owner/mode, and workspace-targeting symlink executables before probing or launch; custom install roots can be selected once with `hol-guard run grok --grok-executable /absolute/path/to/grok`
   - binds an explicit custom selection to its SHA-256 identity and sanitizes code-loader variables and unsafe PATH entries without adding prompts to unchanged launches
   - installs one catch-all `PreToolUse` hook so native tools, `spawn_subagent`, `list_dir`, and `server__tool` MCP names are reviewed once
-  - installs observe-only `UserPromptSubmit`, `SubagentStart`, and `SessionStart` hooks for inventory; Grok ignores deny on those events
-  - installs Guard-managed deny rules and backup hooks in `~/.grok/managed_config.toml` without touching user `~/.grok/config.toml` or `~/.grok/auth`
+  - screens prompts on `UserPromptSubmit` before inference; `SubagentStart` and `SessionStart` remain passive lifecycle hooks
+  - merges deny rules and identical backup hooks into `.grok/config.toml`, preserving unrelated values, comments, and hooks; leaves vendor-managed configuration and authentication intact
   - blocks by returning exit code `2` and Grok-native stdout JSON `{"decision":"deny","reason":"..."}` with approval-center copy in stderr
   - waits on the original PreToolUse hook after queuing an approval, then returns allow so Grok resumes the same tool call
   - surfaces `--always-approve`, `bypassPermissions`, and sandbox `off` as degraded protection states when detected in Grok config

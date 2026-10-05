@@ -218,6 +218,24 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublicationMixin, Native
             self._condition.notify_all()
         self._publish_event.set()
 
+    def request_control_binding_refresh(self, rejected_generation: int | None) -> None:
+        """Coalesce rejected admission refreshes without withdrawing a newer ACK."""
+        with self._condition:
+            if self._closed or not self._acked:
+                return
+            generation = self._snapshot.get("generation") if self._snapshot is not None else None
+            if rejected_generation is not None and isinstance(generation, int) and generation > rejected_generation:
+                return
+            self._epoch += 1
+            self._acked = False
+            self._last_error = None
+            self._renewal_due_monotonic = None
+            self._renewal_after_generation = None
+            self._retry_not_before_monotonic = None
+            self._failure_count = 0
+            self._condition.notify_all()
+        self._publish_event.set()
+
     def _queue_observe_republish(self) -> bool:
         """Refresh an acknowledged Watch snapshot without opening a pause window.
 
