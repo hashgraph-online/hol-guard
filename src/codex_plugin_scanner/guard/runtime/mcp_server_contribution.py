@@ -72,8 +72,11 @@ def _reserved_direct_mcp_command(name: str) -> bool:
 def direct_mcp_command_name(value: object) -> str | None:
     """Recognize a portable executable basename for tightening-only MCP defaults.
 
-    Paths may be POSIX or Windows, independent of the host running Guard. This
-    is catalog selection, never executable authentication or saved approval.
+    Paths may be POSIX or Windows, independent of the host running Guard.
+    Backslashes are treated as path separators on every host, including POSIX,
+    so matching follows portable configured-command syntax rather than host
+    filesystem basename semantics. This is catalog selection, never executable
+    authentication or saved approval.
     """
     if not isinstance(value, str) or not value or "://" in value:
         return None
