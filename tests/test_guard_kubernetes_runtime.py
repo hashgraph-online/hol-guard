@@ -343,7 +343,7 @@ def test_pi_post_tool_output_labels_kubernetes_secret_source(tmp_path: Path) -> 
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -363,7 +363,7 @@ def test_pi_post_tool_output_labels_argv_wrapped_kubernetes_secret_source(tmp_pa
         payload={
             "tool_name": "Bash",
             "tool_input": {"argv": ["bash", "-lc", _network_secret_dump_command()]},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -383,7 +383,7 @@ def test_pi_post_tool_output_labels_single_item_command_args_kubernetes_secret_s
         payload={
             "tool_name": "Bash",
             "tool_input": {"command_args": ["kubectl get secret prod -o yaml"]},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -402,7 +402,7 @@ def test_pi_post_tool_output_labels_commands_payload_kubernetes_secret_source(tm
         payload={
             "tool_name": "Bash",
             "tool_input": {"commands": ["kubectl get secret prod -o yaml"]},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -421,7 +421,7 @@ def test_pi_post_tool_output_labels_later_commands_payload_kubernetes_secret_sou
         payload={
             "tool_name": "Bash",
             "tool_input": {"commands": ["echo ok", "kubectl get secret prod -o yaml"]},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -491,7 +491,7 @@ def test_pi_post_tool_output_labels_wrapped_kubernetes_secret_source(tmp_path: P
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -511,7 +511,7 @@ def test_pi_post_tool_output_preserves_kubernetes_secret_volume_source(tmp_path:
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",

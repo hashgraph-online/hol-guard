@@ -68,14 +68,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub GraphQL grammar records owned unknown uncertainty",
+      "basis": "inherited GitHub GraphQL grammar records owned unknown uncertainty. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
         "decision_plane_floor": "block",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.github.unknown"
@@ -180,14 +180,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "dd sink is exactly parsed; inherited domain classifier records owned destructive-shell uncertainty; selected solely by immutable generator variant modulo four",
+      "basis": "dd sink is exactly parsed; inherited domain classifier records owned destructive-shell uncertainty; selected solely by immutable generator variant modulo four. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.shell-mutations.destructive-shell"
@@ -736,14 +736,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub grammar rejects GraphQL and dynamic-looking dollar tokens despite exact shell quoting",
+      "basis": "inherited GitHub grammar rejects GraphQL and dynamic-looking dollar tokens despite exact shell quoting. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.github.unknown"
@@ -870,14 +870,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Docker compatibility grammar has no exact Compose classification",
+      "basis": "inherited Docker compatibility grammar has no exact Compose classification. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.container-runtime.docker-sensitive"
@@ -894,14 +894,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Docker compatibility grammar has no exact inspect/template classification",
+      "basis": "inherited Docker compatibility grammar has no exact inspect/template classification. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.container-runtime.docker-sensitive"
@@ -1248,14 +1248,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git apply fallback attributes all fifteen compatibility owners as uncertain",
+      "basis": "inherited Git apply fallback attributes all sixteen compatibility owners as uncertain. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.git.blame",
@@ -1272,7 +1272,8 @@
           "command.git.reflog",
           "command.git.remote",
           "command.git.show",
-          "command.git.status"
+          "command.git.status",
+          "command.git.worktree"
         ]
       },
       "group_id": "workflow:workspace-patch-write:patch-apply|all",
@@ -1408,7 +1409,7 @@
   "totals": {
     "below_original_oracle": 0,
     "cases": 51000,
-    "equal_to_original_oracle": 39317,
+    "equal_to_original_oracle": 40459,
     "groups": 58,
     "improved_bounded_git_cases": 50,
     "improved_bounded_git_sources": 2,
@@ -1416,6 +1417,6 @@
     "improved_upstream_benign_sources": 3,
     "native_evaluation_errors": 27084,
     "sources": 52,
-    "stronger_than_original_oracle": 11683
+    "stronger_than_original_oracle": 10541
   }
 }

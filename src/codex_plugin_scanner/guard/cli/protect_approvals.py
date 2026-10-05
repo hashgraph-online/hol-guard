@@ -43,6 +43,32 @@ def _queue_local_protect_approvals(
     except (OSError, RuntimeError, TypeError, ValueError):
         config = None
     if config is None or not asks_for_approval(config):
+        artifact = _protect_request_artifact(response_payload, workspace=workspace)
+        approval_item = (
+            _protect_approval_item(response_payload, workspace=workspace, artifact=artifact)
+            if artifact is not None
+            else None
+        )
+        if artifact is not None and approval_item is not None:
+            from ..approvals import record_unprompted_review
+
+            _annotate_package_execution_context_change(
+                approval_item,
+                store=store,
+                artifact_id=artifact.artifact_id,
+            )
+            record_unprompted_review(
+                detection=HarnessDetection(
+                    harness=artifact.harness,
+                    installed=True,
+                    command_available=True,
+                    config_paths=(artifact.config_path,),
+                    artifacts=(artifact,),
+                ),
+                evaluation={"artifacts": [approval_item]},
+                store=store,
+                redaction_level=config.receipt_redaction_level if config is not None else "full",
+            )
         verdict = response_payload.get("verdict")
         reason = verdict.get("reason") if isinstance(verdict, dict) else None
         guidance = safe_alternative_reason(str(reason or "HOL Guard blocked this package request."))

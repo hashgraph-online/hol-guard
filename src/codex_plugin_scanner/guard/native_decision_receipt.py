@@ -30,7 +30,13 @@ _PROMPT_RISK_CLASSES = (
     "prompt_injection_intent",
 )
 _OPTIONAL_FIELDS = frozenset(
-    {"command_extensions", "origin_authentication", "execution_intent_digest", "prompt_risk_classes"}
+    {
+        "command_extensions",
+        "origin_authentication",
+        "execution_intent_digest",
+        "prompt_risk_classes",
+        "business_review_binding",
+    }
 )
 _REQUIRED_FIELDS = frozenset(
     {
@@ -115,6 +121,8 @@ def _identity_payload(receipt: Mapping[str, object]) -> dict[str, object]:
         identity["command_extensions"] = receipt["command_extensions"]
     if "prompt_risk_classes" in receipt:
         identity["prompt_risk_classes"] = receipt["prompt_risk_classes"]
+    if "business_review_binding" in receipt:
+        identity["business_review_binding"] = receipt["business_review_binding"]
     return identity
 
 
@@ -182,7 +190,7 @@ def _validate_receipt_policy(receipt: dict[str, object]) -> bool:
     )
     if reason_code is None:
         return False
-    for field in ("origin_authentication", "execution_intent_digest"):
+    for field in ("origin_authentication", "execution_intent_digest", "business_review_binding"):
         if field in receipt:
             digest = receipt[field]
             if not isinstance(digest, str) or _HEX64.fullmatch(digest) is None:

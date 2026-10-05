@@ -102,6 +102,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "home-copy-task",
             "commands",
             "watch-command",
+            "mixed-read-batch",
             "blocked-read",
             "blocked-command",
             "blocked-extension",

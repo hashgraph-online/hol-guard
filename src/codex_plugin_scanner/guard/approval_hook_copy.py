@@ -14,7 +14,7 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _OPEN_GUARD_MARKER = "open hol guard to approve"
 _DEFAULT_HOOK_REASON = "HOL Guard flagged this tool call for review."
 _GUARD_TOKEN_FRAGMENT = re.compile(
-    r"#guard-token=(?:[A-Za-z0-9_~%+-]+\.)*[A-Za-z0-9_~%+-]+",
+    r"#guard-token=[A-Za-z0-9_~%+-]+(?:\.[A-Za-z0-9_~%+-]+)*",
     re.IGNORECASE,
 )
 _SIGNED_APPROVAL_LINK_UNAVAILABLE = (
@@ -29,8 +29,10 @@ def _without_guard_token_fragment(text: str) -> str:
 def _without_raw_approval_url(message: str, review_url: str) -> str:
     without_raw_url = message.replace(review_url, "").strip()
     without_raw_url = re.sub(r":\s*\.(?=\s|$)", ".", without_raw_url)
-    without_raw_url = re.sub(r"[\s:;,]*\.\s*$", ".", without_raw_url)
-    return without_raw_url.rstrip(" :;,")
+    trimmed = without_raw_url.rstrip()
+    if trimmed.endswith("."):
+        trimmed = trimmed[:-1].rstrip(" \t\r\n:;,") + "."
+    return trimmed.rstrip(" :;,")
 
 
 def approval_review_url_from_payload(payload: Mapping[str, object]) -> str | None:

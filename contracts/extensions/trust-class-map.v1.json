@@ -78,18 +78,23 @@
       "command.storage.minio"
     ],
     "external": [
+      "command.appimg",
       "command.blitcp",
       "command.cloudg",
       "command.cogext",
+      "command.cs",
       "command.ctty",
       "command.digline",
       "command.errand",
+      "command.faf-cli",
       "command.genclave",
       "command.gitsync",
-      "command.mcp-authyouragent",
+      "command.google-workspace.gog",
       "command.mcp-contribos",
       "command.mcp-filesystem",
       "command.mcp-instapods",
+      "command.mcp-insumer",
+      "command.mcp-loomdesk",
       "command.mcp-pr-ui-compare",
       "command.mcp-reaper",
       "command.noodle",
@@ -102,7 +107,8 @@
       "command.snoboard",
       "command.syngraphe",
       "command.tui-runner",
-      "command.uivoid"
+      "command.uivoid",
+      "command.vttforge"
     ]
   }
 }

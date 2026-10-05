@@ -91,7 +91,7 @@ def test_composed_preparation_is_read_only_and_captures_complete_native_files(tm
 def test_composed_signed_inverse_restores_all_files_and_modes(
     transition,
     tmp_path,
-    monkeypatch,  # noqa: F811 -- shared pytest fixture
+    monkeypatch,
 ):
     runtime, plan, _bindings, _pointer = transition
     harness, context, _global_config, _workspace_config = _sources(tmp_path, monkeypatch)

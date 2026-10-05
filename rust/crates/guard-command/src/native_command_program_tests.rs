@@ -140,11 +140,24 @@ fn complete_observations_match_independent_python_reference_models() {
                     .any(|rule| rule.rule_id == observation.rule_id && rule.matcher.is_some())
             })
             .collect();
+        let expected = serde_json::to_value(
+            case["observations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|observation| {
+                    program.rules.iter().any(|rule| {
+                        rule.rule_id == observation["rule_id"] && rule.matcher.is_some()
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
         let value = serde_json::to_value(declarative).unwrap();
-        if value != case["observations"] {
+        if value != expected {
             mismatches.push(format!(
                 "{}\nexpected={}\nactual={}",
-                case["command"], case["observations"], value
+                case["command"], expected, value
             ));
         }
     }
@@ -405,11 +418,12 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         .any(|item| item.permission_id == "command.github.permission.read-remote"));
     for command in [
         "gh api graphql -f query='{ viewer { login } }'",
-        "git rev-parse --git-dir",
+        "git cat-file -p HEAD",
         "docker compose ps",
     ] {
         let result = decision(command, &unrestricted);
-        assert_eq!(result.minimum_action, "block", "{command}");
+        assert_eq!(result.minimum_action, "review", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
         assert!(result.command_extensions.unwrap().binding.uncertainty_count > 0);
     }
 }

@@ -10,7 +10,15 @@ from typing import Any
 
 from .catalog import WATCH_OUTPUT, Scenario
 from .input_evidence import redact_value
-from .proofs import BLOCK_REASONS, guard_inventory, required_checks, task_calls_in_scope, task_tools_match
+from .mixed_reads import assess_mixed_reads
+from .proofs import (
+    BLOCK_REASONS,
+    command_outputs_match,
+    guard_inventory,
+    required_checks,
+    task_calls_in_scope,
+    task_tools_match,
+)
 from .transport import reconcile_rounds
 
 TRANSCRIPT_LIMIT = 16 * 1024 * 1024
@@ -206,6 +214,8 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
             return "not-exercised", "the model changed the protected read target"
     if scenario.oracle == "blocked-extension":
         return _assess_extension_permission_block(scenario, case, calls, by_id)
+    if scenario.oracle == "mixed-read-batch":
+        return assess_mixed_reads(case, calls, by_id)
     if scenario.oracle == "watch-command":
         watch_error = _watch_evidence_error(case, calls, by_id)
         if watch_error:
@@ -238,6 +248,8 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
         return "not-exercised", "actual native task sequence or targets differ from the scenario"
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:
         return "not-exercised", "the task did not exercise all required native tools"
+    if not command_outputs_match(scenario, calls):
+        return "task-incomplete", "required discovery command returned no fixture source path"
     if not all(value is True for value in case["filesystem"].values()):
         return "task-incomplete", "physical task outcomes do not match the scenario"
     if any(g.get("decision") != "allow" for g in guards):

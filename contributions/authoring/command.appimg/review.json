@@ -1,0 +1,238 @@
+{
+  "discoveryDigest": "1002802e89336475ad89354954f08367e591d51fe6716226b6acda87c71584e2",
+  "entries": {
+    "op-08443d1c3be6e196": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#updates",
+      "rationale": "Without a source it shows where an installed AppImage updates from. With a URL or github:owner/repo, or with --clear, it changes where future updates are downloaded from.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Run appimg update-source NAME without a source first, and confirm a new URL or github:owner/repo belongs to the application's publisher.",
+      "state": "review"
+    },
+    "op-1a83df11ee5b78cd": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Moves or copies an AppImage already on disk into $XDG_DATA_HOME/appimages and writes a desktop entry; one in ~/.local/bin leaves a symbolic link behind. With --scan it only lists candidates and changes nothing.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "adopt",
+          "--scan"
+        ]
+      ],
+      "saferAlternative": "Run appimg adopt --scan first to see candidates, and inspect the file offline with unsquashfs -l before adopting it. adopt --dry-run is safe only from appimg 0.4.1 on.",
+      "state": "review"
+    },
+    "op-1d8f2e3384b44038": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Prints a shell completion script to stdout and writes nothing.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "completions",
+          "bash"
+        ],
+        [
+          "completions",
+          "elvish"
+        ],
+        [
+          "completions",
+          "fish"
+        ],
+        [
+          "completions",
+          "zsh"
+        ]
+      ],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-227d251131facfdb": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#updates",
+      "rationale": "Downloads newer versions and swaps them in place of installed AppImages. With --check it only reports and changes nothing.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution",
+        "network_egress"
+      ],
+      "safeArgv": [
+        [
+          "update",
+          "--all",
+          "--check"
+        ],
+        [
+          "update",
+          "--all",
+          "--check",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Run appimg update --all --check, or appimg update NAME --check, first to see what would change.",
+      "state": "review"
+    },
+    "op-28e623ce1c945c32": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Read-only listing of installed AppImages.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "list",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-2e390f4b1131c34a": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Read-only environment check that reports leftovers without deleting anything.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-3c5f7f4c2183d9b4": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#updates",
+      "rationale": "Shows a sample desktop notification right away. It changes no files, but it acts outside the terminal, so it is kept at review rather than listed as a read-only invocation.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Run appimg notify status to check the notification setup without showing a notification.",
+      "state": "review"
+    },
+    "op-66ac10fbbea895e4": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Opens the desktop entry of an installed AppImage in $EDITOR and rewrites it.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the desktop entry in $XDG_DATA_HOME/applications before editing it.",
+      "state": "review"
+    },
+    "op-6c69101a5444aed0": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Copies an AppImage from a file or downloads it from a URL into $XDG_DATA_HOME/appimages and writes icons and a desktop entry. Versions before 0.4.1 run the AppImage even with --dry-run.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution",
+        "network_egress"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the AppImage offline first, for example list its squashfs contents with unsquashfs -l (add -o with the offset past the ELF runtime). appimg install --dry-run is safe only from appimg 0.4.1 on; earlier versions run the AppImage.",
+      "state": "review"
+    },
+    "op-6df54ad180aab1a8": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#updates",
+      "rationale": "Stops the systemd user timer and removes both units.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Run appimg notify status first to see which timer would be stopped and removed.",
+      "state": "review"
+    },
+    "op-75eb278d6a9fb4cf": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Without a subcommand appimg starts an interactive terminal interface that can install, update and remove AppImages. Help and version output are read-only.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "--help"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "-V"
+        ],
+        [
+          "-h"
+        ]
+      ],
+      "saferAlternative": "Use appimg list --json or appimg update --all --check instead of the interactive interface.",
+      "state": "review"
+    },
+    "op-98ae7de9f4921295": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Deletes an installed AppImage together with its desktop entry and icons.",
+      "reviewed": true,
+      "riskClasses": [
+        "destructive_shell",
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Run appimg list first to confirm the exact application name.",
+      "state": "review"
+    },
+    "op-b4d1dad95db6f6d7": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#updates",
+      "rationale": "Read-only report of whether the timer is on, when it runs next, how the last check went, and whether the appimg it runs still exists.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-bb0b400368c64a1a": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Installs every AppImage an export file lists, downloading each one again from its recorded source.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution",
+        "network_egress"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Read the export file and confirm every listed source first. From appimg 0.4.1 on, import --dry-run shows what would be installed and from where.",
+      "state": "review"
+    },
+    "op-c1ecd601718bd5de": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#updates",
+      "rationale": "Writes a systemd user service and timer to $XDG_CONFIG_HOME/systemd/user and starts the timer, which runs appimg once a day.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Run appimg notify status first; enabling writes and starts a persistent systemd user timer.",
+      "state": "review"
+    },
+    "op-d76e96e3251de015": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Writes the list of installed AppImages and their sources to standard output, or to the given file, which it replaces.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Run appimg export without a file to print the export to standard output instead of writing a file.",
+      "state": "review"
+    }
+  },
+  "schemaVersion": "guard.extension-review.v1"
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,6 +49,34 @@ def sonar_pages(path: str, field: str, **parameters: object) -> dict:
     raise ValueError("report exceeds the pagination limit")
 
 
+def _metric_value(metric: dict) -> float | None:
+    """Read the new-code period; unknown data must not masquerade as zero gaps."""
+    raw = metric.get("value")
+    periods = metric.get("periods")
+    if periods:
+        if not isinstance(periods, list) or any(not isinstance(item, dict) for item in periods):
+            return None
+        selected = [item for item in periods if type(item.get("index")) is int and item["index"] == 1]
+        if not selected and len(periods) == 1 and "index" not in periods[0]:
+            selected = periods
+        if len(selected) != 1:
+            return None
+        raw = selected[0].get("value")
+    elif periods is not None and periods != []:
+        return None
+    elif isinstance(metric.get("period"), dict):
+        raw = metric["period"].get("value", raw)
+    elif metric.get("period") is not None:
+        return None
+    if not isinstance(raw, (str, int, float)) or isinstance(raw, bool):
+        return None
+    try:
+        value = float(raw)
+    except (ValueError, OverflowError):
+        return None
+    return value if math.isfinite(value) and value >= 0 else None
+
+
 def sonar_snapshot(pull_request: int | None) -> dict:
     scope = {} if pull_request is None else {"pullRequest": pull_request}
     issues = sonar_pages("/api/issues/search", "issues", componentKeys=PROJECT, resolved="false", **scope)
@@ -68,8 +97,7 @@ def sonar_snapshot(pull_request: int | None) -> dict:
         sources = {}
         for component in measures["components"]:
             has_gaps = any(
-                metric["metric"].startswith("new_uncovered")
-                and float(metric.get("period", {}).get("value", metric.get("value", "0"))) > 0
+                metric["metric"].startswith("new_uncovered") and ((value := _metric_value(metric)) is None or value > 0)
                 for metric in component.get("measures", [])
             )
             if has_gaps:

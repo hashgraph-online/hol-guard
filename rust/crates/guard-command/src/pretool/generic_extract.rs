@@ -19,6 +19,7 @@ pub(super) enum GenericExtractionError {
 #[derive(Debug, Default)]
 pub(super) struct GenericSignals {
     pub(super) command: Option<String>,
+    pub(super) business_action_present: bool,
     pub(super) tool_name: Option<String>,
     pub(super) package_present: bool,
     pub(super) package_values: Vec<String>,
@@ -184,6 +185,8 @@ fn command_from_value_at_depth(
             for key in [
                 "command",
                 "cmd",
+                "command_line",
+                "commandLine",
                 "shell_command",
                 "shellCommand",
                 "commands",
@@ -210,6 +213,8 @@ fn collect_commands(
         for key in [
             "command",
             "cmd",
+            "command_line",
+            "commandLine",
             "shell_command",
             "shellCommand",
             "commands",

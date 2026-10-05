@@ -340,6 +340,80 @@ def test_native_review_honors_resolved_allow_on_retry(
     assert store.list_approval_requests(status="pending") == []
 
 
+def test_safe_alternative_review_denies_without_prompting_but_reaches_the_inbox(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker, store = _worker(tmp_path, monkeypatch, _edge("cursor"), ask=False)
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "WebFetch",
+        "tool_input": {"url": "https://example.test"},
+    }
+    kwargs = {
+        "payload": payload,
+        "params": {},
+        "default_harness": "cursor",
+        "home_dir": tmp_path / "home",
+        "guard_home": tmp_path / "guard-home",
+        "workspace": tmp_path / "workspace",
+    }
+
+    first = worker.review_http_payload(**kwargs)
+    hook_output = first["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "deny"
+    assert first["prompted"] is False
+    assert first["blocked_request_mode"] == "safe-alternative"
+    assert "approval_request_id" not in first
+    assert "approval_url" not in first
+
+    worker.review_http_payload(**kwargs)
+    pending = store.list_approval_requests(status="pending")
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "review"
+
+    resolved = store.resolve_harness_native_approval_request(
+        str(pending[0]["request_id"]),
+        reason="operator approved the blocked request from the inbox",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
+        expected_harness="cursor",
+    )
+    assert resolved is True
+    retry = worker.review_http_payload(**kwargs)
+    retry_output = retry["hookSpecificOutput"]
+    assert isinstance(retry_output, dict)
+    assert retry_output["permissionDecision"] == "allow"
+    assert store.list_approval_requests(status="pending") == []
+
+
+def test_safe_alternative_block_still_records_nothing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    edge = _edge("cursor")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    result.update(policy_action="block", minimum_action="block", reason_code="native_command_permission_disabled")
+    worker, store = _worker(tmp_path, monkeypatch, edge, ask=False)
+    response = worker.review_http_payload(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "WebFetch",
+            "tool_input": {"url": "https://example.test"},
+        },
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    hook_output = response["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "deny"
+    assert store.list_approval_requests(status="pending") == []
+
+
 def test_native_review_allow_does_not_cross_workspace_or_tool(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

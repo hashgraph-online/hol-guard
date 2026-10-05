@@ -388,7 +388,7 @@ descriptions and review input are publishable author input; inspect them for
 secrets before submission.
 
 The bounded contracts reject excessive input rather than truncating it. The
-current limits include 4 MiB source/compiler input, 4 MiB compiled program,
+current limits include 8 MiB source/compiler input, 4 MiB compiled program,
 32 matcher depth, 16,384 matcher nodes, 512 extensions, 1,024 rules, 64 safe
 variants per rule, and the adapter limits in `contracts/extensions/`.
 

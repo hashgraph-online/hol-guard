@@ -75,7 +75,7 @@ fn apply_post_tool_policy(
     )
 }
 
-fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
+pub(super) fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
     EffectiveNativePolicyV3 {
         protection_posture: "protected".into(),
         security_level: "balanced".into(),
@@ -97,7 +97,7 @@ fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
     }
 }
 
-fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
+pub(super) fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
     PolicySnapshotV3 {
         schema: POLICY_SNAPSHOT_SCHEMA.into(),
         version: 3,
@@ -116,6 +116,7 @@ fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
         },
         effective_policy: policy,
         command_extensions: None,
+        business_policy: None,
         issued_at_ms: 1,
         expires_at_ms: 2,
         integrity: SnapshotIntegrityV3 {
@@ -148,7 +149,7 @@ mod observed_mcp;
 #[path = "policy_enforcement_codex_budget_tests.rs"]
 mod codex_budget;
 
-fn generic_result(minimum_action: &str) -> PreToolResultV1 {
+pub(super) fn generic_result(minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {
         schema: "guard-pre-tool-result.v1".into(),
         version: 1,

@@ -8,6 +8,8 @@ generation state, response binding, and resident lifecycle.
 from __future__ import annotations
 
 import atexit
+import contextlib
+import os
 import threading
 import time
 from collections.abc import Mapping
@@ -47,7 +49,7 @@ def native_resident_client_failure_code() -> str | None:
     return _LAST_FAILURE_CODE.get()
 
 
-def record_native_resident_client_failure_code(code: str) -> None:
+def record_native_resident_client_failure_code(code: str | None) -> None:
     """Record a privacy-safe failure code for the current native client request."""
     _LAST_FAILURE_CODE.set(code)
 
@@ -184,11 +186,17 @@ forget_in_child(_CLIENT_POOLS)
 
 
 def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str, str]) -> _PersistentNativeClientPool:
-    normalized_state_dir = state_dir.expanduser().resolve()
+    normalized_state_dir = _pinned_state_dir(state_dir)
     key = (str(executable), str(normalized_state_dir))
     evicted: _PersistentNativeClientPool | None = None
     with _CLIENTS_LOCK:
         pool = _CLIENT_POOLS.get(key)
+        if pool is None:
+            forms = _directory_forms(normalized_state_dir)
+            for old_key in list(_CLIENT_POOLS):
+                if old_key[0] == key[0] and _directory_forms(Path(old_key[1])) & forms:
+                    evicted = _CLIENT_POOLS.pop(old_key)
+                    break
         if pool is None:
             if len(_CLIENT_POOLS) >= _MAX_PERSISTENT_POOLS:
                 evicted_key = next(iter(_CLIENT_POOLS))
@@ -203,6 +211,47 @@ def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str
         evicted.close()
     _track_resident(executable, normalized_state_dir, environment)
     return pool
+
+
+def _is_directory(path: Path) -> bool:
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _pinned_state_dir(state_dir: Path) -> Path:
+    """Pin a runtime directory that exists.
+
+    ``Path.resolve`` of a missing directory is not a stable Windows identity.
+    A settings write can start a resident before publication creates
+    ``native-runtime`` at its absolute spelling. Caching that guess makes the
+    later bind report a missing private ancestor for a directory that exists.
+    """
+
+    candidate = state_dir.expanduser()
+    if _is_directory(candidate):
+        return candidate.resolve()
+    absolute = Path(os.path.abspath(candidate))
+    if _is_directory(absolute):
+        try:
+            resolved = absolute.resolve()
+        except OSError:
+            return absolute
+        return resolved if _is_directory(resolved) else absolute
+    return absolute
+
+
+def _directory_forms(path: Path) -> set[str]:
+    forms = {str(path), os.path.abspath(path)}
+    if _is_directory(path):
+        with contextlib.suppress(OSError):
+            forms.add(str(path.expanduser().resolve()))
+    return {os.path.normcase(form) for form in forms}
+
+
+def _state_dir_in_guard_home(state_dir: Path, guard_home: Path) -> bool:
+    return bool(_directory_forms(state_dir.parent) & _directory_forms(guard_home))
 
 
 def _state_files(state_dir: Path, *, strict: bool = False) -> tuple[Path, ...]:
@@ -233,7 +282,7 @@ def close_native_resident_clients(guard_home: Path | None = None, *, deadline_mo
         selected = [
             (key, pool)
             for key, pool in _CLIENT_POOLS.items()
-            if resolved_guard_home is None or Path(key[1]).parent == resolved_guard_home
+            if resolved_guard_home is None or _state_dir_in_guard_home(Path(key[1]), resolved_guard_home)
         ]
     first_error: Exception | None = None
     all_contained = True
@@ -347,12 +396,12 @@ def close_native_residents(guard_home: Path | None = None, *, deadline_monotonic
         residents = [
             (key, environment)
             for key, environment in _RESIDENTS.items()
-            if resolved_guard_home is None or key[1].parent == resolved_guard_home
+            if resolved_guard_home is None or _state_dir_in_guard_home(key[1], resolved_guard_home)
         ]
         remaining = {
             key: environment
             for key, environment in _RESIDENTS.items()
-            if resolved_guard_home is not None and key[1].parent != resolved_guard_home
+            if resolved_guard_home is not None and not _state_dir_in_guard_home(key[1], resolved_guard_home)
         }
     all_contained = clients_contained is not False
     for (executable, state_dir), environment in residents:
