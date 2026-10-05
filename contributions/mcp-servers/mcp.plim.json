@@ -3,7 +3,7 @@
   "id": "mcp.plim",
   "version": "1.4.1",
   "name": "Plim MCP",
-  "description": "Desktop audio alerts, interactive Telegram questions, and terminal command monitoring for AI coding agents.",
+  "description": "Desktop audio alerts, interactive Telegram questions, terminal command monitoring, and dynamic progress tracking for AI coding agents.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -23,11 +23,11 @@
     "command": "npx",
     "package": "plim-mcp"
   },
-  "riskClasses": ["external-command-execution"],
+  "riskClasses": ["external-command-execution", "external-message-egress"],
   "tools": [
-    { "name": "plim_notify", "state": "inherit" },
-    { "name": "plim_ask", "state": "inherit" },
-    { "name": "plim_progress", "state": "inherit" },
+    { "name": "plim_notify", "state": "review" },
+    { "name": "plim_ask", "state": "review" },
+    { "name": "plim_progress", "state": "review" },
     { "name": "plim_run", "state": "review" },
     { "name": "other", "state": "inherit" }
   ],
@@ -36,6 +36,6 @@
     "https://plim.sh"
   ],
   "saferAlternatives": [
-    "Review shell commands before approving plim_run execution, or rely on plim_notify and plim_ask for safe notification and user confirmation workflows."
+    "Review shell commands before approving plim_run execution, and inspect message content before approving Telegram egress tools (plim_notify, plim_ask, plim_progress)."
   ]
 }
