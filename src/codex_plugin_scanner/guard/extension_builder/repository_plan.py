@@ -157,7 +157,7 @@ def _previous_kit(root: Path, metadata: Metadata) -> tuple[Kit | None, dict[str,
             or {path: stored_managed[path] for path in stored_managed if path not in extra} != expected_managed
         ):
             raise conflict("The existing authoring ownership record does not match its reviewed source contracts.")
-        legacy_orphans = {path: stored_managed[path] for path in extra}
+        legacy_orphans = {path: str(stored_managed[path]) for path in extra}
     for path, expected in managed_files(previous).items():
         if _read_optional(root / path) != expected:
             raise conflict(
