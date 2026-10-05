@@ -67,7 +67,7 @@
             "kind": { "const": "direct-command" },
             "command": {
               "type": "string",
-              "pattern": "^(?!.*\\.exe$)[a-z0-9][a-z0-9_-]*(?:\\.[a-z0-9_-]+)*$",
+              "pattern": "^(?!.*\\.(?:exe|cmd|bat)$)[a-z0-9][a-z0-9_-]*(?:\\.[a-z0-9_-]+)*$",
               "maxLength": 128
             }
           }

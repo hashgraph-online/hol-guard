@@ -30,6 +30,16 @@ _ALLOWED_ICON_NAMES: Final = frozenset(
     }
 )
 _ALLOWED_LAUNCHERS: Final = frozenset({"bunx", "npx", "npm", "pnpm", "uvx", "yarn", "pipx"})
+_DIRECT_COMMAND_RESERVED: Final = _ALLOWED_LAUNCHERS | frozenset(
+    re.findall(
+        r"\S+",
+        "bash busybox bun cargo cmd csh dash deno docker dotnet env fish go java ksh lua node nodejs perl php "
+        "podman powershell pwsh py python python3 pythonw ruby sh sudo tcsh ts-node tsx uv wsl zsh",
+    )
+)
+_DIRECT_COMMAND_VERSIONED_BASES: Final = tuple(
+    re.findall(r"\S+", "java lua node nodejs perl php py python pythonw ruby")
+)
 _DIRECT_COMMAND: Final = re.compile(r"[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9_-]+)*", re.ASCII)
 _TOOL_STATES: Final = frozenset({"inherit", "allow", "review", "block"})
 _REMOTE_TOOL_STATES: Final = frozenset({"inherit", "review", "block"})
@@ -49,6 +59,16 @@ def catalog_id_for_mcp_id(mcp_id: str) -> str:
     return f"command.mcp-{mcp_id.removeprefix('mcp.')}"
 
 
+def _reserved_direct_mcp_command(name: str) -> bool:
+    if name in _DIRECT_COMMAND_RESERVED:
+        return True
+    for base in _DIRECT_COMMAND_VERSIONED_BASES:
+        suffix = name.removeprefix(base)
+        if suffix != name and suffix and suffix[0].isdigit() and all(ch.isdigit() or ch == "." for ch in suffix):
+            return True
+    return False
+
+
 def direct_mcp_command_name(value: object) -> str | None:
     """Recognize a portable executable basename for tightening-only MCP defaults.
 
@@ -57,10 +77,12 @@ def direct_mcp_command_name(value: object) -> str | None:
     """
     if not isinstance(value, str) or not value or "://" in value:
         return None
-    name = value.replace("\\", "/").rsplit("/", 1)[-1]
-    if name.endswith(".exe"):
-        name = name[:-4]
-    if len(name) > 128 or _DIRECT_COMMAND.fullmatch(name) is None:
+    name = value.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    for suffix in (".exe", ".cmd", ".bat"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    if len(name) > 128 or _DIRECT_COMMAND.fullmatch(name) is None or _reserved_direct_mcp_command(name):
         return None
     return name
 
@@ -255,8 +277,10 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
             raise ValueError(f"{filename} launch command is not an allowlisted package launcher")
     elif launch_kind == "direct-command":
         command = launch.get("command")
-        if direct_mcp_command_name(command) != command:
-            raise ValueError(f"{filename} direct command must be a canonical executable basename without .exe")
+        if not isinstance(command, str) or direct_mcp_command_name(command) != command:
+            raise ValueError(
+                f"{filename} direct command must be a canonical lowercase executable basename, not a generic launcher"
+            )
     elif launch_kind == "remote-http":
         if normalized_remote_mcp_url(launch.get("url")) is None:
             raise ValueError(
