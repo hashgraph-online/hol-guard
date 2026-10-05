@@ -80,7 +80,6 @@
     "external": [
       "command.appimg",
       "command.blitcp",
-      "command.blkcp",
       "command.cloudg",
       "command.cogext",
       "command.cs",
