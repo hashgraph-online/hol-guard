@@ -249,6 +249,7 @@ def _redact_sensitive_assignments(text: str) -> str:
     pieces: list[str] = []
     copied_until = 0
     search_from = 0
+    missing_quote_from: dict[str, int] = {}
     while True:
         equals = text.find("=", search_from)
         if equals < 0:
@@ -270,12 +271,14 @@ def _redact_sensitive_assignments(text: str) -> str:
         value_end = value_start
         quote = text[value_start] if text[value_start] in {"'", '"'} else ""
         if quote:
-            closing = text.find(quote, value_start + 1)
-            if closing >= 0:
-                value_end = closing + 1
-            else:
+            limit = missing_quote_from.get(quote)
+            closing = -1 if limit is not None and value_start + 1 >= limit else text.find(quote, value_start + 1)
+            if closing < 0:
+                missing_quote_from[quote] = min(limit or len(text), value_start + 1)
                 while value_end < len(text) and text[value_end] != "&" and not text[value_end].isspace():
                     value_end += 1
+            else:
+                value_end = closing + 1
         else:
             while value_end < len(text) and text[value_end] != "&" and not text[value_end].isspace():
                 value_end += 1
