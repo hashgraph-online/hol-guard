@@ -95,6 +95,7 @@
       "command.ollama",
       "command.probe",
       "command.remote.essh",
+      "command.repopy",
       "command.repo2nb",
       "command.skill-base",
       "command.skill-sunset",
