@@ -30,6 +30,12 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_tool_
 _INSUMER = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.insumer.json"
 _CATALOG_ID = "command.mcp-insumer"
 _REVIEWED_TOOLS = (
+    "insumer_attest",
+    "insumer_wallet_trust",
+    "insumer_batch_wallet_trust",
+    "insumer_verify",
+    "insumer_acp_discount",
+    "insumer_ucp_discount",
     "insumer_buy_key",
     "insumer_buy_credits",
     "insumer_buy_merchant_credits",
@@ -40,8 +46,10 @@ _REVIEWED_TOOLS = (
     "insumer_configure_nfts",
     "insumer_configure_settings",
     "insumer_publish_directory",
+    "insumer_request_domain_verification",
+    "insumer_verify_domain",
 )
-_INHERITED_TOOLS = ("insumer_attest", "insumer_wallet_trust", "insumer_jwks", "insumer_validate_code")
+_INHERITED_TOOLS = ("insumer_jwks", "insumer_validate_code", "insumer_list_tokens", "insumer_check_discount")
 
 
 def _payload() -> dict[str, object]:
@@ -130,12 +138,12 @@ def test_rejects_unlisted_launcher() -> None:
 
 
 @pytest.mark.parametrize("tool_name", _REVIEWED_TOOLS)
-def test_payment_and_config_tools_are_reviewed(tool_name: str) -> None:
+def test_spending_and_state_changing_tools_are_reviewed(tool_name: str) -> None:
     assert mcp_tool_state(_payload(), tool_name) == "review"
 
 
 @pytest.mark.parametrize("tool_name", _INHERITED_TOOLS)
-def test_verification_tools_keep_usual_handling(tool_name: str) -> None:
+def test_read_only_tools_keep_usual_handling(tool_name: str) -> None:
     assert mcp_tool_state(_payload(), tool_name) == "inherit"
 
 

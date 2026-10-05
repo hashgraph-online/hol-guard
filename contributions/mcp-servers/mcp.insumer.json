@@ -3,7 +3,7 @@
   "id": "mcp.insumer",
   "version": "1.0.0",
   "name": "InsumerAPI MCP",
-  "description": "Reviews the InsumerAPI tools that register a payment, create an API key or merchant, or replace a merchant's configuration and public listing. Verification tools, which return signed yes or no results about wallet conditions, keep Guard's usual handling. Off until you turn it on.",
+  "description": "Reviews the InsumerAPI tools that can spend money or credits or change merchant state: verification and trust calls that use credits or pay per call in USDC, payment registrations, API key and merchant creation, merchant configuration, domain verification and the public listing. Read-only lookups keep Guard's usual handling. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -20,12 +20,20 @@
     "package": "mcp-server-insumer"
   },
   "riskClasses": [
+    "external-metered-payment",
+    "external-credit-spend",
     "external-payment-registration",
     "external-account-creation",
     "external-merchant-config-write",
     "external-public-listing"
   ],
   "tools": [
+    { "name": "insumer_attest", "state": "review" },
+    { "name": "insumer_wallet_trust", "state": "review" },
+    { "name": "insumer_batch_wallet_trust", "state": "review" },
+    { "name": "insumer_verify", "state": "review" },
+    { "name": "insumer_acp_discount", "state": "review" },
+    { "name": "insumer_ucp_discount", "state": "review" },
     { "name": "insumer_buy_key", "state": "review" },
     { "name": "insumer_buy_credits", "state": "review" },
     { "name": "insumer_buy_merchant_credits", "state": "review" },
@@ -36,6 +44,8 @@
     { "name": "insumer_configure_nfts", "state": "review" },
     { "name": "insumer_configure_settings", "state": "review" },
     { "name": "insumer_publish_directory", "state": "review" },
+    { "name": "insumer_request_domain_verification", "state": "review" },
+    { "name": "insumer_verify_domain", "state": "review" },
     { "name": "other", "state": "inherit" }
   ],
   "referenceUrls": [
@@ -44,6 +54,6 @@
     "https://www.npmjs.com/package/mcp-server-insumer"
   ],
   "saferAlternatives": [
-    "Use insumer_credits, insumer_merchant_status and insumer_check_discount to inspect state before a tool that registers a payment or replaces configuration."
+    "Use insumer_credits, insumer_merchant_status and insumer_check_discount to inspect state first, and leave INSUMER_PAYMENT_KEY unset unless per-call USDC payment is intended."
   ]
 }
