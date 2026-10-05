@@ -742,7 +742,7 @@ def test_native_cleanup_does_not_accept_failed_stop_when_state_disappears(
     monotonic_values = iter((0.0, 0.0, 0.1, 0.1, 2.0))
 
     monkeypatch.setattr(probe, "_DAEMON_CLEANUP_TIMEOUT", 1.0)
-    monkeypatch.setattr(probe.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(probe.time, "monotonic", lambda: next(monotonic_values, 2.0))
 
     def close_native_residents(*args: object, **kwargs: object) -> bool:
         nonlocal close_calls

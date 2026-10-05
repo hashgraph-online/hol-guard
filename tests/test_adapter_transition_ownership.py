@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
+from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
 from codex_plugin_scanner.guard.codex_install_transaction import require_codex_install_owner
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
@@ -107,7 +108,7 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
             "claude-code": 3,
             "kimi": 3,
             "openclaw": 5,
-            "grok": 10,
+            "grok": 11 if isolated_cursor_hook_python() is not None else 10,
             "zcode": 5,
             "pi": 4,
             "omp": 4,
