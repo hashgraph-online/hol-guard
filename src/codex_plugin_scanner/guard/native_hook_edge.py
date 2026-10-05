@@ -16,7 +16,7 @@ from .native_resident_client import (
     record_native_resident_client_failure_code,
 )
 from .native_route_receipt import record_native_hook_result
-from .native_runtime import _isolated_environment, native_runtime_status
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
@@ -321,14 +321,16 @@ def review_raw_hook_native(
     observe_mode: bool,
     deadline: float | None,
     policy_snapshot: Mapping[str, object] | None = None,
+    runtime_status: NativeRuntimeStatus | None = None,
     request_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Return a typed Rust edge result, or fail closed without reinterpretation."""
+    record_native_resident_client_failure_code(None)
     if request_id is not None and (
         not isinstance(request_id, str) or re.fullmatch(r"[a-z0-9][a-z0-9_.:-]{0,255}", request_id) is None
     ):
         return record_native_hook_result("native_fail_safe", None)
-    status = native_runtime_status()
+    status = runtime_status if runtime_status is not None else native_runtime_status()
     event_key = event.strip().lower().replace("_", "").replace("-", "")
     required_features = {_EDGE_FEATURE, _CLIENT_FEATURE}
     if event_key in {

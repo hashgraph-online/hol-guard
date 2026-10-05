@@ -8,7 +8,28 @@ from typing import Any, cast
 
 from ..approval_link_output import native_review_reason
 from ..native_decision_receipt import valid_prompt_risk_classes
-from .hook_availability_policy import hook_action_is_emergency_safe
+from .hook_availability_policy import availability_harness_response, hook_action_is_emergency_safe
+
+
+def post_tool_unavailable_response(
+    payload: dict[str, object],
+    *,
+    harness: str,
+    reason_code: str,
+    workspace: Path | None,
+    home_dir: Path,
+    guard_home: Path,
+) -> dict[str, object]:
+    return availability_harness_response(
+        payload,
+        harness=harness,
+        event_name="PostToolUse",
+        reason_code=reason_code,
+        reason="HOL Guard could not complete the native local hook review safely.",
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+    )
 
 
 def prepare_native_hook_policy(
@@ -199,8 +220,6 @@ _NATIVE_PROMPT_RISK_LABELS = {
 
 def harness_json_from_native_prompt(harness: str, response: Mapping[str, object]) -> dict[str, object]:
     canonical = _canonical_hook_harness(harness)
-    if canonical == "grok":
-        return {}
     action = response.get("minimum_action")
     reason_code = str(response.get("reason_code") or "native_prompt_unavailable")
     classes = response.get("prompt_risk_classes")
@@ -210,6 +229,9 @@ def harness_json_from_native_prompt(harness: str, response: Mapping[str, object]
         else []
     )
     if response.get("decision") == "allow" and action in {"allow", "warn"}:
+        if canonical == "grok":
+            # Grok accepts an empty success; decision:allow is not a prompt decision.
+            return {}
         if canonical == "codex":
             return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
         output = {

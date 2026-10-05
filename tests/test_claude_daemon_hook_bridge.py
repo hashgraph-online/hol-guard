@@ -306,12 +306,15 @@ def test_main_stamps_caller_environment_before_daemon_forwarding(
         ),
     )
 
-    assert bridge.main(
-        state_path=tmp_path / "daemon-state.json",
-        fallback_daemon_url="http://127.0.0.1:5474",
-        fallback_command=(sys.executable, "-c", "print('{}')"),
-        query="guard-home=/tmp/guard-home",
-    ) == 0
+    assert (
+        bridge.main(
+            state_path=tmp_path / "daemon-state.json",
+            fallback_daemon_url="http://127.0.0.1:5474",
+            fallback_command=(sys.executable, "-c", "print('{}')"),
+            query="guard-home=/tmp/guard-home",
+        )
+        == 0
+    )
 
     assert len(captured) == 1
     forwarded = json.loads(captured[0])

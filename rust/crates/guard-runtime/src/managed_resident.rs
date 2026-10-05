@@ -266,10 +266,7 @@ pub(crate) fn supervise_managed_for_owner(
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        // The supervisor was launched in its own process group by
-        // spawn_managed_for_owner. Leave the serving child in that inherited
-        // group so startup timeout containment addresses both processes as
-        // one authenticated unit.
+        // Keep the serving child in the supervisor's group for joint containment.
         let mut child = child
             .spawn()
             .map_err(|_| "native_resident_spawn_failed".to_owned())?;

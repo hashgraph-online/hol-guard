@@ -144,7 +144,7 @@ def test_unreadable_grok_managed_config_returns_repair_warning(
     """Unreadable settings degrade readiness rather than breaking status/repair callers."""
     context = HarnessContext(tmp_path / "home", None, tmp_path / "guard")
     monkeypatch.delenv("GROK_HOME", raising=False)
-    path = context.home_dir / ".grok/managed_config.toml"
+    path = context.home_dir / ".grok/config.toml"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"\xff")
     original = Path.read_text

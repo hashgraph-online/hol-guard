@@ -255,6 +255,16 @@ function sourceFileRefForPostToolUse(
 ): { version: number; kind: string; path: string; tool_input_path: string; output_sha256: string; output_chars: number } | null {
   const toolName = typeof event.toolName === 'string' ? event.toolName : '';
   if (!GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES.has(toolName)) return null;
+  // OMP's `read` tool uses the same sourcePath field for directory listings,
+  // but a directory is not a source file the daemon can re-read. Keep the
+  // bounded names-only result inline so Rust scans the actual listing.
+  const details = event.details;
+  if (
+    details !== null &&
+    typeof details === 'object' &&
+    !Array.isArray(details) &&
+    (details as Record<string, unknown>).isDirectory === true
+  ) return null;
   if (!digest.sha256 || digest.traversalTruncated) return null;
   if (digest.chars > GUARD_SOURCE_REF_MAX_OUTPUT_CHARS) return null;
   const path = sourcePathFromToolInput(toolInput);

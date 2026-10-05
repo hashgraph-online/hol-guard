@@ -134,4 +134,6 @@ def test_prepare_checks_fixture_without_executing_a_target(
 def test_authoring_workflow_compares_every_pr_source_change_to_its_base() -> None:
     workflow = (REPOSITORY / ".github/workflows/extension-builder-ci.yml").read_text(encoding="utf-8")
     assert "fetch-depth: 0" in workflow
-    assert '--changed-from "${{ github.event.pull_request.base.sha }}"' in workflow
+    assert '--changed-from "$COMPARISON_BASE"' in workflow
+    assert "scripts/ci/pr_merge_base.py --head" in workflow
+    assert "${{ steps.contribution-base.outputs.sha }}" in workflow

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.faf-cli",
+  "tagline": "Reviewed HOL Guard coverage for faf-cli commands that write agent context.",
+  "summary": "Reviews faf-cli commands that write agent instruction files, wire an MCP server into an agent config, install git hooks or CI workflows, send project context off the machine, or rewrite faf's own project files.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://github.com/Wolfe-Jam/faf-cli",
+  "tags": [
+    "faf",
+    "cli",
+    "agents-md",
+    "mcp"
+  ],
+  "contributors": [
+    {
+      "githubId": "189686721",
+      "githubLogin": "Wolfe-Jam",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "upstream": {
+    "name": "faf-cli",
+    "url": "https://github.com/Wolfe-Jam/faf-cli"
+  },
+  "maintainerGithubIds": [
+    "189686721"
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3397"
+    }
+  ]
+}

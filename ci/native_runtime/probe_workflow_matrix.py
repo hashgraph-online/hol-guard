@@ -19,7 +19,6 @@ from pathlib import Path
 
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.workflow_matrix_cases import WorkflowCase, create_cases
-from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 
 
 @contextmanager
@@ -85,6 +84,59 @@ def _event_object(value: object, label: str) -> dict:
     return value
 
 
+def validate_contained_dependencies(project: Path) -> None:
+    """Reject fixture dependencies that the project-scoped sandbox cannot read."""
+    resolved_project = project.resolve(strict=True)
+    try:
+        dependency_root = (resolved_project / "node_modules").resolve(strict=True)
+    except OSError as error:
+        raise AssertionError("contained-test fixture lacks local node_modules") from error
+    if not dependency_root.is_dir() or not dependency_root.is_relative_to(resolved_project):
+        raise AssertionError("contained-test fixture dependency root escapes project")
+    # The matrix fixture is intentionally pinned to the Vitest entry points used by its runner.
+    for relative, root, label in (
+        ("node_modules/.bin/vitest", resolved_project, "project"),
+        ("node_modules/vitest/vitest.mjs", dependency_root, "node_modules"),
+    ):
+        try:
+            target = (resolved_project / relative).resolve(strict=True)
+        except OSError as error:
+            raise AssertionError(f"contained-test fixture lacks local {relative}") from error
+        if not target.is_file() or not target.is_relative_to(root):
+            raise AssertionError(f"contained-test fixture dependency escapes {label}: {relative}")
+
+
+CONTAINED_VITEST_PROTECTED_REASON = "native_vitest_readonly_containment_required"
+
+
+def contained_vitest_cases(project: Path) -> list[WorkflowCase]:
+    """Return the seven reviewed Bun/Vitest commands for one explicit project."""
+    resolved_project = project.resolve(strict=True)
+    validate_contained_dependencies(resolved_project)
+    required_files = ("tests/workflow.test.mjs", "tests/secondary.test.mjs")
+    if not all((resolved_project / relative).is_file() for relative in required_files):
+        raise AssertionError("test project lacks required two-file synthetic Vitest fixtures")
+    protected_reason = CONTAINED_VITEST_PROTECTED_REASON
+    return [
+        WorkflowCase(name, command, protected_reason=protected_reason)
+        for name, command in [
+            ("bunx-vitest", "bunx vitest run tests/workflow.test.mjs tests/secondary.test.mjs"),
+            ("bun-x-vitest", "bun x vitest run tests/workflow.test.mjs"),
+            ("bun-no-install", "bun x --no-install vitest run tests/secondary.test.mjs"),
+            ("bun-cwd", f"bun --cwd {shlex.quote(str(resolved_project))} x vitest run tests/workflow.test.mjs"),
+            ("bun-cwd-equals", "bun --cwd=. x --no-install vitest run tests/secondary.test.mjs"),
+            (
+                "bun-cross-project",
+                f"bun --cwd {shlex.quote(str(resolved_project))} x vitest run tests/workflow.test.mjs",
+            ),
+            (
+                "bun-cross-project-equals",
+                f"bun --cwd={shlex.quote(str(resolved_project))} x --no-install vitest run tests/secondary.test.mjs",
+            ),
+        ]
+    ]
+
+
 def decode_events(output: str) -> list[dict[str, object]]:
     try:
         return [_event_object(json.loads(line), "event") for line in output.splitlines() if line.startswith("{")]
@@ -106,6 +158,11 @@ def assert_execution(cases: list[WorkflowCase], events: list[dict[str, object]])
             details = _event_object(result.get("details"), f"{case.name}.details")
             proof = _event_object(details.get("holGuardContainedTest"), f"{case.name}.proof")
             original = _event_object(proof.get("input"), f"{case.name}.input")
+            # Pinned OMP omits exitCode on success; contained wrappers can retain
+            # isError=False even when OMP reports a nonzero process exit.
+            # bool is an int subclass; only a JSON integer zero proves success here.
+            if "exitCode" in details and (type(details["exitCode"]) is not int or details["exitCode"] != 0):
+                raise AssertionError(f"protected tests did not exit successfully: {case.name}")
             if not isinstance(args.get("command"), str) or "execute-contained-test" not in args["command"]:
                 raise AssertionError("protected workflow did not use the execution sink")
             commands.append(original.get("command"))
@@ -133,8 +190,7 @@ def _workflow_prompt(batch: list[WorkflowCase]) -> str:
         "Do not change, omit, repeat, or add commands. Do not inspect or verify results with extra calls; "
         "the test runner checks side effects. After the final listed command, reply DONE and stop. "
         "Stop early only if an attempted bash call returns a block. "
-        "Do not infer that an unattempted command is blocked.\n"
-        + json.dumps([case.command for case in batch])
+        "Do not infer that an unattempted command is blocked.\n" + json.dumps([case.command for case in batch])
     )
 
 
@@ -215,6 +271,8 @@ def run_live(
 
 
 def main() -> int:
+    from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live-omp", action="store_true")
     parser.add_argument("--model", default="opencode-go/deepseek-flash")
@@ -224,6 +282,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.live_omp and args.test_project and sys.platform != "darwin":
         parser.error("live protected-test proofs require the macOS containment adapter")
+    if args.test_project:
+        validate_contained_dependencies(args.test_project)
     args.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     _, identity, capabilities = probe._probe_native_identity()
     if args.expected_source_sha and capabilities.build_sha != args.expected_source_sha:
@@ -287,22 +347,8 @@ def main() -> int:
             )
             if args.test_project:
                 project = args.test_project.resolve(strict=True)
-                if (
-                    not (project / "tests/workflow.test.mjs").is_file()
-                    or not (project / "tests/zcode-multi.test.mjs").is_file()
-                ):
-                    raise AssertionError("test project lacks required two-file synthetic Vitest fixtures")
-                reason = "native_vitest_readonly_containment_required"
-                protected = [
-                    WorkflowCase(name, command, protected_reason=reason)
-                    for name, command in [
-                        ("bunx-vitest", "bunx vitest run tests/workflow.test.mjs tests/zcode-multi.test.mjs"),
-                        ("bun-x-vitest", "bun x vitest run tests/workflow.test.mjs"),
-                        ("bun-no-install", "bun x --no-install vitest run tests/zcode-multi.test.mjs"),
-                        ("bun-cwd", f"bun --cwd {shlex.quote(str(project))} x vitest run tests/workflow.test.mjs"),
-                        ("bun-cwd-equals", "bun --cwd=. x --no-install vitest run tests/zcode-multi.test.mjs"),
-                    ]
-                ]
+                contained = contained_vitest_cases(project)
+                protected = contained[:5]
                 probe._prepare_installed_daemon_workspace(daemon, project)
                 protected_results = [
                     _review(
@@ -331,20 +377,7 @@ def main() -> int:
                 results.extend(protected_results)
                 # The reported --cwd regression crossed hook and test-project scopes.
                 # Same-directory --cwd alone cannot establish this invariant.
-                cross = [
-                    WorkflowCase(name, command, protected_reason=reason)
-                    for name, command in [
-                        (
-                            "bun-cross-project",
-                            f"bun --cwd {shlex.quote(str(project))} x vitest run tests/workflow.test.mjs",
-                        ),
-                        (
-                            "bun-cross-project-equals",
-                            f"bun --cwd={shlex.quote(str(project))} x --no-install vitest run "
-                            "tests/zcode-multi.test.mjs",
-                        ),
-                    ]
-                ]
+                cross = contained[5:]
                 cross_results = [
                     _review(
                         worker,

@@ -18,6 +18,9 @@ on:
       - docs/guard/extensions/**
       - scripts/export_extension_directory.py
       - scripts/prepare_extension_contribution.py
+      - scripts/ci/pr_merge_base.py
+      - tests/test_ci_pr_merge_base.py
+      - scripts/build_native_command_program.py
       - scripts/render_command_extension_directory.py
       - scripts/notify_merged_extension_claimants.py
       - scripts/refresh_extension_artifacts.py
@@ -75,6 +78,8 @@ jobs:
           - os: macos-15
             python: "3.13"
     steps:
+      # The default PR checkout is GitHub's merge ref, not a contributor head.
+      # Prepare shared outputs here so authors do not need to keep rebasing main.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
@@ -82,12 +87,29 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python }}
+      - name: Record checkout and resolve contribution comparison base
+        id: contribution-base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_MERGE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p builder-evidence
+          printf 'merge=%s\nhead=%s\n' "$PR_MERGE_SHA" "$PR_HEAD_SHA" > builder-evidence/checkout.txt
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base=$(python scripts/ci/pr_merge_base.py --head "$PR_HEAD_SHA" --merge "$PR_MERGE_SHA")
+            echo "sha=$base" >> "$GITHUB_OUTPUT"
+          fi
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
           save-cache: false
           cache-dependency-glob: uv.lock
+      - name: Stage external contribution trust defaults
+        # Do this before editable package resources and Rust embed the trust map.
+        # Existing reviewed classes are preserved; missing ids are external/opt-in.
+        run: python scripts/refresh_extension_artifacts.py --trust-only
       - name: Install the locked development environment
         run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
       - uses: ./.github/actions/setup-rust
@@ -103,12 +125,14 @@ jobs:
           echo "HOL_GUARD_NATIVE_BINARY=$runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Prepare and verify current extension projections
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMPARISON_BASE: ${{ steps.contribution-base.outputs.sha }}
         run: |
           arguments=(--compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            arguments+=(--changed-from "$COMPARISON_BASE")
           fi
-          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER"
           uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
           uv run --no-sync python scripts/render_command_extension_directory.py
           uv run --no-sync python scripts/prepare_extension_contribution.py --check "${arguments[@]}"
@@ -120,6 +144,8 @@ jobs:
             tests/test_guard_extension_directory*.py \
             tests/test_guard_extension_claim_notice.py \
             tests/test_prepare_extension_contribution.py \
+            tests/test_ci_pr_merge_base.py \
+            tests/test_extension_builder_ci_preparation.py \
             tests/test_guard_extension_contribution.py \
             tests/test_guard_extension_trust.py \
             tests/test_guard_mcp_server_contribution.py \

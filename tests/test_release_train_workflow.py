@@ -309,6 +309,18 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert any(step.get("with", {}).get("name") == "distributions-native" for step in release_main_steps)
     assert any(step.get("with", {}).get("name") == "distribution-sha256-native" for step in release_main_steps)
     assert any("sha256sum --check distribution-sha256-native.txt" in step.get("run", "") for step in release_main_steps)
+    release_tooling = next(step for step in release_main_steps if step.get("name") == "Checkout release-notes tooling")
+    assert release_tooling["if"] == "needs.publish-main-pypi.outputs.pypi_deferred == 'true'"
+    assert release_tooling["with"] == {
+        "fetch-depth": 1,
+        "ref": "${{ github.event.repository.default_branch }}",
+        "path": ".release-tooling",
+    }
+    release_notes = next(step for step in release_main_steps if step.get("name") == "Generate release notes")
+    assert 'notes_script=".release-tooling/scripts/ci/generate_release_notes.py"' in release_notes["run"]
+    assert 'notes_script="scripts/ci/generate_release_notes.py"' in release_notes["run"]
+    assert 'deferred_args+=(--pypi-deferred)' in release_notes["run"]
+    assert 'python3 "$notes_script"' in release_notes["run"]
     for job_name in ("publish-main-testpypi",):
         steps = jobs[job_name]["steps"]
         assert any(step.get("run") == "sha256sum --check distribution-sha256-native.txt" for step in steps)
@@ -345,11 +357,20 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     main_steps = jobs["publish-main-pypi"]["steps"]
     native_validate = next(step for step in main_steps if step.get("name") == "Validate native Guard release set")
     assert "validate-local" in native_validate["run"] and "--artifact-set full" in native_validate["run"]
-    main_quota = next(
-        step for step in main_steps if step.get("name") == "Refuse PyPI upload when the project is over quota"
-    )
-    assert "--pending-dir dist-hol-guard" in main_quota["run"]
+    main_quota = next(step for step in main_steps if step.get("name") == "Check PyPI quota admission")
+    assert main_quota["id"] == "pypi_quota"
+    assert "--fail-if-over-limit --pending-dir dist-hol-guard" in main_quota["run"]
+    assert "jq -e '.over_limit == true'" in main_quota["run"]
+    assert 'echo "blocked=true"' in main_quota["run"]
+    guard_publish = next(step for step in main_steps if step.get("name") == "Publish HOL Guard to PyPI")
+    scanner_publish = next(step for step in main_steps if step.get("name") == "Publish plugin-scanner to PyPI")
+    assert "steps.pypi_quota.outputs.blocked != 'true'" in guard_publish["if"]
+    assert scanner_publish["if"] == "steps.pypi.outputs.plugin_scanner_upload == 'true'"
     main_verify = next(step for step in main_steps if step.get("name") == "Download and verify exact PyPI artifacts")
+    assert main_verify["if"] == (
+        "steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'"
+    )
+    assert jobs["publish-main-pypi"]["outputs"]["pypi_deferred"] == "${{ steps.pypi_quota.outputs.blocked }}"
     assert "--artifact-set full" in main_verify["run"]
     assert (
         main_verify["run"].find("for attempt in {1..60}")
@@ -368,6 +389,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     assert "skip-existing" not in workflow_text
+    assert "--deferred-pypi" in workflow_text
 
 
 def test_alpha_tag_reservation_binds_version_to_build_source() -> None:
@@ -520,7 +542,7 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         assert "--project plugin-scanner" in inspect_step["run"]
         assert len(publish_steps) == 2
         assert {step["if"] for step in publish_steps} == {
-            "steps.pypi.outputs.hol_guard_upload == 'true'",
+            "steps.pypi.outputs.hol_guard_upload == 'true' && steps.pypi_quota.outputs.blocked != 'true'",
             "steps.pypi.outputs.plugin_scanner_upload == 'true'",
         }
         assert {step["with"]["packages-dir"] for step in publish_steps} == {
@@ -625,6 +647,8 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert 'remote_tag_sha" != "$SOURCE_SHA"' in stable_run
     assert 'gh release view "$tag" --json isDraft,isPrerelease,assets' in stable_run
     assert 'gh release upload "$tag"' in stable_run
+    assert 'gh release edit "$tag" --notes-file "$RUNNER_TEMP/release-notes.md"' in stable_run
+    assert '[[ -s "$RUNNER_TEMP/release-notes.md" ]]' in stable_run
     assert "Existing stable release is a draft or prerelease" in stable_run
     assert "remote_guard_files=" in stable_run and "verify_release_asset_inventory.py" in stable_run
     assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in stable_run

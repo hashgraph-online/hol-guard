@@ -1,0 +1,27 @@
+[package]
+name = "guard-google-identity"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64ct.workspace = true
+getrandom.workspace = true
+guard-contracts = { path = "../guard-contracts" }
+guard-command = { path = "../guard-command" }
+hex.workspace = true
+hmac.workspace = true
+oauth2 = { version = "=5.0.0", default-features = false, features = ["timing-resistant-secret-traits"] }
+ring.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
+zeroize = "1.9.0"
+
+[dev-dependencies]
+rsa.workspace = true
+
+[lints]
+workspace = true
