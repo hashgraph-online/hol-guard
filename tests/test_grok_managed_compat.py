@@ -62,7 +62,7 @@ class TestGrokManagedCompat:
 
     def test_install_merges_preexisting_compat_tables(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        managed = ctx.home_dir / ".grok" / "managed_config.toml"
+        managed = ctx.home_dir / ".grok" / "config.toml"
         managed.parent.mkdir(parents=True, exist_ok=True)
         managed.write_text("[compat.claude]\nskills = true\nhooks = true\n", encoding="utf-8")
         monkeypatch.setattr(

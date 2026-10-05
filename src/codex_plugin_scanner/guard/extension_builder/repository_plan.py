@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 from . import BUILDER_VERSION
@@ -135,14 +137,45 @@ def _executable_identity(value: str) -> str:
 def _installed_executable_collision(metadata: Metadata) -> None:
     # This is the installed Guard registry, never code imported from the destination
     # checkout. Destination-only contributions are checked separately as JSON data.
+    # Core domains such as Git and Docker keep their executable names on the native
+    # program rules, not on the catalog extension record.
     from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
     wanted = _executable_identity(metadata.executable)
+    covered: set[str] = set()
     for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
         if extension.extension_id == metadata.catalog_id:
             continue
-        if wanted in {_executable_identity(name) for name in extension.executables}:
-            raise conflict("This executable already has Guard coverage; extend its existing contribution instead.")
+        covered.update(_executable_identity(name) for name in extension.executables)
+    for extension_id, names in _native_program_executables().items():
+        if extension_id == metadata.catalog_id:
+            continue
+        covered.update(names)
+    if wanted in covered:
+        raise conflict("This executable already has Guard coverage; extend its existing contribution instead.")
+
+
+@cache
+def _native_program_executables() -> dict[str, frozenset[str]]:
+    from ..native_command_control_binding import _program_path
+
+    content = _program_path().read_bytes()
+    if len(content) > 4_000_000:
+        raise conflict("Installed command coverage could not be read.")
+    program = json.loads(content)
+    rules = program.get("rules") if isinstance(program, dict) else None
+    covered: dict[str, set[str]] = {}
+    if isinstance(rules, list):
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            extension_id = rule.get("extension_id")
+            names = rule.get("candidate_executables")
+            if not isinstance(extension_id, str) or not isinstance(names, list):
+                continue
+            bucket = covered.setdefault(extension_id, set())
+            bucket.update(_executable_identity(name) for name in names if isinstance(name, str))
+    return {key: frozenset(value) for key, value in covered.items()}
 
 
 def _contribution_collisions(root: Path, metadata: Metadata) -> None:
