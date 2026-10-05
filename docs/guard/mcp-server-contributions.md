@@ -41,9 +41,12 @@ Native servers installed through Homebrew, Cargo, or release archives may use
 `launch: {"kind": "direct-command", "command": "example-mcp"}`. The command is a
 lowercase ASCII executable basename (letters, digits, hyphens, underscores and
 nonempty dot-separated components; at most 128 characters), without a path or
-`.exe` suffix. A single contribution owns each command. The MCP identity matcher
-accepts POSIX and Windows paths and an optional `.exe` suffix, requires stdio and
-a tool identity, and never treats a shell invocation as an MCP call. Package
+wrapper suffix. Generic shells, interpreters, package launchers, and runtime
+wrappers such as `sh`, `node`, `python`, `npx`, `docker`, and `uv` are reserved
+and cannot be claimed. A single contribution owns each command. The MCP identity
+matcher accepts POSIX and Windows paths, case-folds the executable basename, and
+strips a trailing `.exe`, `.cmd`, or `.bat` before matching. It requires stdio and
+a tool identity and never infers the target from shell arguments. Package
 identities and remote transports do not match this launch kind.
 
 Direct-command defaults apply to every stdio MCP invocation of that basename;

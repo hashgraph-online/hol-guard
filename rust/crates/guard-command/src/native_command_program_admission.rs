@@ -2,20 +2,11 @@
 
 use super::*;
 
-/// Canonical, portable basename; catalog selection never authenticates a binary.
+#[path = "native_command_program_admission_direct_mcp.rs"]
+mod direct_mcp;
+
 pub(super) fn valid_direct_mcp_command(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && !value.ends_with(".exe")
-        && value.as_bytes()[0].is_ascii_alphanumeric()
-        && value.split('.').all(|part| {
-            !part.is_empty()
-                && part.bytes().all(|byte| {
-                    byte.is_ascii_lowercase()
-                        || byte.is_ascii_digit()
-                        || matches!(byte, b'_' | b'-')
-                })
-        })
+    direct_mcp::valid_direct_mcp_command(value)
 }
 
 fn valid_mcp_server_name(value: &str) -> bool {

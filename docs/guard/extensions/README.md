@@ -136,6 +136,7 @@ Protection model meanings:
 | `command.mcp-contribos` | Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-filesystem` | Reviews official filesystem MCP tools. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-instapods` | Reviews sensitive InstaPods pod, billing, command execution, and file-write tools for the official hosted MCP server. | 0 | External opt-in |
+| `command.mcp-loomdesk` | Reviews LoomDesk's planning tools, which return unsigned Robinhood Chain transactions (open, add to, change or close a liquidity position, a limit order, a swap, a new pool) for the caller's own wallet to sign. LoomDesk holds no keys and signs nothing. Read tools keep Guard's usual handling. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-pr-ui-compare` | Reviews PR UI Compare tools that run project install and start commands, write artifacts outside the repository, and download Chromium or FFmpeg. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-reaper` | Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, clearing every tempo marker, and multi-step undo. Off until you turn it on. | 0 | External opt-in |
 | `command.skill-sunset` | Reviews the canonical Skill Sunset audit surface and its local report and viewer side effects. Experiment execution and npm launcher policy remain outside this extension. | 1 | External opt-in |

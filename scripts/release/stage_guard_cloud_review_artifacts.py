@@ -23,7 +23,6 @@ _ARTIFACTS = {
     "contributions/extensions/command.tui-runner.json": "extensions/contributions/command.tui-runner.json",
     "contributions/extensions/command.uivoid.json": "extensions/contributions/command.uivoid.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
-    "contributions/mcp-servers/mcp.asdecided.json": "mcp_servers/contributions/mcp.asdecided.json",
     "contributions/mcp-servers/mcp.contribos.json": "mcp_servers/contributions/mcp.contribos.json",
     "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
     "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",

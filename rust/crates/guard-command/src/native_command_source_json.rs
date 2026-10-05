@@ -4,7 +4,7 @@ use serde::de::{DeserializeSeed, Error, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 use std::fmt;
 
-pub(super) const MAX_SOURCE_BYTES: usize = 4 * 1024 * 1024;
+pub(super) const MAX_SOURCE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_VALUES: usize = 1_000_000;
 // Inline matcher trees add object/array syntax levels around each matcher.
 // Matcher depth itself is independently limited to 32 during lowering.

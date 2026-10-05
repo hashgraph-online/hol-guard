@@ -221,7 +221,7 @@ def _local_skill_instruction_findings(plugin_dir: Path, skills_dir: Path) -> tup
         # A shell comment does not continue after its trailing backslash.
         # Preserve physical comment lines so they cannot absorb executable text.
         content = re.sub(
-            r"(?m)^[ \t]*#[^\r\n]*|\\\r?\n",
+            r"(?m)(?:^[ \t]*#[^\r\n]*|\\\r?\n)",
             lambda match: match.group() if match.group().lstrip().startswith("#") else " ",
             content,
         )

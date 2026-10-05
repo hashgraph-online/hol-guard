@@ -55,8 +55,32 @@ def test_validates_and_projects_runnable_example():
         "../fixture-mcp",
         "/bin/fixture-mcp",
         "fixture-mcp.exe",
+        "fixture-mcp.cmd",
+        "fixture-mcp.bat",
         "fixture-mcp --serve",
         "Fixture",
+        "sh",
+        "bash",
+        "node",
+        "python",
+        "docker",
+        "npx",
+        "uv",
+        "cargo",
+        "python3.11",
+        "pythonw",
+        "py",
+        "nodejs",
+        "node20",
+        "java17",
+        "lua5.4",
+        "ksh",
+        "csh",
+        "tcsh",
+        "tsx",
+        "ts-node",
+        "sudo",
+        "busybox",
         "é",
         "a..b",
         "a.",
@@ -97,7 +121,17 @@ def test_rejects_duplicate_direct_commands(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "command", ["fixture-mcp", "/opt/bin/fixture-mcp", "fixture-mcp.exe", r"C:\Program Files\Fixture\fixture-mcp.exe"]
+    "command",
+    [
+        "fixture-mcp",
+        "/opt/bin/fixture-mcp",
+        "fixture-mcp.exe",
+        "FIXTURE-MCP.EXE",
+        "Fixture-MCP.Exe",
+        "fixture-mcp.cmd",
+        "fixture-mcp.BAT",
+        r"C:\\Program Files\\Fixture\\fixture-mcp.exe",
+    ],
 )
 @pytest.mark.parametrize("args", [(), ("--root", "/repo one"), ("--root", "/another", "--budget", "10000")])
 def test_matches_real_stdio_tool_identity_with_variable_user_paths(monkeypatch, command, args):

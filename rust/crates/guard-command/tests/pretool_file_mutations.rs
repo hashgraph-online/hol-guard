@@ -4,10 +4,19 @@ use serde_json::json;
 
 #[test]
 fn routine_file_mutations_do_not_inherit_sensitive_or_directory_delete_access() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/file-mutations")
-        .join(format!("fixture-{}", std::process::id()));
-    std::fs::create_dir_all(root.join("src")).unwrap();
+    let fixtures =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/file-mutations");
+    std::fs::create_dir_all(&fixtures).unwrap();
+    let mut attempt = 0;
+    let root = loop {
+        let candidate = fixtures.join(format!("fixture-{}-{attempt}", std::process::id()));
+        match std::fs::create_dir(&candidate) {
+            Ok(()) => break candidate,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
+            Err(error) => panic!("failed to create fixture directory: {error}"),
+        }
+    };
+    std::fs::create_dir(root.join("src")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     std::fs::write(root.join("src/example.ts"), "ordinary source").unwrap();
     std::fs::write(root.join("src/existing.ts"), "preserve destination").unwrap();

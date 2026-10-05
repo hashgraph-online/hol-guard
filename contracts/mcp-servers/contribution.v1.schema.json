@@ -67,7 +67,8 @@
             "kind": { "const": "direct-command" },
             "command": {
               "type": "string",
-              "pattern": "^(?!.*\\.exe$)[a-z0-9][a-z0-9_-]*(?:\\.[a-z0-9_-]+)*$",
+              "description": "Lexical portable-basename shape only; Python and Rust validators additionally reject reserved shells, interpreters, package launchers, runtime wrappers, and versioned interpreter aliases.",
+              "pattern": "^(?!.*\\.(?:exe|cmd|bat)$)[a-z0-9][a-z0-9_-]*(?:\\.[a-z0-9_-]+)*$",
               "maxLength": 128
             }
           }
