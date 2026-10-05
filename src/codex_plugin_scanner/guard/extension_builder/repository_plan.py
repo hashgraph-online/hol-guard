@@ -151,12 +151,9 @@ def _previous_kit(root: Path, metadata: Metadata) -> Kit | None:
             or any(not _legacy_generated_test_path(path) for path in extra)
             or {key: value for key, value in payload.items() if key != "managedFiles"}
             != {key: value for key, value in expected_payload.items() if key != "managedFiles"}
-            or {path: stored_managed[path] for path in stored_managed if path not in extra}
-            != expected_managed
+            or {path: stored_managed[path] for path in stored_managed if path not in extra} != expected_managed
         ):
-            raise conflict(
-                "The existing authoring ownership record does not match its reviewed source contracts."
-            )
+            raise conflict("The existing authoring ownership record does not match its reviewed source contracts.")
     for path, expected in managed_files(previous).items():
         if _read_optional(root / path) != expected:
             raise conflict(
