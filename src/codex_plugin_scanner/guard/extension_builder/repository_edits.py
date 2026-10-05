@@ -148,8 +148,8 @@ def edit_staging(content: str, metadata: Metadata) -> str:
             continue
         name = source.rsplit("/", 1)[-1]
         covered = (
-            source.startswith("contributions/extensions/") and name.startswith("command.")
-            or source.startswith("contributions/mcp-servers/") and name.startswith("mcp.")
+            (source.startswith("contributions/extensions/") and name.startswith("command."))
+            or (source.startswith("contributions/mcp-servers/") and name.startswith("mcp."))
         ) and name.endswith(".json")
         if not covered:
             raise conflict("The contribution payload is outside the enumerated staging directories.")
