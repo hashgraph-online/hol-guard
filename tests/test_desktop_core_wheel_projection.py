@@ -41,6 +41,10 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
         ROOT / "contributions/extensions/command.blitcp.json",
         source_root / "contributions/extensions/command.blitcp.json",
     )
+    shutil.copyfile(
+        ROOT / "contributions/mcp-servers/mcp.filesystem.json",
+        source_root / "contributions/mcp-servers/mcp.filesystem.json",
+    )
 
     implementation_digest = "i" * 64
     descriptor_ids = (

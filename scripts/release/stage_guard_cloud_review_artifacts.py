@@ -32,9 +32,11 @@ def _artifacts(source_root: Path) -> dict[str, str]:
         source_dir = source_root / relative_dir
         if not source_dir.is_dir():
             raise FileNotFoundError(f"required contribution directory is missing: {relative_dir}")
-        for path in sorted(source_dir.glob(pattern)):
-            if path.is_file() and not path.is_symlink():
-                artifacts[path.relative_to(source_root).as_posix()] = f"{destination_dir}/{path.name}"
+        matched = [path for path in sorted(source_dir.glob(pattern)) if path.is_file() and not path.is_symlink()]
+        if not matched:
+            raise FileNotFoundError(f"required contribution directory holds no payloads: {relative_dir} ({pattern})")
+        for path in matched:
+            artifacts[path.relative_to(source_root).as_posix()] = f"{destination_dir}/{path.name}"
     return artifacts
 
 
@@ -47,6 +49,12 @@ def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) 
         if destination_root is not None
         else source_root / "src/codex_plugin_scanner/guard/contracts/data"
     )
+    # Validate the complete artifact map before touching staged files so a
+    # missing source can never leave a half-staged bundle behind.
+    artifacts = _artifacts(source_root)
+    for source_name in artifacts:
+        if not (source_root / source_name).is_file():
+            raise FileNotFoundError(f"required packaged contract artifact is missing: {source_name}")
     # Stale copies of removed contributions must not linger in a bundle: the
     # contribution destinations hold only staged payloads, so reset them.
     for _relative_dir, _pattern, destination_dir in _CONTRIBUTION_SOURCES:
@@ -54,10 +62,8 @@ def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) 
         if staged_dir.is_dir():
             shutil.rmtree(staged_dir)
     staged: list[Path] = []
-    for source_name, destination_name in _artifacts(source_root).items():
+    for source_name, destination_name in artifacts.items():
         source = source_root / source_name
-        if not source.is_file():
-            raise FileNotFoundError(f"required packaged contract artifact is missing: {source_name}")
         destination = data_root / destination_name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
