@@ -34,7 +34,10 @@ checked across the set, but RSA/algorithm/use checks apply to the selected key s
 an unrelated algorithm does not disable valid Google logins. Token bytes are never sent to Google
 tokeninfo or the key endpoint. Errors carry no token or claim text.
 
-Returned evidence contains only account and tenant HMAC bindings plus expiry.
+The public evidence API exposes only account and tenant HMAC bindings plus expiry.
+Private evidence may also retain a signed verified primary mailbox for the
+worker's exact-sender comparison. Generic identity verification without a verified
+mailbox still yields identity evidence; send-credential admission refuses it.
 Account identity includes namespace, registered client, canonical issuer, hosted
 domain and stable Google subject. Email changes do not retarget it; namespace,
 client, domain or subject changes do. The tenant binding is an approved hosted-domain

@@ -16,7 +16,7 @@ _READ_ONLY_CURL_FLAGS = {
     "--compressed",
     "--no-progress-meter",
 }
-_FENCE = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})(?P<info>[^\r\n]*)[\r\n]*$")
+_FENCE = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})(?P<info>[^\r\n]*)\r?\n?$")
 
 
 def read_only_curl_spans(content: str) -> tuple[tuple[int, int], ...]:

@@ -1,4 +1,4 @@
-"""Default native denials never solicit operator approval."""
+"""Default native denials never pause the agent, but approvable ones reach the inbox."""
 
 from pathlib import Path
 

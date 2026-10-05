@@ -6,10 +6,10 @@ use std::collections::BTreeMap;
 
 const ACCESS: &str = "synthetic-worker-access-token";
 const SECRET: &str = "synthetic-registered-client-secret";
-fn binding() -> String {
+pub(super) fn binding() -> String {
     "a".repeat(64)
 }
-fn session() -> GoogleSendAuthorization {
+pub(super) fn session() -> GoogleSendAuthorization {
     GoogleSendAuthorization::begin(
         GoogleLoginChallenge::new(
             "approved-client".into(),
@@ -31,25 +31,26 @@ fn pairs(value: &str) -> BTreeMap<String, String> {
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
         .collect()
 }
-fn claims(session: &GoogleSendAuthorization) -> Value {
+pub(super) fn claims(session: &GoogleSendAuthorization) -> Value {
     let time = now().unwrap();
     json!({"iss":super::super::ISSUER,"aud":"approved-client","sub":"synthetic-subject",
-        "hd":"work.example","nonce":session.challenge.nonce(),"iat":time,"exp":time+3600,
+        "hd":"work.example","email":"sender@work.example","email_verified":true,
+        "nonce":session.challenge.nonce(),"iat":time,"exp":time+3600,
         "at_hash":Base64UrlUnpadded::encode_string(&Sha256::digest(ACCESS.as_bytes())[..16])})
 }
-fn response(claims: &Value) -> Value {
+pub(super) fn response(claims: &Value) -> Value {
     json!({"access_token":ACCESS,"refresh_token":"synthetic-refresh-token","token_type":"Bearer",
-        "expires_in":3600,"scope":format!("openid {SEND_SCOPE}"),
+        "expires_in":3600,"scope":format!("openid email {SEND_SCOPE}"),
         "id_token":crate::tests::signed(&json!({"alg":"RS256","kid":"synthetic-key"}),claims)})
 }
-fn http_response(value: &Value) -> HttpResponse {
+pub(super) fn http_response(value: &Value) -> HttpResponse {
     oauth2::http::Response::builder()
         .status(200)
         .header("content-type", "application/json")
         .body(serde_json::to_vec(value).unwrap())
         .unwrap()
 }
-fn verify(
+pub(super) fn verify(
     challenge: GoogleLoginChallenge,
     id: &str,
     access: &str,
@@ -69,7 +70,7 @@ fn registered_authorization_url_has_nonce_state_pkce_and_only_send_scopes() {
     assert!(session.authorization_url().starts_with(AUTHORIZE_URL));
     assert_eq!(params["client_id"], "approved-client");
     assert_eq!(params["response_type"], "code");
-    assert_eq!(params["scope"], format!("openid {SEND_SCOPE}"));
+    assert_eq!(params["scope"], format!("openid email {SEND_SCOPE}"));
     assert_eq!(params["nonce"], session.challenge.nonce());
     assert_eq!(params["code_challenge_method"], "S256");
     assert_eq!(params["include_granted_scopes"], "false");
@@ -203,10 +204,85 @@ fn code_exchange_uses_owned_verifier_registered_redirect_and_secret() {
         .unwrap();
     assert_eq!(calls.get(), 1);
     assert!(credential.is_current());
+    assert!(credential.authenticates_sender("sender@work.example"));
+    for sender in [
+        "other@work.example",
+        "sender+alias@work.example",
+        "Sender@work.example",
+    ] {
+        assert!(!credential.authenticates_sender(sender));
+    }
     assert!(credential.has_refresh_credential());
     assert_eq!(credential.identity().account_binding().len(), 64);
     assert!(credential.expires_at() <= now().unwrap() + 300);
     assert_eq!(credential.access_token.as_str(), ACCESS);
+}
+
+#[test]
+fn signed_sender_claims_are_required_for_send_credentials() {
+    for (field, value) in [
+        ("email", Value::Null),
+        ("email", json!("display <sender@work.example>")),
+        ("email", json!("sender@@work.example")),
+        ("email", json!("sender@WORK.EXAMPLE")),
+        ("email", json!("sender\r\n@work.example")),
+        ("email_verified", json!(false)),
+        ("email_verified", Value::Null),
+        ("email_verified", json!("true")),
+    ] {
+        let session = session();
+        let state = session.state.to_string();
+        let mut c = claims(&session);
+        c[field] = value;
+        let body = response(&c);
+        assert!(session
+            .complete_with(
+                &state,
+                "synthetic-code".into(),
+                &binding(),
+                |_| Ok::<_, ExchangeTransportError>(http_response(&body)),
+                verify
+            )
+            .is_err());
+    }
+    for field in ["email", "email_verified"] {
+        let session = session();
+        let state = session.state.to_string();
+        let mut c = claims(&session);
+        c.as_object_mut().unwrap().remove(field);
+        let body = response(&c);
+        assert!(session
+            .complete_with(
+                &state,
+                "synthetic-code".into(),
+                &binding(),
+                |_| Ok::<_, ExchangeTransportError>(http_response(&body)),
+                verify
+            )
+            .is_err());
+    }
+}
+
+#[test]
+fn sender_match_expires_with_credential_and_accepts_canonical_email_scope() {
+    let session = session();
+    let state = session.state.to_string();
+    let mut body = response(&claims(&session));
+    body["scope"] = json!(format!(
+        "openid https://www.googleapis.com/auth/userinfo.email {SEND_SCOPE}"
+    ));
+    let mut credential = session
+        .complete_with(
+            &state,
+            "synthetic-code".into(),
+            &binding(),
+            |_| Ok::<_, ExchangeTransportError>(http_response(&body)),
+            verify,
+        )
+        .unwrap();
+    assert!(credential.authenticates_sender("sender@work.example"));
+    credential.expires_monotonic = Instant::now();
+    assert!(!credential.authenticates_sender("sender@work.example"));
 }
 
 #[test]

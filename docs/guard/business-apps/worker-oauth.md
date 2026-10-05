@@ -2,7 +2,7 @@
 
 `guard_google_identity::oauth::GoogleSendAuthorization` implements the registered
 server-flow authorization/code-exchange step for a credential-owning worker.
-It requests only `openid` and `gmail.send`; it supplies no account enrollment,
+It requests only `openid`, `email` and `gmail.send`; it supplies no account enrollment,
 execution authority, isolation proof, public RPC or Core setup route.
 
 The authenticated worker constructs a `GoogleLoginChallenge` with its registered
@@ -40,6 +40,14 @@ reported scopes, a bounded Bearer token, a one-hour-or-shorter positive expiry
 and an ID token. Missing, extra or duplicated scopes are refused; requested
 scopes are not silently substituted for missing granted scopes. Google signature,
 issuer/audience, tenant, nonce and actual access-token hash are then verified.
+Send credentials additionally require a signed, verified, bounded bare ASCII
+`email`. The returned grant must contain exactly the three requested scopes;
+Google's canonical `userinfo.email` spelling is accepted for the email scope.
+The signed `hd` remains the tenant check; the mailbox domain does not select a
+tenant. Stable account binding still uses `sub`, so an email change does not
+retarget account identity. The private mailbox is never exported by the evidence
+API. `authenticates_sender` compares its exact spelling and enforces credential
+expiry. Alias, case, dot and plus normalization cannot establish send-as rights.
 Admission clocks are checked again after exchange and key retrieval.
 Token expiry starts before the exchange, so its latency cannot extend a short
 lease. Currentness also has a monotonic deadline; a wall-clock rollback cannot

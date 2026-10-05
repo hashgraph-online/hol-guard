@@ -121,21 +121,30 @@ def transaction(store: GuardStore, connection: sqlite3.Connection) -> Iterator[s
     started = time.monotonic()
     initial_changes = connection.total_changes
     notification: dict[str, object] | None = None
-    try:
-        yield connection
-        store_review_event_outbox_schema.finalize_review_event_payload_hashes(connection)
-        outbox_generation = store_review_event_outbox_schema.commit_review_event_transaction(
-            connection, initial_changes, profiler.record_commit
-        )
-        notification = store._take_policy_integrity_state_notification(connection)
-    except BaseException as error:
+
+    def rollback_failed_transaction(error: BaseException) -> None:
         if isinstance(error, sqlite3.OperationalError) and sqlite_error_is_busy_locked(error):
             profiler.record_busy_locked()
         # Earlier method commits remain durable; this failed method rolls back.
         with suppress(sqlite3.DatabaseError):
             connection.rollback()
         store._take_policy_integrity_state_notification(connection)
+
+    try:
+        yield connection
+    except BaseException as error:
+        rollback_failed_transaction(error)
         raise
+    else:
+        try:
+            store_review_event_outbox_schema.finalize_review_event_payload_hashes(connection)
+            outbox_generation = store_review_event_outbox_schema.commit_review_event_transaction(
+                connection, initial_changes, profiler.record_commit
+            )
+            notification = store._take_policy_integrity_state_notification(connection)
+        except BaseException as error:
+            rollback_failed_transaction(error)
+            raise
     finally:
         profiler.record_transaction((time.monotonic() - started) * 1000)
     store_review_event_outbox_schema.notify_review_event_wake(store.path, outbox_generation)

@@ -87,8 +87,10 @@ def extension_evidence_batch(
                     identity=_rule_identity(observation),
                     match_class=ExtensionMatchClass.UNCERTAINTY,
                     severity=EvidenceSeverity.CRITICAL,
+                    # An unattributed match may belong to this rule, so it
+                    # inherits the rule's own floor as well.
                     declared_floor=maximum_action_floor(
-                        UNCERTAINTY_FLOOR[item] for item in observation.uncertainty_reasons
+                        (floor, *(UNCERTAINTY_FLOOR[item] for item in observation.uncertainty_reasons))
                     ),
                     base_fact="matcher-failure",
                     segment_ref="segment:unknown",
