@@ -82,7 +82,6 @@
       "command.blitcp",
       "command.cloudg",
       "command.cogext",
-      "command.crisp-tui",
       "command.cs",
       "command.ctty",
       "command.digline",
