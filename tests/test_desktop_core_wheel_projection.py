@@ -28,13 +28,18 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
         ROOT / "contracts/extensions/trust-class-map.v1.json",
         source_root / "contracts/extensions/trust-class-map.v1.json",
     )
-    for source_name in stage["_ARTIFACTS"]:
+    for source_name in stage["_STATIC_ARTIFACTS"]:
         if source_name == "contracts/extensions/native-command-program.v1.json":
             continue
         source = ROOT / source_name
         destination = source_root / source_name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+    (source_root / "contributions/extensions").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(
+        ROOT / "contributions/extensions/command.blitcp.json",
+        source_root / "contributions/extensions/command.blitcp.json",
+    )
 
     implementation_digest = "i" * 64
     descriptor_ids = (

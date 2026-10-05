@@ -146,7 +146,7 @@ def test_removed_shared_registration_is_not_silently_restored(tmp_path: Path) ->
 @pytest.mark.parametrize(
     "path,original,replacement",
     [
-        (STAGING_PATH, "_ARTIFACTS = {", "_OTHER_ARTIFACTS = {"),
+        (STAGING_PATH, "_CONTRIBUTION_SOURCES = (", "_OTHER_SOURCES = ("),
         (PYPROJECT_PATH, "[tool.hatch.build.targets.wheel.force-include]", "[tool.hatch.build.targets.wheel.other]"),
     ],
 )
