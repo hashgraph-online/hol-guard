@@ -92,3 +92,27 @@ def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     if any(key in expected and expected[key] != enriched[key] for key in ("path", "paths")):
         return False
     return actual == enriched
+
+
+def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str, Any]) -> bool:
+    """Bind resolved read paths without accepting a different target or read options."""
+    if reviewed == completed:
+        return True
+    if tool != "read" or set(reviewed) != set(completed):
+        return False
+    path_keys = set(reviewed) & {"path", "file_path"}
+    if len(path_keys) != 1:
+        return False
+    key = path_keys.pop()
+    original, resolved = reviewed[key], completed[key]
+    if not isinstance(original, str) or not isinstance(resolved, str):
+        return False
+    if original.startswith("~/"):
+        expected = "{{home}}/" + original[2:]
+    elif original.startswith(("/", "{{")):
+        expected = original
+    else:
+        expected = "{{workspace}}/" + original.removeprefix("./")
+    if any(part in {".", "..", ""} for part in expected.split("/")[1:]):
+        return False
+    return completed == {**reviewed, key: expected}

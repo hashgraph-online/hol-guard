@@ -1161,6 +1161,8 @@ def run_native_generic_payload(
     hook_event_name = hook_event_name or "PreToolUse"
     from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 
+    silent_review_action: str | None = None
+    silent_review_reason = ""
     if (
         hook_is_pre_event(hook_event_name)
         and policy_action in {"review", "require-reapproval"}
@@ -1177,6 +1179,8 @@ def run_native_generic_payload(
             policy_reason = "The trusted hook invocation requires review for this action."
         else:
             policy_reason = "No applicable policy or valid saved approval allows this action."
+        silent_review_action = policy_action
+        silent_review_reason = policy_reason
         policy_action = "block"
         payload_map.update(
             policy_action="block",
@@ -1188,6 +1192,56 @@ def run_native_generic_payload(
     changed_capabilities = _string_list(payload_map.get("changed_capabilities"))
     if not changed_capabilities and isinstance(payload_map.get("event"), str):
         changed_capabilities = [str(payload_map["event"])]
+    if silent_review_action is not None:
+        from ..approvals import record_unprompted_review
+
+        redacted_command_text = _command_detail(command_text, home_dir=home_dir)
+        config_path = str(runtime_workspace) if runtime_workspace is not None else ""
+        silent_artifact = GuardArtifact(
+            artifact_id=artifact_id,
+            name=artifact_name,
+            harness=args.harness,
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=config_path,
+            command=redacted_command_text,
+            metadata={
+                "action_class": "unmatched tool action",
+                "request_summary": "Guard recorded a blocked review without prompting.",
+            },
+        )
+        record_unprompted_review(
+            detection=HarnessDetection(
+                harness=args.harness,
+                installed=True,
+                command_available=True,
+                config_paths=(config_path,),
+                artifacts=(silent_artifact,),
+            ),
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact_id,
+                        "artifact_name": artifact_name,
+                        "artifact_hash": runtime_artifact_hash,
+                        "artifact_type": silent_artifact.artifact_type,
+                        "source_scope": silent_artifact.source_scope,
+                        "config_path": config_path,
+                        "policy_action": silent_review_action,
+                        "changed_fields": changed_capabilities or ["tool_action"],
+                        "launch_target": redacted_command_text,
+                        "risk_summary": silent_review_reason,
+                        "action_envelope_json": (
+                            action_envelope.with_pre_execution_result(None).to_dict()
+                            if action_envelope is not None
+                            else None
+                        ),
+                    }
+                ]
+            },
+            store=store,
+            redaction_level=config.receipt_redaction_level,
+        )
     should_record_generic_hook_receipt = not (
         args.harness == "codex"
         and hook_event_name == "PreToolUse"

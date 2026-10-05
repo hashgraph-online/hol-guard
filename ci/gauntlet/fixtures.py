@@ -15,6 +15,11 @@ SETTINGS_AFTER = SETTINGS_BEFORE.replace("retryLimit: 3", "retryLimit: 5")
 SOURCE = "ordinary-workflow-fixture\nsecond-line\n"
 
 
+def scenario_fixture_name(scenario_id: str) -> str:
+    """Keep scenario risk labels out of paths inspected by the product policy."""
+    return "case-" + hashlib.sha256(scenario_id.encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class Fixture:
     root: Path
@@ -73,6 +78,7 @@ def create_fixture(root: Path) -> Fixture:
     )
     sentinel.chmod(0o700)
     (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
+    os.link(workspace / ".env", workspace / "aliases/linked.txt")
     environment = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR") if k in os.environ}
     environment.update(HOME=str(home), USERPROFILE=str(home), GIT_CONFIG_NOSYSTEM="1")
     commands = [

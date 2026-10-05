@@ -107,7 +107,7 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
             "claude-code": 3,
             "kimi": 3,
             "openclaw": 5,
-            "grok": 9,
+            "grok": 10,
             "zcode": 5,
             "pi": 4,
             "omp": 4,
@@ -124,7 +124,7 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
     assert not ctx.guard_home.exists()
 
 
-@pytest.mark.parametrize("harness,expected", [("kimi", 4), ("grok", 10), ("zcode", 6), ("devin", 6)])
+@pytest.mark.parametrize("harness,expected", [("kimi", 4), ("grok", 11), ("zcode", 6), ("devin", 6)])
 def test_frozen_preparation_includes_helper_without_publishing(tmp_path, monkeypatch, harness, expected):
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters import get_adapter

@@ -227,7 +227,8 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     trust = json.loads(old_trust)
     trust["classes"]["external"].append(EXTENSION_ID)
     trust["classes"]["external"].sort()
-    source_path.write_text(json.dumps(source, indent=2) + "\n")
+    # Keep synthetic-fixture formatting from exhausting the production input budget.
+    source_path.write_text(json.dumps(source, separators=(",", ":")) + "\n")
     trust_path.write_text(json.dumps(trust, indent=2) + "\n")
     fixture = {
         "schema": "guard.command-extension-fixtures.v1",
@@ -279,7 +280,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     record("incorrect_behavior_fixture_rejected")
 
     source["extension"]["description"] = "Isolated CI contribution acceptance."
-    source_path.write_text(json.dumps(source, indent=2) + "\n")
+    source_path.write_text(json.dumps(source, separators=(",", ":")) + "\n")
     fixture_path.write_text(json.dumps(fixture, indent=2) + "\n")
     build()
     verify()

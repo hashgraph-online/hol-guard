@@ -3,8 +3,9 @@
 //! facts and policy, preserve intrinsic floors, and bind managed dispatch.
 
 use guard_contracts::{
-    BusinessActionErrorV1, BusinessActionV1, BusinessAudienceKindV1, BusinessOperationV1,
-    BusinessSensitivityV1, BusinessServiceV1, MAX_BUSINESS_ACTION_ITEMS, MAX_BUSINESS_WIRE_COUNT,
+    is_canonical_business_domain, BusinessActionErrorV1, BusinessActionV1, BusinessAudienceKindV1,
+    BusinessOperationV1, BusinessSensitivityV1, BusinessServiceV1, MAX_BUSINESS_ACTION_ITEMS,
+    MAX_BUSINESS_WIRE_COUNT,
 };
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +44,12 @@ pub struct BusinessPolicyMatchV1 {
         skip_serializing_if = "Option::is_none"
     )]
     pub account_bindings: Option<Vec<String>>,
+    #[serde(
+        default,
+        deserialize_with = "present_value",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub recipient_domains: Option<Vec<String>>,
     #[serde(
         default,
         deserialize_with = "present_value",
@@ -115,6 +122,12 @@ impl BusinessPolicyMatchV1 {
                                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
                     })
             })
+            || self.recipient_domains.as_ref().is_some_and(|values| {
+                !valid_set(values, MAX_BUSINESS_ACTION_ITEMS)
+                    || values
+                        .iter()
+                        .any(|value| !is_canonical_business_domain(value))
+            })
             || self.audience_kinds.as_ref().is_some_and(|values| {
                 !valid_set(values, 3) || values.contains(&BusinessAudienceKindV1::Unknown)
             })
@@ -161,6 +174,15 @@ impl BusinessPolicyMatchV1 {
                     .account_binding
                     .as_ref()
                     .is_some_and(|binding| bindings.contains(binding))
+            })
+            && self.recipient_domains.as_ref().is_none_or(|domains| {
+                facts.audience.kind == BusinessAudienceKindV1::Named
+                    && !facts.audience.recipients.is_empty()
+                    && facts
+                        .audience
+                        .recipients
+                        .iter()
+                        .all(|recipient| domains.contains(&recipient.domain))
             })
             && self
                 .audience_kinds

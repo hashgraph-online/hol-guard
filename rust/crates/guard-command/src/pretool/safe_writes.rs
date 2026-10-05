@@ -69,7 +69,6 @@ fn bounded_write_target(
                     // Normalize only the trusted home-root alias. The suffix
                     // must still resolve exactly, rejecting redirected targets.
                     && home_spelling_matches_target(&target, &canonical, home_dir, &home)
-                    && single_link_write_target(&target)
                     && !home_execution_control_target(&canonical, &home, &workspace)
             });
     (canonical.starts_with(&workspace)
@@ -77,6 +76,8 @@ fn bounded_write_target(
         || inside_verified_home)
         && guard_secure_fs::hidden_read_parts_allowed(&canonical)
         && resolved_path_allowed(&canonical, home_dir, workspace.to_str())
+        // A safe pathname can alias a protected inode through a hard link.
+        && ((directory && canonical.is_dir()) || single_link_write_target(&canonical))
         && !autostart_write_target(&canonical)
 }
 
@@ -116,13 +117,16 @@ pub(super) fn safe_copy_arguments(arguments: &[String], context: super::PathCont
     {
         return false;
     }
+    if !single_link_write_target(&destination) {
+        return false;
+    }
     // Only a single file-to-file copy. Flags, directory destinations and
     // recursive copies need separate evaluation; cp follows destination links.
     !paths.0.starts_with('-')
         && !paths.1.starts_with('-')
         && paths.0.trim() == paths.0
         && bounded_file_read_target(paths.0, context.home_dir, context.cwd)
-        && (bounded_file_write_target(destination_text, context.home_dir, context.cwd)
+        && (bounded_native_file_write_target(destination_text, context.home_dir, context.cwd)
             // The temporary carve-out is only for destinations the user
             // spelled absolutely. A relative destination joined onto a /tmp
             // workspace must not sidestep the workspace boundary check above.

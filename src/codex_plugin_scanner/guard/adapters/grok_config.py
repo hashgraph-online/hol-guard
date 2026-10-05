@@ -33,6 +33,7 @@ MANAGED_DENY_RULES = (
     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
     "Edit(**/.grok/hooks/hol-guard*)",
     "Edit(**/.grok/managed_config.toml)",
+    "Edit(**/.grok/config.toml)",
     "Read(**/.grok/auth/**)",
     "Read(**/.grok/auth.json)",
     "Read(**/.env)",

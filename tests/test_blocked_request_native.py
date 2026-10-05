@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.silent_review_assertions import assert_silent_review_recorded
 from tests.test_native_review_approval_coordination import _edge, _worker
 
 
@@ -46,7 +47,8 @@ def test_native_review_defaults_to_safe_alternative(
     )
     assert response["policy_action"] == "block"
     assert response["prompted"] is False
-    assert store.list_approval_requests(status="pending") == []
+    assert response.get("approval_requests", []) == []
+    assert_silent_review_recorded(store)
     reason = response.get("reason") or response["hookSpecificOutput"]["permissionDecisionReason"]
     assert "safe, permitted alternative" in reason
     assert "bypass Guard" in reason
@@ -68,5 +70,5 @@ def test_malformed_config_denies_review_without_prompt(tmp_path, monkeypatch):
     )
     assert response["policy_action"] == "block"
     assert response["prompted"] is False
-    assert store.list_approval_requests() == []
+    assert_silent_review_recorded(store)
     worker.close()

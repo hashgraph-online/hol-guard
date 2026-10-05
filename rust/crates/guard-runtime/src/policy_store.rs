@@ -47,6 +47,8 @@ mod policy_store_validation;
 pub(crate) mod resident_workspace_review_context;
 #[path = "workspace_review_authority.rs"]
 pub(crate) mod workspace_review_authority;
+#[path = "workspace_review_business.rs"]
+pub(crate) mod workspace_review_business;
 #[path = "workspace_review_claim_index.rs"]
 pub(crate) mod workspace_review_claim_index;
 #[path = "workspace_review_decision.rs"]
@@ -70,6 +72,7 @@ mod scope_tests;
 #[cfg(test)]
 #[path = "policy_store_tests.rs"]
 mod tests;
+
 const SNAPSHOT_FILE_NAME: &str = "policy-snapshot-v3.json";
 const GENERATION_FLOOR_FILE_NAME: &str = "policy-snapshot-generation-floor.json";
 pub(crate) const VERIFIER_KEY_FILE_NAME: &str = "policy-verifier.key";
