@@ -111,7 +111,8 @@ def _emit_unavailable(
             worker=_OverlayWorker(config),
             recording_only=recording_only,
         )
-        == 0
+            == 2
+
     )
     assert emitted["command"] == "hook"
     assert emitted["as_json"] is True
