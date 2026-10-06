@@ -1334,7 +1334,9 @@ def run_native_generic_payload(
             ),
             output_stream=output_stream,
         )
-        return 0
+        return native_hook_verdict_exit_code(
+            _canonical_harness_name(args.harness), policy_action, hook_event_name
+        )
     if config.mode == "observe" and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
         observed_artifact = GuardArtifact(
             artifact_id=artifact_id,
@@ -1662,7 +1664,9 @@ def run_native_generic_payload(
             system_message=system_message,
             output_stream=output_stream,
         )
-        return 0
+        return native_hook_verdict_exit_code(
+            _canonical_harness_name(args.harness), policy_action, hook_event_name
+        )
     if hook_event_name == "PostToolUse":
         _apply_native_edge_envelope_fields(hook_envelope, native_edge_result)
         _emit_native_post_tool_envelope(
