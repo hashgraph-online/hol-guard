@@ -9,6 +9,12 @@ import pytest
 from scripts.ci import verify_native_command_program as verifier
 
 
+@pytest.fixture(autouse=True)
+def isolate_workflow_environment(monkeypatch):
+    """Mocked compilers must never mutate the real GitHub Actions environment."""
+    monkeypatch.delenv("GITHUB_ENV", raising=False)
+
+
 @pytest.mark.parametrize("event", ["pull_request", "push", "schedule", "workflow_dispatch"])
 @pytest.mark.parametrize("base", [None, "a" * 40])
 def test_every_event_stages_then_strictly_verifies_current_sources(monkeypatch, event, base):
@@ -56,3 +62,42 @@ def test_unavailable_pr_base_cannot_change_full_source_validation(monkeypatch):
     assert verifier.main() == 0
     assert len(calls) == 2
     assert calls[-1][-1] == "--check"
+
+
+@pytest.mark.parametrize("failed_stage", [0, 1])
+def test_failed_validation_does_not_export_compiler(monkeypatch, tmp_path, failed_stage):
+    """Only successfully verified compilers may reach subsequent packaging steps."""
+    compiler = tmp_path / "compiler"
+    compiler.write_bytes(b"fixture")
+    environment = tmp_path / "github-env"
+    environment.write_text("EXISTING=value\n")
+    monkeypatch.setenv("GITHUB_ENV", str(environment))
+    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", str(compiler)])
+    calls = []
+
+    def execute(command):
+        calls.append(command)
+        if len(calls) - 1 == failed_stage:
+            raise SystemExit(37)
+
+    monkeypatch.setattr(verifier, "_run", execute)
+    with pytest.raises(SystemExit, match="37"):
+        verifier.main()
+    assert environment.read_text() == "EXISTING=value\n"
+
+
+def test_successful_validation_exports_absolute_compiler_path(monkeypatch, tmp_path):
+    """Export a real resolved path without changing the compiler sent to validation."""
+    compiler = tmp_path / "compiler"
+    compiler.write_bytes(b"fixture")
+    environment = tmp_path / "github-env"
+    environment.write_text("EXISTING=value\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_ENV", str(environment))
+    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "compiler"])
+    calls = []
+    monkeypatch.setattr(verifier, "_run", calls.append)
+    assert verifier.main() == 0
+    assert calls[0][-1] == "compiler"
+    assert calls[1] == [*calls[0], "--check"]
+    assert environment.read_text() == f"EXISTING=value\nHOL_GUARD_BUILD_SOURCE_COMPILER={compiler}\n"

@@ -40,6 +40,16 @@ SOURCE_SHA = "a" * 40
 WHEEL_NAME = f"hol_guard-{VERSION}-py3-none-any.whl"
 
 
+def test_canary_counts_match_the_reviewed_native_contract() -> None:
+    from scripts import run_installed_canary as canary
+
+    root = Path(__file__).resolve().parents[1]
+    totals = json.loads((root / "tests/fixtures/guard-command-corpus/native-contract.json").read_bytes())["totals"]
+    assert totals["cases"] == canary._FROZEN_CORPUS_CASE_COUNT
+    assert totals["native_evaluation_errors"] == canary._FROZEN_NATIVE_REJECTION_COUNT
+    assert totals["stronger_than_original_oracle"] == canary._FROZEN_ORACLE_ABOVE_COUNT
+
+
 def test_current_corpus_manifest_is_verified_by_its_canonical_bindings() -> None:
     root = Path(__file__).resolve().parents[1]
 
@@ -94,7 +104,10 @@ def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytes
             assert "HOL_GUARD_NATIVE_DIAGNOSTIC" not in kwargs["env"]
         completed = run(command, **kwargs)
         if is_hook:
-            assert completed.returncode == 0, (completed.stdout, completed.stderr)
+            # The hook emits a block payload; rc mirrors the verdict through the
+            # harness adapter contract (opencode/generic block -> 1). rc=0 would
+            # read the denial as allow to a shell harness.
+            assert completed.returncode == 1, (completed.stdout, completed.stderr)
             hook_responses.append(json.loads(completed.stdout))
         return completed
 

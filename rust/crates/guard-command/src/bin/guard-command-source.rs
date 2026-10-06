@@ -41,7 +41,7 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     }
     let mut bytes = Vec::new();
     std::io::stdin()
-        .take(4 * 1024 * 1024 + 1)
+        .take(8 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "command_source_input_read_failed")?;
     if operation == "test" {

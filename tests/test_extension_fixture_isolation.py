@@ -18,9 +18,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path, monkeypatch):
     """Verify catalog publication does not rewrite tests or rebuild runtime."""
+    bindings_dir = tmp_path / "contracts/extensions/trust"
+    bindings_dir.mkdir(parents=True)
+    (bindings_dir / "command.demo.v1.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": "command.demo",
+                "trustClass": "external",
+            }
+        )
+    )
     trust = tmp_path / "contracts/extensions/trust-class-map.v1.json"
-    trust.parent.mkdir(parents=True)
-    trust.write_text(json.dumps({"classes": {"external": ["command.demo"]}}))
+    trust.parent.mkdir(parents=True, exist_ok=True)
+    trust.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-trust-class-map.v1",
+                "publishers": {
+                    "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                    "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
+                },
+                "classes": {"first-party": [], "trusted-library": [], "external": ["command.demo"]},
+            }
+        )
+    )
     (trust.parent / "command-catalog.v1.json").write_text(json.dumps({"catalog_digest": "a" * 64}))
     preserved = {}
     for name in (
@@ -37,10 +59,11 @@ def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path,
     calls = []
     monkeypatch.setattr(refresh, "ROOT", tmp_path)
     monkeypatch.setattr(refresh, "TRUST_MAP", trust)
+    monkeypatch.setattr(refresh, "TRUST_BINDINGS", bindings_dir)
     monkeypatch.setattr(refresh, "contribution_ids", lambda: ["command.demo"])
     monkeypatch.setattr(refresh, "pending_contribution_ids", lambda: [])
     monkeypatch.setattr(refresh, "_run", lambda command, **kwargs: calls.append(command))
-    assert refresh.main() == 0
+    assert refresh.main([]) == 0
     cargo = [command for command in calls if command[0] == "cargo"]
     assert len(cargo) == 1
     assert cargo[0][-2:] == ["--bin", "guard-command-source"]

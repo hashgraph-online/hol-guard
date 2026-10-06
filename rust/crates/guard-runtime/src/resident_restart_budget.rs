@@ -208,6 +208,25 @@ fn temporary_path(path: &Path) -> Result<PathBuf, String> {
     Ok(path.with_file_name(format!(".{name}.{}.tmp", std::process::id())))
 }
 
+pub(super) fn consume_for_spawn(state_base: &Path, scope: &Path) -> Result<(), String> {
+    let verifier_key = state_base.join(crate::policy_store::VERIFIER_KEY_FILE_NAME);
+    match std::fs::symlink_metadata(&verifier_key) {
+        Ok(metadata)
+            if metadata.file_type().is_symlink()
+                || !metadata.is_file()
+                || metadata.len() != crate::policy_store::VERIFIER_KEY_BYTES as u64 =>
+        {
+            return Err("native_policy_verifier_key_invalid".to_owned());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err("native_policy_verifier_key_missing".to_owned());
+        }
+        Err(_) => return Err("native_policy_verifier_key_stat_failed".to_owned()),
+    }
+    consume(scope)
+}
+
 pub(super) fn consume(scope: &Path) -> Result<(), String> {
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
     let _lock = acquire_budget_lock(scope)?;

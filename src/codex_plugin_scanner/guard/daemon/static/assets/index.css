@@ -1131,6 +1131,10 @@
     max-height: calc(var(--spacing) * 48);
   }
 
+  .max-h-80 {
+    max-height: calc(var(--spacing) * 80);
+  }
+
   .max-h-96 {
     max-height: calc(var(--spacing) * 96);
   }
@@ -6410,10 +6414,6 @@
       width: calc(var(--spacing) * 44);
     }
 
-    .sm\:w-64 {
-      width: calc(var(--spacing) * 64);
-    }
-
     .sm\:w-auto {
       width: auto;
     }
@@ -6540,6 +6540,10 @@
 
     .sm\:gap-y-3 {
       row-gap: calc(var(--spacing) * 3);
+    }
+
+    .sm\:self-end {
+      align-self: flex-end;
     }
 
     .sm\:truncate {

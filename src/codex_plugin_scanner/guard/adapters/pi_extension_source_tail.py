@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .pi_extension_contained_tests_source import with_contained_test_routing
+from .pi_extension_input_source import INPUT_HANDLER_SOURCE
 from .pi_extension_source_tail_shared_v1 import build_source_tail_shared_v1
 
 
@@ -13,12 +14,24 @@ def build_extension_source_tail(
     lifecycle_abort_event_source: str,
     tool_approval_continuation_source: str,
 ) -> str:
+    workspace_readiness_source = (
+        "    const workspaceReadiness = await ensureGuardWorkspaceReady(snapshot.cwd, false);\n"
+        "    if (!workspaceReadiness.ready) {\n"
+        "      const reason = readinessFailureReason(workspaceReadiness);\n"
+        '      ctx.ui.notify(reason, "warning");\n'
+        "      return { block: true, reason };\n"
+        "    }\n"
+    )
     shared_source = build_source_tail_shared_v1(
         display_name=display_name,
         harness=harness,
         lifecycle_abort_event_source=lifecycle_abort_event_source,
         tool_approval_continuation_source=tool_approval_continuation_source,
+        workspace_readiness_source=workspace_readiness_source,
     )
+    input_start = shared_source.index('  pi.on("input",')
+    input_end = shared_source.index('  pi.on("tool_call",', input_start)
+    shared_source = shared_source[:input_start] + INPUT_HANDLER_SOURCE + shared_source[input_end:]
     if harness == "omp":
         shared_source = with_contained_test_routing(shared_source)
     return shared_source + (
@@ -37,16 +50,53 @@ def build_extension_source_tail(
         " || digest.excerptTruncated || digest.traversalTruncated;\n"
         "    const toolOutput = digest.textForExcerpt || (boundedStdout.value as string);\n"
         "    const reviewedContent = outputTruncated ? [{ type: 'text', text: toolOutput }] : boundedContent.value;\n"
-        "    const sourceRef = sourceFileRefForPostToolUse(event as Record<string, unknown>, toolInput, digest);\n"
+        "    // OMP resolves bounded read selectors before returning output. Use that\n"
+        "    // verified base path for source review, while retaining the raw input\n"
+        "    // for directory and non-source tool results.\n"
+        "    const details = event.details;\n"
+        "    const detailsRecord = details && typeof details === 'object' && !Array.isArray(details)\n"
+        "      ? details as Record<string, unknown> : undefined;\n"
+        "    const resolvedDirectoryPath = detailsRecord &&\n"
+        "      detailsRecord.isDirectory === true &&\n"
+        "      typeof detailsRecord.resolvedPath === 'string' && detailsRecord.resolvedPath.trim()\n"
+        "      ? detailsRecord.resolvedPath.trim() : undefined;\n"
+        "    const reviewToolInput = (() => {\n"
+        "      const toolName = typeof event.toolName === 'string' ? event.toolName : '';\n"
+        "      if (!GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES.has(toolName) ||\n"
+        "          !detailsRecord || resolvedDirectoryPath !== undefined) return toolInput;\n"
+        "      const meta = detailsRecord.meta;\n"
+        "      const source = meta && typeof meta === 'object'\n"
+        "        ? (meta as Record<string, unknown>).source : undefined;\n"
+        "      const resolvedPath = source && typeof source === 'object'\n"
+        "        ? (source as Record<string, unknown>).value : undefined;\n"
+        "      if (typeof resolvedPath !== 'string' || !resolvedPath.trim()) return toolInput;\n"
+        "      for (const key of ['file_path', 'filePath', 'path', 'file', 'filename']) {\n"
+        "        const inputPath = toolInput[key];\n"
+        "        if (typeof inputPath === 'string' && inputPath.trim()) {\n"
+        "          return { ...toolInput, [key]: resolvedPath.trim() };\n"
+        "        }\n"
+        "      }\n"
+        "      return toolInput;\n"
+        "    })();\n"
+        "    const sourceRef = sourceFileRefForPostToolUse("
+        "      event as Record<string, unknown>, reviewToolInput, digest);\n"
+        "    // Preserve the original input for native pre/post digest parity.\n"
+        "    // Rust revalidates directory targets, including bounded OMP selectors;\n"
+        "    // host-resolved details are metadata, not an authority to rewrite it.\n"
+        "    const guardToolInput = reviewToolInput;\n"
+        "    const resolvedDirectoryTarget = resolvedDirectoryPath;\n"
         "    const guardPayload: Record<string, unknown> = {\n"
         '        hook_event_name: "PostToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_call_id: event.toolCallId,\n"
         "        tool_name: event.toolName,\n"
-        "        tool_input: toolInput,\n"
+        "        tool_input: guardToolInput,\n"
         "        tool_response: toolOutput,\n"
         "        is_error: event.isError === true,\n"
         "    };\n"
+        "    if (resolvedDirectoryTarget !== undefined) {\n"
+        "      guardPayload.resolved_directory_target = resolvedDirectoryTarget;\n"
+        "    }\n"
         "    // OMP's current ExtensionContext has no lifecycle signal. A managed\n"
         "    // structured destination therefore stays fail-closed there unless the\n"
         "    // host supplies the feature-detected signal used by the tool-call path.\n"

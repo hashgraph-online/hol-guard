@@ -16,13 +16,14 @@ from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy, runtime_mcp
 from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.silent_review_assertions import assert_silent_review_recorded
 from tests.test_guard_approval_precedence_generic_stdio import _marker_child_command, _sensitive_read_message
 from tests.test_guard_protect_approval_guidance import _pending_package_payload
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages, _package_artifact
 
 
 def _unexpected_prompt(*args, **kwargs):
-    pytest.fail("default denial must not create an approval surface")
+    pytest.fail("default denial must not open an approval prompt")
 
 
 @pytest.mark.parametrize("harness,as_json", [("generic-test", True), ("copilot", True), ("copilot", False)])
@@ -31,7 +32,12 @@ def test_generic_pretool_review_blocks_without_queue(tmp_path, monkeypatch, caps
     store = GuardStore(context.guard_home)
     config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, default_action="review")
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_generic.queue_blocked_approvals", _unexpected_prompt
+        "codex_plugin_scanner.guard.approvals._notify_pending_approval",
+        _unexpected_prompt,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_generic.schedule_guard_daemon_ensure",
+        _unexpected_prompt,
     )
     result = run_native_generic_payload(
         SimpleNamespace(harness=harness, json=as_json),
@@ -51,7 +57,7 @@ def test_generic_pretool_review_blocks_without_queue(tmp_path, monkeypatch, caps
     )
     response = json.loads(capsys.readouterr().out)
     if as_json:
-        assert result == 1
+        assert result == (0 if harness == "copilot" else 1)
         assert response["policy_action"] == "block"
     else:
         assert result == 0
@@ -60,7 +66,8 @@ def test_generic_pretool_review_blocks_without_queue(tmp_path, monkeypatch, caps
     assert "safe, permitted alternative" in serialized
     assert "Current local policy requires review" in serialized
     assert "FORGED" not in serialized
-    assert store.list_approval_requests() == []
+    assert response.get("approval_requests", []) == []
+    assert_silent_review_recorded(store)
 
 
 def test_default_denial_command_activity_is_unprompted(tmp_path, capsys):
@@ -86,7 +93,7 @@ def test_default_denial_command_activity_is_unprompted(tmp_path, capsys):
             "select prompted, policy_action, proof_level, execution_status from command_activity"
         ).fetchone()
     assert row == (0, "block", "pre_hook", "prevented")
-    assert store.list_approval_requests() == []
+    assert_silent_review_recorded(store)
 
 
 def test_local_package_denial_preserves_receipt_without_queue(tmp_path):
@@ -108,7 +115,8 @@ def test_local_package_denial_preserves_receipt_without_queue(tmp_path):
     assert payload["receipt"] == original_receipt
     assert "Current package policy" in payload["review_hint"]
     assert "safe, permitted alternative" in payload["review_hint"]
-    assert store.list_approval_requests() == []
+    assert payload["approval_requests"] == []
+    assert_silent_review_recorded(store)
 
 
 def test_local_package_malformed_config_stays_blocked(tmp_path):
@@ -129,7 +137,8 @@ def test_local_package_malformed_config_stays_blocked(tmp_path):
     assert payload["policy_action"] == "block"
     assert payload["receipt"] == original_receipt
     assert "safe, permitted alternative" in payload["review_hint"]
-    assert store.list_approval_requests() == []
+    assert payload["approval_requests"] == []
+    assert_silent_review_recorded(store)
 
 
 @pytest.mark.parametrize("harness", ["generic-test", "copilot"])
@@ -217,7 +226,8 @@ def test_mcp_package_denial_preserves_reason_and_policy_source(tmp_path, monkeyp
     assert "safe, permitted alternative" in details["user_copy"]["next_step"]
     assert original_evaluation == evaluation_snapshot
     assert event["prompted"] is False
-    assert store.list_approval_requests() == []
+    assert response["error"]["data"]["approvalRequests"] == []
+    assert_silent_review_recorded(store)
     assert store.list_receipts(limit=1)[0]["approval_source"] == "policy"
 
 
@@ -241,7 +251,7 @@ def test_stdio_default_secret_read_denial_has_no_pending_review(tmp_path):
     assert "pending" not in message.lower()
     assert "review in" not in message.lower()
     assert not marker.exists()
-    assert store.list_approval_requests() == []
+    assert_silent_review_recorded(store)
 
 
 @pytest.mark.parametrize("proxy_class", [CodexMcpGuardProxy, OpenCodeMcpGuardProxy])
@@ -279,7 +289,7 @@ def test_default_mcp_review_blocks_without_prompt_or_execution(
     monkeypatch.setattr(runtime_mcp, "ensure_guard_daemon", unexpected_prompt)
     result = proxy.run_session(_messages(tool_name="safe_echo", arguments={}, elicitation=True))
     assert not marker.exists()
-    assert store.list_approval_requests() == []
+    assert_silent_review_recorded(store)
     response = result["responses"][2]
     assert response["error"]["data"]["approvalRequests"] == []
     assert "safe, permitted alternative" in response["error"]["message"]

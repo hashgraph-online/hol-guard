@@ -32,6 +32,30 @@ mod policy_enforcement_mcp_provider;
 mod policy_enforcement_policy;
 pub(crate) use policy_enforcement_matrix::{validate_pre_tool_result_matrix, ActionFloor};
 
+/// Recheck business rules above the authenticated native receipt's intrinsic
+/// floor. This validates review eligibility; it grants no execution authority.
+pub(crate) fn ensure_business_review_permitted(
+    snapshot: &PolicySnapshotV3,
+    facts: &guard_contracts::BusinessActionV1,
+    intrinsic: &str,
+) -> Result<(), String> {
+    let binding = snapshot
+        .business_policy
+        .as_ref()
+        .ok_or_else(|| "native_workspace_review_business_invalid".to_owned())?;
+    if binding.budgets.is_some() {
+        return Err("native_business_budget_executor_unavailable".to_owned());
+    }
+    let intrinsic = ActionFloor::parse(intrinsic)
+        .ok_or_else(|| "native_workspace_review_business_invalid".to_owned())?;
+    let policy = policy_enforcement_business::CompiledBusinessPolicy::new(binding)?;
+    let floor = policy.floor(intrinsic, Some(facts));
+    if floor.action >= ActionFloor::SandboxRequired {
+        return Err("native_workspace_review_business_blocked".to_owned());
+    }
+    Ok(())
+}
+
 use policy_enforcement_facts::{
     classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, PATH_KEYS,
 };
@@ -43,6 +67,9 @@ use policy_enforcement_policy::CompiledEffectivePolicy;
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
 pub(crate) use policy_enforcement_admission::AdmittedPolicySnapshot;
+
+#[path = "policy_enforcement_business.rs"]
+mod policy_enforcement_business;
 
 #[cfg(test)]
 #[path = "policy_enforcement_tests.rs"]
@@ -115,6 +142,7 @@ pub(crate) fn apply_pre_tool_policy(
         return Err("native_policy_mode_invalid".to_owned());
     }
     validate_pre_tool_result_matrix(&result)?;
+    policy_enforcement_business::guard_untrusted_business_context(snapshot, payload, &mut result)?;
     let harness = normalized_harness(&result.action.harness);
     let mut facts = payload_facts(
         payload,
@@ -358,7 +386,14 @@ pub(crate) fn apply_post_tool_policy(
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
     }
-    let action_type = post_action_type(request, payload_kind)?;
+    let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
+        && guard_command::pretool::bounded_task_metadata_output(&request.payload);
+    let classified_action = post_action_type(request, payload_kind)?;
+    let action_type = if task_metadata {
+        PreToolActionTypeV1::Harness
+    } else {
+        classified_action
+    };
     let intrinsic = response
         .observed_policy_action
         .as_deref()
@@ -388,7 +423,15 @@ pub(crate) fn apply_post_tool_policy(
         action_type,
         &FloorInput {
             facts: &facts,
-            reason_code: &response.reason_code,
+            reason_code: if task_metadata
+                && matches!(
+                    response.reason_code.as_str(),
+                    "output_scan_allow" | "source_full_scan_allow"
+                ) {
+                "native_agent_task_metadata"
+            } else {
+                &response.reason_code
+            },
             prompt_classes: &[],
             benign_prompt: false,
         },

@@ -1,0 +1,3812 @@
+[
+ {
+  "argv": [],
+  "capability": "unknown",
+  "reason_code": "github.command.missing",
+  "detail": "The GitHub CLI subcommand is missing.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "--version"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-metadata",
+  "detail": "The command reads local CLI metadata.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "-v"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-metadata",
+  "detail": "The command reads local CLI metadata.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "version"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-metadata",
+  "detail": "The command reads local CLI metadata.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "completion"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-metadata",
+  "detail": "The command reads local CLI metadata.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "help"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-metadata",
+  "detail": "The command reads local CLI metadata.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "-h"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "--help"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "--hostname",
+   "github.com",
+   "version"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-metadata",
+  "detail": "The command reads local CLI metadata.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "-h",
+   "ghes.example.com",
+   "pr",
+   "list"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "--hostname",
+   "GITHUB.EXAMPLE.COM",
+   "pr",
+   "list"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "--hostname=github.com",
+   "-h",
+   "other.com",
+   "pr",
+   "list"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "switch",
+   "--help"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "token"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.command.auth-token-read",
+  "detail": "The command reads a GitHub authentication token.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "token",
+   "-h",
+   "ghes.example.com"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "status"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-auth-read",
+  "detail": "The command reads local CLI auth state.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "status",
+   "--show-token"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.command.auth-token-read",
+  "detail": "The command reads a GitHub authentication token.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "status",
+   "-t"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.command.auth-token-read",
+  "detail": "The command reads a GitHub authentication token.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "status",
+   "-h",
+   "ghes.example.com"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "login"
+  ],
+  "capability": "write_local",
+  "reason_code": "github.command.local-auth-write",
+  "detail": "The command changes local GitHub CLI authentication.",
+  "capabilities": [
+   "write_local"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "logout"
+  ],
+  "capability": "write_local",
+  "reason_code": "github.command.local-auth-write",
+  "detail": "The command changes local GitHub CLI authentication.",
+  "capabilities": [
+   "write_local"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "switch"
+  ],
+  "capability": "write_local",
+  "reason_code": "github.command.local-auth-write",
+  "detail": "The command changes local GitHub CLI authentication.",
+  "capabilities": [
+   "write_local"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "refresh"
+  ],
+  "capability": "write_local",
+  "reason_code": "github.command.local-auth-write",
+  "detail": "The command changes local GitHub CLI authentication.",
+  "capabilities": [
+   "write_local"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "setup-git"
+  ],
+  "capability": "write_local",
+  "reason_code": "github.command.local-auth-write",
+  "detail": "The command changes local GitHub CLI authentication.",
+  "capabilities": [
+   "write_local"
+  ]
+ },
+ {
+  "argv": [
+   "auth",
+   "foo"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.extension-or-alias",
+  "detail": "The GitHub CLI command may be an extension or alias and cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "auth"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.extension-or-alias",
+  "detail": "The GitHub CLI command may be an extension or alias and cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "user",
+   "--method",
+   "GET"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query={ viewer { login } }"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.graphql.proven-query",
+  "detail": "The GraphQL document is a single static query.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "--field",
+   "query={ viewer { login } }",
+   "--jq",
+   ".data"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.graphql.proven-query",
+  "detail": "The GraphQL document is a single static query.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-X",
+   "POST",
+   "repos/o/r/issues",
+   "-f",
+   "title=x"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.api.content",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/issues/1/comments",
+   "-F",
+   "body=hi"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.api.content",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/pulls/1/merge",
+   "-X",
+   "PUT"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.api.merge",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r",
+   "-X",
+   "PATCH",
+   "-f",
+   "description=d"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.api.access",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/issues/1",
+   "-X",
+   "DELETE"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.api.mixed-mutation",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "content_remote",
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/issues/1/lock",
+   "-X",
+   "PUT",
+   "-f",
+   "lock_reason=resolved"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.api.maintain",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/issues/1/lock",
+   "-X",
+   "DELETE"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.api.maintain",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/actions/workflows/x/dispatches",
+   "-X",
+   "POST"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.api.workflow",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/releases",
+   "-X",
+   "POST"
+  ],
+  "capability": "publish_remote",
+  "reason_code": "github.api.publish",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "publish_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/contents/.github/workflows/ci.yml",
+   "-X",
+   "PUT"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.api.workflow",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/contents/README.md",
+   "-X",
+   "PUT"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.api.content",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/branches/main/protection",
+   "-X",
+   "PUT"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.api.access",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/collaborators/u",
+   "-X",
+   "PUT"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.api.access",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/git/refs/heads/x",
+   "-X",
+   "PATCH",
+   "-f",
+   "sha=abc",
+   "-F",
+   "force=true"
+  ],
+  "capability": "force_remote",
+  "reason_code": "github.api.force",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "force_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/secrets/S",
+   "-X",
+   "PUT"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.api.secret",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/actions/runners/registration-token",
+   "-X",
+   "POST"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.api.secret",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/$(id)"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.dynamic-endpoint",
+  "detail": "The GitHub API endpoint cannot be resolved statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-f",
+   "x",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.unrecognized-arguments",
+  "detail": "The GitHub API arguments cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--method"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.unrecognized-arguments",
+  "detail": "The GitHub API arguments cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--input",
+   "body.json",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.input-body",
+  "detail": "A GitHub API body loaded from a file or standard input cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-H",
+   "X-Custom: v",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.untrusted-header",
+  "detail": "Only static GitHub Accept media-type headers qualify for prompt-free API reads.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-H",
+   "Accept: application/vnd.github+json",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-H",
+   "X-GitHub-Api-Version: 2022-11-28",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-H",
+   "X-HTTP-Method-Override: DELETE",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.method-override",
+  "detail": "An HTTP method-override header prevents reliable API capability classification.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-X",
+   "POST",
+   "-f",
+   "query={viewer{login}}"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.method-override",
+  "detail": "A GraphQL method override prevents reliable operation classification.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query={viewer{login}}",
+   "-f",
+   "query={x}"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.query-count",
+  "detail": "Exactly one static GraphQL query is required for classification.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { addComment(input: {subjectId: \\\"x\\\", body: \\\"y\\\"}) { clientMutationId } }"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.invalid-document",
+  "detail": "The GraphQL document is not balanced.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { resolveReviewThread(input: {threadId: \\\"PRRT_kwDOabc12345678\\\"}) { thread { id } } }"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.invalid-document",
+  "detail": "The GraphQL document is not balanced.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { resolveReviewThread(input: {threadId: $t}) { thread { id } } }",
+   "-f",
+   "threadId=PRT_0123456789abcd"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.graphql.maintain",
+  "detail": "The GraphQL operation contains statically classified mutation root fields.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { resolveReviewThread(input: {threadId: $t}) { thread { id } } }",
+   "-f",
+   "threadId=PRT_bad"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.graphql.maintain",
+  "detail": "The GraphQL operation contains statically classified mutation root fields.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { mergePullRequest(input: {pullRequestId: \\\"x\\\"}) { clientMutationId } }"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.invalid-document",
+  "detail": "The GraphQL document is not balanced.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { deleteIssue(input: {issueId: \\\"x\\\"}) { clientMutationId } }"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.invalid-document",
+  "detail": "The GraphQL document is not balanced.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { updateProjectV2ItemFieldValue(input: {}) { clientMutationId } }"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.graphql.content",
+  "detail": "The GraphQL operation contains statically classified mutation root fields.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { createDeployment(input: {}) { clientMutationId } }"
+  ],
+  "capability": "mutate_remote",
+  "reason_code": "github.graphql.mutate",
+  "detail": "The GraphQL operation contains statically classified mutation root fields.",
+  "capabilities": [
+   "mutate_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { updateSecret(input: {}) { clientMutationId } }"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.graphql.secret",
+  "detail": "The GraphQL operation contains statically classified mutation root fields.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { addCollaborator(input: {}) { clientMutationId } }"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.graphql.access",
+  "detail": "The GraphQL operation contains statically classified mutation root fields.",
+  "capabilities": [
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=query { viewer { login } } mutation { x }"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.multiple-operations",
+  "detail": "Multiple GraphQL operations or a batched document cannot be classified automatically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=subscription { x }"
+  ],
+  "capability": "mutate_remote",
+  "reason_code": "github.graphql.remote-mutation",
+  "detail": "The GraphQL operation can change or subscribe to GitHub-hosted state.",
+  "capabilities": [
+   "mutate_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query={ viewer { login } } { x }"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.multiple-operations",
+  "detail": "Multiple GraphQL operations or a batched document cannot be classified automatically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=fragment f on X { y } query { a }"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.graphql.proven-query",
+  "detail": "The GraphQL document is a single static query.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=fragment f on X { y } mutation { x }"
+  ],
+  "capability": "mutate_remote",
+  "reason_code": "github.graphql.remote-mutation",
+  "detail": "GraphQL mutations with fragment definitions require confirmation.",
+  "capabilities": [
+   "mutate_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=query { a: mutation { x } }"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.graphql.proven-query",
+  "detail": "The GraphQL document is a single static query.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query={ unbalanced"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.invalid-document",
+  "detail": "The GraphQL document is not balanced.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=query { x } # comment\n"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.graphql.proven-query",
+  "detail": "The GraphQL document is a single static query.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--silent",
+   "--include",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-f",
+   "x=$(curl x)",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.external-field-value",
+  "detail": "A GitHub API field loaded from external data cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-f",
+   "x=$HOME",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.external-field-value",
+  "detail": "A GitHub API field loaded from external data cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--jq",
+   "$(x)",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.dynamic-option-value",
+  "detail": "A GitHub API option value cannot be resolved statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--hostname",
+   "ghes.example.com",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "repos/o/r/commits/$(gh pr view 1 --json headRefOid --jq .headRefOid)/check-runs",
+   "-X",
+   "GET"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "--jq",
+   ".data",
+   "-f",
+   "query=mutation { resolveReviewThread(input: {threadId: $t}) { thread { id } } }",
+   "-f",
+   "threadId=PRT_0123456789abcd"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.graphql.maintain",
+  "detail": "The GraphQL operation contains statically classified mutation root fields.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "--jq",
+   ".other",
+   "-f",
+   "query=mutation { resolveReviewThread(input: {threadId: $t}) { thread { id } } }",
+   "-f",
+   "threadId=PRT_0123456789abcd"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.graphql.maintain",
+  "detail": "The GraphQL operation contains statically classified mutation root fields.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "search",
+   "repos",
+   "foo"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "status"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "SEARCH",
+   "issues"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "secret",
+   "set",
+   "NAME"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.command.secret-mutation",
+  "detail": "The command changes GitHub secrets.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "secret",
+   "list"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.command.secret-mutation",
+  "detail": "The command changes GitHub secrets.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "secret",
+   "delete",
+   "N"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.command.secret-mutation",
+  "detail": "The command changes GitHub secrets.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "gpg-key",
+   "list"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-access-read",
+  "detail": "The command reads public-key metadata from GitHub.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "gpg-key",
+   "add",
+   "f"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.command.access-mutation",
+  "detail": "The command changes GitHub access credentials.",
+  "capabilities": [
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "gpg-key",
+   "delete",
+   "k"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.command.access-mutation",
+  "detail": "The command changes GitHub access credentials.",
+  "capabilities": [
+   "delete_remote",
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "gpg-key",
+   "--help"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "ssh-key",
+   "list"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-access-read",
+  "detail": "The command reads public-key metadata from GitHub.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "ssh-key",
+   "add",
+   "f"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.command.access-mutation",
+  "detail": "The command changes GitHub access credentials.",
+  "capabilities": [
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "cache",
+   "list"
+  ],
+  "capability": "mutate_remote",
+  "reason_code": "github.command.remote-mutation",
+  "detail": "The command changes GitHub-hosted state.",
+  "capabilities": [
+   "mutate_remote"
+  ]
+ },
+ {
+  "argv": [
+   "cache",
+   "delete",
+   "id"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.delete-mutation",
+  "detail": "The command deletes GitHub-hosted state.",
+  "capabilities": [
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "codespace",
+   "delete"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.delete-mutation",
+  "detail": "The command deletes GitHub-hosted state.",
+  "capabilities": [
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "codespace",
+   "create"
+  ],
+  "capability": "mutate_remote",
+  "reason_code": "github.command.remote-mutation",
+  "detail": "The command changes GitHub-hosted state.",
+  "capabilities": [
+   "mutate_remote"
+  ]
+ },
+ {
+  "argv": [
+   "label",
+   "create",
+   "n"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.remote-mutation",
+  "detail": "The command changes GitHub-hosted state.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "label",
+   "delete",
+   "n"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.delete-mutation",
+  "detail": "The command deletes GitHub-hosted state.",
+  "capabilities": [
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "variable",
+   "set",
+   "n"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.remote-mutation",
+  "detail": "The command changes GitHub-hosted state.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "variable",
+   "delete",
+   "n"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.delete-mutation",
+  "detail": "The command deletes GitHub-hosted state.",
+  "capabilities": [
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "browse"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.extension-or-alias",
+  "detail": "The GitHub CLI command may be an extension or alias and cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "alias",
+   "get",
+   "x"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.extension-or-alias",
+  "detail": "The GitHub CLI command may be an extension or alias and cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "config",
+   "get",
+   "x"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.extension-or-alias",
+  "detail": "The GitHub CLI command may be an extension or alias and cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "completion",
+   "bash"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-metadata",
+  "detail": "The command reads local CLI metadata.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "list"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "list",
+   "--label",
+   "bug"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "view",
+   "1"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "view",
+   "1",
+   "-cw"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "view",
+   "-w",
+   "-R",
+   "o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "status"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "close",
+   "1"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "comment",
+   "1",
+   "-b",
+   "x"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "create",
+   "-t",
+   "t",
+   "-b",
+   "b"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "delete",
+   "1"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.delete-mutation",
+  "detail": "The command deletes GitHub-hosted state.",
+  "capabilities": [
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "lock",
+   "1"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.command.bounded-maintenance",
+  "detail": "The command performs a statically bounded maintenance operation.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "pin",
+   "1"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.command.bounded-maintenance",
+  "detail": "The command performs a statically bounded maintenance operation.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "lock",
+   "$ID"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.dynamic-maintenance-target",
+  "detail": "The maintenance target cannot be resolved statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "edit",
+   "1"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "reopen",
+   "1"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "transfer",
+   "1",
+   "o/r"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "develop",
+   "1"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "foo"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.unrecognized-subcommand",
+  "detail": "The GitHub CLI subcommand is not in the reviewed read-only set.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "issue"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.unresolved-subcommand",
+  "detail": "The GitHub CLI subcommand could not be resolved statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "--web"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.unresolved-subcommand",
+  "detail": "The GitHub CLI subcommand could not be resolved statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "view",
+   "--help"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "view",
+   "42"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "checks",
+   "42"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "diff",
+   "42"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "status"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "checkout",
+   "1"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.unrecognized-subcommand",
+  "detail": "The GitHub CLI subcommand is not in the reviewed read-only set.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "close",
+   "1"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "comment",
+   "1",
+   "-b",
+   "x"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "--title",
+   "t",
+   "--body",
+   "b"
+  ],
+  "capability": "propose_remote",
+  "reason_code": "github.command.pr-proposal",
+  "detail": "The command creates a pull-request proposal without merging or changing repository controls.",
+  "capabilities": [
+   "propose_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "-t",
+   "t",
+   "-b",
+   "b"
+  ],
+  "capability": "propose_remote",
+  "reason_code": "github.command.pr-proposal",
+  "detail": "The command creates a pull-request proposal without merging or changing repository controls.",
+  "capabilities": [
+   "propose_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "-ttitle",
+   "-bbody"
+  ],
+  "capability": "propose_remote",
+  "reason_code": "github.command.pr-proposal",
+  "detail": "The command creates a pull-request proposal without merging or changing repository controls.",
+  "capabilities": [
+   "propose_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "--title=t",
+   "--body=b"
+  ],
+  "capability": "propose_remote",
+  "reason_code": "github.command.pr-proposal",
+  "detail": "The command creates a pull-request proposal without merging or changing repository controls.",
+  "capabilities": [
+   "propose_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "--fill"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "-t",
+   "t",
+   "--body-file",
+   "f.md"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "-t",
+   "t",
+   "-b",
+   "b",
+   "--draft"
+  ],
+  "capability": "propose_remote",
+  "reason_code": "github.command.pr-proposal",
+  "detail": "The command creates a pull-request proposal without merging or changing repository controls.",
+  "capabilities": [
+   "propose_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "-w"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create",
+   "--title",
+   "t"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "create"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "edit",
+   "1"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "ready",
+   "1"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.command.bounded-maintenance",
+  "detail": "The command performs a statically bounded maintenance operation.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "review",
+   "1",
+   "--approve"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash"
+  ],
+  "capability": "routine_merge_remote",
+  "reason_code": "github.command.pr-routine-squash-merge",
+  "detail": "The command performs a numeric, non-privileged squash merge and may clean up its merged head branch.",
+  "capabilities": [
+   "routine_merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--delete-branch"
+  ],
+  "capability": "routine_merge_remote",
+  "reason_code": "github.command.pr-routine-squash-merge",
+  "detail": "The command performs a numeric, non-privileged squash merge and may clean up its merged head branch.",
+  "capabilities": [
+   "routine_merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--delete-branch=false"
+  ],
+  "capability": "routine_merge_remote",
+  "reason_code": "github.command.pr-routine-squash-merge",
+  "detail": "The command performs a numeric, non-privileged squash merge and may clean up its merged head branch.",
+  "capabilities": [
+   "routine_merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--no-delete-branch"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--delete-branch=maybe"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.invalid-delete-branch-option",
+  "detail": "The delete-branch option has an invalid Boolean value.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--admin"
+  ],
+  "capability": "admin_merge_remote",
+  "reason_code": "github.command.pr-admin-merge",
+  "detail": "The command uses administrator privileges to merge a pull request.",
+  "capabilities": [
+   "admin_merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--admin=false"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--admin=yes"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.invalid-admin-option",
+  "detail": "The administrator merge option has an invalid Boolean value.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "-R",
+   "o/r"
+  ],
+  "capability": "routine_merge_remote",
+  "reason_code": "github.command.pr-routine-squash-merge",
+  "detail": "The command performs a numeric, non-privileged squash merge and may clean up its merged head branch.",
+  "capabilities": [
+   "routine_merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--repo=o/r"
+  ],
+  "capability": "routine_merge_remote",
+  "reason_code": "github.command.pr-routine-squash-merge",
+  "detail": "The command performs a numeric, non-privileged squash merge and may clean up its merged head branch.",
+  "capabilities": [
+   "routine_merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "-R",
+   "$(cat)"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "abc",
+   "--squash"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--merge"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--squash"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "0",
+   "--squash"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--rebase"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "lock",
+   "1"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.command.bounded-maintenance",
+  "detail": "The command performs a statically bounded maintenance operation.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "unlock",
+   "1"
+  ],
+  "capability": "maintain_remote",
+  "reason_code": "github.command.bounded-maintenance",
+  "detail": "The command performs a statically bounded maintenance operation.",
+  "capabilities": [
+   "maintain_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "reopen",
+   "1"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "delete",
+   "1"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.delete-mutation",
+  "detail": "The command deletes GitHub-hosted state.",
+  "capabilities": [
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "release",
+   "list"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "release",
+   "view",
+   "v1"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "release",
+   "create",
+   "v1"
+  ],
+  "capability": "publish_remote",
+  "reason_code": "github.command.release-publication",
+  "detail": "The command publishes or changes a GitHub release artifact.",
+  "capabilities": [
+   "publish_remote"
+  ]
+ },
+ {
+  "argv": [
+   "release",
+   "edit",
+   "v1"
+  ],
+  "capability": "publish_remote",
+  "reason_code": "github.command.release-publication",
+  "detail": "The command publishes or changes a GitHub release artifact.",
+  "capabilities": [
+   "publish_remote"
+  ]
+ },
+ {
+  "argv": [
+   "release",
+   "upload",
+   "v1",
+   "f"
+  ],
+  "capability": "publish_remote",
+  "reason_code": "github.command.release-publication",
+  "detail": "The command publishes or changes a GitHub release artifact.",
+  "capabilities": [
+   "publish_remote"
+  ]
+ },
+ {
+  "argv": [
+   "release",
+   "delete",
+   "v1"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.delete-mutation",
+  "detail": "The command deletes GitHub-hosted state.",
+  "capabilities": [
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "view"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "list"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "create",
+   "n"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "fork"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "rename",
+   "n"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "sync"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.content-mutation",
+  "detail": "The command changes GitHub-hosted content.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "sync",
+   "--force"
+  ],
+  "capability": "force_remote",
+  "reason_code": "github.command.force-mutation",
+  "detail": "The command forcefully changes remote repository state.",
+  "capabilities": [
+   "force_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "sync",
+   "x",
+   "--force=true"
+  ],
+  "capability": "force_remote",
+  "reason_code": "github.command.force-mutation",
+  "detail": "The command forcefully changes remote repository state.",
+  "capabilities": [
+   "force_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "edit"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.command.repository-access-mutation",
+  "detail": "Repository settings can change access or protection boundaries.",
+  "capabilities": [
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "set-default"
+  ],
+  "capability": "write_local",
+  "reason_code": "github.command.local-default-write",
+  "detail": "The command changes local GitHub CLI repository configuration.",
+  "capabilities": [
+   "write_local"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "delete",
+   "o/r"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.delete-mutation",
+  "detail": "The command deletes GitHub-hosted state.",
+  "capabilities": [
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "clone",
+   "o/r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.unrecognized-subcommand",
+  "detail": "The GitHub CLI subcommand is not in the reviewed read-only set.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "archive"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.unrecognized-subcommand",
+  "detail": "The GitHub CLI subcommand is not in the reviewed read-only set.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "list"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "view",
+   "1"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "watch",
+   "1"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "cancel",
+   "1"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "rerun",
+   "1"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "rerun",
+   "1",
+   "--failed"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "rerun",
+   "1",
+   "--failed",
+   "--repo",
+   "o/r"
+  ],
+  "capability": "routine_workflow_remote",
+  "reason_code": "github.command.routine-failed-run-rerun",
+  "detail": "The command retries only failed jobs from one numeric GitHub Actions run.",
+  "capabilities": [
+   "routine_workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "--repo",
+   "o/r",
+   "run",
+   "rerun",
+   "1",
+   "--failed"
+  ],
+  "capability": "routine_workflow_remote",
+  "reason_code": "github.command.routine-failed-run-rerun",
+  "detail": "The command retries only failed jobs from one numeric GitHub Actions run.",
+  "capabilities": [
+   "routine_workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "-R",
+   "o/r",
+   "run",
+   "rerun",
+   "123456",
+   "--failed"
+  ],
+  "capability": "routine_workflow_remote",
+  "reason_code": "github.command.routine-failed-run-rerun",
+  "detail": "The command retries only failed jobs from one numeric GitHub Actions run.",
+  "capabilities": [
+   "routine_workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "-Ro/r",
+   "run",
+   "rerun",
+   "7",
+   "--failed"
+  ],
+  "capability": "routine_workflow_remote",
+  "reason_code": "github.command.routine-failed-run-rerun",
+  "detail": "The command retries only failed jobs from one numeric GitHub Actions run.",
+  "capabilities": [
+   "routine_workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "-R=o/r",
+   "run",
+   "rerun",
+   "7",
+   "--failed"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "--repo",
+   "o/r",
+   "run",
+   "rerun",
+   "1"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "--repo",
+   "$(x)",
+   "run",
+   "rerun",
+   "1",
+   "--failed"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "rerun",
+   "1",
+   "--failed",
+   "--failed"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "rerun",
+   "abc",
+   "--failed"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "rerun",
+   "1",
+   "--failed",
+   "--job",
+   "j"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "workflow",
+   "list"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "workflow",
+   "view",
+   "x"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "workflow",
+   "run",
+   "x"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "workflow",
+   "disable",
+   "x"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "workflow",
+   "enable",
+   "x"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.workflow-mutation",
+  "detail": "The command starts or changes a GitHub workflow.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "repo",
+   "list",
+   "-R",
+   "o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "--repo",
+   "bad/repo/x"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "--repo",
+   "o/r",
+   "--repo",
+   "o/r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "-Rw",
+   "o/r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "-wR",
+   "o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "-qR",
+   "o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "-R",
+   "o/r?x=$(id)"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "view",
+   "1",
+   "--repo=github.com/o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "view",
+   "1",
+   "--repo",
+   "ghes.com/o/r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "view",
+   "1",
+   "--repo",
+   "o"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "--repo"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "-R"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.unrecognized-arguments",
+  "detail": "The GitHub API arguments cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--paginate",
+   "repos/o/r/issues"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-XHEAD",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--method=DELETE",
+   "repos/o/r/issues/1"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.api.mixed-mutation",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "content_remote",
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--method",
+   "post",
+   "repos/o/r/issues"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.api.content",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.query-count",
+  "detail": "Exactly one static GraphQL query is required for classification.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query="
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.missing-operation",
+  "detail": "No static GraphQL operation was found.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-F",
+   "n=v",
+   "user"
+  ],
+  "capability": "mutate_remote",
+  "reason_code": "github.api.mutate",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "mutate_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-f",
+   "x=y",
+   "user"
+  ],
+  "capability": "mutate_remote",
+  "reason_code": "github.api.mutate",
+  "detail": "The GitHub API request performs a statically classified remote mutation.",
+  "capabilities": [
+   "mutate_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "user",
+   "extra"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.unrecognized-arguments",
+  "detail": "The GitHub API arguments cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--verbose=true",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.api.unrecognized-arguments",
+  "detail": "The GitHub API arguments cannot be classified statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-i",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-p",
+   "name",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-h",
+   "host",
+   "user"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--cache",
+   "10m",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "--template",
+   "t",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "-HAccept: application/vnd.github.raw+json",
+   "user"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.api.proven-get",
+  "detail": "The GitHub API request is a statically proven read.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { resolveReviewThread(input: {threadId: \\\"PRRT_abcdefgh12345\\\"}) { thread { isResolved id } } }"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.invalid-document",
+  "detail": "The GraphQL document is not balanced.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "api",
+   "graphql",
+   "-f",
+   "query=mutation { resolveReviewThread(input: {threadId: \\\"PRRT_abcdefgh12345\\\"}) { clientMutationId } }"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.graphql.invalid-document",
+  "detail": "The GraphQL document is not balanced.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--admin",
+   "--delete-branch"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.pr-admin-merge",
+  "detail": "The command uses administrator privileges to merge a pull request.",
+  "capabilities": [
+   "admin_merge_remote",
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--delete-branch"
+  ],
+  "capability": "delete_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote",
+   "delete_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--admin=FALSE"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--admin=true"
+  ],
+  "capability": "admin_merge_remote",
+  "reason_code": "github.command.pr-admin-merge",
+  "detail": "The command uses administrator privileges to merge a pull request.",
+  "capabilities": [
+   "admin_merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--admin",
+   "--squash"
+  ],
+  "capability": "admin_merge_remote",
+  "reason_code": "github.command.pr-admin-merge",
+  "detail": "The command uses administrator privileges to merge a pull request.",
+  "capabilities": [
+   "admin_merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "merge",
+   "1",
+   "--squash",
+   "--"
+  ],
+  "capability": "merge_remote",
+  "reason_code": "github.command.pr-merge",
+  "detail": "The command merges a pull request and may also delete its branch.",
+  "capabilities": [
+   "merge_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "rerun",
+   "1",
+   "--failed",
+   "-R",
+   "o/r"
+  ],
+  "capability": "routine_workflow_remote",
+  "reason_code": "github.command.routine-failed-run-rerun",
+  "detail": "The command retries only failed jobs from one numeric GitHub Actions run.",
+  "capabilities": [
+   "routine_workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "rerun",
+   "1",
+   "--failed",
+   "-Ro/r"
+  ],
+  "capability": "routine_workflow_remote",
+  "reason_code": "github.command.routine-failed-run-rerun",
+  "detail": "The command retries only failed jobs from one numeric GitHub Actions run.",
+  "capabilities": [
+   "routine_workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "--hostname=x.y",
+   "auth",
+   "status"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "-h",
+   "pr",
+   "list"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "-h",
+   "ghes.com"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "view",
+   "1",
+   "-h",
+   "ghes.com",
+   "--repo",
+   "o/r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.alternate-host",
+  "detail": "An alternate GitHub host requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "view",
+   "1",
+   "-c"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "view",
+   "1",
+   "-cw",
+   "--comments"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "-L",
+   "10",
+   "-R",
+   "o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "-L10"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "list",
+   "-dL5"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "status",
+   "-cq",
+   "v"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "list",
+   "-L"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "list",
+   "-e",
+   "push"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "view",
+   "9",
+   "--repo=o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "pr",
+   "view",
+   "9",
+   "-Ro/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "gpg-key",
+   "foo"
+  ],
+  "capability": "access_remote",
+  "reason_code": "github.command.access-mutation",
+  "detail": "The command changes GitHub access credentials.",
+  "capabilities": [
+   "access_remote"
+  ]
+ },
+ {
+  "argv": [
+   "secret",
+   "--help"
+  ],
+  "capability": "secret_remote",
+  "reason_code": "github.command.secret-mutation",
+  "detail": "The command changes GitHub secrets.",
+  "capabilities": [
+   "secret_remote"
+  ]
+ },
+ {
+  "argv": [
+   "label",
+   "list"
+  ],
+  "capability": "content_remote",
+  "reason_code": "github.command.remote-mutation",
+  "detail": "The command changes GitHub-hosted state.",
+  "capabilities": [
+   "content_remote"
+  ]
+ },
+ {
+  "argv": [
+   "codespace",
+   "list"
+  ],
+  "capability": "mutate_remote",
+  "reason_code": "github.command.remote-mutation",
+  "detail": "The command changes GitHub-hosted state.",
+  "capabilities": [
+   "mutate_remote"
+  ]
+ },
+ {
+  "argv": [
+   "variable",
+   "list"
+  ],
+  "capability": "workflow_remote",
+  "reason_code": "github.command.remote-mutation",
+  "detail": "The command changes GitHub-hosted state.",
+  "capabilities": [
+   "workflow_remote"
+  ]
+ },
+ {
+  "argv": [
+   "workflow"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.unresolved-subcommand",
+  "detail": "The GitHub CLI subcommand could not be resolved statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "workflow",
+   "--help"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "run",
+   "--help"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "pr"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.unresolved-subcommand",
+  "detail": "The GitHub CLI subcommand could not be resolved statically.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "--repo=o/r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.missing",
+  "detail": "The GitHub CLI subcommand is missing after global options.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "--repo",
+   "o/r",
+   "--version"
+  ],
+  "capability": "read_local",
+  "reason_code": "github.command.local-metadata",
+  "detail": "The command reads local CLI metadata.",
+  "capabilities": [
+   "read_local"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "list",
+   "--repo",
+   "github.com/o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "list",
+   "--repo",
+   "github.com.x/o/r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "list",
+   "--repo",
+   "a/o/r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "list",
+   "--repo",
+   "o//r"
+  ],
+  "capability": "unknown",
+  "reason_code": "github.command.untrusted-repository-selector",
+  "detail": "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
+  "capabilities": [
+   "unknown"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "list",
+   "-t",
+   "x",
+   "-R",
+   "o/r"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ },
+ {
+  "argv": [
+   "issue",
+   "view",
+   "1",
+   "-t",
+   "x"
+  ],
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
+  "capabilities": [
+   "read_remote"
+  ]
+ }
+]

@@ -15,30 +15,79 @@ import time
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Protocol
 
 from .runtime.command_activity_contract import CorrelationHandle, CorrelationKind
 from .runtime_transition import TransitionError
-from .sqlite_tuning import sqlite_connect_timeout_override
+from .sqlite_tuning import (
+    SQLITE_CACHE_SIZE_KIB,
+    SQLITE_MMAP_SIZE_BYTES,
+    sqlite_connect_timeout_override,
+)
 from .store_native_decision_receipts import validate_stored_native_decision_receipt
 
 MAX_LEGACY_PROBE_ROWS = 128
 
 
 class _ReceiptStore(Protocol):
+    path: Path
+
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
 
 @contextmanager
 def _deadline_connection(store: _ReceiptStore, deadline: float) -> Iterator[sqlite3.Connection]:
-    """Preserve the admission deadline across connection setup and teardown."""
+    """Preserve the admission deadline across connection setup and teardown.
+
+    The probe is a pure SELECT against WAL state; route it through a read-only
+    URI connection so it never enters the writer queue or runs the write
+    teardown (`finalize_review_event_payload_hashes` + commit) that
+    ``store._connect()`` performs on every exit. Under concurrent coverage
+    shards that teardown is what converts a 0ms read into a lock collision.
+    """
+    opener = (
+        _read_only_connection(store.path)
+        if isinstance(getattr(store, "path", None), Path)
+        else store._connect()  # duck-typed fakes lacking .path keep _connect()
+    )
+    # Lock-wait floor 0.5s: 100ms trips on real contention under coverage
+    # shards; operation_seconds still bounds total wall time at the deadline.
+    # Compute remaining once: if the deadline expires between check() and the
+    # cap, a non-positive value must surface as TransitionError, not the
+    # ValueError sqlite_connect_timeout_override raises for a non-positive cap.
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TransitionError("admission_deadline_expired")
+    lock_cap = min(0.5, remaining)
     try:
-        with store._connect() as connection:
+        with (
+            sqlite_connect_timeout_override(lock_cap, operation_seconds=remaining),
+            opener as connection,
+        ):
             yield connection
     except (TimeoutError, sqlite3.OperationalError) as error:
         if time.monotonic() >= deadline:
             raise TransitionError("admission_deadline_expired") from error
         raise
+
+
+@contextmanager
+def _read_only_connection(path: Path) -> Iterator[sqlite3.Connection]:
+    """Open ``path`` read-only; no write transaction, no teardown commit."""
+    connection = sqlite3.connect(
+        f"file:{path.as_posix()}?mode=ro",
+        uri=True,
+        timeout=5.0,
+    )
+    connection.row_factory = sqlite3.Row
+    try:
+        connection.execute("pragma query_only=ON")
+        connection.execute(f"pragma mmap_size={SQLITE_MMAP_SIZE_BYTES}")
+        connection.execute(f"pragma cache_size=-{SQLITE_CACHE_SIZE_KIB}")
+        yield connection
+    finally:
+        connection.close()
 
 
 def _timestamp(value: object) -> datetime | None:
@@ -78,16 +127,10 @@ def read_legacy_codex_probe_receipt(
         if time.monotonic() >= deadline_monotonic:
             raise TransitionError("admission_deadline_expired")
 
+    # check() + the progress handler enforce deadline_monotonic end-to-end;
+    # the ro connection's busy timeout is only a safety floor for WAL readers.
     check()
-    remaining = deadline_monotonic - time.monotonic()
-    if remaining <= 0:
-        raise TransitionError("admission_deadline_expired")
-    with (
-        # Keep lock waits short without shrinking the entire receipt query
-        # and connection initialization to the same 100 ms budget.
-        sqlite_connect_timeout_override(min(0.1, remaining), operation_seconds=remaining),
-        _deadline_connection(store, deadline_monotonic) as connection,
-    ):
+    with _deadline_connection(store, deadline_monotonic) as connection:
         check()
         connection.set_progress_handler(lambda: int(time.monotonic() >= deadline_monotonic), 100)
         try:

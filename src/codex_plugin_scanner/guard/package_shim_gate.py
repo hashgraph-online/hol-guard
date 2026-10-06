@@ -54,9 +54,7 @@ def package_shim_command_requires_guard(
             ("help",),
         }
     command = [normalized_manager, *normalized_argv]
-    from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
-
-    intent = parse_package_intent(shlex.join(command), workspace=workspace)
+    intent = _parse_shim_package_intent(shlex.join(command), workspace=workspace)
     return intent is not None
 
 
@@ -72,10 +70,9 @@ def package_shim_command_requires_external_archive_binding(
     if normalized_manager not in _PACKAGE_SHIM_PARSER_MANAGERS:
         return False
     command = [normalized_manager, *[str(argument) for argument in argv]]
-    from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
     from codex_plugin_scanner.guard.runtime.restricted_archive_download import is_external_https_archive_source
 
-    intent = parse_package_intent(shlex.join(command), workspace=workspace)
+    intent = _parse_shim_package_intent(shlex.join(command), workspace=workspace)
     return bool(
         intent is not None
         and any(
@@ -85,3 +82,28 @@ def package_shim_command_requires_external_archive_binding(
             for target in intent.targets
         )
     )
+
+
+def _parse_shim_package_intent(raw_command: str, *, workspace: Path | None = None):
+    """Route shim package-intent parsing through the resident native authority
+    when available; transport failure (``None``) falls back to the Python
+    parser."""
+    from codex_plugin_scanner.guard.config import resolve_guard_home
+    from codex_plugin_scanner.guard.native_package_authority import package_intent_parse_native
+    from codex_plugin_scanner.guard.runtime.package_intent_common import PackageIntent
+    from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
+
+    try:
+        payload = package_intent_parse_native(
+            raw_command,
+            workspace=workspace,
+            guard_home=resolve_guard_home(),
+        )
+    except Exception:  # transport failures degrade to the Python parser
+        payload = None
+    if isinstance(payload, dict):
+        try:
+            return PackageIntent.from_dict(payload)
+        except (TypeError, ValueError):
+            pass
+    return parse_package_intent(raw_command, workspace=workspace)

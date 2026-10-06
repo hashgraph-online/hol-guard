@@ -49,6 +49,10 @@ from ..local_supply_chain import (
     _package_policy_override_evaluation,
 )
 from ..models import GuardAction
+from ..native_package_authority import (
+    apply_stored_package_policy_native,
+    evaluation_from_native_payload,
+)
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.approval_reuse import (
@@ -287,6 +291,41 @@ def _runtime_cisco_scanner_evidence(
             if signal not in evidence:
                 evidence.append(signal)
     return tuple(evidence)
+
+
+def _apply_stored_package_policy_via_resident(
+    package_evaluation,
+    *,
+    store,
+    guard_home: Path,
+    artifact,
+    artifact_hash: str,
+    workspace_dir: Path,
+    now: str,
+    current_action: object | None,
+    claim_saved_approval: bool,
+):
+    """Route the saved-package-policy claim through the resident.
+
+    The resident is the sole authority for the stored-approval claim. When it
+    is unreachable (``None`` — transport/identity failure) the evaluation is
+    returned unchanged: no saved approval is applied, matching the resident's
+    own no-saved-approval result rather than re-running a Python path.
+    """
+    payload = apply_stored_package_policy_native(
+        package_evaluation.to_dict(),
+        artifact.to_dict(),
+        store_path=store.path,
+        guard_home=guard_home,
+        artifact_hash=artifact_hash,
+        workspace_dir=workspace_dir,
+        now=now,
+        current_action=current_action,
+        claim_saved_approval=claim_saved_approval,
+    )
+    if payload is None:
+        return package_evaluation
+    return evaluation_from_native_payload(payload)
 
 
 def evaluate_native_artifact_hook(
@@ -1254,6 +1293,23 @@ def evaluate_native_artifact_hook(
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
         decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
         decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
+    elif scanner_raised_to_block:
+        # The scanner escalated a weaker package verdict to a block. Surface the
+        # escalated block copy rather than the generic block copy or the weaker
+        # package copy. The block title mirrors the package evaluator's own
+        # block title in `supply_chain_package_eval._finalize_package_request_evaluation`.
+        decision_v2_payload["user_title"] = "Critical install blocked"
+        if package_evaluation is not None:
+            decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
+            decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
+    if scanner_evidence and policy_action == "block" and scanner_risk_signals:
+        # The Cisco scanner contributed the decisive escalation signal. Surface
+        # the scanner's primary summary as the dashboard detail so the composed
+        # block copy reflects the escalation source rather than the package
+        # verdict's generic block summary. Covers both the Python compose path
+        # (scanner_raised_to_block) and the resident path (the native eval
+        # already escalated, so package_policy_action is itself block).
+        decision_v2_payload["dashboard_primary_detail"] = scanner_risk_signals[0]
     if has_compound_findings:
         action_phrase = {
             "allow": "allowed",

@@ -16,8 +16,12 @@ from scripts.installed_canary_proof import InstalledCanaryError, load_subject, v
 
 class _Results:
     def __init__(self) -> None:
+        self.collected = 0
         self.passed = 0
         self.skipped = 0
+
+    def pytest_collection_finish(self, session: pytest.Session) -> None:
+        self.collected = len(session.items)
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         if report.when == "call" and report.passed:
@@ -53,8 +57,11 @@ def main() -> int:
                 ],
                 plugins=[results],
             )
-        if status != 0 or results.passed != 45 or results.skipped != 0:
-            raise InstalledCanaryError("Installed native outage qualification requires all 45 cases to pass")
+        if status != 0 or results.collected == 0 or results.passed != results.collected or results.skipped != 0:
+            raise InstalledCanaryError(
+                "Installed native outage qualification requires every collected case to pass without skips; "
+                f"collected={results.collected}, passed={results.passed}, skipped={results.skipped}"
+            )
         for name, module in tuple(sys.modules.items()):
             if name == "codex_plugin_scanner" or name.startswith("codex_plugin_scanner."):
                 origin = getattr(module, "__file__", None)
@@ -67,6 +74,7 @@ def main() -> int:
             "schema_version": "hol-guard.installed-native-outage-evidence.v1",
             "installed": installed,
             "passed": results.passed,
+            "collected": results.collected,
             "skipped": results.skipped,
             "evaluation_failure_injected": True,
             "mode_snapshot_fixture": True,

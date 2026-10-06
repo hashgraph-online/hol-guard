@@ -127,7 +127,10 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           components: rustfmt clippy
+      # The required CI workspace gate owns this Linux proof on main PRs and pushes.
       - name: Check locked Rust workspace
+        if: >-
+          !((github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps > /dev/null
           rustfmt --edition 2021 --check rust/crates/guard-runtime/src/main.rs

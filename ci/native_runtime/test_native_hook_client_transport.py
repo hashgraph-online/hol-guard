@@ -31,7 +31,7 @@ def test_native_resident_contains_spoof_partial_frame_and_slow_client(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, state_dir.parent)
     _invoke(runtime, state_dir, request)
     state = json.loads(_state_files(state_dir)[0].read_text(encoding="utf-8"))
 
@@ -67,7 +67,7 @@ def test_native_resident_returns_bounded_overload_signal(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, state_dir.parent)
     _invoke(runtime, state_dir, request)
     with _hold_native_client_lease(runtime, state_dir):
         state = json.loads(_state_files(state_dir)[0].read_text(encoding="utf-8"))
@@ -100,7 +100,7 @@ def test_unauthenticated_saturation_never_starts_parallel_generation(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, state_dir.parent)
     _invoke(runtime, state_dir, request)
     state = json.loads(_state_files(state_dir)[0].read_text(encoding="utf-8"))
     clients = [_connect_state(state) for _index in range(21)]
@@ -137,7 +137,7 @@ def test_native_hook_client_recovers_only_stale_startup_lock(
         lock.chmod(0o600)
     old = time.time() - 15
     os.utime(lock, (old, old))
-    response = _invoke(runtime, state_dir, _request(runtime, tmp_path))
+    response = _invoke(runtime, state_dir, _request(runtime, state_dir.parent))
     assert response["authority"] == "rust"
     lock_stat = lock.lstat()
     assert stat.S_ISREG(lock_stat.st_mode)
@@ -161,7 +161,7 @@ def test_native_hook_client_rejects_duplicate_edge_keys_without_fallback(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    provision_native_policy_verifier_key(tmp_path, b"\x07" * 32)
+    provision_native_policy_verifier_key(state_dir.parent, b"\x07" * 32)
     malformed = b'{"schema":"guard-hook-envelope.v2","schema":"other"}'
     paths_before = {path.relative_to(state_dir) for path in state_dir.rglob("*")}
     result = subprocess.run(
@@ -173,7 +173,7 @@ def test_native_hook_client_rejects_duplicate_edge_keys_without_fallback(
     )
     assert result.returncode == 0
     assert json.loads(result.stdout) == {
-        "error": "native_request_invalid_json",
+        "error": "native_json_duplicate_key",
         "retryable": False,
     }
     assert {path.relative_to(state_dir) for path in state_dir.rglob("*")} == paths_before

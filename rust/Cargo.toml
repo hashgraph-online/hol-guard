@@ -4,6 +4,7 @@ members = [
     "crates/guard-archive",
     "crates/guard-command",
     "crates/guard-contracts",
+    "crates/guard-google-identity",
     "crates/guard-rules",
     "crates/guard-scanner",
     "crates/guard-seatbelt",
@@ -16,6 +17,10 @@ members = [
 ]
 resolver = "2"
 
+[profile.release]
+# Executable behavior is unchanged; omit symbol tables from distributed binaries.
+strip = "symbols"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
@@ -23,19 +28,38 @@ license = "Apache-2.0"
 rust-version = "1.88"
 
 [workspace.dependencies]
+base64 = "=0.22.1"
+mailparse = "=0.17.0"
 hex = "0.4.3"
+caseless = "0.2.2"
 fs2 = "0.4.3"
 ring = "0.17.14"
+rsa = "0.9.8"
 getrandom = "0.3.3"
 libc = "0.2.175"
 nix = { version = "0.31.3", features = ["fs", "poll", "process", "signal", "socket"] }
 regex = "1.11.2"
+fancy-regex = "0.19"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.143"
+idna = "1.0"
+percent-encoding = "2.3"
+pep440_rs = "=0.7.3"
+serde_json = { version = "1.0.143", features = ["arbitrary_precision"] }
+aes = "0.8.4"
+base64ct = { version = "1.7.3", features = ["alloc"] }
+cbc = "0.1.2"
+hmac = "0.12.1"
 sha2 = "0.10.9"
+sha1 = "0.10.6"
+pbkdf2 = "0.12.2"
+scrypt = "0.11.0"
+base32ct = { version = "0.2.0", features = ["alloc"] }
 sysinfo = "=0.37.2"
 thiserror = "2.0.16"
 windows-permissions = "0.2.4"
+toml = "0.8.23"
+roxmltree = "0.21.1"
 winapi = "0.3.9"
 
 [workspace.lints.rust]

@@ -65,11 +65,45 @@ def test_resident_change_waits_for_new_ack_instead_of_returning_an_unready_polic
     assert not acknowledgement.is_alive()
 
 
-@pytest.mark.parametrize("deadline", [None, 100.25, 99.0])
-def test_resident_change_preserves_existing_deadline_and_never_admits_without_ack(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, deadline: float | None
+def test_control_mutation_contention_waits_for_committed_policy_ack(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     worker, publisher = waiting_worker(monkeypatch, tmp_path)
+    publisher._record_error("native_command_control_mutation_in_progress")
+    calls: list[float] = []
+
+    def acknowledge(wait_deadline: float) -> bool:
+        calls.append(wait_deadline)
+        with publisher._condition:
+            publisher._snapshot = {
+                "generation": 2,
+                "policy_digest": "committed",
+                "runtime_identity": "runtime",
+                "mode": "enforce",
+            }
+            publisher._acked = True
+            publisher._last_error = None
+        return True
+
+    monkeypatch.setattr(publisher, "wait_until_ready", acknowledge)
+    deadline = time.monotonic() + 0.5
+    try:
+        binding = worker.prepare_workspace_policy(tmp_path, deadline=deadline)
+        assert calls == [deadline]
+        assert binding is not None and binding["policy_digest"] == "committed"
+    finally:
+        publisher.close()
+
+
+@pytest.mark.parametrize(
+    "error", ["native_policy_snapshot_resident_changed", "native_command_control_mutation_in_progress"]
+)
+@pytest.mark.parametrize("deadline", [None, 100.25, 99.0])
+def test_resident_change_preserves_existing_deadline_and_never_admits_without_ack(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, deadline: float | None, error: str
+) -> None:
+    worker, publisher = waiting_worker(monkeypatch, tmp_path)
+    publisher._record_error(error)
     calls: list[float] = []
     monkeypatch.setattr(worker_module, "time", SimpleNamespace(monotonic=lambda: 100.0))
 

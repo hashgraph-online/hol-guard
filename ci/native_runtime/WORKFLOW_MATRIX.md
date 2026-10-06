@@ -10,7 +10,7 @@ python -m ci.native_runtime.probe_workflow_matrix --live-omp \
 ```
 
 The model defaults to `opencode-go/deepseek-flash`. `omp` must be on PATH. The existing isolated
-test project must contain `tests/workflow.test.mjs`, `tests/zcode-multi.test.mjs`
+test project must contain `tests/workflow.test.mjs`, `tests/secondary.test.mjs`
 and its already-installed local Vitest. This runner never installs dependencies,
 enables Codex, grants approvals, changes user policy, or mutates the test project.
 It creates a fresh disposable home, workspace and Guard state for each run.
@@ -27,7 +27,7 @@ on Windows, enable Developer Mode or use an account with that privilege.
 - Protected Vitest calls must execute through the containment sink, preserve
   original input in presentation metadata and produce passing test output.
 - Coverage includes quoted/absolute/outside reads; multi-file, clustered-option,
-  piped and recursive searches; bounded word counts and stdin filters;
+  piped and recursive searches; bounded word counts, byte inspection and stdin filters;
   copy-file/copy-directory; mkdir/touch/mv; verified absolute cwd transitions
   followed by reads or one bounded filesystem mutation; GitHub
   GET comparison with a quoted jq expression; GitHub compound commands using
@@ -35,7 +35,8 @@ on Windows, enable Developer Mode or use an account with that privilege.
   with directory routing; Bun x/bunx and cross-project cwd. Git inspection uses
   a fresh repository inside the disposable workspace, not a user's repository.
 - Synthetic secret reads/copies, secret aliases, secret directory walks,
-  directory deletion, destructive chains, Git metadata writes, GitHub mutation,
+  byte inspection of secret files or secret-producing pipelines, directory deletion,
+  destructive chains, Git metadata writes, GitHub mutation,
   external hosts and auth-token reads must remain guarded. Safe GitHub reads
   combined with secret access, deletion or unknown execution must also remain
   guarded. Git configuration/execution overrides and unsupported routing forms

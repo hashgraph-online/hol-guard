@@ -10,6 +10,124 @@ fn request(command: &str) -> CommandModelRequestV1 {
 }
 
 #[test]
+fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    for command in [
+        "od -c src/lib.rs",
+        "wc -c src/lib.rs && od -c src/lib.rs | tail -2",
+        "cat src/lib.rs | od -An -tx1",
+        "cat src/lib.rs | od -c -",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+    }
+    for command in [
+        "od -c .env",
+        "od -c ~/.ssh/id_rsa",
+        "od -c /etc/shadow",
+        "cat .env | od -c",
+        "od -c src/lib.rs; rm -rf src",
+        "od -c src/lib.rs > .env",
+        "od -c src/lib.rs .env",
+        "od -c",
+        "od --unknown src/lib.rs",
+        "od -c $(echo src/lib.rs)",
+    ] {
+        let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
+        assert!(
+            decision.is_err() || decision.unwrap().minimum_action != "allow",
+            "{command}"
+        );
+    }
+    assert_ne!(
+        evaluate_pre_tool(&request("od -c src/lib.rs"))
+            .unwrap()
+            .minimum_action,
+        "allow"
+    );
+}
+
+#[test]
+fn bounded_find_listings_do_not_admit_actions_or_sensitive_targets() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    for command in [
+        "find src -type f",
+        "find -P src -maxdepth 3 -type f",
+        "find src -type f | head -5",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+    }
+    for command in [
+        "find .env -type f",
+        "find ~/.ssh -type f",
+        "find -L src -type f",
+        "find src -type f -delete",
+        "find src -type f -exec sh {} ;",
+        "find src -type f -fprint output.txt",
+        "find src .env -type f",
+        "find src -maxdepth 999 -type f",
+        "find src -type f && cat .env",
+    ] {
+        let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
+        assert!(
+            decision.is_err() || decision.unwrap().minimum_action != "allow",
+            "{command}"
+        );
+    }
+    assert_ne!(
+        evaluate_pre_tool(&request("find src -type f"))
+            .unwrap()
+            .minimum_action,
+        "allow"
+    );
+}
+
+#[test]
+fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    for command in [
+        "test -f src/lib.rs && cat src/lib.rs",
+        "test -d src && ls src",
+        "test -e src/lib.rs; echo done",
+        "test -r src/lib.rs && head -1 src/lib.rs",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+        assert_ne!(
+            evaluate_pre_tool(&request(command)).unwrap().minimum_action,
+            "allow"
+        );
+    }
+    for command in [
+        "test -f .env && cat .env",
+        "test -e ~/.ssh/id_rsa",
+        "test -f src/lib.rs && rm -rf src",
+        "test -f src/lib.rs -o -f .env",
+        "test -f $(echo src/lib.rs)",
+        "test -x src/lib.rs",
+    ] {
+        let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
+        assert!(
+            decision.is_err() || decision.unwrap().minimum_action != "allow",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn permits_only_standalone_plain_directory_changes() {
     assert!(!safe_directory_target(r"~/.ss\h"));
     for command in [
@@ -98,6 +216,25 @@ fn stderr_null_sink_preserves_each_compound_command_risk() {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
         assert_ne!(decision.minimum_action, "allow", "{command}");
+    }
+}
+
+#[test]
+fn encoded_github_reads_remain_benign_in_compounds() {
+    for command in [
+        "gh api 'repos/owner/repo/contents/app/%28group%29/file.ts?ref=main'",
+        "echo ready && gh api 'repos/owner/repo/commits?path=app/%28group%29/file.ts' --jq '.[].sha' | head -1",
+    ] {
+        let result = evaluate_pre_tool(&request(command)).unwrap();
+        assert_eq!(result.minimum_action, "allow", "{command}: {}", result.reason_code);
+    }
+    for command in [
+        "gh api 'repos/owner/repo/contents/app/%28group%29/file.ts'; cat .env",
+        "gh api -X DELETE 'repos/owner/repo/contents/app/%28group%29/file.ts'",
+        "gh api 'repos/owner/repo/contents/app/%28group%29/file.ts' && rm -rf src",
+    ] {
+        let result = evaluate_pre_tool(&request(command)).unwrap();
+        assert_ne!(result.minimum_action, "allow", "{command}");
     }
 }
 
