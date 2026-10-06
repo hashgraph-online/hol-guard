@@ -92,6 +92,7 @@
       "command.gitsync",
       "command.google-workspace.gog",
       "command.keibidrop",
+      "command.mcp-agenthub",
       "command.mcp-asdecided",
       "command.mcp-contribos",
       "command.mcp-filesystem",
