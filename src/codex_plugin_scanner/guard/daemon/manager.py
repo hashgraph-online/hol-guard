@@ -2664,69 +2664,20 @@ def _bounded_process_query_stdout(
     timeout_seconds: float = _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS,
     output_limit_bytes: int = _GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES,
 ) -> str | None:
-    """Return bounded child stdout, or ``None`` after failure, timeout, or overflow."""
+    """Return verified bounded stdout, or ``None`` when enumeration is unknown."""
 
-    if timeout_seconds <= 0 or output_limit_bytes < 0:
-        return None
-    try:
-        process = _spawn_bounded_process_query(command)
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return None
-    stdout = getattr(process, "stdout", None)
-    if stdout is None:
-        _terminate_bounded_process_query(process)
-        return None
+    from .process_query_capture import bounded_process_query_stdout
 
-    captured = bytearray()
-    overflow = threading.Event()
-    errors: list[OSError | ValueError] = []
-    reader = threading.Thread(
-        target=_capture_bounded_process_query_stdout,
-        args=(stdout, captured, output_limit_bytes, overflow, errors),
-        name="guard-daemon-process-query",
-        daemon=True,
+    return bounded_process_query_stdout(
+        command,
+        timeout_seconds=timeout_seconds,
+        output_limit_bytes=output_limit_bytes,
+        monitor_interval_seconds=_GUARD_DAEMON_PROCESS_QUERY_MONITOR_INTERVAL_SECONDS,
+        cleanup_timeout_seconds=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS,
+        spawn=_spawn_bounded_process_query,
+        capture_stdout=_capture_bounded_process_query_stdout,
+        terminate=_terminate_bounded_process_query,
     )
-    timed_out = False
-    reader_started = False
-    deadline = time.monotonic() + timeout_seconds
-    try:
-        reader.start()
-        reader_started = True
-        while process.poll() is None:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                timed_out = True
-                break
-            if overflow.wait(min(_GUARD_DAEMON_PROCESS_QUERY_MONITOR_INTERVAL_SECONDS, remaining)):
-                break
-        if process.poll() is not None and reader.is_alive():
-            reader.join(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
-    except BaseException:
-        _terminate_bounded_process_query(process)
-        raise
-    finally:
-        if timed_out or overflow.is_set() or process.poll() is None or reader.is_alive():
-            _terminate_bounded_process_query(process)
-        if reader_started:
-            reader.join(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
-            if reader.is_alive():
-                with suppress(OSError, ValueError):
-                    stdout.close()
-                reader.join(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
-
-    if timed_out or overflow.is_set() or errors or reader.is_alive():
-        return None
-    try:
-        returncode = process.wait(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
-    except subprocess.TimeoutExpired:
-        _terminate_bounded_process_query(process)
-        return None
-    if returncode != 0:
-        return None
-    try:
-        return bytes(captured).decode("utf-8", errors="strict")
-    except UnicodeDecodeError:
-        return None
 
 
 def _running_ephemeral_guard_daemon_processes() -> list[tuple[int, Path, float]]:

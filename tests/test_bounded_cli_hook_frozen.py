@@ -142,7 +142,8 @@ def test_frozen_bounded_hook_prefers_isolated_stdlib_client(
 
     script = bounded_cli_hook_bridge.bounded_hook_script_path(guard_home, "grok")
     assert script is not None
-    assert command == ("/usr/bin/python3", "-I", str(script.resolve()))
+    assert command[:3] == ("/usr/bin/python3", "-I", str(script.resolve()))
+    assert json.loads(command[3])["guard_home"] == str(guard_home.resolve())
     source = script.read_text(encoding="utf-8")
     assert 'HARNESS = "grok"' in source
     assert "TIMEOUT_SECONDS = 25" in source

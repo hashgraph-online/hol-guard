@@ -3147,7 +3147,7 @@ class TestGuardApprovals:
         assert approvals[0]["decision_v2_json"]["action"] == "ask"
         assert (
             approvals[0]["decision_v2_json"]["harness_message"]
-            == "HOL Guard needs a fresh approval because this action changed."
+            == "HOL Guard needs a fresh approval before this action can run."
         )
 
     def test_guard_approvals_cli_lists_and_resolves_requests(self, tmp_path, capsys, monkeypatch):

@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 _MAX_INPUT_BYTES = 4 * 1024 * 1024
+_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
 _MAX_COMPILER_BYTES = 128 * 1024 * 1024
@@ -213,7 +214,7 @@ def _canonical_request(request: Mapping[str, object]) -> bytes:
         )
     except (TypeError, ValueError) as exc:
         raise NativeSourceCompilerError("compiler request is not canonical JSON") from exc
-    if len(encoded) > _MAX_INPUT_BYTES:
+    if len(encoded) > _MAX_REQUEST_BYTES:
         raise NativeSourceCompilerError("compiler request exceeds the native input bound")
     return encoded
 
