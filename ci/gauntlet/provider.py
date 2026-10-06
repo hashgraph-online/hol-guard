@@ -152,6 +152,10 @@ class InferenceRelay:
                             self.wfile.write(line)
                             self.wfile.flush()
                             row["delivered_bytes"] += len(line)
+                            # DONE terminates an SSE event, even when the provider
+                            # keeps its HTTP connection open after the delimiter.
+                            if completed and not line.strip():
+                                break
                     with relay._lock:
                         row.update(
                             status="completed" if completed else "incomplete-stream",
