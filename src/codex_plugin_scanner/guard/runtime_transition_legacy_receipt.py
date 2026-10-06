@@ -53,10 +53,16 @@ def _deadline_connection(store: _ReceiptStore, deadline: float) -> Iterator[sqli
     )
     # Lock-wait floor 0.5s: 100ms trips on real contention under coverage
     # shards; operation_seconds still bounds total wall time at the deadline.
-    lock_cap = min(0.5, max(0.0, deadline - time.monotonic()))
+    # Compute remaining once: if the deadline expires between check() and the
+    # cap, a non-positive value must surface as TransitionError, not the
+    # ValueError sqlite_connect_timeout_override raises for a non-positive cap.
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TransitionError("admission_deadline_expired")
+    lock_cap = min(0.5, remaining)
     try:
         with (
-            sqlite_connect_timeout_override(lock_cap, operation_seconds=max(0.0, deadline - time.monotonic())),
+            sqlite_connect_timeout_override(lock_cap, operation_seconds=remaining),
             opener as connection,
         ):
             yield connection
