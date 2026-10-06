@@ -23,13 +23,16 @@ from .io import (
 from .kit import MAX_ARTIFACT_BYTES, Kit, build_kit
 from .models import Metadata, load_discovery
 from .repository_edits import (
+    BINDINGS_DIR,
     PYPROJECT_PATH,
     STAGING_PATH,
     TRUST_PATH,
     conflict,
     edit_pyproject,
     edit_staging,
-    edit_trust,
+    project_trust_map,
+    trust_binding_content,
+    trust_binding_path,
     trust_members,
 )
 from .review import load_review
@@ -246,15 +249,38 @@ def _contribution_collisions(root: Path, metadata: Metadata) -> None:
 
 def _shared_files(root: Path, metadata: Metadata) -> dict[str, str]:
     paths = [PYPROJECT_PATH, TRUST_PATH, STAGING_PATH]
-    return {path: text_from_bytes(read_bytes(root / path)) for path in paths}
+    files = {path: text_from_bytes(read_bytes(root / path)) for path in paths}
+    bindings_dir = root / BINDINGS_DIR
+    if bindings_dir.is_dir():
+        for binding in sorted(bindings_dir.glob("*.v1.json")):
+            files[str(binding.relative_to(root)).replace("\\", "/")] = text_from_bytes(read_bytes(binding))
+    return files
 
 
 def _edited_shared(files: dict[str, str], metadata: Metadata) -> dict[str, str]:
+    # The builder authors a per-extension binding file, not a shared-array
+    # append; the committed aggregate is regenerated as the projection of all
+    # bindings including the new one.
+    binding_path = trust_binding_path(metadata)
+    binding_content = trust_binding_content(metadata)
+    bindings = {path: content for path, content in files.items() if path.startswith(f"{BINDINGS_DIR}/")}
+    # Guard against reclassifying an existing trusted extension.
+    classes = trust_members(project_trust_map(bindings))
+    if metadata.catalog_id in classes["first-party"] or metadata.catalog_id in classes["trusted-library"]:
+        raise conflict("The builder cannot modify an existing trusted extension or change its trust class.")
+    if metadata.catalog_id not in classes["external"]:
+        bindings[binding_path] = binding_content
+    aggregate = project_trust_map(bindings)
+    # Preserve the committed file's line endings so CRLF checkouts stay byte-stable.
+    if "\r\n" in files.get(TRUST_PATH, ""):
+        aggregate = aggregate.replace("\n", "\r\n")
     edited = {
-        TRUST_PATH: edit_trust(files[TRUST_PATH], metadata),
+        TRUST_PATH: aggregate,
         PYPROJECT_PATH: edit_pyproject(files[PYPROJECT_PATH], metadata),
         STAGING_PATH: edit_staging(files[STAGING_PATH], metadata),
     }
+    if binding_path in bindings and binding_path not in files:
+        edited[binding_path] = binding_content
     return edited
 
 
@@ -268,10 +294,12 @@ def plan_repository(kit: Kit, repository: Path) -> IntegrationPlan:
     metadata = kit.discovery.metadata
     previous, legacy_orphans = _previous_kit(root, metadata)
     shared = _shared_files(root, metadata)
-    classes = trust_members(shared[TRUST_PATH])
+    classes = trust_members(project_trust_map({p: c for p, c in shared.items() if p.startswith(f"{BINDINGS_DIR}/")}))
     if previous is None and any(metadata.catalog_id in values for values in classes.values()):
         raise conflict("This catalog ID already exists and is not owned by this authoring workflow.")
-    if previous is not None and _edited_shared(shared, previous.discovery.metadata) != shared:
+    if previous is not None and any(
+        shared.get(path) != edited for path, edited in _edited_shared(shared, previous.discovery.metadata).items()
+    ):
         raise conflict(
             "An installed registration or packaging entry was removed; reconcile the shared-file edit first."
         )
@@ -285,7 +313,9 @@ def plan_repository(kit: Kit, repository: Path) -> IntegrationPlan:
             raise conflict("A new contribution would overwrite an existing file without an authoring ownership record.")
         changes.append(Change(path, before, after))
     for path, after in _edited_shared(shared, metadata).items():
-        changes.append(Change(path, shared[path].encode("utf-8"), after.encode("utf-8")))
+        before_text = shared.get(path)
+        before = before_text.encode("utf-8") if before_text is not None else None
+        changes.append(Change(path, before, after.encode("utf-8")))
     # Legacy generated test modules are no longer managed outputs: remove each
     # accepted orphan only while its contents still match the ownership digest,
     # so a contributor-edited file is never deleted.
