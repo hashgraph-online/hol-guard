@@ -46,7 +46,7 @@ def test_disabled_cli_evidence_failure_never_changes_denial(
         runtime_workspace=None,
         store=store,
     )
-    assert status == 0
+    assert status == 2
     assert responses[0]["policy_action"] == "block"
     assert responses[0]["hookSpecificOutput"]["permissionDecision"] == "deny"
     if failure != "start":
@@ -140,7 +140,7 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
             runtime_workspace=None,
             store=store,
         )
-        assert status == 0
+        assert status == 2
         assert len(responses) == 1
         response = responses[0]
     hook_output = response["hookSpecificOutput"]
