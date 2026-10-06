@@ -56,15 +56,20 @@ def test_native_failure_preserves_codex_wire_response(
         store=store,
     )
     captured = capsys.readouterr()
-    assert result == 0
     response = json.loads(captured.out)
+    # rc mirrors the emitted verdict per the harness's adapter contract:
+    # codex deny -> 1 (generic CLI contract), allow -> 0. A blanket 0 lets a
+    # denied protected action pass shell harnesses that read only the process
+    # status (PRD S10: unavailable authority cannot produce permit).
     assert response["hookSpecificOutput"]["hookEventName"] == event
     if event == "PreToolUse":
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert result == 1
     else:
         assert response["continue"] is True
         assert "permissionDecision" not in response["hookSpecificOutput"]
         assert "decision" not in response["hookSpecificOutput"]
+        assert result == 0
 
 
 @pytest.mark.parametrize("event", ("PreToolUse", "PermissionRequest"))
@@ -85,12 +90,14 @@ def test_pipeline_unavailable_preserves_codex_wire_response(
             store=GuardStore(context.guard_home), wait_for_native_policy=False, publish_native_policy=False
         ),
     )
-    assert result == 0
     response = json.loads(capsys.readouterr().out)
+    # rc mirrors the emitted verdict: codex deny -> 1, allow -> 0.
     assert response["hookSpecificOutput"]["hookEventName"] == event
     if event == "PreToolUse":
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert result == 1
     else:
         assert response["continue"] is True
         assert "permissionDecision" not in response["hookSpecificOutput"]
         assert "decision" not in response["hookSpecificOutput"]
+        assert result == 0

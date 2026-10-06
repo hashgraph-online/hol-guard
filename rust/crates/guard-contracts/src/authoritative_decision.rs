@@ -112,7 +112,7 @@ fn action_messages(a: GuardAction) -> (&'static str, &'static str, &'static str,
         GuardAction::RequireReapproval => (
             "ask",
             "Fresh approval required",
-            "HOL Guard needs a fresh approval because this action changed.",
+            "HOL Guard needs a fresh approval before this action can run.",
             "Choose the smallest approval scope that matches your intent, then retry.",
         ),
         GuardAction::Block => (

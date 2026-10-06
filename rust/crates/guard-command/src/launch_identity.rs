@@ -14,9 +14,10 @@
 //! exactly like the Python original.
 
 use std::collections::HashSet;
-use std::fs::{self, File, Metadata};
+use std::fs::{self, Metadata};
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -319,7 +320,14 @@ fn cached_executable_hash(
     path: &Path,
     expected_stat: StatKey,
 ) -> (Option<String>, &'static str, Option<String>, &'static str) {
-    let file = match File::open(path) {
+    // Python: os.open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW). Rust File::open
+    // would follow a symlink hop; O_NOFOLLOW makes the final-component symlink
+    // fail with "open_failed" exactly like the source.
+    let file = match std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+    {
         Ok(f) => f,
         Err(_) => return (None, "open_failed", None, "unverified"),
     };
@@ -379,8 +387,12 @@ fn parse_executable_shebang(prefix: &[u8]) -> (Option<String>, &'static str) {
     if !prefix.starts_with(b"#!") {
         return (None, "not_script");
     }
-    // bytes.splitlines() splits on \n and \r\n; first_line covers both.
-    let first_line: &[u8] = match prefix.iter().position(|&b| b == b'\n' || b == b'\r') {
+    // Python bytes.splitlines() boundaries: \n, \r, \r\n, \v, \f,
+    // \x1c, \x1d, \x1e, \x85. first_line is up to the first boundary.
+    let first_line: &[u8] = match prefix
+        .iter()
+        .position(|&b| matches!(b, b'\n' | b'\r' | 0x0b | 0x0c | 0x1c | 0x1d | 0x1e | 0x85))
+    {
         Some(i) => &prefix[..i],
         None => prefix,
     };
@@ -388,7 +400,7 @@ fn parse_executable_shebang(prefix: &[u8]) -> (Option<String>, &'static str) {
         return (None, "too_long");
     }
     let decoded = match std::str::from_utf8(&first_line[2..]) {
-        Ok(s) => s.trim(),
+        Ok(s) => python_str_strip(s),
         Err(_) => return (None, "invalid_encoding"),
     };
     if decoded.is_empty() {
@@ -680,20 +692,20 @@ fn identity_shebang_status(identity: &Value) -> &'static str {
 }
 
 // `_raw_shebang_for_identity` (:1226-1253).
-fn raw_shebang_for_identity(identity: &Value) -> (Option<String>, &'static str) {
+fn raw_shebang_for_identity(identity: &Value) -> (Option<String>, String) {
     let initial_status = identity.get("shebang_status").and_then(|v| v.as_str());
     if initial_status != Some("verified") {
-        return (None, "unverified");
+        return (None, initial_status.unwrap_or("unverified").to_string());
     }
     let path = identity.get("path").and_then(|v| v.as_str());
     let expected_digest = identity.get("sha256").and_then(|v| v.as_str());
     let (path, expected_digest) = match (path, expected_digest) {
         (Some(p), Some(d)) => (p, d),
-        _ => return (None, "unverified"),
+        _ => return (None, "unverified".to_string()),
     };
     let metadata = match fs::metadata(path) {
         Ok(m) => m,
-        Err(_) => return (None, "identity_changed"),
+        Err(_) => return (None, "identity_changed".to_string()),
     };
     let (digest, hash_status, shebang, shebang_status) =
         cached_executable_hash(Path::new(path), stat_key(&metadata));
@@ -702,9 +714,9 @@ fn raw_shebang_for_identity(identity: &Value) -> (Option<String>, &'static str) 
         || shebang_status != "verified"
         || shebang.is_none()
     {
-        return (None, "identity_changed");
+        return (None, "identity_changed".to_string());
     }
-    (shebang, "verified")
+    (shebang, "verified".to_string())
 }
 
 // `_runtime_identity_contains_reuse_nonce` (:1710-1717).
@@ -937,7 +949,11 @@ pub fn build_runtime_launch_identity(
                     .collect(),
             ))
         });
-    let _ = environment; // kept for parity with the Python signature
+    // Python: `environment = launch_env if launch_env is not None else os.environ`
+    // and `effective_search_path = search_path or environment.get("PATH")` —
+    // the None-search_path fallback sources PATH from the launch env.
+    let effective_search_path: Option<&str> =
+        search_path.or_else(|| environment.get("PATH").and_then(|v| v.as_str()));
 
     if command.is_null() || command.as_str() == Some("") {
         return json!({
@@ -1007,7 +1023,7 @@ pub fn build_runtime_launch_identity(
         } else {
             build_runtime_executable_identity(
                 &Value::String(executable.clone()),
-                search_path,
+                effective_search_path,
                 Some(&effective_cwd),
                 home_dir,
                 true,
@@ -1018,7 +1034,7 @@ pub fn build_runtime_launch_identity(
     let entrypoint = runtime_entrypoint_identity(
         &executable_identity,
         executable_shebang.as_deref(),
-        executable_shebang_status,
+        executable_shebang_status.as_str(),
         direct_executable,
         &launch_args,
         &effective_cwd,
@@ -1344,34 +1360,37 @@ fn direct_executable_runtime_entrypoint_identity(
         }
         Some((i, a)) => (i, a),
     };
+    // `search_path` comes from the launch env (PATH) so `env` shebangs resolve
+    // interpreters against the same path the spawned process will see.
+    let search_path_opt = launch_env
+        .and_then(|v| v.get("PATH"))
+        .and_then(|v| v.as_str());
     let interpreter_identity = build_runtime_executable_identity(
         &Value::String(interpreter.clone()),
-        None,
+        search_path_opt,
         Some(launch_cwd),
         None,
         true,
     );
     let interpreter_name = executable_name(Some(&interpreter)).unwrap_or_default();
     result["interpreter"] = interpreter_identity.clone();
+    result["interpreter_args_sha256"] = Value::String(launch_argv_digest(&interpreter_args));
     if UNRESOLVED_CODE_LAUNCHER_NAMES.contains(&interpreter_name.as_str())
         || interpreter_identity.get("status").and_then(|v| v.as_str()) != Some("verified")
+        || identity_shebang_status(&interpreter_identity) != "native"
     {
+        let env_selector: Vec<String> = std::iter::once(interpreter.clone())
+            .chain(interpreter_args.iter().cloned())
+            .collect();
         result.as_object_mut().unwrap().extend(
-            unproven_runtime_entrypoint("direct-env-script", "env_interpreter_unresolved", None)
-                .as_object()
-                .unwrap()
-                .clone(),
-        );
-        result["interpreter"] = interpreter_identity;
-        result["launcher"] = launcher_identity;
-        return result;
-    }
-    if identity_shebang_status(&interpreter_identity) != "native" {
-        result.as_object_mut().unwrap().extend(
-            unproven_runtime_entrypoint("direct-env-script", "env_interpreter_nested_script", None)
-                .as_object()
-                .unwrap()
-                .clone(),
+            unproven_runtime_entrypoint(
+                "direct-env-script",
+                "env_interpreter_unresolved",
+                Some(&env_selector),
+            )
+            .as_object()
+            .unwrap()
+            .clone(),
         );
         result["interpreter"] = interpreter_identity;
         result["launcher"] = launcher_identity;
@@ -1738,31 +1757,37 @@ fn python_package_initializer_identities(
 fn node_runtime_entrypoint_identity(
     args: &[String],
     launch_cwd: &Path,
-    _launch_env: Option<&Value>,
+    launch_env: Option<&Value>,
 ) -> Value {
-    #[allow(clippy::all)]
-    const HARMLESS_FLAGS: &[&str] = &[
-        "--no-deprecation",
-        "--pending-deprecation",
-        "--throw-deprecation",
-        "--trace-deprecation",
-        "--trace-warnings",
-        "--no-warnings",
-        "--abort-on-uncaught-exception",
-        "--max-old-space-size",
-        "--max-semi-space-size",
-        "--max-http-header-size",
-        "--enable-source-maps",
-        "--experimental-vm-modules",
-        "--experimental-json-modules",
-        "--experimental-modules",
-        "--experimental-specifier-resolution",
-        "--preserve-symlinks",
-        "--preserve-symlinks-main",
-    ];
+    // NODE_OPTIONS injects a caller-controlled `-r`/`-e` preamble ahead of
+    // the script argv, so any visible value makes the entrypoint unproven.
+    let node_options_nonempty = launch_env
+        .and_then(|v| v.get("NODE_OPTIONS"))
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    if node_options_nonempty {
+        return unproven_runtime_entrypoint("node-launch", "environment_options_unresolved", None);
+    }
     let mut index = 0usize;
+    const HARMLESS_FLAGS: &[&str] = &[
+        "--abort-on-uncaught-exception",
+        "--enable-source-maps",
+        "--no-addons",
+        "--no-deprecation",
+        "--no-warnings",
+        "--trace-deprecation",
+        "--trace-uncaught",
+        "--trace-warnings",
+        "--use-bundled-ca",
+        "--use-openssl-ca",
+    ];
     while index < args.len() {
         let argument = args[index].as_str();
+        if argument == "--" {
+            index += 1;
+            break;
+        }
         if argument == "-e" || argument == "--eval" || argument == "-p" || argument == "--print" {
             if index + 1 >= args.len() {
                 return unproven_runtime_entrypoint("node-inline", "missing_inline_code", None);
@@ -1775,10 +1800,7 @@ fn node_runtime_entrypoint_identity(
                 argument.split_once('=').map(|(_, v)| v).unwrap_or(""),
             );
         }
-        if HARMLESS_FLAGS
-            .iter()
-            .any(|f| argument == *f || argument.starts_with(&format!("{f}=")))
-        {
+        if HARMLESS_FLAGS.contains(&argument) {
             index += 1;
             continue;
         }
@@ -1821,14 +1843,28 @@ fn shell_runtime_entrypoint_identity(
     if has_startup_env {
         return unproven_runtime_entrypoint(
             &format!("{shell}-launch"),
-            "shell_startup_unresolved",
+            "shell_startup_environment_unresolved",
             None,
         );
     }
-    let index = 0usize;
-    if index < args.len() {
+    let mut index = 0usize;
+    const HARMLESS_LONG: &[&str] = &[
+        "--noprofile",
+        "--norc",
+        "--posix",
+        "--restricted",
+        "--verbose",
+    ];
+    const HARMLESS_SHORT: &str = "abefhkmnptuvxBCEHPT"; // "-i" is already excluded
+    while index < args.len() {
         let argument = args[index].as_str();
-        if argument == "-c" {
+        if argument == "--" {
+            index += 1;
+            break;
+        }
+        let clustered_inline =
+            argument.starts_with('-') && !argument.starts_with("--") && argument[1..].contains('c');
+        if argument == "-c" || argument == "--command" || clustered_inline {
             if index + 1 >= args.len() {
                 return unproven_runtime_entrypoint(
                     &format!("{shell}-inline"),
@@ -1838,6 +1874,19 @@ fn shell_runtime_entrypoint_identity(
             }
             return inline_runtime_entrypoint(&format!("{shell}-inline"), &args[index + 1]);
         }
+        if HARMLESS_LONG.contains(&argument) {
+            index += 1;
+            continue;
+        }
+        // Bare "-" has an empty suffix set, which Python treats as a subset
+        // of the harmless options and therefore skips.
+        let harmless_short = argument.starts_with('-')
+            && !argument.starts_with("--")
+            && argument[1..].chars().all(|c| HARMLESS_SHORT.contains(c));
+        if harmless_short {
+            index += 1;
+            continue;
+        }
         if argument.starts_with('-') {
             return unproven_runtime_entrypoint(
                 &format!("{shell}-script"),
@@ -1845,6 +1894,7 @@ fn shell_runtime_entrypoint_identity(
                 Some(std::slice::from_ref(&args[index])),
             );
         }
+        break;
     }
     if index >= args.len() {
         return unproven_runtime_entrypoint(
@@ -1996,12 +2046,10 @@ fn unproven_runtime_entrypoint(kind: &str, reason: &str, selector: Option<&[Stri
     let mut map = Map::new();
     map.insert("kind".to_string(), Value::String(kind.to_string()));
     map.insert("reason".to_string(), Value::String(reason.to_string()));
-    if let Some(sel) = selector {
-        map.insert(
-            "selector".to_string(),
-            Value::Array(sel.iter().map(|s| Value::String(s.clone())).collect()),
-        );
-    }
+    map.insert(
+        "selector_sha256".to_string(),
+        Value::String(launch_argv_digest(selector.unwrap_or(&[]))),
+    );
     map.insert("status".to_string(), Value::String("unproven".to_string()));
     map.insert("reuse_nonce".to_string(), Value::String(token_hex(16)));
     Value::Object(map)
@@ -2177,7 +2225,7 @@ mod tests {
     fn temp_script(body: &str) -> (TempDir, PathBuf) {
         let dir = TempDir::new();
         let path = dir.path().join("run.sh");
-        let mut f = File::create(&path).unwrap();
+        let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(body.as_bytes()).unwrap();
         drop(f);
         let mut perms = fs::metadata(&path).unwrap().permissions();
@@ -2445,5 +2493,88 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(package_advisory_ids(&package), vec!["GHSA-X"]);
+    }
+
+    /// `env -S` option clusters must terminate after an operand-consuming flag
+    /// (`short_index = len(token)` in `env_wrapper.parse_env_wrapper`). The port
+    /// omitted that advance, so the cluster loop re-read the same flag until
+    /// `ENV_SPLIT_MAX_EXPANSIONS` tripped and every `#!/usr/bin/env -S ...`
+    /// shebang resolved as `env_shebang_command_unresolved`.
+    #[test]
+    fn env_split_string_cluster_consumes_operand_once() {
+        for (args, expected) in [
+            (
+                vec!["-S", "python", "-m", "bootstrap"],
+                vec!["python", "-m", "bootstrap"],
+            ),
+            (
+                vec!["-S python -m bootstrap"],
+                vec!["python", "-m", "bootstrap"],
+            ),
+            (vec!["-Spython"], vec!["python"]),
+            (vec!["-u", "FOO", "cmd"], vec!["cmd"]),
+            (vec!["-C", "/tmp", "cmd"], vec!["cmd"]),
+            (vec!["cmd"], vec!["cmd"]),
+        ] {
+            let tokens: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+            let parsed = crate::env_wrapper::parse_env_wrapper(&tokens, None, None);
+            assert_eq!(parsed.error, None, "{args:?}");
+            assert!(parsed.complete, "{args:?}");
+            assert_eq!(parsed.executable_argv, expected, "{args:?}");
+        }
+    }
+
+    /// Descriptor-race parity for the ported executable hasher. The Python
+    /// `test_windows_executable_hash_keeps_descriptor_race_checks` matrix was
+    /// retired with the approval_context helper cluster; this keeps the same
+    /// decision contract on the Rust side: any stat field that moves between
+    /// the pre-open probe and the opened descriptor yields `identity_raced`
+    /// with no digest, while an unmoved stat verifies.
+    #[test]
+    fn executable_hash_reports_identity_races() {
+        let (_dir, path) = temp_script("#!/bin/sh\necho hi\n");
+        let expected = stat_key(&fs::metadata(&path).unwrap());
+        let (digest, status, _shebang, _shebang_status) = cached_executable_hash(&path, expected);
+        assert_eq!(status, "verified");
+        assert!(digest.is_some());
+
+        fn assert_identity_raced(path: &Path, expected: StatKey) {
+            let (digest, status, _shebang, _shebang_status) =
+                cached_executable_hash(path, expected);
+            assert_eq!(status, "identity_raced");
+            assert!(digest.is_none());
+        }
+
+        let mut raced = expected;
+        raced.ino += 1;
+        assert_identity_raced(&path, raced);
+
+        let mut raced = expected;
+        raced.mode &= !0o111;
+        assert_identity_raced(&path, raced);
+
+        let mut raced = expected;
+        raced.mtime_ns += 1;
+        assert_identity_raced(&path, raced);
+
+        let mut raced = expected;
+        raced.ctime_ns += 1;
+        assert_identity_raced(&path, raced);
+
+        let mut raced = expected;
+        raced.size += 1;
+        assert_identity_raced(&path, raced);
+    }
+
+    /// `O_NOFOLLOW` must reject a final-component symlink exactly like the
+    /// Python `os.open(..., O_NOFOLLOW)` it replaced: nothing is hashed.
+    #[cfg(unix)]
+    #[test]
+    fn executable_hash_refuses_final_symlink() {
+        let (dir, path) = temp_script("#!/bin/sh\necho hi\n");
+        let link = dir.path().join("link.sh");
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+        let expected = stat_key(&fs::metadata(&link).unwrap());
+        assert_eq!(cached_executable_hash(&link, expected).1, "open_failed");
     }
 }

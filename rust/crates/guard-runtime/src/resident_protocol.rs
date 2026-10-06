@@ -6,10 +6,13 @@ use guard_contracts::{
     CommandEffectRequestV1, ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
     ContainedPackageScriptExecuteRequestV1, ContainedTestHookRequestV1,
     ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
-    ContextDigestRequestV1, GuardHookEnvelopeV2, McpStdioProbeRequestV1, NativeHookRequestV1,
-    PackageAuthorityDecideRequestV1, PackageIntentParseRequestV1, PromptAnalyzeRequestV1,
-    RuntimeCapabilitiesV1, ShimAdminRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
-    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    ContextDigestRequestV1, GuardHookEnvelopeV2, McpStdioProbeRequestV1,
+    McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1,
+    McpStdioSessionSendRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
+    PackageAuthorityDecideRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1, SupplyChainEvalRequestV1,
+    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION,
+    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -67,15 +70,19 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),
+        guard_contracts::POLICY_DECISION_LOOKUP_FEATURE.into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
     }
     if cfg!(unix) {
         features.push("authenticated-unix-resident-v1".into());
-        // Contained execution dispatch is Unix-only. Do not advertise an
-        // operation that can only return platform-unavailable on Windows.
+        // Capability flags must reflect dispatch reality: features gated
+        // cfg(unix) in resident_ops::evaluate_resident_bytes must not be
+        // advertised on other platforms, or callers route work the binary
+        // cannot honor.
         features.push(guard_contracts::CONTAINED_EXECUTION_FEATURE.into());
+        features.push(guard_contracts::MCP_STDIO_SESSION_FEATURE.into());
     }
     let (program_digest, catalog_digest, trust_digest) =
         guard_command::native_command_program::packaged_program_digests();
@@ -129,10 +136,23 @@ pub(crate) enum ResidentOperationV1 {
     ContainedTestHook(ContainedTestHookRequestV1),
     ShimAdmin(ShimAdminRequestV1),
     McpStdioProbe(McpStdioProbeRequestV1),
+    McpStdioCancel(McpStdioCancelRequest),
+    McpStdioSessionOpen(McpStdioSessionOpenRequestV1),
+    McpStdioSessionSend(McpStdioSessionSendRequestV1),
+    McpStdioSessionRecv(McpStdioSessionRecvRequestV1),
+    McpStdioSessionClose(McpStdioSessionCloseRequestV1),
+    PackageAdvisoryIds(PackageAdvisoryIdsRequestV1),
+    PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     Health(Value),
     Shutdown(Value),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct McpStdioCancelRequest {
+    pub(crate) request_id: String,
 }
 
 #[derive(Debug, Deserialize)]

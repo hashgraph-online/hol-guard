@@ -27,6 +27,12 @@ from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
     _PUBLISH_TIMEOUT_SECONDS,
 )
 from codex_plugin_scanner.guard.native_resident_client import (
+    NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS as _NATIVE_CLEANUP_RETRY_INTERVAL,
+)
+from codex_plugin_scanner.guard.native_resident_client import (
+    NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS as _DAEMON_CLEANUP_TIMEOUT,
+)
+from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,
     native_resident_client_failure_code,
 )
@@ -53,6 +59,23 @@ from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
 def require(condition: bool, code: str) -> None:
     if not condition:
         raise RuntimeError(f"installed_native_extensions_failed:{code}")
+
+
+def close_native_residents_with_retry(home: Path) -> bool:
+    deadline = time.monotonic() + _DAEMON_CLEANUP_TIMEOUT
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        try:
+            if close_native_residents(home, deadline_monotonic=deadline):
+                return True
+        except (OSError, RuntimeError):
+            pass
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(_NATIVE_CLEANUP_RETRY_INTERVAL, remaining))
 
 
 def installed_native_case_runner():
@@ -337,7 +360,7 @@ def exercise(root: Path) -> dict[str, object]:
         case("external-reenabled", "ollama push example-model", revision, matched="command.ollama.push")
         previous_publisher = daemon._server.hook_worker.policy_snapshot_publisher
         daemon.stop()
-        require(close_native_residents(home), "restart_containment")
+        require(close_native_residents_with_retry(home), "restart_containment")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=root, workspace_dir=workspace)
         daemon.start()
         case("restart-retains-controls", "ollama rm example-model", revision, matched="command.ollama.rm")
@@ -470,7 +493,7 @@ def exercise(root: Path) -> dict[str, object]:
         }
     finally:
         daemon.stop()
-        require(close_native_residents(home), "final_containment")
+        require(close_native_residents_with_retry(home), "final_containment")
 
 
 def main() -> int:

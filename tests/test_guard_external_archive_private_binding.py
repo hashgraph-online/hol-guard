@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.local_supply_chain import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
@@ -126,7 +127,7 @@ def test_external_archive_private_source_is_preserved_for_authorized_scan(
             None,
         )
 
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", clean_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
     evaluator.evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
@@ -150,11 +151,7 @@ def test_external_archive_private_source_mutation_fails_closed_before_scan(
     private_target = private_targets[0]
     assert isinstance(private_target, dict)
     private_target["source_url"] = "https://changed.example.com/demo.tgz"
-    monkeypatch.setattr(
-        evaluator,
-        "_scan_external_tarball",
-        lambda *_args, **_kwargs: pytest.fail("mutated private source reached archive scan"),
-    )
+    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: pytest.fail("mutated private source reached archive scan"),)
 
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
@@ -210,7 +207,7 @@ def test_direct_pip_signed_url_preserves_exact_private_download_and_binding_sour
             None,
         )
 
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", clean_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
     evaluator.evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),

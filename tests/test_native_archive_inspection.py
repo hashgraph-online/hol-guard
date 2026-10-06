@@ -735,7 +735,11 @@ def test_archive_inspector_rejects_invalid_policy(native_hook_force: Path, state
     assert bad_timeout.code == "external_archive_inspection_policy_invalid"
 
 
-def test_archive_inspector_reports_native_unavailable(state_dir: Path, tmp_path: Path) -> None:
+def test_archive_inspector_reports_native_unavailable(state_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The negative capability gate only fires when the native runtime is absent;
+    # under `HOL_GUARD_NATIVE=force` (CI native regression) the worker is
+    # authoritative and would return `clean`, so pin the runtime off here.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
     archive_path, digest = _archive_path(tmp_path, [("package/readme.txt", b"safe")])
 
     result = _inspect(archive_path, expected_sha256=digest, state_dir=state_dir)

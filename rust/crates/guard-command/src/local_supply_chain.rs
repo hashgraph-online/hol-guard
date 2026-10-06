@@ -987,6 +987,9 @@ impl Timestamp {
     pub fn unix_seconds(&self) -> i64 {
         self.micros.div_euclid(1_000_000)
     }
+    pub fn unix_seconds_f64(&self) -> f64 {
+        self.micros as f64 / 1_000_000.0
+    }
     /// `datetime.now(tz=timezone.utc)`.
     pub fn now_utc() -> Self {
         let secs = std::time::SystemTime::now()
@@ -1672,8 +1675,8 @@ fn posture_or_level_defaults(config: &GuardConfig) -> std::collections::BTreeMap
 
 /// `SECURITY_LEVEL_RISK_ACTIONS` lookup with `DEFAULT_SECURITY_LEVEL` fallback
 /// (config.py :1058, :167-265).
-fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String, String> {
-    let table: &[(&str, &[(&str, &str)])] = &[
+fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static str)] {
+    const TABLE: &[(&str, &[(&str, &str)])] = &[
         (
             "relaxed",
             &[
@@ -1722,7 +1725,7 @@ fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String
                 ("encoded_execution", "block"),
                 ("network_egress", "warn"),
                 ("prompt_injection", "review"),
-                ("mcp_dangerous_tool", "review"),
+                ("mcp_dangerous_tool", "require-reapproval"),
                 ("malicious_skill", "block"),
                 ("package_script", "review"),
                 ("persistence", "review"),
@@ -1789,19 +1792,22 @@ fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String
             ],
         ),
     ];
-    let find = |lvl: &str| -> Option<std::collections::BTreeMap<String, String>> {
-        table
+    let find = |level: &str| {
+        TABLE
             .iter()
-            .find(|(name, _)| *name == lvl)
-            .map(|(_, rows)| {
-                rows.iter()
-                    .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                    .collect()
-            })
+            .find(|(name, _)| *name == level)
+            .map(|(_, rows)| *rows)
     };
     find(level)
         .or_else(|| find(DEFAULT_SECURITY_LEVEL))
-        .unwrap_or_default()
+        .unwrap_or(&[])
+}
+
+fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String, String> {
+    security_level_risk_rows(level)
+        .iter()
+        .map(|(key, action)| ((*key).to_owned(), (*action).to_owned()))
+        .collect()
 }
 
 /// `resolve_posture_defaults` (protection_posture.py :121-122).
@@ -1810,8 +1816,8 @@ fn resolve_posture_defaults(posture: &str) -> Option<std::collections::BTreeMap<
 }
 
 /// `POSTURE_RISK_ACTIONS` (protection_posture.py :35) — keyed by posture name.
-fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<String, String>> {
-    let table: &[(&str, &[(&str, &str)])] = &[
+fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static str)]> {
+    const TABLE: &[(&str, &[(&str, &str)])] = &[
         (
             "protected",
             &[
@@ -1851,14 +1857,35 @@ fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<Stri
             ],
         ),
     ];
-    table
+    TABLE
         .iter()
         .find(|(name, _)| *name == posture)
-        .map(|(_, rows)| {
-            rows.iter()
-                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                .collect()
-        })
+        .map(|(_, rows)| *rows)
+}
+
+fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<String, String>> {
+    posture_risk_rows(posture).map(|rows| {
+        rows.iter()
+            .map(|(key, action)| ((*key).to_owned(), (*action).to_owned()))
+            .collect()
+    })
+}
+
+pub(crate) fn default_risk_action(
+    security_level: &str,
+    posture: &str,
+    posture_explicit: bool,
+    managed_locks_level: bool,
+    risk_class: &str,
+) -> Option<&'static str> {
+    let rows = if posture_explicit && !managed_locks_level {
+        posture_risk_rows(posture).unwrap_or_else(|| security_level_risk_rows(security_level))
+    } else {
+        security_level_risk_rows(security_level)
+    };
+    rows.iter()
+        .find(|(key, _)| *key == risk_class)
+        .map(|(_, action)| *action)
 }
 
 /// `build_local_supply_chain_posture` (:325-428).
@@ -3093,7 +3120,7 @@ fn resolve_sbom_paths(workspace_dir: &Path, sbom_paths: &[String]) -> Vec<String
 /// (:1849-1864). Returns `true` when the stored override record describes a
 /// policy-bundle *family* stale override for the package-request family.
 #[allow(dead_code)]
-fn stored_package_policy_is_stale_policy_bundle_family(
+pub(crate) fn stored_package_policy_is_stale_policy_bundle_family(
     store: &dyn SupplyChainStore,
     matched_policy: &Value,
     _artifact: &GuardArtifact,
@@ -3117,11 +3144,17 @@ fn stored_package_policy_is_stale_policy_bundle_family(
     let Some(bundle) = payload else { return false };
     let rules = bundle.get("rules").and_then(Value::as_array);
     let Some(rules) = rules else { return false };
-    rules.iter().any(|rule| {
-        rule.get("ruleId").and_then(Value::as_str) == Some(owner)
-            && policy_bundle_rule_saved_decision_families(rule)
-                .iter()
-                .any(|f| f == "package-request")
+    let matching: Vec<&Value> = rules
+        .iter()
+        .filter(|rule| rule.get("ruleId").and_then(Value::as_str) == Some(owner))
+        .collect();
+    if matching.is_empty() {
+        return true;
+    }
+    !matching.iter().any(|rule| {
+        policy_bundle_rule_saved_decision_families(rule)
+            .iter()
+            .any(|f| f == "package-request")
     })
 }
 
@@ -6638,7 +6671,7 @@ fn recompute_package_protect_artifact_hash(
 /// package request (artifact_id + policy_context material).
 #[allow(clippy::too_many_arguments)]
 #[allow(dead_code)]
-fn package_request_policy_hash(
+pub(crate) fn package_request_policy_hash(
     artifact: &GuardArtifact,
     store: &dyn SupplyChainStore,
     evaluation: &PackageRequestEvaluation,

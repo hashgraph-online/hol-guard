@@ -32,6 +32,7 @@ hmac.workspace = true
 sha2.workspace = true
 sha1.workspace = true
 pbkdf2.workspace = true
+scrypt.workspace = true
 base32ct.workspace = true
 sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }

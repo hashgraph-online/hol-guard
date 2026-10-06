@@ -374,7 +374,8 @@ def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(
         runtime_workspace=tmp_path / "workspace",
         store=GuardStore(guard_home),
     )
-    assert result == 0
+    # codex PreToolUse deny envelope -> generic-contract rc 1 (verdict-derived).
+    assert result == 1
     assert emitted[0]["reason_code"] == "native_hook_worker_unavailable"
 
 
