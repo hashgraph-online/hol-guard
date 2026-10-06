@@ -108,19 +108,28 @@ fn trim_unescaped_trailing_spaces(line: &str) -> &str {
     &line[..end]
 }
 
-/// Apply ripgrep's precedence: a matching `.rgignore`/`.ignore` rule
-/// decides first; otherwise git sources decide. Within each tier the last
-/// matching rule wins. `path` and every rule base share `slash_path` form.
+/// Ignore sources, highest precedence first, as ripgrep consults them:
+/// `.rgignore`, then `.ignore`, then git sources. The first tier with a
+/// matching rule decides; within a tier the last matching rule wins.
+#[derive(Debug, Clone, Default)]
+pub(super) struct IgnoreTiers {
+    pub(super) rgignore: Vec<IgnoreRule>,
+    pub(super) ignore: Vec<IgnoreRule>,
+    pub(super) git: Vec<IgnoreRule>,
+}
+
+/// `path` and every rule base share `slash_path` form.
 pub(super) fn is_ignored(
-    custom: &[IgnoreRule],
-    git: &[IgnoreRule],
+    tiers: &IgnoreTiers,
     path: &str,
     is_directory: bool,
 ) -> Result<bool, ScopeUnproven> {
-    if let Some(ignored) = last_match(custom, path, is_directory)? {
-        return Ok(ignored);
+    for rules in [&tiers.rgignore, &tiers.ignore, &tiers.git] {
+        if let Some(ignored) = last_match(rules, path, is_directory)? {
+            return Ok(ignored);
+        }
     }
-    Ok(last_match(git, path, is_directory)?.unwrap_or(false))
+    Ok(false)
 }
 
 fn last_match(

@@ -315,6 +315,17 @@ fn ripgrep_ignore_files_outrank_gitignore() {
         &home,
         &project,
     ));
+    // `.rgignore` is its own, higher tier: a root re-include beats a deeper
+    // `.ignore` exclusion.
+    let (home, project) = fixture();
+    write(project.join("app/.env"), "TOKEN=canary\n");
+    write(project.join("app/.ignore"), ".env\n");
+    write(project.join(".rgignore"), "!.env\n");
+    assert!(!scope_allowed(
+        serde_json::json!({"pattern": "TOKEN", "path": "app"}),
+        &home,
+        &project,
+    ));
     // Ignore files also hide secrets without a repository-level rule.
     let (home, project) = fixture();
     write(project.join("vendor/credentials.json"), "{}\n");

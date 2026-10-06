@@ -52,7 +52,7 @@ def test_pending_package_review_adds_context_but_no_decision(tmp_path: Path, mon
     hook_output = response["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert "decision" not in hook_output
-    assert "requires fresh approval" in str(hook_output["additionalContext"])
+    assert hook_output == {"hookEventName": "PermissionRequest"}
     assert "requires fresh approval" in str(response["systemMessage"])
     assert seen == [notice]
 

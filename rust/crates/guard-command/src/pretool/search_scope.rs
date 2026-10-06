@@ -7,7 +7,7 @@
 
 use super::search_scope_filter::{Override, SearchFilter};
 use super::search_scope_ignore::{
-    is_ignored, load_ignore_file, slash_path, IgnoreRule, ScopeUnproven,
+    is_ignored, load_ignore_file, slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
@@ -127,23 +127,21 @@ fn repository_root(root: &Path) -> Option<PathBuf> {
 
 /// `.ignore` and `.rgignore` rules from every ancestor above the search
 /// root, outermost first. ripgrep reads these with or without a repository.
-fn ancestor_custom_rules(root: &Path) -> Result<Vec<IgnoreRule>, ScopeUnproven> {
-    let mut rules = Vec::new();
+fn ancestor_custom_rules(root: &Path, tiers: &mut IgnoreTiers) -> Result<(), ScopeUnproven> {
     let ancestors: Vec<&Path> = root.ancestors().skip(1).take(MAX_ANCESTORS).collect();
     if root.ancestors().skip(1).nth(MAX_ANCESTORS).is_some() {
         return Err(ScopeUnproven);
     }
     for directory in ancestors.into_iter().rev() {
-        load_custom_rules(directory, &mut rules)?;
+        load_custom_rules(directory, tiers)?;
     }
-    Ok(rules)
+    Ok(())
 }
 
-fn load_custom_rules(directory: &Path, rules: &mut Vec<IgnoreRule>) -> Result<(), ScopeUnproven> {
+fn load_custom_rules(directory: &Path, tiers: &mut IgnoreTiers) -> Result<(), ScopeUnproven> {
     let base = slash_path(directory).ok_or(ScopeUnproven)?;
-    // `.rgignore` outranks `.ignore` in the same directory.
-    load_ignore_file(&directory.join(".ignore"), &base, rules)?;
-    load_ignore_file(&directory.join(".rgignore"), &base, rules)
+    load_ignore_file(&directory.join(".ignore"), &base, &mut tiers.ignore)?;
+    load_ignore_file(&directory.join(".rgignore"), &base, &mut tiers.rgignore)
 }
 
 /// Repository exclude rules and `.gitignore` files from the repository root
@@ -180,21 +178,20 @@ fn sensitive_scope_file(path: &Path) -> bool {
 struct PendingDirectory {
     path: PathBuf,
     depth: usize,
-    custom: Rc<Vec<IgnoreRule>>,
-    git: Rc<Vec<IgnoreRule>>,
+    tiers: Rc<IgnoreTiers>,
 }
 
 fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root);
-    let git = match &repository {
-        Some(repository) => ancestor_git_rules(root, repository)?,
-        None => Vec::new(),
-    };
+    let mut tiers = IgnoreTiers::default();
+    if let Some(repository) = &repository {
+        tiers.git = ancestor_git_rules(root, repository)?;
+    }
+    ancestor_custom_rules(root, &mut tiers)?;
     let mut pending = vec![PendingDirectory {
         path: root.to_path_buf(),
         depth: 0,
-        custom: Rc::new(ancestor_custom_rules(root)?),
-        git: Rc::new(git),
+        tiers: Rc::new(tiers),
     }];
     let mut inspected = 0_usize;
     while let Some(directory) = pending.pop() {
@@ -202,26 +199,18 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
             return Err(ScopeUnproven);
         }
         let base = slash_path(&directory.path).ok_or(ScopeUnproven)?;
-        let mut git = Rc::clone(&directory.git);
+        let mut tiers = (*directory.tiers).clone();
         if repository.is_some() {
-            // A nested repository may not inherit outer rules. Dropping them
-            // can only widen the modeled scope.
-            let nested = directory.depth > 0
-                && std::fs::symlink_metadata(directory.path.join(".git")).is_ok();
-            let mut extended = if nested { Vec::new() } else { (*git).clone() };
-            let before = extended.len();
-            load_ignore_file(&directory.path.join(".gitignore"), &base, &mut extended)?;
-            if nested || extended.len() != before {
-                git = Rc::new(extended);
+            // A nested repository may not inherit outer git rules. Dropping
+            // them can only widen the modeled scope.
+            if directory.depth > 0 && std::fs::symlink_metadata(directory.path.join(".git")).is_ok()
+            {
+                tiers.git.clear();
             }
+            load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
         }
-        let mut custom = Rc::clone(&directory.custom);
-        let mut extended = (*custom).clone();
-        let before = extended.len();
-        load_custom_rules(&directory.path, &mut extended)?;
-        if extended.len() != before {
-            custom = Rc::new(extended);
-        }
+        load_custom_rules(&directory.path, &mut tiers)?;
+        let tiers = Rc::new(tiers);
         let entries = std::fs::read_dir(&directory.path).map_err(|_| ScopeUnproven)?;
         for entry in entries {
             let entry = entry.map_err(|_| ScopeUnproven)?;
@@ -259,7 +248,7 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
                 Override::Searched => true,
                 Override::Undecided => {
                     let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
-                    if is_ignored(&custom, &git, &rendered, is_directory)? {
+                    if is_ignored(&tiers, &rendered, is_directory)? {
                         continue;
                     }
                     is_directory || filter.type_allows(name)
@@ -269,8 +258,7 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
                 pending.push(PendingDirectory {
                     path,
                     depth: directory.depth + 1,
-                    custom: Rc::clone(&custom),
-                    git: Rc::clone(&git),
+                    tiers: Rc::clone(&tiers),
                 });
             } else if searched && sensitive_scope_file(&path) {
                 return Err(ScopeUnproven);
