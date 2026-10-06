@@ -117,7 +117,7 @@ def _refuse_native_business_floor_without_source(store: GuardStore, key: bytes) 
     # Authenticate the existing combined floor before interpreting its identity.
     read_native_control_floor(store, key)
     record = _strict_json_loads_v3(content)
-    if "business_policy_floor" in record:
+    if not isinstance(record, dict) or "business_policy_floor" in record:
         raise _error("native_business_source_recovery_required")
 
 

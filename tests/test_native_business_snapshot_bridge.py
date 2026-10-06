@@ -277,6 +277,8 @@ def test_business_transport_receives_real_native_ack_without_provider_dispatch(
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents, native_resident_client_request
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
     from codex_plugin_scanner.guard.store import GuardStore
+    from tests.test_native_business_document_compile import document
+    from tests.test_native_business_source_store import _grant, _install
 
     # Keep command authority and snapshot signing on the same synthetic master;
     # this test must never ask a real credential store for integrity material.
@@ -284,7 +286,11 @@ def test_business_transport_receives_real_native_ack_without_provider_dispatch(
     home = tmp_path / "guard"
     status = native_runtime_status()
     assert status.compatible and status.identity is not None and status.capabilities is not None
-    controls, _ = read_native_command_control_binding(GuardStore(home))
+    store = GuardStore(home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    business = json.loads(installed.source.binding_bytes)
+    controls, _ = read_native_command_control_binding(store)
     publisher = SimpleNamespace(
         guard_home=home,
         _snapshot=None,
@@ -306,9 +312,9 @@ def test_business_transport_receives_real_native_ack_without_provider_dispatch(
             master_key=b"m" * 32,
             client=client,
             renew_after_generation=None,
-            business_policy=binding(),
+            business_policy=business,
         )
-        assert snapshot["business_policy"] == binding()
+        assert snapshot["business_policy"] == business
         assert resident_generation >= snapshot["generation"]
         cached = api._read_v3_snapshot_cache(home, verifier_key=api.derive_native_policy_verifier_key(b"m" * 32))
         assert cached is not None and cached[0] == snapshot

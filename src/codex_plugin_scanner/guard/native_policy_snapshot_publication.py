@@ -174,7 +174,11 @@ class NativePolicySnapshotPublicationMixin:
                     client=client,
                     renew_after_generation=renew_after_generation,
                     **(
-                        {"business_policy": _strict_json_loads_v3(business_source.binding_bytes)}
+                        {
+                            "business_policy": cast(
+                                Mapping[str, object], _strict_json_loads_v3(business_source.binding_bytes)
+                            )
+                        }
                         if business_source is not None
                         else {}
                     ),

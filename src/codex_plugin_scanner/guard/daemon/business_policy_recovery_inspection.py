@@ -1,6 +1,7 @@
 """Read-only native-authenticated recovery discovery and local rule preview."""
 
 import time
+from typing import cast
 
 from .. import native_business_source_store as owner
 from ..business_policy_document_view import without_provenance
@@ -17,7 +18,7 @@ def inspect_business_policy_recovery(store, request, document):
     digest = policy_document_digest(document)
     deadline = time.monotonic() + 5
     status = _consumer(deadline, anchor=True)
-    if owner.CURRENT_FENCE_CAPABILITY not in status.capabilities.features:
+    if status.capabilities is None or owner.CURRENT_FENCE_CAPABILITY not in status.capabilities.features:
         raise owner._error("native_business_source_current_fence_unavailable")
     with hold_command_control_authority_lock(store.guard_home, timeout_seconds=5):
         recovered = request_recovery_recorded(store, request.request_id)
@@ -46,8 +47,10 @@ def inspect_business_policy_recovery(store, request, document):
             state = "installed" if installed is not None and installed.source_digest == digest else "interrupted"
         # Preview comes only from the native-authenticated record, never the
         # request/browser's text. Author metadata is redacted by the shared view.
-        record = owner._strict_json_loads_v3(source.record_bytes)
-        preview = without_provenance(GuardPolicyDocument.from_mapping(record["source_document"]))
+        record = cast(dict[str, object], owner._strict_json_loads_v3(source.record_bytes))
+        preview = without_provenance(
+            GuardPolicyDocument.from_mapping(cast(dict[str, object], record["source_document"]))
+        )
         return {
             "state": state,
             "candidateDigest": source.source_digest,

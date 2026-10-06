@@ -262,6 +262,8 @@ def build_business_source_record(
     )
     verified = _verify(status, record, verifier_key, deadline)
     identity = _strict_json_loads_v3(verified.retained_identity_bytes)
+    if not isinstance(identity, dict):
+        raise _invalid()
     if (
         verified.source_digest != candidate.source_digest
         or verified.binding_bytes != candidate.binding_bytes

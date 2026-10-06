@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from ..approval_gate import ApprovalGateError, require_high_risk
+from ..approval_gate import ApprovalGateError, ApprovalGateInput, require_high_risk
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
 from ..business_policy_document_import import has_business_rules
 from ..mcp.policy_errors import PolicyToolError
@@ -44,7 +44,9 @@ def handle_business_policy_recovery(handler, request_id, payload):
             purpose="policy_import",
             **policy_import_approval_binding(document, "replace"),
             approval_gate_input=replace(
-                approval_gate_input_from_mapping(payload), use_cooldown=False, require_fresh_totp=True
+                approval_gate_input_from_mapping(payload) or ApprovalGateInput(),
+                use_cooldown=False,
+                require_fresh_totp=True,
             ),
         )
         from ..mcp.policy_recovery_state import stage_request_recovery

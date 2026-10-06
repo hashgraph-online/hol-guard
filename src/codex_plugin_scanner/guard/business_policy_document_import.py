@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .approval_gate import require_high_risk
 from .native_business_document_compile import compile_business_policy_document
@@ -89,8 +89,8 @@ def read_business_document_for_store(store: GuardStore) -> GuardPolicyDocument |
     source = read_business_source_for_store(store)
     if source is None:
         return None
-    record = _strict_json_loads_v3(source.record_bytes)
-    return GuardPolicyDocument.from_mapping(record["source_document"])
+    record = cast(dict[str, object], _strict_json_loads_v3(source.record_bytes))
+    return GuardPolicyDocument.from_mapping(cast(dict[str, object], record["source_document"]))
 
 
 def refuse_legacy_import_over_business_source(store: GuardStore) -> None:

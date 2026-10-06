@@ -71,7 +71,11 @@ def recover_committed_business_source(
             from .native_policy_snapshot_codec import _canonical_json_bytes_v3, _strict_json_loads_v3
 
             observed = _strict_json_loads_v3(witness)
-            if observed.get("schema") != "guard.business-source-installation.v1" or "retained_identity" not in observed:
+            if (
+                not isinstance(observed, dict)
+                or observed.get("schema") != "guard.business-source-installation.v1"
+                or "retained_identity" not in observed
+            ):
                 raise owner._error("native_business_source_recovery_required")
             verify_business_source_record(
                 candidate,

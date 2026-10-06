@@ -6,7 +6,7 @@ import sqlite3
 
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from .approval_gate import ApprovalGateGrant, require_high_risk
 from .policy_authority import validate_policy_write_authority
@@ -17,6 +17,9 @@ from .policy_document_io import CompiledPolicyRow
 from .store_base import _validate_scoped_policy_artifact_target
 
 PolicyImportMode = Literal["merge", "replace"]
+
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +136,9 @@ class StorePolicyDocumentMixin:
         if has_business_rules(document):
             if compiled_rows:
                 raise ValueError("policy_document_compilation_mismatch")
-            return import_business_document(self, document, mode=mode, now=now, approval_gate_grant=approval_gate_grant)
+            return import_business_document(
+                cast("GuardStore", self), document, mode=mode, now=now, approval_gate_grant=approval_gate_grant
+            )
         normalized_rows = self._normalize_compiled_rows(compiled_rows)
 
         _validate_compiled_document_rows(document, compiled_rows)
@@ -151,7 +156,7 @@ class StorePolicyDocumentMixin:
         from .native_command_control_authority_io import hold_command_control_authority_lock
 
         with hold_command_control_authority_lock(self.guard_home), self._connect() as connection:
-            refuse_legacy_import_over_business_source(self)
+            refuse_legacy_import_over_business_source(cast("GuardStore", self))
             connection.execute("begin immediate")
             result = self._import_policy_rows_on_connection(
                 connection,
@@ -350,7 +355,7 @@ class StorePolicyDocumentMixin:
         # Direct transaction callers cannot wait on a lease held by another
         # owner waiting for this SQLite writer. Refuse immediately and rollback.
         with hold_command_control_authority_lock(self.guard_home, timeout_seconds=0):
-            refuse_legacy_import_over_business_source(self)
+            refuse_legacy_import_over_business_source(cast("GuardStore", self))
             return self._import_policy_rows_on_connection(
                 connection,
                 document=document,

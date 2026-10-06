@@ -317,6 +317,7 @@ class NativePolicySnapshotPublisherInputs:
                 with self._condition:
                     self._acked = False
                     self._condition.notify_all()
+        source = None
         try:
             effective_policy = self._compiled_effective_policy()
             # ``_compiled_effective_policy`` carries the raw mode beside the

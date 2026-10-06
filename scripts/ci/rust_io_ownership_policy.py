@@ -92,10 +92,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_package_authority.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_context.py",
-        # Same bridge shape for the package-intent / package-authority ops the
-        # hook pipeline now routes natively (`_resident_request` decodes the
-        # bounded resident response into a DTO).
-        "src/codex_plugin_scanner/guard/native_package_authority.py",
     }
 )
 _STRUCTURED_OUTPUT_MEDIATION_PATHS: Final = frozenset(
@@ -113,6 +109,13 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py",
+        # Native-authenticated source binding and asynchronous snapshot bytes;
+        # Rust remains the document compiler and resident admission authority.
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_codec.py",
+        "src/codex_plugin_scanner/guard/native_business_source_bridge.py",
+        "src/codex_plugin_scanner/guard/native_business_source_anchor_bridge.py",
+        "src/codex_plugin_scanner/guard/native_business_source_store.py",
+        "src/codex_plugin_scanner/guard/native_business_source_retention.py",
         "src/codex_plugin_scanner/guard/config.py",
         "src/codex_plugin_scanner/guard/config_file_io.py",
         "src/codex_plugin_scanner/guard/directory_path_authority.py",
