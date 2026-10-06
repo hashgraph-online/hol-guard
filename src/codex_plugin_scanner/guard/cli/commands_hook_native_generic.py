@@ -167,6 +167,7 @@ from ..trusted_local_tools import (
 )
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .native_hook_exit_code import native_hook_verdict_exit_code
 from .commands_support_apply_patch_policy import verified_non_sensitive_codex_apply_patch
 from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
 from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
@@ -1513,7 +1514,9 @@ def run_native_generic_payload(
             )
         # Kimi surfaces stderr to the user as the blocking explanation.
         _emit_native_hook_block_stderr(block_reason)
-        return 2
+        return native_hook_verdict_exit_code(
+            _canonical_harness_name(args.harness), policy_action, hook_event_name
+        )
     if _canonical_harness_name(args.harness) == "codex" and (
         hook_event_name == "UserPromptSubmit" or approval_context is not None
     ):
@@ -1611,7 +1614,9 @@ def run_native_generic_payload(
                 approval_payload=payload_map,
                 output_stream=output_stream,
             )
-            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+            return native_hook_verdict_exit_code(
+                _canonical_harness_name(args.harness), policy_action, hook_event_name
+            )
         if _canonical_harness_name(args.harness) == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response, zcode_hook_process_exit
 
@@ -1633,7 +1638,9 @@ def run_native_generic_payload(
                 payload=payload_map,
                 output_stream=output_stream,
             )
-            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+            return native_hook_verdict_exit_code(
+                _canonical_harness_name(args.harness), policy_action, hook_event_name
+            )
         system_message = None
         canonical_harness = _canonical_harness_name(args.harness)
         if (
@@ -1666,9 +1673,6 @@ def run_native_generic_payload(
             output_stream=output_stream,
             as_json=getattr(args, "json", False),
         )
-        from .commands_support_runtime_resolution import _canonical_harness_name
-        from .native_hook_exit_code import native_hook_verdict_exit_code
-
         return native_hook_verdict_exit_code(
             _canonical_harness_name(args.harness), policy_action, hook_event_name
         )
@@ -1684,9 +1688,6 @@ def run_native_generic_payload(
         # The caller replayed a decision that was already recorded upstream;
         # the envelope acknowledges it without re-blocking the harness.
         return 0
-    from .commands_support_runtime_resolution import _canonical_harness_name
-    from .native_hook_exit_code import native_hook_verdict_exit_code
-
     return native_hook_verdict_exit_code(
         _canonical_harness_name(args.harness), policy_action, hook_event_name
     )

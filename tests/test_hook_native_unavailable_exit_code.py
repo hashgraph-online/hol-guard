@@ -55,7 +55,7 @@ class TestAvailabilityResponseIsDeny:
 class TestVerdictExitCodeContract:
     """The shared table every emit path delegates to."""
 
-    @pytest.mark.parametrize("h", ("pi", "omp", "cursor", "devin", "kimi", "hermes"))
+    @pytest.mark.parametrize("h", ("cursor", "devin", "kimi", "hermes"))
     def test_rc_block_is_two(self, h):
         assert native_hook_verdict_exit_code(h, "block") == 2
         assert native_hook_verdict_exit_code(h, "allow") == 0
@@ -67,7 +67,7 @@ class TestVerdictExitCodeContract:
         assert native_hook_verdict_exit_code(h, "block") == 1
         assert native_hook_verdict_exit_code(h, "allow") == 0
 
-    @pytest.mark.parametrize("h", ("codex", "claude-code"))
+    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
     def test_envelope_driven_deny_rc0(self, h):
         # Deny rides hookSpecificOutput.permissionDecision; nonzero rc would
         # read as a hook error and permit the action.
@@ -105,9 +105,9 @@ class TestNativeUnavailableExitCode:
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 0, h
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
 
-    def test_rc2_harnesses_deny(self):
+    def test_envelope_harnesses_deny_rc0(self):
         for h in ("pi", "omp"):
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 2, h
+            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 0, h
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
 
     def test_rc_driven_deny_rc1(self):
