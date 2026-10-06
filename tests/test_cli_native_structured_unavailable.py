@@ -303,8 +303,9 @@ def test_cli_native_unavailable_preserves_native_recording_posture(
         recording_only=recording_only,
     )
 
-    # pi/omp exit 2 on a blocking verdict (matches commands_hook_native_finish
-    # native-managed rc 2); allow -> 0.
-    assert rc == (2 if decision == "block" else 0)
+    # pi/omp are envelope-driven: a preemptive (UserPromptSubmit) block rides
+    # the decision envelope and exits 0 — nonzero rc reads as a hook error.
+    # Gauntlet-verified: omp deny arrives as decision==deny while host exits 0.
+    assert rc == 0
     assert response["decision"] == decision
     assert response["reason_code"] == reason_code

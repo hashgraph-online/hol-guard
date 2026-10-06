@@ -69,11 +69,19 @@ class TestVerdictExitCodeContract:
 
     @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
     def test_envelope_driven_deny_rc0(self, h):
-        # Deny rides hookSpecificOutput.permissionDecision; nonzero rc would
-        # read as a hook error and permit the action.
-        assert native_hook_verdict_exit_code(h, "block") == 0
-        assert native_hook_verdict_exit_code(h, "allow") == 0
+        # Deny rides the decision envelope (permissionDecision / decision);
+        # a nonzero PREEMPTIVE rc would read as a hook error and permit the
+        # action.  Gauntlet-verified for omp.
+        assert native_hook_verdict_exit_code(h, "block", "PreToolUse") == 0
+        assert native_hook_verdict_exit_code(h, "block", "UserPromptSubmit") == 0
+        assert native_hook_verdict_exit_code(h, "allow", "PreToolUse") == 0
 
+    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
+    def test_envelope_post_tool_block_rc1(self, h):
+        # PostToolUse cannot preempt (the tool already ran) — a blocking
+        # verdict flags the violation on the exit status instead.
+        assert native_hook_verdict_exit_code(h, "block", "PostToolUse") == 1
+        assert native_hook_verdict_exit_code(h, "allow", "PostToolUse") == 0
     def test_unknown_harness_fails_safe(self):
         assert native_hook_verdict_exit_code("some-future-harness", "block") == 1
         assert native_hook_verdict_exit_code("some-future-harness", "allow") == 0
