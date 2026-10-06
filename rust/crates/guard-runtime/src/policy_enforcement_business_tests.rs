@@ -31,6 +31,75 @@ fn facts() -> BusinessActionV1 {
     .unwrap()
 }
 
+#[test]
+fn expiry_equality_removes_allow_and_preserves_intrinsic_floor() {
+    let mut value = binding("block", "allow");
+    let expiry_text = "2026-07-16T12:00:00.123456789Z";
+    value.rules[0].expires_at = Some(expiry_text.into());
+    let expiry = guard_contracts::canonical_policy_timestamp_nanos(expiry_text).unwrap();
+    let policy = CompiledBusinessPolicy::new(&value).unwrap();
+    let action = facts();
+    assert_eq!(
+        policy
+            .floor_at(ActionFloor::Allow, Some(&action), Some(expiry - 1))
+            .action,
+        ActionFloor::Allow
+    );
+    for now in [expiry, expiry + 1, expiry + 1_000_000_000] {
+        let result = policy.floor_at(ActionFloor::Allow, Some(&action), Some(now));
+        assert_eq!(result.action, ActionFloor::Block);
+        assert!(result.matched_rule_ids.is_empty());
+    }
+    assert_eq!(
+        policy
+            .floor_at(ActionFloor::Block, Some(&action), Some(expiry - 1))
+            .action,
+        ActionFloor::Block
+    );
+    assert_eq!(
+        policy
+            .floor_at(ActionFloor::Allow, Some(&action), None)
+            .action,
+        ActionFloor::Block
+    );
+}
+
+#[test]
+fn expired_rules_do_not_mask_live_rules_and_permanent_policy_needs_no_clock() {
+    let mut value = binding("allow", "allow");
+    value.rules[0].expires_at = Some("1970-01-01T00:00:00.000000001Z".into());
+    let mut block = value.rules[0].clone();
+    block.id = "permanent.block".into();
+    block.action = "block".into();
+    block.expires_at = None;
+    value.rules.push(block);
+    let result = CompiledBusinessPolicy::new(&value).unwrap().floor_at(
+        ActionFloor::Allow,
+        Some(&facts()),
+        Some(1),
+    );
+    assert_eq!(result.action, ActionFloor::Block);
+    assert_eq!(result.matched_rule_ids, ["permanent.block"]);
+    let permanent = CompiledBusinessPolicy::new(&binding("block", "allow")).unwrap();
+    assert_eq!(
+        permanent
+            .floor_at(ActionFloor::Allow, Some(&facts()), None)
+            .action,
+        ActionFloor::Allow
+    );
+    let mut expired_block = binding("allow", "block");
+    expired_block.rules[0].expires_at = Some("1970-01-01T00:00:00Z".into());
+    let expired = CompiledBusinessPolicy::new(&expired_block).unwrap();
+    assert_eq!(
+        expired.floor(ActionFloor::Allow, Some(&facts())).action,
+        ActionFloor::Allow
+    );
+    assert_eq!(
+        expired.floor(ActionFloor::Allow, None).action,
+        ActionFloor::Block
+    );
+}
+
 fn snapshot(binding: Option<BusinessPolicyBindingV1>, mode: &str) -> AdmittedPolicySnapshot {
     let mut value = super::super::tests::snapshot(super::super::tests::policy("allow"));
     value.business_policy = binding;

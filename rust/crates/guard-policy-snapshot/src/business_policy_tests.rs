@@ -13,6 +13,37 @@ fn binding() -> BusinessPolicyBindingV1 {
     serde_json::from_value(binding_value()).unwrap()
 }
 
+#[test]
+fn expiry_is_signed_and_malformed_or_null_expiry_cannot_be_permanent() {
+    let permanent = binding_value();
+    assert_eq!(serde_json::to_value(binding()).unwrap(), permanent);
+    let mut value = permanent.clone();
+    value["rules"][0]["expiresAt"] = json!("2026-07-16T12:00:00.000000001Z");
+    let until: BusinessPolicyBindingV1 = serde_json::from_value(value.clone()).unwrap();
+    assert!(until.validate().is_ok());
+    let old = signed_business_snapshot();
+    let mut bounded = old.clone();
+    bounded.business_policy = Some(until);
+    assert_ne!(policy_digest(&bounded).unwrap(), old.policy_digest);
+    assert_ne!(
+        integrity_mac(&bounded, &[7; 32]).unwrap(),
+        old.integrity.mac
+    );
+    for expiry in [json!(null), json!(17), json!({"mode":"permanent"})] {
+        value["rules"][0]["expiresAt"] = expiry;
+        assert!(serde_json::from_value::<BusinessPolicyBindingV1>(value.clone()).is_err());
+    }
+    for expiry in [
+        "2026-02-29T00:00:00Z",
+        "2026-01-01T00:00:00+00:00",
+        "2026-01-01T00:00:00.1234567890Z",
+    ] {
+        value["rules"][0]["expiresAt"] = json!(expiry);
+        let invalid: BusinessPolicyBindingV1 = serde_json::from_value(value.clone()).unwrap();
+        assert!(invalid.validate().is_err());
+    }
+}
+
 fn signed_business_snapshot() -> PolicySnapshotV3 {
     let mut value = tests::snapshot(1, &[7; 32]);
     value.business_policy = Some(binding());

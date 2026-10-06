@@ -13,6 +13,7 @@ from ...version import __version__
 from ..approval_gate import ApprovalGateError, require_high_risk
 from ..policy_authority import PolicyAuthorityError
 from ..policy_document import policy_document_digest
+from ..policy_document_authority import policy_import_approval_binding
 from ..policy_document_io import (
     PolicyCompilationError,
     PolicyDocumentDiff,
@@ -357,6 +358,7 @@ def _run_guard_policy_document_command(
             grant = require_high_risk(
                 store.guard_home,
                 purpose="policy_import",
+                **policy_import_approval_binding(document, mode),
                 approval_gate_input=gate_input,
             )
             result = store.import_policy_document(

@@ -8,12 +8,14 @@ use super::{ActionFloor, AdmittedPolicySnapshot};
 use guard_contracts::{BusinessActionV1, PreToolActionTypeV1, PreToolResultV1};
 use guard_policy_snapshot::business_policy::BusinessPolicyBindingV1;
 use serde_json::Value;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub(super) struct CompiledBusinessPolicy {
     binding: BusinessPolicyBindingV1,
     default_action: ActionFloor,
     actions: Vec<ActionFloor>,
+    expirations: Vec<Option<i128>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -35,11 +37,25 @@ impl CompiledBusinessPolicy {
                     .ok_or_else(|| "native_business_policy_invalid".to_owned())
             })
             .collect::<Result<_, _>>()?;
+        let expirations = binding
+            .rules
+            .iter()
+            .map(|rule| {
+                rule.expires_at
+                    .as_deref()
+                    .map(|expiry| {
+                        guard_contracts::canonical_policy_timestamp_nanos(expiry)
+                            .ok_or_else(|| "native_business_policy_invalid".to_owned())
+                    })
+                    .transpose()
+            })
+            .collect::<Result<_, _>>()?;
         Ok(Self {
             binding: binding.clone(),
             default_action: ActionFloor::parse(&binding.default_action)
                 .ok_or_else(|| "native_business_policy_invalid".to_owned())?,
             actions,
+            expirations,
         })
     }
 
@@ -50,6 +66,19 @@ impl CompiledBusinessPolicy {
         &self,
         intrinsic: ActionFloor,
         facts: Option<&BusinessActionV1>,
+    ) -> BusinessFloor {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|duration| i128::try_from(duration.as_nanos()).ok());
+        self.floor_at(intrinsic, facts, now)
+    }
+
+    fn floor_at(
+        &self,
+        intrinsic: ActionFloor,
+        facts: Option<&BusinessActionV1>,
+        now: Option<i128>,
     ) -> BusinessFloor {
         let blocked = || BusinessFloor {
             action: ActionFloor::Block,
@@ -63,7 +92,21 @@ impl CompiledBusinessPolicy {
         }
         let mut action = intrinsic;
         let mut matched_rule_ids = Vec::new();
-        for (rule, rule_action) in self.binding.rules.iter().zip(&self.actions) {
+        for ((rule, rule_action), expiry) in self
+            .binding
+            .rules
+            .iter()
+            .zip(&self.actions)
+            .zip(&self.expirations)
+        {
+            if let Some(expiry) = expiry {
+                let Some(now) = now else {
+                    return blocked();
+                };
+                if now >= *expiry {
+                    continue;
+                }
+            }
             match rule.selector.matches(facts) {
                 Ok(true) => {
                     action = action.max(*rule_action);
