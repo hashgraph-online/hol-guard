@@ -202,6 +202,28 @@ fn evaluate_envelope(
             return redirect_projection::join(projected, raw, projection.writes_file);
         }
     }
+    if event == "PreToolUse"
+        && harness == "claude-code"
+        && signals.tool_name.as_deref() == Some("Grep")
+        && signals.url_values.is_empty()
+        && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd)
+    {
+        // A search pattern is data, not a command, so it never reaches the
+        // command authority on this path.
+        return generic_result(
+            generic_action(
+                harness,
+                event,
+                PreToolActionTypeV1::FileRead,
+                PreToolOperationV1::Read,
+                true,
+                false,
+            ),
+            "allow",
+            "native_bounded_search_scope",
+            "The Rust authority proved this directory search cannot reach a sensitive file.",
+        );
+    }
     let task_metadata = event == "PreToolUse"
         && agent_metadata::bounded_task_list(payload, signals.tool_name.as_deref())
         && signals.command.is_none()
