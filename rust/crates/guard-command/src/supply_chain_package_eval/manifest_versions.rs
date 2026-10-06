@@ -1,5 +1,8 @@
 use super::*;
 
+static SOURCE_SCHEME_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^[A-Za-z][A-Za-z0-9+.-]*://").expect("scheme re"));
+
 /// `_source_url_from_specifier` (:4647-4655) — return the specifier when it is
 /// already a usable source URL/spec.
 // supply_chain_package_eval.py:4647-4655
@@ -10,9 +13,7 @@ pub(super) fn source_url_from_specifier(specifier: Option<&str>) -> Option<Strin
         return Some(specifier.to_string());
     }
     let lower = specifier.to_lowercase();
-    if Regex::new(r"^[A-Za-z][A-Za-z0-9+.-]*://")
-        .expect("scheme re")
-        .is_match(specifier)
+    if SOURCE_SCHEME_RE.is_match(specifier)
         || lower.starts_with("http:")
         || lower.starts_with("https:")
         || lower.starts_with("git+")
@@ -32,7 +33,7 @@ pub(super) fn source_url_from_specifier(specifier: Option<&str>) -> Option<Strin
 #[allow(dead_code)]
 pub(super) fn source_url_from_raw_spec(raw_spec: &str) -> Option<String> {
     let candidate = match NAMED_SOURCE_SEPARATOR_RE.find(raw_spec) {
-        Some(m) => &raw_spec[m.end()..],
+        Some(m) => &raw_spec[m.start() + 1..],
         None => raw_spec,
     };
     let lower = candidate.to_lowercase();

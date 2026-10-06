@@ -9,6 +9,7 @@ from .extension_control_contract import ExtensionControlLayer
 from .extension_trust import extension_is_active
 from .mcp_server_contribution import (
     catalog_id_for_mcp_id,
+    direct_mcp_command_name,
     load_mcp_contribution_payloads,
     mcp_tool_state,
     normalized_remote_server_name,
@@ -78,9 +79,17 @@ def matching_mcp_contribution(artifact: GuardArtifact) -> dict[str, object] | No
                 return payload
     for payload in load_mcp_contribution_payloads():
         launch = payload.get("launch")
-        if not isinstance(launch, dict) or launch.get("kind") != "remote-http":
+        if not isinstance(launch, dict):
             continue
-        if _matches_remote_http_contribution(artifact, launch):
+        if launch.get("kind") == "direct-command":
+            if (
+                package is None
+                and _mcp_transport(artifact) == "stdio"
+                and _mcp_identity_tool_name(artifact) is not None
+                and direct_mcp_command_name(_mcp_identity_command(artifact)) == launch.get("command")
+            ):
+                return payload
+        elif launch.get("kind") == "remote-http" and _matches_remote_http_contribution(artifact, launch):
             return payload
     return None
 

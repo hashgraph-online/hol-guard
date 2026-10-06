@@ -29,15 +29,15 @@ _MAGIC = {b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\x
 def _node_runtime_args(command: Sequence[str]) -> tuple[str, ...]:
     """Accept only one bounded V8 heap option before a Node entrypoint."""
     argv = _normalized_command(command)
-    if len(argv) < 2 or Path(argv[0]).name not in {"node", "nodejs"}:
-        return ()
-    option = argv[1]
-    if not option.startswith("--max-old-space-size="):
-        return ()
-    value = option.partition("=")[2]
-    if not value.isascii() or not value.isdecimal() or not 16 <= int(value) <= 131072:
-        raise RestrictedPytestError(_INVALID, "Invalid bounded Node memory option.")
-    return (option,)
+    runtime_args: list[str] = []
+    if len(argv) >= 2 and Path(argv[0]).name in {"node", "nodejs"}:
+        option = argv[1]
+        if option.startswith("--max-old-space-size="):
+            value = option.partition("=")[2]
+            if not value.isascii() or not value.isdecimal() or not 16 <= int(value) <= 131072:
+                raise RestrictedPytestError(_INVALID, "Invalid bounded Node memory option.")
+            runtime_args.append(option)
+    return tuple(runtime_args)
 
 
 def _approved_node(executable: Path, workspace: Path) -> bool:

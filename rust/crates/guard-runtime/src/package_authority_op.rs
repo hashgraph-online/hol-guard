@@ -23,14 +23,16 @@ use guard_command::package_intent_common::{
     build_package_request_artifact, resolve_path_within_workspace, GuardArtifact,
 };
 use guard_command::package_intent_parser::parse_package_intent;
+use guard_command::pep440::{SpecifierSet, Version};
 use guard_command::supply_chain_bundle;
 use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
     ConfigLoaderApi, EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest,
     GuardSyncRunnerApi, JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi,
-    NativeArchiveApi, PackageIdentityApi, RestrictedArchiveApi, RestrictedArchiveDownloadResult,
-    RestrictedArchiveFailure, RiskDetectApi, SpecifierSet, StoreExtrasApi, SupplyChainBundleApi,
-    SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, Version, WorkspaceIoApi,
+    NativeArchiveApi, PackageIdentityApi, RestrictedArchiveApi,
+    RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
+    RestrictedArchiveFailure, RiskDetectApi, StoreExtrasApi, SupplyChainBundleApi,
+    SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, WorkspaceIoApi,
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{
@@ -1281,16 +1283,20 @@ impl SupplyChainStore for ResidentSupplyChainStore {
 // ResidentEvalDeps — concrete `SupplyChainEvalDeps` impls.
 // ---------------------------------------------------------------------------
 
-/// Fails closed — resident has no HTTP transport for guard-sync; eval falls
-/// back to local-only exactly like Python `GuardSyncNotConfiguredError`.
+/// Resident `.runtime.runner` guard-sync seam — owns the OAuth credential
+/// read, DPoP proof signing (ES256/ring), origin-allowlist endpoint
+/// validation, and the ureq-backed HTTPS transport with the Python retry
+/// state machine (`_urlopen_with_sync_retries`). Token refresh is not yet
+/// ported (stage B) — a cached-token-miss surfaces `EvalError::Validation`
+/// (`GuardSyncAuthorizationExpiredError` mirror, fail-closed to `ask`).
 ///
 /// `auth_context_override` is a test-only seam: when the originating Python
 /// process is running under pytest (`PYTEST_CURRENT_TEST` set) and exports
 /// `HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON`, `supply_chain_eval_native` forwards
 /// the parsed dict on the request as `sync_auth_context_override`. Two forms:
 ///   * `{"sync_url": ..., "access_token": ...}` — used verbatim as the auth
-///     context so the resident reaches the (still stubbed) transport and
-///     surfaces `cloud_http_error` rather than silently degrading;
+///     context so the resident reaches the transport and surfaces
+///     `cloud_http_error` rather than silently degrading;
 ///   * `{"error": "authorization_expired"}` — surfaces as
 ///     `EvalError::Validation`, which `evaluate_with_cloud` maps to the
 ///     `cloud_auth_error` fail-closed path (parity with
@@ -1302,57 +1308,174 @@ struct ResidentGuardSyncRunner {
 impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
     fn resolve_guard_sync_auth_context(
         &self,
-        _store: &dyn SupplyChainStore,
+        store: &dyn SupplyChainStore,
         _allow_primary_repair: bool,
-        _force_refresh: bool,
+        force_refresh: bool,
     ) -> EvalResult<Map<String, Value>> {
+        use guard_command::guard_sync_transport as gst;
         if let Some(override_ctx) = &self.auth_context_override {
             if override_ctx.get("error").and_then(Value::as_str) == Some("authorization_expired") {
                 return Err(EvalError::Validation(
                     "guard sync authorization expired (test override)".into(),
                 ));
             }
-            return Ok(override_ctx.clone());
+            let mut ctx = override_ctx.clone();
+            if let Some(sync_url) = ctx.get("sync_url").and_then(Value::as_str) {
+                let issuer = ctx.get("issuer").and_then(Value::as_str);
+                ctx.insert(
+                    "sync_url".to_owned(),
+                    Value::String(
+                        gst::validate_guard_sync_endpoint(sync_url, issuer)
+                            .map_err(EvalError::Validation)?,
+                    ),
+                );
+            }
+            return Ok(ctx);
         }
-        Err(EvalError::NotFound(
-            "guard sync auth context unavailable in resident".into(),
-        ))
+        if let Some(mut env_ctx) = gst::test_sync_auth_context_from_env() {
+            if let Some(sync_url) = env_ctx.get("sync_url").and_then(Value::as_str) {
+                let issuer = env_ctx.get("issuer").and_then(Value::as_str);
+                env_ctx.insert(
+                    "sync_url".to_owned(),
+                    Value::String(
+                        gst::validate_guard_sync_endpoint(sync_url, issuer)
+                            .map_err(EvalError::Validation)?,
+                    ),
+                );
+            }
+            return Ok(env_ctx);
+        }
+        // `_resolve_guard_sync_auth_context` (:4733) — read the stored OAuth
+        // credentials, extract DPoP material, and reuse a still-valid cached
+        // access token. Token refresh (the network leg + rotation persist) is
+        // NOT ported in stage A: a missing/expired token surfaces
+        // `EvalError::Validation` (the `GuardSyncAuthorizationExpiredError`
+        // mirror) so `_evaluate_with_cloud` fail-closes to `ask` rather than
+        // mislabeling a refresh-needed credential as `NotFound` ("not
+        // configured") and falling back to local-only evaluation.
+        let oauth_credentials = match store.get_sync_payload("oauth_local_credentials") {
+            Some(c) if c.is_object() => c,
+            _ => return Err(EvalError::NotFound("Guard is not logged in.".to_owned())),
+        };
+        let issuer = oauth_credentials
+            .get("issuer")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty());
+        let client_id = oauth_credentials
+            .get("client_id")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty());
+        let refresh_token = oauth_credentials
+            .get("refresh_token")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty());
+        let (issuer, client_id, refresh_token) = match (issuer, client_id, refresh_token) {
+            (Some(i), Some(c), Some(r)) => (i, c, r),
+            _ => {
+                return Err(EvalError::Validation(
+                    "Guard OAuth credentials are incomplete; reauthorize Guard.".to_owned(),
+                ))
+            }
+        };
+        let _ = (client_id, refresh_token); // refresh path is the stage-B port
+        let dpop_key_material = gst::oauth_dpop_key_material(&oauth_credentials)?;
+        gst::resolve_guard_oauth_client_config(issuer).map_err(|e| {
+            EvalError::Validation(format!("Reconnect Guard to Guard Cloud to continue. {e}"))
+        })?;
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or_default();
+        let cached_access_token = if force_refresh {
+            None
+        } else {
+            gst::cached_oauth_access_token(&oauth_credentials, now_unix)
+        };
+        let access_token = match cached_access_token {
+            Some(t) => t,
+            None => {
+                return Err(EvalError::Validation(
+                    "Guard OAuth access token needs refresh; the resident refresh path \
+                     is not ported (stage A). Reauthorize Guard to continue."
+                        .to_owned(),
+                ))
+            }
+        };
+        let sync_url = gst::validate_guard_sync_endpoint(
+            &gst::oauth_sync_url_from_issuer(issuer).map_err(EvalError::Validation)?,
+            Some(issuer),
+        )
+        .map_err(EvalError::Validation)?;
+        let mut ctx = Map::new();
+        ctx.insert("sync_url".to_owned(), Value::String(sync_url));
+        ctx.insert("access_token".to_owned(), Value::String(access_token));
+        ctx.insert(
+            "dpop_key_material".to_owned(),
+            Value::Object(dpop_key_material),
+        );
+        ctx.insert("issuer".to_owned(), Value::String(issuer.to_owned()));
+        Ok(ctx)
     }
-    fn validate_guard_sync_url(&self, sync_url: &str, _issuer: Option<&str>) -> EvalResult<String> {
-        Ok(sync_url.trim_end_matches('/').to_owned())
+    fn validate_guard_sync_url(&self, sync_url: &str, issuer: Option<&str>) -> EvalResult<String> {
+        guard_command::guard_sync_transport::validate_guard_sync_endpoint(sync_url, issuer)
+            .map_err(EvalError::Validation)
     }
     fn guard_sync_request(
         &self,
-        _auth_context: &Value,
+        auth_context: &Value,
         request_url: &str,
         method: &str,
         data: Option<&[u8]>,
-        _extra_headers: Option<&Map<String, Value>>,
+        extra_headers: Option<&Map<String, Value>>,
         dpop_nonce: Option<&str>,
     ) -> EvalResult<GuardSyncRequest> {
-        Ok(GuardSyncRequest {
-            url: request_url.to_owned(),
-            method: method.to_owned(),
-            headers: BTreeMap::new(),
-            body: data.map(|d| d.to_vec()),
-            dpop_nonce: dpop_nonce.map(str::to_owned),
-        })
+        guard_command::guard_sync_transport::guard_sync_request(
+            auth_context,
+            request_url,
+            method,
+            data,
+            extra_headers,
+            dpop_nonce,
+        )
     }
     fn urlopen_json_with_timeout_retry(
         &self,
-        _request: &GuardSyncRequest,
-        _timeout_seconds: u64,
-        _retry_timeout_seconds: u64,
+        request: &GuardSyncRequest,
+        timeout_seconds: u64,
+        retry_timeout_seconds: u64,
     ) -> EvalResult<Map<String, Value>> {
-        Err(EvalError::Internal(
-            "resident guard-sync transport unavailable".into(),
-        ))
+        let payload = guard_command::guard_sync_transport::urlopen_json_with_timeout_retry(
+            request,
+            timeout_seconds as f64,
+            retry_timeout_seconds as f64,
+        )?;
+        match payload {
+            Value::Object(map) => Ok(map),
+            _ => Err(EvalError::Internal(
+                "Guard Cloud sync returned an invalid response payload.".into(),
+            )),
+        }
     }
-    fn is_timeout_error(&self, _error: &(dyn std::error::Error + 'static)) -> bool {
-        false
+    fn is_timeout_error(&self, error: &(dyn std::error::Error + 'static)) -> bool {
+        // `_is_timeout_error` (:4997) — urllib surfaces `TimeoutError`,
+        // `URLError` with a `timeout` reason, and (rarely) `HTTPException`.
+        // The transport folds all of those into `EvalError::Internal` with a
+        // `timeout:` prefix.
+        error
+            .downcast_ref::<EvalError>()
+            .is_some_and(|e| matches!(e, EvalError::Internal(m) if m.starts_with("timeout:")))
     }
     fn normalized_receipts_sync_url(&self, sync_url: &str) -> String {
-        sync_url.to_owned()
+        // `_normalized_receipts_sync_url` (:4927) — trailing `/`s trimmed,
+        // the sync endpoint suffix stripped so error detail + nonce paths
+        // compare origins.
+        let trimmed = sync_url.trim_end_matches('/');
+        let lower = trimmed.to_lowercase();
+        if lower.ends_with("/api/guard/receipts/sync") {
+            trimmed[..trimmed.len() - "/api/guard/receipts/sync".len()].to_owned()
+        } else {
+            trimmed.to_owned()
+        }
     }
 }
 
@@ -1585,187 +1708,49 @@ fn response_to_bundle_json(response: &EvalBundleResponse) -> Value {
     })
 }
 
-/// `packaging`-style PEP-440 + npm-selector semver seam — faithful subset
-/// matching the shape Python's `packaging`/`js_semver` expose.
+/// Native PEP 440 parsing and bounded npm selectors.
 struct ResidentSemver;
-
-impl ResidentSemver {
-    fn parse_version(value: &str) -> EvalResult<Version> {
-        let normalized = value.trim().to_owned();
-        if normalized.is_empty() {
-            return Err(EvalError::Validation("empty version".into()));
-        }
-        let release_part = normalized
-            .split(['-', '+'])
-            .next()
-            .unwrap_or(normalized.as_str());
-        let mut release: Vec<u64> = Vec::new();
-        for seg in release_part.split('.') {
-            if seg.is_empty() {
-                continue;
-            }
-            release.push(seg.parse::<u64>().unwrap_or(0));
-        }
-        if release.is_empty() {
-            release.push(0);
-        }
-        Ok(Version {
-            normalized,
-            release,
-        })
-    }
-
-    fn compare_release(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
-        let len = a.len().max(b.len());
-        for i in 0..len {
-            match a
-                .get(i)
-                .copied()
-                .unwrap_or(0)
-                .cmp(&b.get(i).copied().unwrap_or(0))
-            {
-                std::cmp::Ordering::Equal => continue,
-                ord => return ord,
-            }
-        }
-        std::cmp::Ordering::Equal
-    }
-
-    fn satisfies_specifier(version: &Version, spec: &str) -> bool {
-        let spec = spec.trim();
-        if spec.is_empty() || spec == "*" {
-            return true;
-        }
-        for clause in spec.split(',') {
-            let clause = clause.trim();
-            if clause.is_empty() {
-                continue;
-            }
-            let (op, rhs) = if let Some(rest) = clause.strip_prefix(">=") {
-                (">=", rest)
-            } else if let Some(rest) = clause.strip_prefix("<=") {
-                ("<=", rest)
-            } else if let Some(rest) = clause.strip_prefix("==") {
-                ("==", rest)
-            } else if let Some(rest) = clause.strip_prefix("!=") {
-                ("!=", rest)
-            } else if let Some(rest) = clause.strip_prefix('>') {
-                (">", rest)
-            } else if let Some(rest) = clause.strip_prefix('<') {
-                ("<", rest)
-            } else if let Some(rest) = clause.strip_prefix('~') {
-                ("~=", rest)
-            } else if let Some(rest) = clause.strip_prefix('^') {
-                ("^", rest)
-            } else {
-                ("==", clause)
-            };
-            let rhs_v = match Self::parse_version(rhs.trim()) {
-                Ok(v) => v,
-                Err(_) => return false,
-            };
-            let ord = Self::compare_release(&version.release, &rhs_v.release);
-            let ok = match op {
-                "==" => ord == std::cmp::Ordering::Equal,
-                "!=" => ord != std::cmp::Ordering::Equal,
-                ">=" => ord != std::cmp::Ordering::Less,
-                "<=" => ord != std::cmp::Ordering::Greater,
-                ">" => ord == std::cmp::Ordering::Greater,
-                "<" => ord == std::cmp::Ordering::Less,
-                "~=" | "^" => {
-                    if ord == std::cmp::Ordering::Less {
-                        false
-                    } else {
-                        let mut upper = rhs_v.release.clone();
-                        if op == "^" && upper.first().copied().unwrap_or(0) == 0 && upper.len() > 1
-                        {
-                            upper[1] += 1;
-                            upper.truncate(2);
-                        } else {
-                            upper[0] = upper.first().copied().unwrap_or(0) + 1;
-                            upper.truncate(1);
-                        }
-                        Self::compare_release(&version.release, &upper) == std::cmp::Ordering::Less
-                    }
-                }
-                _ => false,
-            };
-            if !ok {
-                return false;
-            }
-        }
-        true
-    }
-}
 
 impl JsSemverApi for ResidentSemver {
     fn specifier_set(&self, range: &str) -> EvalResult<SpecifierSet> {
-        if range.trim().is_empty() {
-            return Err(EvalError::Validation("empty specifier".into()));
-        }
-        Ok(SpecifierSet {
-            normalized: range.trim().to_owned(),
-        })
+        SpecifierSet::parse(range).map_err(EvalError::Validation)
     }
     fn version(&self, value: &str) -> EvalResult<Version> {
-        Self::parse_version(value)
+        Version::parse(value).map_err(EvalError::Validation)
     }
     fn version_in_specifier_set(&self, version: &Version, set: &SpecifierSet) -> bool {
-        Self::satisfies_specifier(version, &set.normalized)
+        set.contains(version)
     }
     fn highest_js_version_for_selector(
         &self,
         versions: &[String],
         selector: &str,
     ) -> Option<String> {
-        let mut best: Option<Version> = None;
-        let mut best_raw: Option<String> = None;
-        for candidate in versions {
-            let Ok(v) = Self::parse_version(candidate) else {
-                continue;
-            };
-            if !Self::satisfies_specifier(&v, selector) {
-                continue;
-            }
-            let better = match &best {
-                None => true,
-                Some(b) => {
-                    Self::compare_release(&v.release, &b.release) == std::cmp::Ordering::Greater
-                }
-            };
-            if better {
-                best = Some(v);
-                best_raw = Some(candidate.clone());
-            }
-        }
-        best_raw
+        guard_command::js_semver::highest_js_version_for_selector(versions, selector)
+            .map(str::to_owned)
     }
     fn version_matches_js_selector(&self, version: &str, selector: &str) -> bool {
-        match Self::parse_version(version) {
-            Ok(v) => Self::satisfies_specifier(&v, selector),
-            Err(_) => false,
-        }
+        guard_command::js_semver::version_matches_js_selector(version, selector)
     }
 }
 
-/// Risk-detection seam — `detect_supply_chain_risk` is not yet ported; return
-/// an empty signal list so eval continues with zero risk contribution.
+/// Package risk detection delegates to the native supply-chain content rules.
 struct ResidentRisk;
 
 impl RiskDetectApi for ResidentRisk {
     fn detect_supply_chain_risk(
         &self,
-        _content: &str,
+        content: &str,
         _file_path: Option<&str>,
     ) -> EvalResult<Vec<Map<String, Value>>> {
-        Ok(Vec::new())
+        guard_command::supply_chain_risk::detect_supply_chain_risk(content)
     }
     fn evaluate_supply_chain_risk_sync(
         &self,
-        _content: &str,
+        content: &str,
         _file_path: Option<&str>,
     ) -> EvalResult<Vec<Map<String, Value>>> {
-        Ok(Vec::new())
+        guard_command::supply_chain_risk::detect_supply_chain_risk(content)
     }
 }
 
@@ -1773,56 +1758,6 @@ impl RiskDetectApi for ResidentRisk {
 struct ResidentManifestDeps;
 
 impl ManifestDepsApi for ResidentManifestDeps {
-    fn evaluation_targets(
-        &self,
-        artifact: &GuardArtifact,
-        workspace_dir: Option<&Path>,
-        explicit_targets: &[Map<String, Value>],
-        include_locked: bool,
-    ) -> Vec<Map<String, Value>> {
-        let mut out: Vec<Map<String, Value>> = explicit_targets.to_vec();
-        if !include_locked {
-            return out;
-        }
-        let Some(ws) = workspace_dir else {
-            return out;
-        };
-        for key in ["manifest_paths", "lockfile_paths"] {
-            let Some(Value::Array(paths)) = artifact.metadata.get(key).cloned() else {
-                continue;
-            };
-            for rel in paths.iter().filter_map(Value::as_str) {
-                let Some(resolved) = resolve_path_within_workspace(ws, rel) else {
-                    continue;
-                };
-                let Ok(text) = std::fs::read_to_string(&resolved) else {
-                    continue;
-                };
-                let deps = guard_command::package_manifest_diff::parse_manifest_dependencies(
-                    rel,
-                    &text,
-                    text.len(),
-                    4000,
-                );
-                for (name, version) in deps {
-                    out.push(
-                        json!({
-                            "ecosystem": ecosystem_for_path(rel),
-                            "name": name,
-                            "package_name": name,
-                            "version": version,
-                            "source": rel,
-                        })
-                        .as_object()
-                        .cloned()
-                        .unwrap_or_default(),
-                    );
-                }
-            }
-        }
-        out
-    }
-
     fn dependency_map_for_path(
         &self,
         path: &str,
@@ -1854,30 +1789,6 @@ impl ManifestDepsApi for ResidentManifestDeps {
         )
     }
 }
-
-fn ecosystem_for_path(path: &str) -> &'static str {
-    let name = Path::new(path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
-    match name {
-        "package.json"
-        | "package-lock.json"
-        | "npm-shrinkwrap.json"
-        | "yarn.lock"
-        | "pnpm-lock.yaml"
-        | "bun.lock"
-        | "bun.lockb" => "npm",
-        "requirements.txt" | "Pipfile" | "Pipfile.lock" | "poetry.lock" | "pyproject.toml"
-        | "uv.lock" | "setup.py" => "pypi",
-        "Cargo.toml" | "Cargo.lock" => "cargo",
-        "Gemfile" | "Gemfile.lock" => "rubygems",
-        "composer.json" | "composer.lock" => "packagist",
-        "go.mod" | "go.sum" => "go",
-        _ => "",
-    }
-}
-
 /// Package-identity seam — delegates to `supply_chain_package_identity` fns.
 struct ResidentPackageIdentity;
 
@@ -1930,27 +1841,49 @@ impl PackageIdentityApi for ResidentPackageIdentity {
     }
 }
 
-/// Restricted-archive seam — no HTTP transport in the resident; return the
-/// policy Failure the Python download produces when the fetch is denied.
+/// Restricted-archive seam — bounded public-HTTPS-only acquisition via the
+/// `guard_command::restricted_archive` policy engine over the ureq-backed
+/// pinned transport.
 struct ResidentRestrictedArchive;
 
 impl RestrictedArchiveApi for ResidentRestrictedArchive {
     fn download_restricted_archive(
         &self,
         source_url: &str,
-        _max_bytes: u64,
-        _max_redirects: u32,
-        _timeout_seconds: f64,
-        _temp_dir: Option<&Path>,
+        max_bytes: u64,
+        max_redirects: u32,
+        timeout_seconds: f64,
+        temp_dir: Option<&Path>,
     ) -> EvalResult<RestrictedArchiveDownloadResult> {
-        Ok(RestrictedArchiveDownloadResult::Failure(
-            RestrictedArchiveFailure {
-                code: "external_archive_transport_unavailable".into(),
-                message: format!(
-                    "Restricted archive download is unavailable in the resident: {source_url}"
-                ),
+        let resolver = guard_command::restricted_archive_transport::SystemDnsResolver;
+        let transport = guard_command::restricted_archive_transport::UreqPinnedTransport;
+        Ok(
+            match guard_command::restricted_archive::download_restricted_archive(
+                source_url,
+                max_bytes,
+                max_redirects,
+                timeout_seconds,
+                temp_dir,
+                &resolver,
+                &transport,
+            ) {
+                guard_command::restricted_archive::RestrictedArchiveDownloadResult::Success(
+                    blob,
+                ) => RestrictedArchiveDownloadResult::Success(EvalRestrictedArchiveDownload {
+                    path: blob.path,
+                    sha256: blob.sha256,
+                    size: blob.size,
+                    source_url: blob.source_url,
+                    final_url: blob.final_url,
+                }),
+                guard_command::restricted_archive::RestrictedArchiveDownloadResult::Failure(
+                    failure,
+                ) => RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
+                    code: failure.code,
+                    message: failure.message,
+                }),
             },
-        ))
+        )
     }
 }
 
@@ -2190,11 +2123,33 @@ struct ResidentRuntimeRunner;
 impl RuntimeRunnerApi for ResidentRuntimeRunner {
     fn resolve_guard_sync_auth_context(
         &self,
-        _store: &dyn SupplyChainStore,
+        store: &dyn SupplyChainStore,
     ) -> Result<Value, LocalSupplyChainError> {
-        Err(LocalSupplyChainError::NotAvailable {
-            message: "guard sync auth context unavailable in resident".into(),
-            retryable: true,
+        // `.runtime.runner` resolve delegates to the same resident
+        // `GuardSyncRunnerApi` — the OAuth credential read + origin gate +
+        // cached-token check live there. `EvalError` → `LocalSupplyChainError`
+        // mapping: `NotFound` = `GuardSyncNotConfiguredError` (non-retryable
+        // not-configured), `Validation` = `GuardSyncAuthorizationExpiredError`
+        // (fail-closed auth-expired; still `retryable` at this seam so the
+        // caller's `with_refresh` loop can retry once before surfacing).
+        ResidentGuardSyncRunner {
+            auth_context_override: None,
+        }
+        .resolve_guard_sync_auth_context(store, false, false)
+        .map(Value::Object)
+        .map_err(|e| match e {
+            EvalError::NotFound(m) => LocalSupplyChainError::NotAvailable {
+                message: m,
+                retryable: false,
+            },
+            EvalError::Validation(m) => LocalSupplyChainError::NotAvailable {
+                message: m,
+                retryable: true,
+            },
+            other => LocalSupplyChainError::NotAvailable {
+                message: other.to_string(),
+                retryable: true,
+            },
         })
     }
     fn sync_local_guard_cloud_proof(
@@ -2217,14 +2172,118 @@ impl RuntimeRunnerApi for ResidentRuntimeRunner {
             retryable: true,
         })
     }
-    fn guard_sync_headers(&self, _auth_context: &Value) -> BTreeMap<String, String> {
-        BTreeMap::new()
+    fn guard_sync_headers(&self, auth_context: &Value) -> BTreeMap<String, String> {
+        // `_guard_sync_headers` (:4783) without a request_url — the bundle
+        // sync path only needs the Bearer + content-type set (no DPoP proof
+        // is bound to a URL/method yet).
+        let mut headers = BTreeMap::new();
+        let access_token = auth_context
+            .get("access_token")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        headers.insert("Authorization".to_owned(), format!("Bearer {access_token}"));
+        headers.insert("Content-Type".to_owned(), "application/json".to_owned());
+        headers.insert("Accept".to_owned(), "application/json".to_owned());
+        headers.insert("User-Agent".to_owned(), "hol-guard-native".to_owned());
+        headers
     }
-    fn check_plan_restriction_403(&self, _status: u16, _body: &str) -> (bool, String) {
-        (false, String::new())
+    fn check_plan_restriction_403(&self, _status: u16, body: &str) -> (bool, String) {
+        // `_check_plan_restriction_403` (:4955) — read the 403 body once,
+        // prefer the `error`/`syncEnabled`/`code` fields, keyword-scan the
+        // combined message+code for plan-restriction signals.
+        const PLAN_403_KEYWORDS: &[&str] = &[
+            "sync_not_available",
+            "plan_restriction",
+            "requires a pro",
+            "requires a team",
+            "upgrade your plan",
+            "upgrade to",
+            "subscription required",
+            "not included in your plan",
+            "guard sync requires",
+        ];
+        let fallback = {
+            let trimmed = body.trim();
+            if trimmed.is_empty() {
+                "HTTP Error 403".to_owned()
+            } else {
+                trimmed.to_owned()
+            }
+        };
+        let Ok(Value::Object(payload)) = serde_json::from_str::<Value>(body) else {
+            return (false, fallback);
+        };
+        let message_str = payload
+            .get("error")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| fallback.clone());
+        if payload.get("syncEnabled").and_then(Value::as_bool) == Some(false) {
+            return (true, message_str);
+        }
+        let error_field = payload
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_lowercase();
+        let code_field = payload
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_lowercase();
+        let combined = format!("{error_field} {code_field}");
+        if PLAN_403_KEYWORDS.iter().any(|kw| combined.contains(kw)) {
+            return (true, message_str);
+        }
+        (false, message_str)
     }
     fn guard_cloud_http_error_details(&self, status: u16, body: &str) -> (String, bool) {
-        (format!("guard cloud HTTP {status}: {body}"), status >= 500)
+        // `_guard_cloud_http_error_details` (:2874) — retryable codes +
+        // `guardError.retryable`/`guardError.code` signals, message preferring
+        // the structured `guardError.message`/`error`/`message` field.
+        let mut retryable = matches!(status, 429 | 503 | 524);
+        let mut message: Option<String> = None;
+        if let Ok(Value::Object(payload)) = serde_json::from_str::<Value>(body) {
+            for key in ["guardError", "error", "message"] {
+                if let Some(s) = payload.get(key).and_then(Value::as_str).map(str::trim) {
+                    if !s.is_empty() {
+                        message = Some(s.to_owned());
+                        break;
+                    }
+                }
+                if let Some(inner) = payload.get(key).and_then(Value::as_object) {
+                    if let Some(s) = inner.get("message").and_then(Value::as_str).map(str::trim) {
+                        if !s.is_empty() {
+                            message = Some(s.to_owned());
+                            break;
+                        }
+                    }
+                }
+            }
+            if let Some(guard_error) = payload.get("guardError").and_then(Value::as_object) {
+                if guard_error.get("retryable").and_then(Value::as_bool) == Some(true) {
+                    retryable = true;
+                }
+                if let Some(code) = guard_error.get("code").and_then(Value::as_str) {
+                    let normalized = code.trim().to_lowercase();
+                    if normalized == "guard_unavailable" || normalized == "guard_cloud_unavailable"
+                    {
+                        retryable = true;
+                    }
+                }
+            }
+        }
+        let message = message.unwrap_or_else(|| {
+            let trimmed = body.trim();
+            if trimmed.is_empty() {
+                format!("HTTP Error {status}")
+            } else {
+                trimmed.to_owned()
+            }
+        });
+        (message, retryable)
     }
     fn sync_url_error_message(&self, error: &str) -> String {
         error.to_owned()
@@ -2650,5 +2709,212 @@ fn artifact_from_value(v: &Value) -> GuardArtifact {
         publisher: get_opt("publisher"),
         metadata: v.get("metadata").cloned().unwrap_or(Value::Null),
         runtime_private_metadata: Value::Null,
+    }
+}
+
+pub(crate) fn evaluate_package_advisory_ids(
+    request: &guard_contracts::PackageAdvisoryIdsRequestV1,
+) -> Result<Vec<u8>, String> {
+    let request_sha256 = request_digest(request)?;
+    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
+        return Err("native_package_advisory_schema_mismatch".into());
+    }
+    if let Some(rejected) = reject_empty_resident_paths(
+        &request.request_id,
+        &request_sha256,
+        &request.store_path,
+        &request.guard_home,
+    ) {
+        return rejected;
+    }
+    let artifact = artifact_from_value(&request.artifact);
+    let identities: Vec<Value> =
+        guard_command::target_identities::package_target_identities(&artifact)
+            .iter()
+            .map(|identity| Value::Object(identity.to_dict()))
+            .collect();
+    let model = guard_command::target_identities::NativeAdvisoryModel;
+    let connection = rusqlite::Connection::open_with_flags(
+        &request.store_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?;
+    let mut statement = connection
+        .prepare("SELECT payload_json FROM publisher_cache ORDER BY updated_at DESC")
+        .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?;
+    let mut rows = statement
+        .query([])
+        .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?;
+    let mut matched_ids = std::collections::BTreeSet::new();
+    while let Some(row) = rows
+        .next()
+        .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?
+    {
+        let raw = row
+            .get_ref(0)
+            .map_err(|_| "native_package_advisory_cache_invalid".to_owned())?;
+        let rusqlite::types::ValueRef::Text(raw) = raw else {
+            return Err("native_package_advisory_cache_invalid".to_owned());
+        };
+        let mut advisory: Value = serde_json::from_slice(raw)
+            .map_err(|_| "native_package_advisory_cache_invalid".to_owned())?;
+        if !advisory.is_object() {
+            continue;
+        }
+        if identities.iter().any(|identity| {
+            guard_command::local_supply_chain::AdvisoryModelApi::advisory_matches_target(
+                &model, &advisory, identity,
+            )
+        }) {
+            if let Some(Value::String(id)) =
+                advisory.as_object_mut().and_then(|row| row.remove("id"))
+            {
+                if !id.is_empty() {
+                    matched_ids.insert(id);
+                }
+            }
+        }
+    }
+    let mut payload = Map::new();
+    payload.insert(
+        "matched_advisory_ids".into(),
+        Value::Array(matched_ids.into_iter().map(Value::String).collect()),
+    );
+    serde_json::to_vec(&SupplyChainEvalResultV1 {
+        schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.into(),
+        request_id: request.request_id.clone(),
+        request_sha256,
+        status: "ok".into(),
+        code: "ok".into(),
+        payload: Some(Value::Object(payload)),
+    })
+    .map_err(|_| "native_package_advisory_result_invalid".to_owned())
+}
+
+#[cfg(test)]
+mod package_advisory_tests {
+    use super::*;
+
+    struct CacheFixture {
+        home: PathBuf,
+        connection: Option<rusqlite::Connection>,
+    }
+
+    impl CacheFixture {
+        fn new() -> Self {
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let home = std::env::temp_dir().join(format!(
+                "hol-guard-package-advisory-{}-{nonce}",
+                std::process::id(),
+            ));
+            std::fs::create_dir_all(&home).unwrap();
+            let connection = rusqlite::Connection::open(home.join("guard.db")).unwrap();
+            connection.execute_batch(
+                "CREATE TABLE publisher_cache (publisher_key TEXT PRIMARY KEY, payload_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            ).unwrap();
+            Self {
+                home,
+                connection: Some(connection),
+            }
+        }
+
+        fn request(&self) -> guard_contracts::PackageAdvisoryIdsRequestV1 {
+            guard_contracts::PackageAdvisoryIdsRequestV1 {
+                schema: PACKAGE_AUTHORITY_REQUEST_SCHEMA.into(),
+                request_id: "package-policy-feed".into(),
+                store_path: self.home.join("guard.db").to_string_lossy().into_owned(),
+                guard_home: self.home.to_string_lossy().into_owned(),
+                artifact: json!({
+                    "artifact_id":"command:install",
+                    "metadata":{"targets":[{"ecosystem":"npm","package_name":"@scope/résumé","requested_specifier":"2.0"}]}
+                }),
+            }
+        }
+    }
+
+    impl Drop for CacheFixture {
+        fn drop(&mut self) {
+            drop(self.connection.take());
+            let _ = std::fs::remove_dir_all(&self.home);
+        }
+    }
+
+    #[test]
+    fn package_advisory_scan_includes_old_rows_and_deduplicates_matching_ids() {
+        let mut fixture = CacheFixture::new();
+        let transaction = fixture.connection.as_mut().unwrap().transaction().unwrap();
+        for index in 0..150 {
+            let advisory = if index == 0 || index == 149 {
+                json!({"id":"older-risk","package_url":"pkg:npm/@scope/résumé@1.0"})
+            } else {
+                json!({"id":format!("unrelated-{index}"),"package":"not-the-target"})
+            };
+            transaction
+                .execute(
+                    "INSERT INTO publisher_cache VALUES (?1, ?2, ?3)",
+                    rusqlite::params![
+                        index.to_string(),
+                        advisory.to_string(),
+                        format!("{index:03}")
+                    ],
+                )
+                .unwrap();
+        }
+        transaction.commit().unwrap();
+        let result: Value =
+            serde_json::from_slice(&evaluate_package_advisory_ids(&fixture.request()).unwrap())
+                .unwrap();
+        assert_eq!(
+            result["payload"]["matched_advisory_ids"],
+            json!(["older-risk"])
+        );
+        fixture
+            .connection
+            .as_ref()
+            .unwrap()
+            .execute(
+                "DELETE FROM publisher_cache WHERE publisher_key = '149'",
+                [],
+            )
+            .unwrap();
+        let result: Value =
+            serde_json::from_slice(&evaluate_package_advisory_ids(&fixture.request()).unwrap())
+                .unwrap();
+        assert_eq!(
+            result["payload"]["matched_advisory_ids"],
+            json!(["older-risk"])
+        );
+    }
+
+    #[test]
+    fn package_advisory_scan_fails_closed_on_corrupt_or_missing_cache() {
+        let fixture = CacheFixture::new();
+        fixture
+            .connection
+            .as_ref()
+            .unwrap()
+            .execute(
+                "INSERT INTO publisher_cache VALUES ('broken', '{', '2026')",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            evaluate_package_advisory_ids(&fixture.request()).unwrap_err(),
+            "native_package_advisory_cache_invalid",
+        );
+        let mut request = fixture.request();
+        request.store_path = fixture
+            .home
+            .join("missing.db")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(
+            evaluate_package_advisory_ids(&request).unwrap_err(),
+            "native_package_advisory_store_unavailable",
+        );
+        assert!(!fixture.home.join("missing.db").exists());
     }
 }

@@ -34,7 +34,7 @@ def main() -> int:
         "--profile",
         choices=("core", "contained-bun-vitest"),
         default="core",
-        help="Core20 qualification or the additive contained Bun/Vitest profile",
+        help="Complete core qualification or the additive contained Bun/Vitest profile",
     )
     run.add_argument(
         "--contained-test-project",
@@ -153,7 +153,7 @@ def main() -> int:
                     "pass": report["pass"],
                     "merge_qualified": report["merge_qualified"],
                     "scenarios": len(report["cases"]),
-                    "profile": report.get("profile", "core20"),
+                    "profile": report.get("profile", "core"),
                     "evidence": str(args.output),
                 }
             )

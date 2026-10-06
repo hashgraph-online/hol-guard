@@ -49,7 +49,7 @@ def native_runtime(tmp_path: Path) -> Iterator[tuple[Path, Path]]:
                 (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
                 check=False,
                 capture_output=True,
-                timeout=2,
+                timeout=10,
             )
         finally:
             if state_root is not None:

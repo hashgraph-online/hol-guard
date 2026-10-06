@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.local_supply_chain import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
@@ -125,7 +126,7 @@ def test_manifest_warning_does_not_suppress_approved_external_archive_inspection
         )
 
     monkeypatch.setattr(evaluator, "_evaluation_targets", unsynced_targets)
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", clean_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
 
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
@@ -154,7 +155,7 @@ def test_mixed_registry_and_external_archive_request_fails_closed_without_networ
     def unexpected_scan(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("mixed request must fail before network inspection")
 
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", unexpected_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", unexpected_scan)
 
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
@@ -190,19 +191,15 @@ def test_retained_archive_is_cleaned_if_evidence_persistence_raises(
         final_url=source_url,
     )
 
-    monkeypatch.setattr(
-        evaluator,
-        "_scan_external_tarball",
-        lambda *_args, **_kwargs: (
-            {
-                "decision": "ask",
-                "code": "external_tarball_source",
-                "message": "External tarball source requires review.",
-                "severity": "medium",
-            },
-            download,
-        ),
-    )
+    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: (
+        {
+            "decision": "ask",
+            "code": "external_tarball_source",
+            "message": "External tarball source requires review.",
+            "severity": "medium",
+        },
+        download,
+    ),)
 
     def persistence_failure(**_kwargs: object) -> None:
         raise RuntimeError("controlled evidence failure")
@@ -242,6 +239,7 @@ def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_pat
 
 def test_external_archive_credentials_stay_private_across_artifact_and_receipt_surfaces(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
