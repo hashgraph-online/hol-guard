@@ -693,8 +693,16 @@ jobs:
           if missing:
               print("::error::required jobs absent from needs graph: "+", ".join(missing))
               sys.exit(1)
-          bad_providers = [j for j in always_on
-                           if needs.get(j, {}).get("result") != "success"]
+          # `plan` is `if: pull_request`, so on push/merge_group it is always
+          # skipped — that is expected, not a provider failure. Off-PR it must
+          # merely not have failed; on pull_request it must succeed outright.
+          event = os.environ.get("EVENT_NAME", "")
+          def _provider_ok(name):
+              result = needs.get(name, {}).get("result")
+              if name == "plan" and event != "pull_request":
+                  return result in ("success", "skipped")
+              return result == "success"
+          bad_providers = [j for j in always_on if not _provider_ok(j)]
           failed = [j for j in required
                     if needs.get(j, {}).get("result") in ("failure","cancelled")]
           print(f"plan lanes={os.environ.get('PLAN_LANES')} data_only={data_only}")
