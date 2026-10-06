@@ -49,8 +49,9 @@ def _availability_response_is_deny(response: Mapping[str, object]) -> bool:
             "require-reapproval",
             "sandbox-required",
         }
-    # Empty/observe responses carry no deny signal.
-    return not response
+    # No deny signal present -> not a deny (fail-open on the verdict axis only
+    # when the envelope itself carries no decision; callers gate on shape).
+    return False
 
 
 def _native_unavailable_exit_code(
