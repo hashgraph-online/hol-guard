@@ -82,9 +82,7 @@ def _native_unavailable_exit_code(
     # Deny responses resolve to the fail-closed "block" action; allow / observe
     # responses resolve to "allow".  The shared per-harness contract decides rc
     # so this path can never diverge from the finish path's verdict mapping.
-    return native_hook_verdict_exit_code(
-        harness, "block" if deny else "allow", event_name=event_name
-    )
+    return native_hook_verdict_exit_code(harness, "block" if deny else "allow", event_name=event_name)
 
 
 def _emit_native_unavailable(

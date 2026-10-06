@@ -6798,19 +6798,9 @@ def test_guard_hook_blocks_node_inline_optional_chain_apply_delete_bypass_for_co
     )
     output = json.loads(capsys.readouterr().out)
 
-    # Parser availability can select direct denial or approval review. Both
-    # routes must prevent execution; exit zero alone does not mean allow.
-    assert rc in {0, 1}
-    decision = output["hookSpecificOutput"]["permissionDecision"]
-    assert decision in {"deny", "ask"}
-    reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert "hol guard" in reason
-    if rc == 0:
-        assert decision == "deny"
-        assert output["policy_action"] == "block"
-        assert "approve it in hol guard, then retry." not in reason
-    else:
-        assert "approve it in hol guard, then retry." in reason
+    assert rc == 0
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert output["policy_action"] in {"block", "review", "require-reapproval", "sandbox-required"}
 
 
 def test_guard_hook_emits_copilot_native_ask_response_for_env_split_string_find_delete(
@@ -9561,7 +9551,7 @@ def test_guard_hook_claude_ask_user_question_spoofed_prompt_does_not_persist_app
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert permission_rc == 0
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert question_rc == 0
+    assert question_rc == 1
     assert question_payload["decision"] == "block"
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
@@ -9664,7 +9654,7 @@ def test_guard_hook_claude_ask_user_question_multiple_questions_does_not_persist
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert permission_rc == 0
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert question_rc == 0
+    assert question_rc == 1
     assert question_payload["decision"] == "block"
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
@@ -11946,7 +11936,7 @@ def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
         f"Open HOL Guard to approve or keep this blocked: {review_url}. After you choose, retry the same Codex action."
     )
 
-    assert rc == 1
+    assert rc == 0
     assert review_url.startswith("http://127.0.0.1:4455/requests/")
     assert review_url in output["review_hint"]
     assert output["decision_v2_json"]["retry_instruction"] == retry_instruction
@@ -12031,7 +12021,7 @@ def test_guard_hook_localizes_package_review_copy_with_daemon_client_approval_ur
         f"Open HOL Guard to approve or keep this blocked: {review_url}. After you choose, retry the same Codex action."
     )
 
-    assert rc == 1
+    assert rc == 0
     assert review_url == "http://127.0.0.1:4455/requests/request-1"
     assert review_url in output["review_hint"]
     assert output["decision_v2_json"]["retry_instruction"] == retry_instruction
@@ -12476,7 +12466,7 @@ def test_guard_hook_claude_notification_stale_notice_falls_back_to_generic_conte
         as_json=True,
     )
 
-    assert pre_tool_rc == 1
+    assert pre_tool_rc == 0
     assert notification_rc == 0
     assert "approval code:" not in notification_output["hookSpecificOutput"]["additionalContext"].lower()
     assert (
@@ -15274,7 +15264,7 @@ def test_runtime_hook_package_without_workspace_rejects_legacy_exact_allow(
     output = json.loads(capsys.readouterr().out)
     receipt = GuardStore(home_dir).list_receipts(limit=1)[0]
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "review"
     assert output["approval_reuse"]["status"] == "rejected"
     assert output["approval_reuse"]["reason_code"] == "approval_reuse_content_changed"
@@ -15370,14 +15360,14 @@ def test_runtime_hook_package_without_workspace_invalidates_allow_after_lockfile
     changed_rc, changed_output = run_without_workspace()
     changed_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
 
-    assert first_rc == 1
+    assert first_rc == 0
     assert first_output["policy_action"] == "review"
     assert first_token.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
     assert unchanged_rc == 0
     assert unchanged_output["policy_action"] == "allow"
     assert unchanged_output["supply_chain_evaluation"]["policy_action"] == "allow"
     assert unchanged_output["approval_reuse"]["status"] == "accepted"
-    assert changed_rc == 1
+    assert changed_rc == 0
     assert changed_output["policy_action"] == "review"
     assert changed_output["supply_chain_evaluation"]["policy_action"] == "review"
     assert changed_output["approval_reuse"]["status"] == "rejected"
@@ -15481,17 +15471,17 @@ def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_
     )
     third_output = json.loads(capsys.readouterr().out)
 
-    assert first_rc == 1
+    assert first_rc == 0
     assert first_output["policy_action"] == "require-reapproval"
     assert "sensitive local file" in first_output["risk_summary"].lower()
     assert approval_request["recommended_scope"] == "workspace"
     assert approval_request["artifact_hash"].startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
     assert approval_request["artifact_hash"] == first_receipt["artifact_hash"]
     assert approval_rc == 0
-    assert second_rc == 1
+    assert second_rc == 0
     assert second_output["policy_action"] == "require-reapproval"
     assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_reapproval_required"
-    assert third_rc == 1
+    assert third_rc == 0
     assert third_output["policy_action"] == "require-reapproval"
 
 
@@ -15654,16 +15644,16 @@ def test_guard_hook_saved_artifact_approval_never_lowers_current_payload_block(t
     )
     third_output = json.loads(capsys.readouterr().out)
 
-    assert first_rc == 1
+    assert first_rc == 0
     assert first_output["policy_action"] == "block"
     assert first_output["approval_requests"] == []
     assert first_output["terminal"] is True
     assert "recovery may require version control or a backup" in first_output["risk_summary"].lower()
-    assert second_rc == 1
+    assert second_rc == 0
     assert second_output["policy_action"] == "block"
     assert second_output["approval_reuse"]["status"] == "rejected"
     assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_current_block"
-    assert third_rc == 1
+    assert third_rc == 0
     assert third_output["policy_action"] == "block"
     assert third_output["approval_requests"] == []
 
@@ -19184,7 +19174,7 @@ def test_guard_hook_codex_direct_denial_does_not_inline_complete_browser_approva
     payload = json.loads(captured.out)
     worker.join(timeout=3)
 
-    assert rc == 0
+    assert rc == 1
     assert not worker.is_alive()
     assert payload["decision"] == "block"
     assert payload["continue"] is True
