@@ -210,7 +210,7 @@ def test_catalog_has_both_product_outcomes_and_no_duplicate_scenarios():
     assert {
         "developer-settings-task",
         "native-sibling-project",
-        "credential-egress",
+        "synthetic-loopback-egress",
         "absolute-recursive-source-grep",
         "bounded-od-byte-check",
         "sibling-project-copy-readback",

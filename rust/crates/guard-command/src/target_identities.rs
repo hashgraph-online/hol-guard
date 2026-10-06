@@ -25,6 +25,8 @@
 //!   `package_manifest_diff.rs` version — it reproduces CPython's `e+16`/
 //!   `e-05` exponent style for shortest-repr floats.
 
+use std::borrow::Cow;
+
 use serde_json::{json, Map, Value};
 
 use crate::package_intent_common::GuardArtifact;
@@ -236,12 +238,16 @@ fn package_url_purl_type(ecosystem: &str) -> Option<&'static str> {
 /// `normalize_identity_value` (`advisory_model.py` :96-97):
 /// `value.strip().lower()` — only called with `str` in Python, so the
 /// `isinstance` guard is implied by the signature.
-fn normalize_identity_value(value: &str) -> String {
+fn normalize_identity_value(value: &str) -> Cow<'_, str> {
     let stripped = python_strip(value);
-    if stripped.is_empty() {
-        String::new()
+    if stripped
+        .chars()
+        .flat_map(char::to_lowercase)
+        .eq(stripped.chars())
+    {
+        Cow::Borrowed(stripped)
     } else {
-        stripped.to_lowercase()
+        Cow::Owned(stripped.to_lowercase())
     }
 }
 
@@ -260,6 +266,154 @@ pub fn build_package_url(
         return Some(base);
     }
     Some(format!("{base}@{stripped_version}"))
+}
+
+/// Concrete advisory identity authority shared by package policy consumers.
+pub struct NativeAdvisoryModel;
+
+impl crate::local_supply_chain::AdvisoryModelApi for NativeAdvisoryModel {
+    fn build_package_url(
+        &self,
+        ecosystem: &str,
+        package_name: Option<&str>,
+        version: Option<&str>,
+    ) -> Option<String> {
+        build_package_url(ecosystem, package_name, version)
+    }
+
+    fn advisory_matches_target(&self, advisory: &Value, target: &Value) -> bool {
+        advisory_matches_target(advisory, target)
+    }
+}
+
+fn package_url_base(value: &str) -> Cow<'_, str> {
+    let mut normalized = normalize_identity_value(value);
+    let without_suffix = normalized.split(['?', '#']).next().unwrap_or("");
+    let mut end = without_suffix.len();
+    if let Some(at) = without_suffix.rfind('@') {
+        if without_suffix.rfind('/').is_none_or(|slash| at >= slash) {
+            end = at;
+        }
+    }
+    match &mut normalized {
+        Cow::Borrowed(value) => Cow::Borrowed(&value[..end]),
+        Cow::Owned(value) => {
+            value.truncate(end);
+            normalized
+        }
+    }
+}
+
+fn normalized_membership(values: Option<&Value>, candidates: &[&str]) -> bool {
+    values.and_then(Value::as_array).is_some_and(|values| {
+        values.iter().filter_map(Value::as_str).any(|value| {
+            let normalized = normalize_identity_value(value);
+            !normalized.is_empty() && candidates.iter().any(|candidate| normalized == *candidate)
+        })
+    })
+}
+
+fn normalized_url_indicator(value: Option<&str>) -> String {
+    let Some(value) = value else {
+        return String::new();
+    };
+    let Ok(parsed) = crate::cloud_audit_sync::urlsplit(value) else {
+        return normalize_identity_value(value).into_owned();
+    };
+    if parsed.scheme.is_empty() || parsed.netloc.is_empty() {
+        return normalize_identity_value(value).into_owned();
+    }
+    let indicator = format!("{}{}", parsed.netloc, parsed.path.trim_end_matches('/'));
+    match normalize_identity_value(&indicator) {
+        Cow::Borrowed(_) => indicator,
+        Cow::Owned(normalized) => normalized,
+    }
+}
+
+pub fn advisory_matches_target(advisory: &Value, target: &Value) -> bool {
+    let (Some(advisory), Some(target)) = (advisory.as_object(), target.as_object()) else {
+        return false;
+    };
+    let Some(artifact_id) = target.get("artifact_id").and_then(Value::as_str) else {
+        return false;
+    };
+    if advisory.get("artifact_id").and_then(Value::as_str) == Some(artifact_id) {
+        return true;
+    }
+    if let Some(ecosystem) = advisory.get("ecosystem").and_then(Value::as_str) {
+        if ecosystem != "*" && target.get("ecosystem").and_then(Value::as_str) != Some(ecosystem) {
+            return false;
+        }
+    }
+    if let (Some(advisory_url), Some(target_url)) = (
+        advisory.get("package_url").and_then(Value::as_str),
+        target.get("package_url").and_then(Value::as_str),
+    ) {
+        let advisory_base = package_url_base(advisory_url);
+        if !advisory_base.is_empty() && advisory_base == package_url_base(target_url) {
+            return true;
+        }
+    }
+    let package = normalize_identity_value(
+        target
+            .get("package_name")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+    );
+    let name = normalize_identity_value(
+        target
+            .get("artifact_name")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+    );
+    if normalized_membership(advisory.get("aliases"), &[&package, &name]) {
+        return true;
+    }
+    let advisory_package = advisory
+        .get("package")
+        .filter(|value| py_truthy(value))
+        .or_else(|| advisory.get("name"))
+        .and_then(Value::as_str)
+        .map(normalize_identity_value);
+    if advisory_package
+        .as_ref()
+        .is_some_and(|value| !value.is_empty() && (value == &package || value == &name))
+    {
+        return true;
+    }
+    if let Some(publisher) = advisory.get("publisher").and_then(Value::as_str) {
+        let publisher = normalize_identity_value(publisher);
+        if !publisher.is_empty() && publisher == package {
+            return true;
+        }
+    }
+    if normalized_membership(advisory.get("publisher_identities"), &[&package]) {
+        return true;
+    }
+    let source = target.get("source_url").and_then(Value::as_str);
+    let normalized_source = normalized_url_indicator(source);
+    if !normalized_source.is_empty() {
+        if advisory
+            .get("endpoint_indicators")
+            .and_then(Value::as_array)
+            .is_some_and(|values| {
+                values.iter().filter_map(Value::as_str).any(|value| {
+                    let indicator = normalized_url_indicator(Some(value));
+                    !indicator.is_empty()
+                        && (normalized_source == indicator
+                            || normalized_source
+                                .strip_prefix(&indicator)
+                                .is_some_and(|rest| rest.starts_with('/')))
+                })
+            })
+        {
+            return true;
+        }
+        if let Some(advisory_source) = advisory.get("source_url").and_then(Value::as_str) {
+            return normalized_source == normalized_url_indicator(Some(advisory_source));
+        }
+    }
+    false
 }
 
 // ---------------------------------------------------------------------------
@@ -633,5 +787,74 @@ mod tests {
         assert_eq!(py_str_or_empty(&item, "ecosystem"), "");
         assert_eq!(py_str_or_empty(&item, "raw_spec"), "");
         assert_eq!(py_str_or_empty(&item, "missing"), "");
+    }
+    #[test]
+    fn advisory_identity_precedence_and_scoped_purl_boundaries() {
+        let target = json!({
+            "artifact_id": "npm:@scope/pkg", "artifact_name": "@scope/pkg",
+            "package_name": "@scope/pkg", "ecosystem": "npm",
+            "package_url": "pkg:npm/@scope/pkg@2.0#integrity"
+        });
+        assert!(advisory_matches_target(
+            &json!({"artifact_id":"npm:@scope/pkg", "ecosystem":"pypi"}),
+            &target,
+        ));
+        assert!(!advisory_matches_target(
+            &json!({"aliases":["@scope/pkg"], "ecosystem":"pypi"}),
+            &target,
+        ));
+        assert!(advisory_matches_target(
+            &json!({"package_url":"pkg:npm/@scope/pkg@1.0?arch=arm64"}),
+            &target,
+        ));
+        assert!(!advisory_matches_target(
+            &json!({"package_url":"pkg:npm/@other/pkg"}),
+            &target,
+        ));
+    }
+
+    #[test]
+    fn advisory_endpoint_matches_only_complete_path_segments() {
+        let target = json!({
+            "artifact_id":"npm:pkg", "ecosystem":"npm",
+            "source_url":"HTTPS://Registry.Example/repo/pkg?token=opaque#fragment"
+        });
+        assert!(advisory_matches_target(
+            &json!({"endpoint_indicators":["http://registry.example/repo/"]}),
+            &target,
+        ));
+        assert!(!advisory_matches_target(
+            &json!({"endpoint_indicators":["https://registry.example/rep"]}),
+            &target,
+        ));
+        assert!(!advisory_matches_target(
+            &json!({"endpoint_indicators":["https://registry.example.evil/repo"]}),
+            &target,
+        ));
+        assert!(advisory_matches_target(
+            &json!({"source_url":"http://registry.example/repo/pkg/"}),
+            &target,
+        ));
+    }
+
+    #[test]
+    fn advisory_aliases_preserve_unicode_lowercase_and_python_whitespace() {
+        let target = json!({
+            "artifact_id":"npm:other", "artifact_name":"ΟΣ", "package_name":"Résumé",
+            "ecosystem":"npm"
+        });
+        assert!(advisory_matches_target(
+            &json!({"aliases":["\u{1f}résumé\u{1c}"]}),
+            &target
+        ));
+        assert!(advisory_matches_target(&json!({"aliases":["ος"]}), &target));
+        assert!(!advisory_matches_target(
+            &json!({"aliases":["οσ"]}),
+            &target
+        ));
+        assert!(advisory_matches_target(
+            &json!({"publisher_identities":["RÉSUMÉ"]}),
+            &target
+        ));
     }
 }

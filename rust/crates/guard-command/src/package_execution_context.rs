@@ -142,7 +142,7 @@ pub fn package_execution_context_from_evidence(value: &Value) -> Option<PackageE
     if object.get("kind")?.as_str()? != PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND {
         return None;
     }
-    if object.get("schema_version")?.as_u64()? != PACKAGE_EXECUTION_CONTEXT_VERSION {
+    if object.get("schema_version")?.as_f64()? != PACKAGE_EXECUTION_CONTEXT_VERSION as f64 {
         return None;
     }
     let digest = sha256_value(object.get("context_digest"))?;
@@ -257,7 +257,9 @@ pub fn digest_json(value: &Value) -> String {
 
 /// `_string_value` (:286-287): strip + non-empty.
 fn string_value(value: Option<&Value>) -> Option<String> {
-    let text = value?.as_str()?.trim();
+    let text = value?.as_str()?.trim_matches(|character: char| {
+        character.is_whitespace() || matches!(character, '\u{001c}'..='\u{001f}')
+    });
     if text.is_empty() {
         None
     } else {
@@ -338,6 +340,24 @@ mod tests {
         assert_eq!(evidence["kind"], PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND);
         let decoded = package_execution_context_from_evidence(&evidence).unwrap();
         assert_eq!(decoded, context);
+    }
+
+    #[test]
+    fn persisted_numeric_version_and_python_whitespace_remain_compatible() {
+        let mut context = valid_context();
+        context.non_portable_reason = Some("reason".to_string());
+        let mut evidence = context.to_evidence();
+        evidence["schema_version"] = json!(2.0);
+        evidence["components"][0]["name"] = json!("\u{001c}repository_identity\u{001f}");
+        evidence["non_portable_reason"] = json!("\u{001e} reason \u{001d}");
+        assert_eq!(
+            package_execution_context_from_evidence(&evidence),
+            Some(context)
+        );
+        evidence["schema_version"] = json!(true);
+        assert!(package_execution_context_from_evidence(&evidence).is_none());
+        evidence["schema_version"] = json!(2.5);
+        assert!(package_execution_context_from_evidence(&evidence).is_none());
     }
 
     #[test]

@@ -87,8 +87,9 @@ rust/target/release/guard-command-source test < source-fixtures-current.json
 Python only assembles the envelope from checked-in JSON files. Rust validates
 the complete catalog and evaluates every case through native policy. Commit
 the canonical source and portable fixture, not `source-fixtures-current.json`.
-MCP kits generate MCP contribution tests instead of a command-source fixture;
-run their generated test file as part of the source-tree checks.
+MCP kits produce a contribution descriptor rather than a command-source
+fixture; the shared MCP contribution checks validate it — no
+per-contribution test module is generated.
 
 ## Source-tree checks
 

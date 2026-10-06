@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 pub mod action_lattice;
 pub mod approval_reuse;
+pub mod browser_mcp_intent;
 pub mod business_gmail_plain;
 pub mod business_gmail_wire;
 pub mod business_gws_command;
@@ -22,7 +23,7 @@ mod command_evaluation_tests;
 mod command_launcher_floors;
 pub mod command_model;
 mod command_operand_matchers;
-mod command_option_parsing;
+pub mod command_option_parsing;
 mod command_segment_parsing;
 #[cfg(unix)]
 pub mod command_shell_read_factors;
@@ -56,9 +57,18 @@ pub mod homebrew_intent;
 pub mod jsonc;
 #[cfg(unix)]
 pub mod launch_identity;
+#[cfg(not(unix))]
+#[path = "launch_identity_stub.rs"]
+pub mod launch_identity;
 #[cfg(unix)]
 pub mod launch_identity_binding;
 pub mod launch_identity_environment;
+pub mod mcp_arguments;
+pub mod mcp_launch_environment;
+pub mod mcp_tool_approval;
+pub mod mcp_tool_catalog;
+pub mod mcp_tool_policy;
+pub mod mcp_tool_risk;
 pub mod native_command_catalog;
 pub mod native_command_controls;
 pub mod native_command_extension_evidence;
@@ -85,6 +95,8 @@ mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
 pub mod typescript_launch_evidence;
+
+pub mod package_context_environment;
 
 pub use command_evaluation::{evaluate_command, CompositeCommandEvaluation};
 pub use command_model::parse_shell_command;
@@ -1064,7 +1076,6 @@ mod tests {
 // RTM-019 pending modules — compile signal only until legs complete
 pub mod audit_receipt;
 pub mod cloud_audit_sync;
-#[cfg(unix)]
 pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
@@ -1091,13 +1102,22 @@ pub mod detectors;
 #[cfg(unix)]
 pub mod direct_vitest;
 pub mod false_positive_rules;
+pub mod guard_sync_transport;
 pub mod hook_evidence_writer;
 pub mod hook_responses;
 pub mod inventory_contract;
+pub mod js_semver;
 pub mod linux_artifact_supply_chain;
+#[cfg(unix)]
 pub mod local_mcp_stdio;
+#[cfg(all(unix, test))]
+mod local_mcp_stdio_tests;
 pub mod mcp_decision;
+#[cfg(unix)]
+pub mod mcp_stdio_session;
+pub mod pep440;
 pub mod restricted_archive;
+pub mod restricted_archive_transport;
 #[cfg(unix)]
 pub mod restricted_pytest;
 pub mod resume_template;
@@ -1109,4 +1129,5 @@ pub mod shims;
 pub mod signals;
 pub mod supply_chain_bundle;
 pub mod supply_chain_package_identity;
+pub mod supply_chain_risk;
 pub mod supply_chain_support;

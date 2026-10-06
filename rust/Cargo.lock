@@ -527,6 +527,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "base64ct",
+ "caseless",
  "fancy-regex",
  "getrandom 0.3.4",
  "guard-command-build",
@@ -535,7 +536,10 @@ dependencies = [
  "guard-secure-fs",
  "hex",
  "idna",
+ "libc",
  "mailparse",
+ "nix",
+ "pep440_rs",
  "percent-encoding",
  "regex",
  "ring",
@@ -545,6 +549,8 @@ dependencies = [
  "serde_json",
  "sha2",
  "toml 0.8.23",
+ "ureq",
+ "url",
 ]
 
 [[package]]
@@ -553,6 +559,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "base64ct",
+ "caseless",
  "fancy-regex",
  "getrandom 0.3.4",
  "guard-contracts",
@@ -560,7 +567,10 @@ dependencies = [
  "guard-secure-fs",
  "hex",
  "idna",
+ "libc",
  "mailparse",
+ "nix",
+ "pep440_rs",
  "percent-encoding",
  "regex",
  "ring",
@@ -570,6 +580,8 @@ dependencies = [
  "serde_json",
  "sha2",
  "toml 0.9.12+spec-1.1.0",
+ "ureq",
+ "url",
 ]
 
 [[package]]
@@ -1204,6 +1216,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
 dependencies = [
  "base64ct",
+]
+
+[[package]]
+name = "pep440_rs"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31095ca1f396e3de32745f42b20deef7bc09077f918b085307e8eab6ddd8fb9c"
+dependencies = [
+ "once_cell",
+ "serde",
+ "unicode-width",
+ "unscanny",
 ]
 
 [[package]]
@@ -1904,6 +1928,18 @@ checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "unicode-width"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
+
+[[package]]
+name = "unscanny"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9df2af067a7953e9c3831320f35c1cc0600c30d44d9f7a12b01db1cd88d6b47"
 
 [[package]]
 name = "untrusted"

@@ -31,33 +31,6 @@ def conflict(message: str) -> BuilderError:
     return BuilderError("repository_conflict", message, conflict=True)
 
 
-def parse_python(content: str) -> ast.Module:
-    try:
-        tree = ast.parse(content, feature_version=(3, 10))
-    except (SyntaxError, RecursionError, ValueError) as exc:
-        raise conflict("A repository integration file has unsupported Python syntax.") from exc
-    if sum(1 for _ in ast.walk(tree)) > 50_000:
-        raise conflict("A repository integration file exceeds the supported syntax budget.")
-    return tree
-
-
-def _assignment(tree: ast.Module, name: str) -> ast.Assign | ast.AnnAssign:
-    matches: list[ast.Assign | ast.AnnAssign] = []
-    for node in tree.body:
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
-        else:
-            continue
-        if any(isinstance(target, ast.Name) and target.id == name for target in targets):
-            assert isinstance(node, (ast.Assign, ast.AnnAssign))
-            matches.append(node)
-    if len(matches) != 1:
-        raise conflict("An expected unique repository registration anchor is missing or duplicated.")
-    return matches[0]
-
-
 def trust_members(content: str) -> dict[str, list[str]]:
     payload = object_value(parse_json(content.encode("utf-8")))
     if payload.get("schemaVersion") != "guard.extension-trust-class-map.v1":
@@ -157,40 +130,40 @@ def edit_pyproject(content: str, metadata: Metadata) -> str:
     return updated
 
 
-def _literal_mapping(node: ast.AST | None) -> dict[str, str]:
-    if not isinstance(node, ast.Dict):
-        raise conflict("The frozen contribution artifact map must remain a literal dictionary.")
-    result: dict[str, str] = {}
-    for key, value in zip(node.keys, node.values, strict=True):
-        if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
-            raise conflict("The frozen contribution artifact map has a nonliteral key.")
-        if not isinstance(value, ast.Constant) or not isinstance(value.value, str) or key.value in result:
-            raise conflict("The frozen contribution artifact map has an invalid or duplicate entry.")
-        result[key.value] = value.value
-    return result
-
-
 def edit_staging(content: str, metadata: Metadata) -> str:
-    assignment = _assignment(parse_python(content), "_ARTIFACTS")
-    mapping = _literal_mapping(assignment.value)
-    lines = content.splitlines(keepends=True)
-    last_line = assignment.end_lineno
-    if last_line is None or lines[last_line - 1].strip() != "}":
-        raise conflict("The frozen artifact dictionary has an unsupported insertion layout.")
-    insertion = last_line - 1
-    for source, packaged in _artifact_mappings(metadata):
-        destination = packaged.removeprefix("codex_plugin_scanner/guard/contracts/data/")
-        if source in mapping:
-            if mapping[source] != destination:
-                raise conflict("The frozen artifact map already assigns a different destination.")
+    """Assert the enumerated staging covers this contribution.
+
+    The staging script scans `contributions/` for payload JSON rather than a
+    per-contribution list, so integration is a no-op here. It still fails
+    closed when the script's enumeration table is missing or a payload path
+    falls outside the scanned directories — an unknown layout is a conflict,
+    not a silent skip.
+    """
+    try:
+        tree = ast.parse(content)
+    except SyntaxError as exc:
+        raise conflict("The staging script is not parseable Python.") from exc
+    assigned: set[str] = set()
+    defined: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            assigned.update(target.id for target in node.targets if isinstance(target, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            assigned.add(node.target.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defined.add(node.name)
+    if "_CONTRIBUTION_SOURCES" not in assigned or not {"_artifacts", "stage_artifacts"} <= defined:
+        raise conflict("The staging script no longer enumerates contribution payloads.")
+    for source, _packaged in _artifact_mappings(metadata):
+        if not source.startswith(("contributions/extensions/", "contributions/mcp-servers/")):
+            # Command sources compile into the native program rather than
+            # staging individually; only descriptor payloads are enumerated.
             continue
-        if destination in mapping.values():
-            raise conflict("Another frozen artifact entry already owns this contribution destination.")
-        entry = f"    {json.dumps(source)}: {json.dumps(destination)},\n"
-        if len(entry.rstrip()) > 120:
-            entry = f"    {json.dumps(source)}: (\n        {json.dumps(destination)}\n    ),\n"
-        lines.insert(insertion, entry.replace("\n", _line_ending(content)))
-        insertion += 1
-    updated = "".join(lines)
-    _literal_mapping(_assignment(parse_python(updated), "_ARTIFACTS").value)
-    return updated
+        name = source.rsplit("/", 1)[-1]
+        covered = (
+            (source.startswith("contributions/extensions/") and name.startswith("command."))
+            or (source.startswith("contributions/mcp-servers/") and name.startswith("mcp."))
+        ) and name.endswith(".json")
+        if not covered:
+            raise conflict("The contribution payload is outside the enumerated staging directories.")
+    return content
