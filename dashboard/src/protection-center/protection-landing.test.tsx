@@ -105,6 +105,11 @@ import { searchCommandPatterns } from "./model/protection-landing";
         description: "Writes workflow files for GitHub Actions.",
         risk_tier: "critical",
       }),
+      permission("command.faf-cli", "export-mirror", "faf-cli export mirror", {
+        description: "Writes a mirror file for offline reference.",
+        example_command: "faf export --github-mirror",
+        risk_tier: "medium",
+      }),
       permission("command.faf-cli", "ci-persistence", "faf-cli git hook or CI workflow change", {
         description: "Installs hooks and GitHub Actions workflows that run on every later commit.",
         risk_tier: "high",
@@ -128,11 +133,14 @@ import { searchCommandPatterns } from "./model/protection-landing";
       "command.github.permission.workflow-rerun",
       "command.github.permission.read-remote",
       "command.faf-cli.permission.github-sync",
+      "command.faf-cli.permission.export-mirror",
       "command.faf-cli.permission.ci-persistence",
     ],
-    "named capabilities rank first, official before locally added custom, severity descending",
+    "identity matches first, then example-only, then prose-only; official before locally added custom; severity descending",
   );
 
+  const exampleOnly = ranked.find((match) => match.permission.permission_id === "command.faf-cli.permission.export-mirror");
+  assert.equal(exampleOnly!.score, 1, "a query term found only in the example command scores as an example match");
   const proseOnly = ranked.find((match) => match.permission.permission_id === "command.faf-cli.permission.ci-persistence");
   assert.equal(proseOnly!.score, 2, "a query term found only in prose demotes the whole match to a context match");
   assert.equal(searchCommandPatterns(catalog, "github secret")[0]!.score, 0, "label matches score as identity matches");
