@@ -34,8 +34,6 @@ _NODE_PROBE_TIMEOUT = 5.0
 # Cold policy publication is setup, not part of the timed hook request.
 # Match the production workspace-readiness cap without extending hook budgets.
 _DAEMON_READINESS_TIMEOUT = 25.0
-_DAEMON_CLEANUP_TIMEOUT = 10.0
-_NATIVE_CLEANUP_RETRY_INTERVAL = 0.25
 _NODE_PROBE_SOURCE = 'const typedValue: string = "node-capability-probe";\nprocess.stdout.write(typedValue);\n'
 _ENV_ALLOWLIST = {
     "COMSPEC",
@@ -49,6 +47,18 @@ _ENV_ALLOWLIST = {
     "TMPDIR",
     "USERPROFILE",
 }
+
+
+def _daemon_cleanup_timeout_seconds() -> float:
+    from codex_plugin_scanner.guard.native_resident_client import NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS
+
+    return NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS
+
+
+def _native_cleanup_retry_interval_seconds() -> float:
+    from codex_plugin_scanner.guard.native_resident_client import NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
+
+    return NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
 
 
 class ProbeError(RuntimeError):
@@ -947,7 +957,7 @@ def _bounded_daemon_call(daemon: Any, method_name: str) -> object | None:
 
     try:
         signal.signal(signal.SIGALRM, timeout_handler)
-        signal.setitimer(signal.ITIMER_REAL, _DAEMON_CLEANUP_TIMEOUT)
+        signal.setitimer(signal.ITIMER_REAL, _daemon_cleanup_timeout_seconds())
         return method()
     except _DaemonCallTimeoutError:
         raise
@@ -1025,7 +1035,7 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
         stop_native_resident,
     )
 
-    deadline = time.monotonic() + _DAEMON_CLEANUP_TIMEOUT
+    deadline = time.monotonic() + _daemon_cleanup_timeout_seconds()
     last_error: OSError | RuntimeError | None = None
     stop_confirmed = True
     while True:
@@ -1036,7 +1046,7 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
         except (OSError, RuntimeError) as exc:
             cleanup_error = exc
         state_files = _native_state_files(guard_home)
-        if state_files:
+        if state_files or not stop_confirmed:
             remaining = deadline - time.monotonic()
             if remaining > 0:
                 stop_confirmed = False
@@ -1046,6 +1056,10 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
                         state_dir=guard_home / "native-runtime",
                         environment=_native_cleanup_environment(),
                         timeout_seconds=min(2.0, remaining),
+                        # This isolated probe owns the fixture Guard home. Retire
+                        # its verified clients too, so a retry can authenticate
+                        # idempotent containment after the generation disappears.
+                        retire_clients=True,
                         deadline_monotonic=deadline,
                     ):
                         cleanup_error = RuntimeError("native resident stop did not complete")
@@ -1061,7 +1075,7 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
             if last_error is None:
                 last_error = RuntimeError("native resident containment did not complete")
             raise ProbeError(f"authenticated native cleanup failed: {type(last_error).__name__}") from last_error
-        time.sleep(min(_NATIVE_CLEANUP_RETRY_INTERVAL, max(0.0, deadline - time.monotonic())))
+        time.sleep(min(_native_cleanup_retry_interval_seconds(), max(0.0, deadline - time.monotonic())))
 
 
 def _remove_probe_path(path: Path) -> bool:

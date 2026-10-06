@@ -1,15 +1,20 @@
 ---
-title: "Enable automatic repair on active pull requests"
-description: "Enable Gitar auto-apply for every ready-for-review pull request."
+title: "Disable automatic repair on pull requests"
+description: "Keep Gitar auto-apply disabled; never self-apply repair commits."
 type: automation
-when: "A pull request is opened, reopened, marked ready for review, or receives new commits. Skip drafts and pull requests labeled gitar-skip."
-actions: "Add the gitar-managed label to enable Gitar auto-apply for the pull request."
+when: "A pull request is opened, reopened, marked ready for review, or receives new commits."
+actions: "Do not add the gitar-managed label and do not push repair commits. Leave contributor-requested auto-apply off unless a maintainer explicitly writes 'gitar auto-apply:on' on that pull request."
 ---
 
-# Enable automatic repair
+# Disable automatic repair
 
-For every active, ready-for-review pull request, add the `gitar-managed` label.
-That label enables Gitar auto-apply for the lifetime of the pull request.
+Gitar auto-apply is **disabled repository-wide**.
 
-Do not add it to a draft pull request or to a pull request labeled `gitar-skip`.
-Leave a contributor's explicit `gitar auto-apply:off` choice in effect.
+For every pull request: do **not** add the `gitar-managed` label and do **not**
+push automated repair commits. Analysis and review comments may continue, but no
+code changes are applied automatically.
+
+Auto-apply stays off unless a maintainer explicitly writes `gitar auto-apply:on`
+in a comment on that specific pull request; treat that as an opt-in for that PR
+only, not a repo-wide re-enable. Respect `gitar auto-apply:off` and the
+`gitar-skip` label immediately.

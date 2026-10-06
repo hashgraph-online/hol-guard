@@ -63,6 +63,24 @@ def acceptance_source(root: Path) -> dict:
     return source
 
 
+def _trust_with_external(root: Path, extension_id: str) -> dict:
+    """Project authored bindings plus this fixture's new external binding."""
+    classes: dict[str, list[str]] = {"first-party": [], "trusted-library": [], "external": []}
+    for path in sorted((root / "contracts/extensions/trust").glob("*.v1.json")):
+        payload = json.loads(path.read_bytes())
+        classes[str(payload["trustClass"])].append(str(payload["extension"]))
+    for values in classes.values():
+        values.sort()
+    return {
+        "schemaVersion": "guard.extension-trust-class-map.v1",
+        "publishers": {
+            "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+            "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
+        },
+        "classes": classes,
+    }
+
+
 def contributor_cli() -> Path:
     """Exercise the installed console entry point used by contributors."""
     binary = Path(sys.executable).with_name("hol-guard.exe" if os.name == "nt" else "hol-guard")
@@ -221,22 +239,30 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
 
     source_path = root / "contributions/command-sources" / f"{EXTENSION_ID}.json"
     fixture_path = root / "tests/fixtures/command-source-hol-ci-fixture.v1.json"
-    trust_path = root / "contracts/extensions/trust-class-map.v1.json"
-    old_trust = trust_path.read_bytes()
+    bindings_dir = root / "contracts/extensions/trust"
+    binding_path = bindings_dir / f"{EXTENSION_ID}.v1.json"
+    binding = {
+        "schemaVersion": "guard.extension-trust-binding.v1",
+        "extension": EXTENSION_ID,
+        "trustClass": "external",
+    }
     source = acceptance_source(root)
-    trust = json.loads(old_trust)
-    trust["classes"]["external"].append(EXTENSION_ID)
-    trust["classes"]["external"].sort()
     # Keep synthetic-fixture formatting from exhausting the production input budget.
     source_path.write_text(json.dumps(source, separators=(",", ":")) + "\n")
-    trust_path.write_text(json.dumps(trust, indent=2) + "\n")
+    bindings_dir.mkdir(parents=True, exist_ok=True)
+    binding_path.write_text(json.dumps(binding, indent=2, sort_keys=True) + "\n")
+    trust_map_path = root / "contracts/extensions/trust-class-map.v1.json"
+    baseline_trust_map = trust_map_path.read_bytes()
+    # The committed aggregate is a projection of the bindings; keep it in sync so
+    # the consistency gate does not reject the temporary fixture binding.
+    trust_map_path.write_text(json.dumps(_trust_with_external(root, EXTENSION_ID), indent=2) + "\n")
     fixture = {
         "schema": "guard.command-extension-fixtures.v1",
         "build": {
             "schema": "guard.command-extension-build.v1",
             "sources": [source],
             "mcp_sources": [],
-            "trust": trust,
+            "trust": _trust_with_external(root, EXTENSION_ID),
             "base": "packaged",
         },
         "cases": [
@@ -318,7 +344,8 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     record("malformed_source_rejected_without_replacing_outputs")
     source_path.unlink()
     fixture_path.unlink()
-    trust_path.write_bytes(old_trust)
+    binding_path.unlink()
+    trust_map_path.write_bytes(baseline_trust_map)
     build()
     verify()
     require(export() == baseline and not descriptor.exists(), "source removal did not restore the original inventory")

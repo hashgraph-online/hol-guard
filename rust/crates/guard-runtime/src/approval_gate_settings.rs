@@ -250,7 +250,7 @@ pub(crate) fn next_settings_state(
             err(
                 "approval_gate_invalid_cooldown",
                 "Approval cooldown must be 0, 900, or 3600 seconds.",
-                400,
+                403,
             )
         })?;
         next_state

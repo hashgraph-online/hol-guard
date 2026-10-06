@@ -7,7 +7,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const MAX_INPUT_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_INPUT_BYTES: u64 = 8 * 1024 * 1024;
+// The canonical corpus plus one acceptance source no longer fits in 4MiB.
+const MAX_ENVELOPE_BYTES: u64 = 8 * 1024 * 1024;
 
 fn read_input(root: &Path, path: &Path) -> String {
     let relative = path.strip_prefix(root).expect("input inside source tree");
@@ -28,13 +30,7 @@ fn read_input(root: &Path, path: &Path) -> String {
         "source input size/type invalid"
     );
     println!("cargo:rerun-if-changed={}", path.display());
-    // Validate duplicate keys and all native JSON bounds before compacting.
-    // Author formatting must not consume the aggregate compiler input budget.
-    let text = fs::read(path).expect("source input bytes");
-    let compact =
-        guard_command_build::native_command_program::source::canonicalize_source_json(&text)
-            .expect("bounded unambiguous source JSON");
-    String::from_utf8(compact).expect("source input UTF-8")
+    fs::read_to_string(path).expect("source input UTF-8")
 }
 
 fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
@@ -95,7 +91,8 @@ fn main() {
         root,
         &root.join("contracts/extensions/trust-class-map.v1.json"),
     );
-    // Inputs were bounded and checked for duplicate keys before compaction.
+    // Keep raw JSON until the native duplicate-key/depth/budget validator runs.
+    // Parsing then reserializing here would silently discard duplicate keys.
     let request = format!(
         r#"{{"schema":"guard.command-extension-build.v1","sources":[{}],"mcp_sources":[{}],"trust":{}}}"#,
         commands.join(","),
@@ -103,7 +100,7 @@ fn main() {
         trust
     );
     assert!(
-        request.len() as u64 <= MAX_INPUT_BYTES,
+        request.len() as u64 <= MAX_ENVELOPE_BYTES,
         "canonical source envelope exceeds budget"
     );
     let compiled = guard_command_build::native_command_program::source::compile_build_request(

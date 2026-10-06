@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 base64.workspace = true
+caseless.workspace = true
 mailparse.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-contracts = { path = "../guard-contracts" }
@@ -19,12 +20,19 @@ sha2.workspace = true
 hex.workspace = true
 idna.workspace = true
 percent-encoding.workspace = true
+pep440_rs.workspace = true
 toml.workspace = true
 roxmltree.workspace = true
 getrandom.workspace = true
+libc.workspace = true
 ring.workspace = true
 rsa.workspace = true
 base64ct.workspace = true
+ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
+url = "=2.5.8"
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
 
 [build-dependencies]
 guard-command-build = { path = "../guard-command-build" }

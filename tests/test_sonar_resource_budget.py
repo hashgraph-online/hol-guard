@@ -65,7 +65,10 @@ def test_resource_tuning_keeps_current_attempt_coverage_and_quality_gate() -> No
     assert not vendor_gate.get("continue-on-error", False)
     assert job["permissions"] == {"contents": "read", "actions": "read"}
     assert not job.get("continue-on-error", False)
-    assert len(workflow["jobs"]["coverage"]["strategy"]["matrix"]["shard-index"]) == 128
+    assert (
+        workflow["jobs"]["coverage"]["strategy"]["matrix"]["shard-index"]
+        == "${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}"
+    )
 
 
 def test_resource_tuning_leaves_python_rust_and_coverage_sources_enabled() -> None:

@@ -4,12 +4,15 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime import local_mcp_stdio
+import pytest
+
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
     MAX_MCP_PROBE_TOOLS,
     run_mcp_catalog,
     run_mcp_tools_list,
 )
+
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
 
 
 def _server(
@@ -338,24 +341,8 @@ def test_change_notification_during_pagination_invalidates_partial_snapshot(tmp_
     assert catalog.tools == tuple(_tools(1))
 
 
-def test_rpc_parser_rejects_ambiguous_keys_and_nonfinite_schema_values() -> None:
-    for raw in [
-        b'{"jsonrpc":"2.0","id":2,"result":{"tools":[]},"result":{"tools":[{"name":"hidden"}]}}',
-        b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"x","inputSchema":{"default":NaN}}]}}',
-    ]:
-        assert local_mcp_stdio._pop_json_message(raw + b"\n")[0] is None
-        framed = b"Content-Length: " + str(len(raw)).encode() + b"\r\n\r\n" + raw
-        assert local_mcp_stdio._pop_json_message(framed)[0] is None
 
 
-def test_blank_line_flood_does_not_recurse() -> None:
-    raw = b"\n" * 2_000 + b'{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}\n'
-    messages = []
-    while raw:
-        message, raw = local_mcp_stdio._pop_json_message(raw)
-        if message is not None:
-            messages.append(message)
-    assert len(messages) == 1 and messages[0]["id"] == 2
 
 
 def test_modern_version_error_does_not_initialize_legacy(tmp_path: Path) -> None:

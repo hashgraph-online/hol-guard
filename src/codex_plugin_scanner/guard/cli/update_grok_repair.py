@@ -83,6 +83,11 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
         return False
     if _isolated_bounded_hook_is_current(command, context=context):
         return True
+    bounded_argv = _split_hook_command(command, posix=True)
+    if len(bounded_argv) not in {3, 4} or bounded_argv[1] != "-I":
+        bounded_argv = _split_hook_command(command, posix=False)
+    if len(bounded_argv) in {3, 4} and bounded_argv[1] == "-I":
+        return False
     marker = f'"timeout_seconds":{GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}'
     if marker not in command.replace(" ", ""):
         return False
@@ -139,15 +144,18 @@ def _prompt_hook_entries_are_current(payload: object, expected: dict[str, object
 def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) -> bool:
     from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
     from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+    from .grok_hook_validation import is_grok_hook_command
 
     interpreter = isolated_cursor_hook_python()
     expected_script = bounded_hook_script_path(context.guard_home, "grok")
     if interpreter is None or expected_script is None:
         return False
+    if not is_grok_hook_command(command, context=context):
+        return False
     argv = _split_hook_command(command, posix=True)
-    if len(argv) != 3 or argv[1] != "-I":
+    if len(argv) not in {3, 4} or argv[1] != "-I":
         argv = _split_hook_command(command, posix=False)
-    if len(argv) != 3 or argv[1] != "-I":
+    if len(argv) not in {3, 4} or argv[1] != "-I":
         return False
     try:
         if Path(argv[0]).resolve() != Path(interpreter).resolve():
