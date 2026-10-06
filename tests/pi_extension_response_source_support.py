@@ -25,6 +25,9 @@ def _strip_generated_types(fragment: str) -> str:
         "function normalizeGuardResponse(value: unknown): GuardResponse | null {": (
             "function normalizeGuardResponse(value) {"
         ),
+        "function normalizePromptGuardResponse(value: unknown, event: unknown): GuardResponse | null {": (
+            "function normalizePromptGuardResponse(value, event) {"
+        ),
         """function daemonResponseCanReturn(
   payload: Record<string, unknown>,
   response: GuardResponse,

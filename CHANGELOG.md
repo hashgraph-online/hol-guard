@@ -20,6 +20,7 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 
 ### Bug Fixes
 
+* **hooks:** normalize Hermes `pre_tool_call` and `post_tool_call` events through the shared hook event parser. An unavailable worker must block a protected pre-tool call instead of treating it as an observational lifecycle event and returning allow.
 * **hooks:** route structured `--json` responses and remaining Grok/ZCode verdict emit paths through the shared exit-code authority, removing the competing response-layer table. Envelope-driven pre-execution and approval verdicts, including `PermissionRequest`, exit `0`; post-execution violations and rc-driven harness denials remain nonzero.
 * **native:** the context-digest transport now establishes the resident's on-disk prerequisite (the owner-private `policy-verifier.key` under `<guard-home>/native-runtime/`) before shipping a request, the way every native launch/session caller already did. Launch and executable identities became resident-owned, so a guard home that had never been provisioned — a fresh deployment, or a test home carrying a seeded key — failed closed on `native_runtime_launch_identity_unavailable`, `native_mcp_launch_environment_unavailable`, and `native_package_context_digest_unavailable`. An existing key file is accepted as satisfied without opening a store; only a missing key is provisioned, once per home per process.
 * **native:** a digest request that arrives while the pool has no parked resident client is granted a cold-start allowance on top of the steady-state budget. The pooled resident is spawned lazily, and a contended runner can spend several hundred milliseconds faulting a 20 MB binary in before it answers; charging that startup to the 500 ms degradation budget made launch-identity and package-context callers — which have no fallback — fail closed on a resident that was merely still starting, or one that a killed process had taken with it. The allowance tracks the pool instead of remembering past answers, so it is granted again whenever the resident has to be spawned (fresh process, retired client, killed resident) and never in steady state.
@@ -27,6 +28,33 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a context-digest request whose deadline ran out — the client's `native_client_timed_out` or the resident's own `native_client_deadline_exceeded` — is retried once with twice the cold-start allowance. The pooled resident serves one request at a time, so a sibling's long RPC could consume the steady-state budget and fail a request that was neither slow nor dead, and the resident's own bound (which the request carries) must not make the retry hopeless. Only a request that has already failed pays for the retry; every other failure still fails after a single attempt, and the reason names the transport, the attempt count and the budget that actually failed.
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
+
+## [3.27.0](https://github.com/hashgraph-online/hol-guard/compare/v3.26.0...v3.27.0) (2026-10-06)
+
+
+### Features
+
+* **ci:** add trusted change planner and shadow required aggregate ([#3610](https://github.com/hashgraph-online/hol-guard/issues/3610)) ([a200dfe](https://github.com/hashgraph-online/hol-guard/commit/a200dfef03627ea721d3f7de1968bb453f8cfdbe))
+* **extensions:** add command protection for blkcp ([#3062](https://github.com/hashgraph-online/hol-guard/issues/3062)) ([82ad7e7](https://github.com/hashgraph-online/hol-guard/commit/82ad7e783ef50f274ca897d31273268ba451f2e3))
+* **guard:** RTM-023 — native MCP child-I/O ownership + tools/list catalog boundary ([#3613](https://github.com/hashgraph-online/hol-guard/issues/3613)) ([e90c7af](https://github.com/hashgraph-online/hol-guard/commit/e90c7afd6df9a743d17cff4880f4ccf7116ef4e1))
+* **guard:** RTM-030 — resident apply_stored_package_policy op ([#3653](https://github.com/hashgraph-online/hol-guard/issues/3653)) ([14bb586](https://github.com/hashgraph-online/hol-guard/commit/14bb58629a7c96e708900cdba7ab499650347ad3))
+* **guard:** RTM-030a — resident guard-sync transport (OAuth read, DPoP, ureq HTTPS) ([#3634](https://github.com/hashgraph-online/hol-guard/issues/3634)) ([c5f9fc2](https://github.com/hashgraph-online/hol-guard/commit/c5f9fc2ed3e0c8ea86fc10ad3013da6073ec0864))
+* **guard:** RTM-030b-1 — resident OAuth credential authority (scoped secret resolution + fingerprint parity) ([#3645](https://github.com/hashgraph-online/hol-guard/issues/3645)) ([59c5522](https://github.com/hashgraph-online/hol-guard/commit/59c5522707358bd2d3007b694832adad6954b8e0))
+* **mcp:** add external AsDecided server contribution ([#3579](https://github.com/hashgraph-online/hol-guard/issues/3579)) ([55b126e](https://github.com/hashgraph-online/hol-guard/commit/55b126e595bd8d5eb813266b75ebad64625352b0))
+* **mcp:** own persistent MCP child lifecycle in the native runtime ([#3564](https://github.com/hashgraph-online/hol-guard/issues/3564)) ([66eef10](https://github.com/hashgraph-online/hol-guard/commit/66eef10214353cee32e872b176c39abb4d592449))
+
+
+### Bug Fixes
+
+* **approval:** restore disabled gate setup and accurate review labels ([#3621](https://github.com/hashgraph-online/hol-guard/issues/3621)) ([24032f8](https://github.com/hashgraph-online/hol-guard/commit/24032f8b4f2b94c0073d83a3f6768591ac6d2096))
+* **ci:** allow skipped change planner in required aggregate on push ([#3628](https://github.com/hashgraph-online/hol-guard/issues/3628)) ([98cd7b3](https://github.com/hashgraph-online/hol-guard/commit/98cd7b3bb9cfb13c5e9754bcdb89aa84da9f3d9f))
+* **ci:** repair product regressions breaking main test suite ([#3641](https://github.com/hashgraph-online/hol-guard/issues/3641)) ([5895c06](https://github.com/hashgraph-online/hol-guard/commit/5895c0612e0b29b4597df6a11f48163ee87d0356))
+* **ci:** treat skipped change planner as expected on push runs ([#3625](https://github.com/hashgraph-online/hol-guard/issues/3625)) ([ce487e5](https://github.com/hashgraph-online/hol-guard/commit/ce487e5238732e26d1fe85adde97edcc8716339c))
+* **guard:** empty availability response is not a deny + cover exit-code mapper ([#3654](https://github.com/hashgraph-online/hol-guard/issues/3654)) ([e2cf4e2](https://github.com/hashgraph-online/hol-guard/commit/e2cf4e2fc0b1598782e7d5a569cb89b9cfcd4b9e))
+* **guard:** fail closed for Hermes pre-tool worker errors ([#3661](https://github.com/hashgraph-online/hol-guard/issues/3661)) ([06493b6](https://github.com/hashgraph-online/hol-guard/commit/06493b6e3280849dd17f401eeebe372a9af98f03))
+* **guard:** fail-closed rc when native hook authority unavailable + relax archive timing flake ([#3647](https://github.com/hashgraph-online/hol-guard/issues/3647)) ([2755b3c](https://github.com/hashgraph-online/hol-guard/commit/2755b3cd3cd372ec8a08a962de2cc4213d73d49a))
+* **omp:** prepare Guard protection before reviewing prompts ([ab20104](https://github.com/hashgraph-online/hol-guard/commit/ab20104e095c2ff9e20ba1abdc982640dc4b2c3a))
+* **zcode:** install hooks on both ZCode config surfaces ([#3605](https://github.com/hashgraph-online/hol-guard/issues/3605)) ([aac53a8](https://github.com/hashgraph-online/hol-guard/commit/aac53a8989e33a6405d174b80206231826554fa4))
 
 ## [3.25.2](https://github.com/hashgraph-online/hol-guard/compare/v3.25.1...v3.25.2) (2026-10-05)
 

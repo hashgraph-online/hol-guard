@@ -7597,9 +7597,10 @@ function McpServerDefaults({ extension }) {
   const tools = extension.mcp_tools ?? [];
   const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
   const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
+  const directLaunch = launch?.kind === "direct-command" ? launch : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "MCP server defaults" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : directLaunch ? "Matching launches use this command. Defaults apply only after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: remoteLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Endpoint" }),
@@ -7609,6 +7610,9 @@ function McpServerDefaults({ extension }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Server names" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: remoteLaunch.serverNames.join(", ") })
       ] })
+    ] }) : directLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: directLaunch.command })
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
