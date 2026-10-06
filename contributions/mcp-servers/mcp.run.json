@@ -16,8 +16,7 @@
   "license": "MIT",
   "launch": {
     "kind": "direct-command",
-    "command": "run",
-    "args": ["--serve-mcp"]
+    "command": "run"
   },
   "riskClasses": ["external-command-execution"],
   "tools": [
