@@ -49,4 +49,7 @@ def _emit_native_unavailable(
         workspace=workspace,
     )
     _emit("hook", response, True)
-    return 0
+    # Block rc (2) — matches blocking_harness_response/grok_hook_process_exit so
+    # a fail-closed harness that reads the process status denies the action
+    # instead of treating an unavailable native edge as allow.
+    return 2

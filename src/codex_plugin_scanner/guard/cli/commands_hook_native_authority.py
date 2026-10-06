@@ -147,7 +147,7 @@ def route_native_hook(
             ),
             True,
         )
-        return 0
+        return 2
     from .commands_hook_native_pipeline import run_native_hook_pipeline
 
     def run_pipeline(worker: HookWorker) -> int:
@@ -193,7 +193,10 @@ def route_native_hook(
         # Availability responses are already harness wire documents. A hook
         # caller need not pass --json to receive a parseable deny response.
         _emit("hook", native_result, True)
-        return 0
+        # Availability responses are deny payloads; rc must be the block code (2),
+        # matching blocking_harness_response/grok_hook_process_exit so shell
+        # harnesses read unavailable-native as deny, not allow (0).
+        return 2
     except Exception:
         _emit(
             "hook",
@@ -210,4 +213,4 @@ def route_native_hook(
             ),
             True,
         )
-        return 0
+        return 2
