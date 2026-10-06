@@ -130,7 +130,10 @@ jobs:
           retention-days: 7
 
   quality:
-    needs: native-command-evaluators
+    needs: [plan, native-command-evaluators]
+    # `always()` so it resolves `result` (not skipped) on push/merge_group when
+    # `plan` is skipped; it then fails on a bad provider, matching the aggregate.
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -154,6 +157,7 @@ jobs:
 
   # Rust validation is required, but is not on the artifact/Python fan-out critical path.
   native-workspace:
+    if: always()
     name: Rust workspace (${{ matrix.check }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -180,8 +184,10 @@ jobs:
           esac
 
   native-command-evaluators:
+    # `always()` so dependents (coverage-plan/quality/coverage/cisco-full…) can
+    # gate on `result` even when `plan` is skipped on push/merge_group.
+    if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -248,30 +254,28 @@ jobs:
           retention-days: 1
 
   coverage-plan:
-    needs: native-command-evaluators
+    # `needs: [plan]` only (always()): `plan` is skipped on push so it cannot
+    # gate the graph. Shard indices are deterministic, so coverage-plan must NOT
+    # serialize behind the ~2.4min native-command-evaluators build — emitting the
+    # matrix at t=0 lets the coverage fan-out run in the first runner wave, which
+    # is what brings the push critical path under 5 minutes. Coverage shards
+    # re-download the evaluator/projections artifacts themselves.
+    if: always()
+    needs: [plan]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       shard-indices: ${{ steps.shard-indices.outputs.indices }}
       shard-count: ${{ steps.shard-indices.outputs.count }}
     steps:
+      - name: Gate on change planner when present
+        if: github.event_name == 'pull_request'
+        run: |
+          # On pull_request, `plan` must succeed; on push it is skipped by design.
+          test "${{ needs.plan.result }}" = "success"
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-evaluators
-          path: rust/target/release
-      - name: Bind the compiled native runtime
-        run: |
-          chmod 0755 rust/target/release/hol-guard-runtime
-          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
-      - name: Download this run's current command projections
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-projections
-          path: .
       - uses: ./.github/actions/setup-ci-python
         with:
           python-version: ${{ env.CI_PYTHON_VERSION }}
@@ -295,11 +299,10 @@ jobs:
 
   coverage:
     name: coverage (3.12, ${{ matrix.shard-index }})
-    needs: [plan, coverage-plan, native-command-evaluators]
+    needs: [plan, coverage-plan]
     if: >-
       !cancelled() &&
       needs.coverage-plan.result == 'success' &&
-      needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
@@ -323,6 +326,22 @@ jobs:
         with:
           name: pytest-shard-plan-3.12
           path: pytest-shards
+      # The evaluator/projections artifacts are uploaded by the
+      # native-command-evaluators build (~2.4min). Shards launch at t=0 to land in
+      # the first runner wave; this bounded wait blocks for that artifact instead
+      # of serializing the fan-out behind the build's `needs` completion edge.
+      - name: Wait for native evaluator artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          deadline=$((SECONDS + 240))
+          until [ "$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?name=pytest-native-command-evaluators" --jq '[.artifacts[]|select(.expired==false)]|length')" -ge 1 ]; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::timed out waiting for pytest-native-command-evaluators artifact"; exit 1
+            fi
+            sleep 5
+          done
       - name: Download native command evaluators
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
