@@ -1,4 +1,4 @@
-"""End-to-end approval-boundary regressions for external package archives."""
+"""Compatibility-mode archive approval boundaries with injected Python I/O."""
 
 from __future__ import annotations
 
@@ -19,6 +19,14 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+@pytest.fixture(autouse=True)
+def python_archive_boundary_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These tests inspect exact Python intent fields and inject the Python
+    # downloader. Native intent DTOs deliberately redact those fields and native
+    # dispatch does not use this injected downloader; qualify it separately.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
 
 
 def _hook_inputs(
@@ -116,7 +124,11 @@ def test_npm_url_like_https_specs_are_rejected_before_approval_or_network(
         source_scope="project",
     )
 
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: pytest.fail("non-canonical source reached archive network boundary"),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda *_args, **_kwargs: pytest.fail("non-canonical source reached archive network boundary"),
+    )
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
@@ -172,7 +184,11 @@ def test_npm_https_at_sign_is_not_mistaken_for_package_source_separator(
         source_scope="project",
     )
     if "user:password@" in source_url:
-        monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: pytest.fail("credential URL reached archive network boundary"),)
+        monkeypatch.setattr(
+            package_services,
+            "_scan_external_tarball",
+            lambda *_args, **_kwargs: pytest.fail("credential URL reached archive network boundary"),
+        )
         result = evaluator.evaluate_package_request_artifact(
             artifact=artifact,
             store=GuardStore(tmp_path / "guard-home"),
@@ -191,7 +207,11 @@ def test_external_archive_request_caps_target_count_before_network(
     (workspace / "package.json").write_text("{}\n", encoding="utf-8")
     sources = [f"https://packages{index}.example.com/demo.tgz" for index in range(5)]
     artifact = _package_artifact(workspace, shlex.join(("npm", "install", *sources)))
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: pytest.fail("over-target request reached archive network boundary"),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda *_args, **_kwargs: pytest.fail("over-target request reached archive network boundary"),
+    )
 
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
@@ -267,7 +287,11 @@ def test_external_archive_request_deadline_fails_before_next_download(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(package_services, "_download_external_tarball", lambda *_args, **_kwargs: pytest.fail("expired request started another download"),)
+    monkeypatch.setattr(
+        package_services,
+        "_download_external_tarball",
+        lambda *_args, **_kwargs: pytest.fail("expired request started another download"),
+    )
 
     result, retained = package_services._scan_external_tarball("https://packages.example.com/demo.tgz",
     request_deadline=evaluator.time.monotonic() - 1,
