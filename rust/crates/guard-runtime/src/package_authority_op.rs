@@ -23,14 +23,15 @@ use guard_command::package_intent_common::{
     build_package_request_artifact, resolve_path_within_workspace, GuardArtifact,
 };
 use guard_command::package_intent_parser::parse_package_intent;
+use guard_command::pep440::{SpecifierSet, Version};
 use guard_command::supply_chain_bundle;
 use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
     ConfigLoaderApi, EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest,
     GuardSyncRunnerApi, JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi,
     NativeArchiveApi, PackageIdentityApi, RestrictedArchiveApi, RestrictedArchiveDownloadResult,
-    RestrictedArchiveFailure, RiskDetectApi, SpecifierSet, StoreExtrasApi, SupplyChainBundleApi,
-    SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, Version, WorkspaceIoApi,
+    RestrictedArchiveFailure, RiskDetectApi, StoreExtrasApi, SupplyChainBundleApi,
+    SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, WorkspaceIoApi,
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{
@@ -1585,187 +1586,49 @@ fn response_to_bundle_json(response: &EvalBundleResponse) -> Value {
     })
 }
 
-/// `packaging`-style PEP-440 + npm-selector semver seam — faithful subset
-/// matching the shape Python's `packaging`/`js_semver` expose.
+/// Native PEP 440 parsing and bounded npm selectors.
 struct ResidentSemver;
-
-impl ResidentSemver {
-    fn parse_version(value: &str) -> EvalResult<Version> {
-        let normalized = value.trim().to_owned();
-        if normalized.is_empty() {
-            return Err(EvalError::Validation("empty version".into()));
-        }
-        let release_part = normalized
-            .split(['-', '+'])
-            .next()
-            .unwrap_or(normalized.as_str());
-        let mut release: Vec<u64> = Vec::new();
-        for seg in release_part.split('.') {
-            if seg.is_empty() {
-                continue;
-            }
-            release.push(seg.parse::<u64>().unwrap_or(0));
-        }
-        if release.is_empty() {
-            release.push(0);
-        }
-        Ok(Version {
-            normalized,
-            release,
-        })
-    }
-
-    fn compare_release(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
-        let len = a.len().max(b.len());
-        for i in 0..len {
-            match a
-                .get(i)
-                .copied()
-                .unwrap_or(0)
-                .cmp(&b.get(i).copied().unwrap_or(0))
-            {
-                std::cmp::Ordering::Equal => continue,
-                ord => return ord,
-            }
-        }
-        std::cmp::Ordering::Equal
-    }
-
-    fn satisfies_specifier(version: &Version, spec: &str) -> bool {
-        let spec = spec.trim();
-        if spec.is_empty() || spec == "*" {
-            return true;
-        }
-        for clause in spec.split(',') {
-            let clause = clause.trim();
-            if clause.is_empty() {
-                continue;
-            }
-            let (op, rhs) = if let Some(rest) = clause.strip_prefix(">=") {
-                (">=", rest)
-            } else if let Some(rest) = clause.strip_prefix("<=") {
-                ("<=", rest)
-            } else if let Some(rest) = clause.strip_prefix("==") {
-                ("==", rest)
-            } else if let Some(rest) = clause.strip_prefix("!=") {
-                ("!=", rest)
-            } else if let Some(rest) = clause.strip_prefix('>') {
-                (">", rest)
-            } else if let Some(rest) = clause.strip_prefix('<') {
-                ("<", rest)
-            } else if let Some(rest) = clause.strip_prefix('~') {
-                ("~=", rest)
-            } else if let Some(rest) = clause.strip_prefix('^') {
-                ("^", rest)
-            } else {
-                ("==", clause)
-            };
-            let rhs_v = match Self::parse_version(rhs.trim()) {
-                Ok(v) => v,
-                Err(_) => return false,
-            };
-            let ord = Self::compare_release(&version.release, &rhs_v.release);
-            let ok = match op {
-                "==" => ord == std::cmp::Ordering::Equal,
-                "!=" => ord != std::cmp::Ordering::Equal,
-                ">=" => ord != std::cmp::Ordering::Less,
-                "<=" => ord != std::cmp::Ordering::Greater,
-                ">" => ord == std::cmp::Ordering::Greater,
-                "<" => ord == std::cmp::Ordering::Less,
-                "~=" | "^" => {
-                    if ord == std::cmp::Ordering::Less {
-                        false
-                    } else {
-                        let mut upper = rhs_v.release.clone();
-                        if op == "^" && upper.first().copied().unwrap_or(0) == 0 && upper.len() > 1
-                        {
-                            upper[1] += 1;
-                            upper.truncate(2);
-                        } else {
-                            upper[0] = upper.first().copied().unwrap_or(0) + 1;
-                            upper.truncate(1);
-                        }
-                        Self::compare_release(&version.release, &upper) == std::cmp::Ordering::Less
-                    }
-                }
-                _ => false,
-            };
-            if !ok {
-                return false;
-            }
-        }
-        true
-    }
-}
 
 impl JsSemverApi for ResidentSemver {
     fn specifier_set(&self, range: &str) -> EvalResult<SpecifierSet> {
-        if range.trim().is_empty() {
-            return Err(EvalError::Validation("empty specifier".into()));
-        }
-        Ok(SpecifierSet {
-            normalized: range.trim().to_owned(),
-        })
+        SpecifierSet::parse(range).map_err(EvalError::Validation)
     }
     fn version(&self, value: &str) -> EvalResult<Version> {
-        Self::parse_version(value)
+        Version::parse(value).map_err(EvalError::Validation)
     }
     fn version_in_specifier_set(&self, version: &Version, set: &SpecifierSet) -> bool {
-        Self::satisfies_specifier(version, &set.normalized)
+        set.contains(version)
     }
     fn highest_js_version_for_selector(
         &self,
         versions: &[String],
         selector: &str,
     ) -> Option<String> {
-        let mut best: Option<Version> = None;
-        let mut best_raw: Option<String> = None;
-        for candidate in versions {
-            let Ok(v) = Self::parse_version(candidate) else {
-                continue;
-            };
-            if !Self::satisfies_specifier(&v, selector) {
-                continue;
-            }
-            let better = match &best {
-                None => true,
-                Some(b) => {
-                    Self::compare_release(&v.release, &b.release) == std::cmp::Ordering::Greater
-                }
-            };
-            if better {
-                best = Some(v);
-                best_raw = Some(candidate.clone());
-            }
-        }
-        best_raw
+        guard_command::js_semver::highest_js_version_for_selector(versions, selector)
+            .map(str::to_owned)
     }
     fn version_matches_js_selector(&self, version: &str, selector: &str) -> bool {
-        match Self::parse_version(version) {
-            Ok(v) => Self::satisfies_specifier(&v, selector),
-            Err(_) => false,
-        }
+        guard_command::js_semver::version_matches_js_selector(version, selector)
     }
 }
 
-/// Risk-detection seam — `detect_supply_chain_risk` is not yet ported; return
-/// an empty signal list so eval continues with zero risk contribution.
+/// Package risk detection delegates to the native supply-chain content rules.
 struct ResidentRisk;
 
 impl RiskDetectApi for ResidentRisk {
     fn detect_supply_chain_risk(
         &self,
-        _content: &str,
+        content: &str,
         _file_path: Option<&str>,
     ) -> EvalResult<Vec<Map<String, Value>>> {
-        Ok(Vec::new())
+        guard_command::supply_chain_risk::detect_supply_chain_risk(content)
     }
     fn evaluate_supply_chain_risk_sync(
         &self,
-        _content: &str,
+        content: &str,
         _file_path: Option<&str>,
     ) -> EvalResult<Vec<Map<String, Value>>> {
-        Ok(Vec::new())
+        guard_command::supply_chain_risk::detect_supply_chain_risk(content)
     }
 }
 
@@ -1773,56 +1636,6 @@ impl RiskDetectApi for ResidentRisk {
 struct ResidentManifestDeps;
 
 impl ManifestDepsApi for ResidentManifestDeps {
-    fn evaluation_targets(
-        &self,
-        artifact: &GuardArtifact,
-        workspace_dir: Option<&Path>,
-        explicit_targets: &[Map<String, Value>],
-        include_locked: bool,
-    ) -> Vec<Map<String, Value>> {
-        let mut out: Vec<Map<String, Value>> = explicit_targets.to_vec();
-        if !include_locked {
-            return out;
-        }
-        let Some(ws) = workspace_dir else {
-            return out;
-        };
-        for key in ["manifest_paths", "lockfile_paths"] {
-            let Some(Value::Array(paths)) = artifact.metadata.get(key).cloned() else {
-                continue;
-            };
-            for rel in paths.iter().filter_map(Value::as_str) {
-                let Some(resolved) = resolve_path_within_workspace(ws, rel) else {
-                    continue;
-                };
-                let Ok(text) = std::fs::read_to_string(&resolved) else {
-                    continue;
-                };
-                let deps = guard_command::package_manifest_diff::parse_manifest_dependencies(
-                    rel,
-                    &text,
-                    text.len(),
-                    4000,
-                );
-                for (name, version) in deps {
-                    out.push(
-                        json!({
-                            "ecosystem": ecosystem_for_path(rel),
-                            "name": name,
-                            "package_name": name,
-                            "version": version,
-                            "source": rel,
-                        })
-                        .as_object()
-                        .cloned()
-                        .unwrap_or_default(),
-                    );
-                }
-            }
-        }
-        out
-    }
-
     fn dependency_map_for_path(
         &self,
         path: &str,
@@ -1854,30 +1667,6 @@ impl ManifestDepsApi for ResidentManifestDeps {
         )
     }
 }
-
-fn ecosystem_for_path(path: &str) -> &'static str {
-    let name = Path::new(path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
-    match name {
-        "package.json"
-        | "package-lock.json"
-        | "npm-shrinkwrap.json"
-        | "yarn.lock"
-        | "pnpm-lock.yaml"
-        | "bun.lock"
-        | "bun.lockb" => "npm",
-        "requirements.txt" | "Pipfile" | "Pipfile.lock" | "poetry.lock" | "pyproject.toml"
-        | "uv.lock" | "setup.py" => "pypi",
-        "Cargo.toml" | "Cargo.lock" => "cargo",
-        "Gemfile" | "Gemfile.lock" => "rubygems",
-        "composer.json" | "composer.lock" => "packagist",
-        "go.mod" | "go.sum" => "go",
-        _ => "",
-    }
-}
-
 /// Package-identity seam — delegates to `supply_chain_package_identity` fns.
 struct ResidentPackageIdentity;
 
@@ -2650,5 +2439,212 @@ fn artifact_from_value(v: &Value) -> GuardArtifact {
         publisher: get_opt("publisher"),
         metadata: v.get("metadata").cloned().unwrap_or(Value::Null),
         runtime_private_metadata: Value::Null,
+    }
+}
+
+pub(crate) fn evaluate_package_advisory_ids(
+    request: &guard_contracts::PackageAdvisoryIdsRequestV1,
+) -> Result<Vec<u8>, String> {
+    let request_sha256 = request_digest(request)?;
+    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
+        return Err("native_package_advisory_schema_mismatch".into());
+    }
+    if let Some(rejected) = reject_empty_resident_paths(
+        &request.request_id,
+        &request_sha256,
+        &request.store_path,
+        &request.guard_home,
+    ) {
+        return rejected;
+    }
+    let artifact = artifact_from_value(&request.artifact);
+    let identities: Vec<Value> =
+        guard_command::target_identities::package_target_identities(&artifact)
+            .iter()
+            .map(|identity| Value::Object(identity.to_dict()))
+            .collect();
+    let model = guard_command::target_identities::NativeAdvisoryModel;
+    let connection = rusqlite::Connection::open_with_flags(
+        &request.store_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?;
+    let mut statement = connection
+        .prepare("SELECT payload_json FROM publisher_cache ORDER BY updated_at DESC")
+        .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?;
+    let mut rows = statement
+        .query([])
+        .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?;
+    let mut matched_ids = std::collections::BTreeSet::new();
+    while let Some(row) = rows
+        .next()
+        .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?
+    {
+        let raw = row
+            .get_ref(0)
+            .map_err(|_| "native_package_advisory_cache_invalid".to_owned())?;
+        let rusqlite::types::ValueRef::Text(raw) = raw else {
+            return Err("native_package_advisory_cache_invalid".to_owned());
+        };
+        let mut advisory: Value = serde_json::from_slice(raw)
+            .map_err(|_| "native_package_advisory_cache_invalid".to_owned())?;
+        if !advisory.is_object() {
+            continue;
+        }
+        if identities.iter().any(|identity| {
+            guard_command::local_supply_chain::AdvisoryModelApi::advisory_matches_target(
+                &model, &advisory, identity,
+            )
+        }) {
+            if let Some(Value::String(id)) =
+                advisory.as_object_mut().and_then(|row| row.remove("id"))
+            {
+                if !id.is_empty() {
+                    matched_ids.insert(id);
+                }
+            }
+        }
+    }
+    let mut payload = Map::new();
+    payload.insert(
+        "matched_advisory_ids".into(),
+        Value::Array(matched_ids.into_iter().map(Value::String).collect()),
+    );
+    serde_json::to_vec(&SupplyChainEvalResultV1 {
+        schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.into(),
+        request_id: request.request_id.clone(),
+        request_sha256,
+        status: "ok".into(),
+        code: "ok".into(),
+        payload: Some(Value::Object(payload)),
+    })
+    .map_err(|_| "native_package_advisory_result_invalid".to_owned())
+}
+
+#[cfg(test)]
+mod package_advisory_tests {
+    use super::*;
+
+    struct CacheFixture {
+        home: PathBuf,
+        connection: Option<rusqlite::Connection>,
+    }
+
+    impl CacheFixture {
+        fn new() -> Self {
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let home = std::env::temp_dir().join(format!(
+                "hol-guard-package-advisory-{}-{nonce}",
+                std::process::id(),
+            ));
+            std::fs::create_dir_all(&home).unwrap();
+            let connection = rusqlite::Connection::open(home.join("guard.db")).unwrap();
+            connection.execute_batch(
+                "CREATE TABLE publisher_cache (publisher_key TEXT PRIMARY KEY, payload_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            ).unwrap();
+            Self {
+                home,
+                connection: Some(connection),
+            }
+        }
+
+        fn request(&self) -> guard_contracts::PackageAdvisoryIdsRequestV1 {
+            guard_contracts::PackageAdvisoryIdsRequestV1 {
+                schema: PACKAGE_AUTHORITY_REQUEST_SCHEMA.into(),
+                request_id: "package-policy-feed".into(),
+                store_path: self.home.join("guard.db").to_string_lossy().into_owned(),
+                guard_home: self.home.to_string_lossy().into_owned(),
+                artifact: json!({
+                    "artifact_id":"command:install",
+                    "metadata":{"targets":[{"ecosystem":"npm","package_name":"@scope/résumé","requested_specifier":"2.0"}]}
+                }),
+            }
+        }
+    }
+
+    impl Drop for CacheFixture {
+        fn drop(&mut self) {
+            drop(self.connection.take());
+            let _ = std::fs::remove_dir_all(&self.home);
+        }
+    }
+
+    #[test]
+    fn package_advisory_scan_includes_old_rows_and_deduplicates_matching_ids() {
+        let mut fixture = CacheFixture::new();
+        let transaction = fixture.connection.as_mut().unwrap().transaction().unwrap();
+        for index in 0..150 {
+            let advisory = if index == 0 || index == 149 {
+                json!({"id":"older-risk","package_url":"pkg:npm/@scope/résumé@1.0"})
+            } else {
+                json!({"id":format!("unrelated-{index}"),"package":"not-the-target"})
+            };
+            transaction
+                .execute(
+                    "INSERT INTO publisher_cache VALUES (?1, ?2, ?3)",
+                    rusqlite::params![
+                        index.to_string(),
+                        advisory.to_string(),
+                        format!("{index:03}")
+                    ],
+                )
+                .unwrap();
+        }
+        transaction.commit().unwrap();
+        let result: Value =
+            serde_json::from_slice(&evaluate_package_advisory_ids(&fixture.request()).unwrap())
+                .unwrap();
+        assert_eq!(
+            result["payload"]["matched_advisory_ids"],
+            json!(["older-risk"])
+        );
+        fixture
+            .connection
+            .as_ref()
+            .unwrap()
+            .execute(
+                "DELETE FROM publisher_cache WHERE publisher_key = '149'",
+                [],
+            )
+            .unwrap();
+        let result: Value =
+            serde_json::from_slice(&evaluate_package_advisory_ids(&fixture.request()).unwrap())
+                .unwrap();
+        assert_eq!(
+            result["payload"]["matched_advisory_ids"],
+            json!(["older-risk"])
+        );
+    }
+
+    #[test]
+    fn package_advisory_scan_fails_closed_on_corrupt_or_missing_cache() {
+        let fixture = CacheFixture::new();
+        fixture
+            .connection
+            .as_ref()
+            .unwrap()
+            .execute(
+                "INSERT INTO publisher_cache VALUES ('broken', '{', '2026')",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            evaluate_package_advisory_ids(&fixture.request()).unwrap_err(),
+            "native_package_advisory_cache_invalid",
+        );
+        let mut request = fixture.request();
+        request.store_path = fixture
+            .home
+            .join("missing.db")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(
+            evaluate_package_advisory_ids(&request).unwrap_err(),
+            "native_package_advisory_store_unavailable",
+        );
+        assert!(!fixture.home.join("missing.db").exists());
     }
 }

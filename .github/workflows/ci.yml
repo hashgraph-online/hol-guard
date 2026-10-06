@@ -14,6 +14,7 @@ permissions:
 
 env:
   CI_PYTHON_VERSION: "3.12.14"
+  CI_PYTEST_COVERAGE_SHARDS: "128"
   UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
@@ -26,6 +27,108 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Trusted change planner (shadow mode): computes which lanes the diff requires.
+  # Runs on PRs only; the diff is taken from the strict PR merge parent so a
+  # contributor cannot influence the base. Output feeds the `hol-guard /
+  # required` aggregate; nothing is skipped in shadow mode.
+  plan:
+    name: plan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      lanes: ${{ steps.plan.outputs.lanes || steps.plan_fallback.outputs.lanes }}
+      data_only: ${{ steps.plan.outputs.data_only || steps.plan_fallback.outputs.data_only }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+      - name: Extract trusted planner from the base revision
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        # The merge-commit checkout is PR-controlled, so a contribution could
+        # rewrite scripts/ci/plan_changes.py to emit data_only=true (CWE-807).
+        # Resolve the strict merge parent, then execute the planner files from
+        # that trusted revision only. If the base has no planner, the PR is
+        # introducing it, which is definitionally not a data-only change:
+        # emit a conservative full plan without running the untrusted copy.
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Push runs post-merge main code, which is trusted by review. The
+            # base is the push's before-SHA (server-side, not contributor input).
+            BASE="${{ github.event.before }}"
+            HEAD="$GITHUB_SHA"
+            if ! printf '%s' "$BASE" | grep -Eq '^[0-9a-f]{40}$'; then
+              # First push / branch create has no before-SHA: full plan.
+              printf '{"base":"","head":"%s","lanes":["full"],"data_only":false,"escalate_reason":"no-push-base","changed":[]}\n' "$HEAD" > ci-plan.json
+              echo "PLAN_READY=1" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "PLAN_BASE_SHA=$BASE" >> "$GITHUB_ENV"
+            echo "PLAN_HEAD_SHA=$HEAD" >> "$GITHUB_ENV"
+            echo "PLANNER_DIR=$PWD" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # Require the exact two-parent PR merge; an ambiguous checkout plans full.
+          PARENTS=$(git rev-list --parents -n 1 "$GITHUB_SHA" | wc -w)
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          if [ "$PARENTS" -ne 3 ]; then
+            printf '{"base":"","head":"%s","lanes":["full"],"data_only":false,"escalate_reason":"ambiguous-merge","changed":[]}\n' "$HEAD" > ci-plan.json
+            echo "PLAN_READY=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          BASE=$(git log -1 --format=%P "$GITHUB_SHA" | awk '{print $1}')
+          echo "PLAN_BASE_SHA=$BASE" >> "$GITHUB_ENV"
+          echo "PLAN_HEAD_SHA=$HEAD" >> "$GITHUB_ENV"
+          mkdir -p trusted/scripts/ci
+          introduced=0
+          for f in scripts/ci/plan_changes.py scripts/ci/pr_merge_base.py scripts/ci/__init__.py scripts/__init__.py; do
+            if git cat-file -e "$BASE:$f" 2>/dev/null; then
+              git show "$BASE:$f" > "trusted/$f"
+            elif [ "$f" = "scripts/ci/plan_changes.py" ]; then
+              introduced=1
+              echo "planner absent at trusted base; forcing full plan"
+              printf '{"base":"%s","head":"%s","lanes":["full"],"data_only":false,"escalate_reason":"planner-introduced","changed":[]}\n' "$BASE" "$HEAD" > ci-plan.json
+              echo "PLAN_READY=1" >> "$GITHUB_ENV"
+            else
+              : > "trusted/$f"
+            fi
+          done
+          if [ "$introduced" = 0 ]; then
+            echo "PLANNER_DIR=$PWD/trusted" >> "$GITHUB_ENV"
+          fi
+      - name: Fallback plan for a planner-introducing PR
+        id: plan_fallback
+        if: github.event_name == 'pull_request' && env.PLAN_READY == '1'
+        run: |
+          cat ci-plan.json
+          echo "lanes=full" >> "$GITHUB_OUTPUT"
+          echo "data_only=false" >> "$GITHUB_OUTPUT"
+      - name: Compute change plan
+        id: plan
+        if: env.PLAN_READY != '1'
+        env:
+          PLAN_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python "${PLANNER_DIR:?trusted planner dir unset}/scripts/ci/plan_changes.py" --root "$PWD" --base "${PLAN_BASE_SHA:-}" --head "${PLAN_HEAD_SHA:-}" --output ci-plan.json
+          LANES=$(python -c "import json;print(' '.join(json.load(open('ci-plan.json'))['lanes']))")
+          DATA_ONLY=$(python -c "import json;print(str(json.load(open('ci-plan.json'))['data_only']).lower())")
+          echo "lanes=$LANES" >> "$GITHUB_OUTPUT"
+          echo "data_only=$DATA_ONLY" >> "$GITHUB_OUTPUT"
+      - name: Upload ci-plan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ci-plan
+          path: ci-plan.json
+          if-no-files-found: error
+          retention-days: 7
+
   quality:
     needs: native-command-evaluators
     runs-on: ubuntu-latest
@@ -148,6 +251,9 @@ jobs:
     needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      shard-indices: ${{ steps.shard-indices.outputs.indices }}
+      shard-count: ${{ steps.shard-indices.outputs.count }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -174,24 +280,36 @@ jobs:
       - uses: ./.github/actions/plan-pytest
         with:
           python-version: "3.12"
-          shard-count: "128"
+          shard-count: ${{ env.CI_PYTEST_COVERAGE_SHARDS }}
           telemetry-branch: ${{ github.event.pull_request.base.ref || github.ref_name }}
           github-token: ${{ github.token }}
+      - name: Emit resolved shard indices
+        id: shard-indices
+        shell: bash
+        run: |
+          indices=$(ls pytest-shards/shard-*.txt | sed -E 's#.*shard-([0-9]+)\.txt#\1#' | sort -n | tr '\n' ' ' | sed 's/ $//')
+          test -n "$indices" || { echo "no shard files produced" >&2; exit 1; }
+          json=$(echo "$indices" | tr ' ' '\n' | jq -R 'tonumber' | jq -cs .)
+          echo "indices=${json}" >> "$GITHUB_OUTPUT"
+          echo "count=$(echo "$indices" | wc -w | tr -d ' ')" >> "$GITHUB_OUTPUT"
 
   coverage:
     name: coverage (3.12, ${{ matrix.shard-index }})
-    needs: [coverage-plan, native-command-evaluators]
+    needs: [plan, coverage-plan, native-command-evaluators]
+    if: >-
+      !cancelled() &&
+      needs.coverage-plan.result == 'success' &&
+      needs.native-command-evaluators.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Includes checkout/setup plus the instrumented shard. Five minutes can
+    # cancel a healthy shard before it produces the coverage artifact Sonar needs.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard-index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
-                       28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52,
-                       53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
-                       78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102,
-                       103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
-                       123, 124, 125, 126, 127]
+        shard-index: ${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -260,7 +378,7 @@ jobs:
 
   duration-manifest-candidate:
     if: needs.coverage.result == 'success'
-    needs: coverage
+    needs: [coverage, coverage-plan]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -278,7 +396,7 @@ jobs:
         run: |
           shopt -s globstar nullglob
           reports=(duration-reports/**/pytest-durations.json)
-          if [ "${#reports[@]}" -ne 128 ]; then
+          if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ]; then
             echo "Incomplete attempt reports; retain the previous duration manifest."
             echo "complete=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -329,7 +447,12 @@ jobs:
         if: steps.token-presence.outputs.has-token == 'true'
 
   scheduling-sensitive:
-    needs: native-command-evaluators
+    needs: [plan, native-command-evaluators]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -345,7 +468,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
   compatibility:
-    needs: native-command-evaluators
+    needs: [plan, native-command-evaluators]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -393,7 +521,7 @@ jobs:
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [native-workspace, quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
+    needs: [plan, native-workspace, quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -410,16 +538,27 @@ jobs:
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
           SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
+          PLAN_DATA_ONLY: ${{ needs.plan.outputs.data_only }}
         run: |
-          test "$NATIVE_WORKSPACE_RESULT" = "success"
-          test "$QUALITY_RESULT" = "success"
-          test "$COVERAGE_PLAN_RESULT" = "success"
-          test "$COVERAGE_RESULT" = "success"
-          test "$COMPATIBILITY_RESULT" = "success"
-          test "$SCHEDULING_SENSITIVE_RESULT" = "success"
+          # Plan-aware: a lane-eligible job that the planner skipped is acceptable
+          # only on a data-only plan. On a full plan skipped still fails.
+          if [ "$PLAN_DATA_ONLY" = "true" ]; then
+            ok_set='success skipped'
+          else
+            ok_set='success'
+          fi
+          for r in "$NATIVE_WORKSPACE_RESULT" "$QUALITY_RESULT" "$COVERAGE_PLAN_RESULT" \
+                   "$COVERAGE_RESULT" "$COMPATIBILITY_RESULT" "$SCHEDULING_SENSITIVE_RESULT"; do
+            case " $ok_set " in *" $r "*) : ;; *) echo "dependency result not OK: $r"; exit 1;; esac
+          done
 
   pi-exact-continuation:
-    needs: native-command-evaluators
+    needs: [plan, native-command-evaluators]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     name: Pi exact continuation (actual SDKs)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -434,6 +573,11 @@ jobs:
       - uses: ./.github/actions/ci-job-pi-exact-continuation
 
   dashboard:
+    needs: [plan]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -453,7 +597,12 @@ jobs:
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
   cisco-full:
-    needs: native-command-evaluators
+    needs: [plan, native-command-evaluators]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -462,7 +611,12 @@ jobs:
       - uses: ./.github/actions/ci-job-cisco-full
 
   cross-platform:
-    needs: native-command-evaluators
+    needs: [plan, native-command-evaluators]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -492,3 +646,93 @@ jobs:
       - uses: ./.github/actions/ci-job-windows-updater
         with:
           python-version: ${{ matrix.python-version }}
+
+  # Shadow aggregate: reports the merged required-result contract. In shadow mode
+  # it needs the full required set and evaluates the planner's lane choice so the
+  # status name is stable before the fast lane is switched on. always() so the
+  # aggregate runs even when an upstream required job fails — the point is to
+  # evaluate results, not to be skipped by them.
+  required:
+    name: hol-guard / required
+    if: always()
+    needs: [plan, native-workspace, native-command-evaluators, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      statuses: read
+    steps:
+      - name: Evaluate planned required results
+        env:
+          PLAN_LANES: ${{ needs.plan.outputs.lanes }}
+          PLAN_SHARD_COUNT: ${{ needs.coverage-plan.outputs.shard-count }}
+          EXPECTED_SHARDS: ${{ env.CI_PYTEST_COVERAGE_SHARDS }}
+          PLAN_DATA_ONLY: ${{ needs.plan.outputs.data_only }}
+          RESULTS: ${{ toJson(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python - <<'PY'
+          import json, os, sys
+          needs = json.loads(os.environ["RESULTS"])
+          plan_result = needs.get("plan", {}).get("result")
+          if os.environ.get("EVENT_NAME") == "pull_request" and plan_result != "success":
+              print(f"::error::plan job result: {plan_result}")
+              sys.exit(1)
+          data_only = os.environ.get("PLAN_DATA_ONLY") == "true"
+          # Always-on providers are never lane-gated: they must succeed on every
+          # plan, including data-only. A failed or cancelled provider (or a
+          # skipped one, which means its `if`/needs chain broke) must not let a
+          # data-only plan coast through on surviving lane-gated residue.
+          always_on = ["plan","native-workspace","native-command-evaluators",
+                       "quality","coverage-plan","ci-python-312"]
+          # Lane-gated required set: skipped is acceptable only on a data-only
+          # plan; failure/cancelled always fails.
+          required = ["coverage","compatibility","scheduling-sensitive",
+                      "dashboard","cisco-full","pi-exact-continuation","cross-platform"]
+          missing = [j for j in always_on + required if j not in needs]
+          if missing:
+              print("::error::required jobs absent from needs graph: "+", ".join(missing))
+              sys.exit(1)
+          # `plan` is `if: pull_request`, so on push/merge_group it is always
+          # skipped — that is expected, not a provider failure. Off-PR it must
+          # merely not have failed; on pull_request it must succeed outright.
+          event = os.environ.get("EVENT_NAME", "")
+          def _provider_ok(name):
+              result = needs.get(name, {}).get("result")
+              if name == "plan" and event != "pull_request":
+                  return result in ("success", "skipped")
+              return result == "success"
+          bad_providers = [j for j in always_on if not _provider_ok(j)]
+          failed = [j for j in required
+                    if needs.get(j, {}).get("result") in ("failure","cancelled")]
+          print(f"plan lanes={os.environ.get('PLAN_LANES')} data_only={data_only}")
+          for j in always_on + required:
+              print(f"  {j}: {needs.get(j,{}).get('result')}")
+          if bad_providers:
+              print("::error::always-on jobs did not succeed: " + ", ".join(bad_providers))
+              sys.exit(1)
+          if failed:
+              print("::error::required jobs failed: " + ", ".join(failed))
+              sys.exit(1)
+          # Matrix cardinality: coverage must expand to exactly the planned shard
+          # count. A truncated/empty matrix that still "passes" is a protection gap.
+          shard_count = os.environ.get("PLAN_SHARD_COUNT", "")
+          expected = os.environ.get("EXPECTED_SHARDS", "")
+          if not data_only:
+              if not shard_count.isdigit() or int(shard_count) < 1:
+                  print(f"::error::coverage-plan shard count invalid ({shard_count!r})")
+                  sys.exit(1)
+              if expected.isdigit() and int(shard_count) != int(expected):
+                  print(f"::error::coverage matrix {shard_count} != configured {expected}")
+                  sys.exit(1)
+          skipped = [j for j in required if needs.get(j,{}).get("result")=="skipped"]
+          if skipped and not data_only:
+              print("::error::required jobs skipped on a full-lane plan: "+", ".join(skipped))
+              sys.exit(1)
+          # Evidence residue is already enforced: `always_on` (plan, quality,
+          # coverage-plan, ci-python-312, plus the native providers) must succeed,
+          # so a data-only plan cannot coast with no green evidence. Lane-gated
+          # jobs are all skipped on data-only by design — counting them as
+          # residue would fail every valid fast lane.
+          print("required aggregate: all planned required results green")
+          PY

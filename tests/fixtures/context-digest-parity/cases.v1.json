@@ -212,7 +212,6 @@
         "policy": {},
         "sandbox": {}
       },
-      "diverges_from_python": true,
       "extension_control_digest": "20d45a0efad04c26d4bf5e490d0b1924cdc34bc4e2b8b09f4b732bdce8c49043",
       "id": "int-beyond-u64",
       "token": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiJmMzNkNzQ3NjMyZGRkODMwNTIyNzI3ZDBhYmZkOGQ5ZDUyNDI4MzJiNzZkOWY3ZTljYTI5ZDE4NGUwNzQ1NjFkIiwiY29udGVudCI6IjMxYWFmMGQyMmE4Y2FkYWQ5MzI2OGUxMGExYzIxOGRiZjgwNmIxMzYzNWZhYjQ4NDEzNjM1ZWYyM2M2ODI2NTQiLCJpZGVudGl0eSI6ImMzZmZkZmEwM2RjZjFhNjg3MGMxNzZhNGQ5NGQzZWQyMzMwNDE4M2FlZWM4ODU4YzdlNGViYWU5NTMzYzQxOGUiLCJwb2xpY3kiOiI5NzYwOGFlM2IzNGY4ODNhMzFkYzcwY2JjZDhiZjg0MDA0MTFmNzdkMTQ1OTdjODYxNWYwYWVkMTFlNjMyOTdlIiwic2FuZGJveCI6ImJkN2EzNDc5MmRhYWI3Mjk2MTBjYmIzZTJlY2Y3MTZjNGMyMWY4MzVkNDNkMjU2YTNkYTUxOTRhMzcyODQ1M2MiLCJ2ZXJzaW9uIjoxfQ"

@@ -14,12 +14,13 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ..native_context import context_package_launcher_token
 from ..protect import _collect_package_specs
 from ._shell_execution_context_support import shell_path_identity_payload
 from .command_model import CanonicalCommand
 from .env_wrapper import parse_env_wrapper
 from .homebrew_intent import parse_brew_intent
-from .mcp_protection import _command_name, _package_token
+from .mcp_protection import _command_name
 from .package_intent_common import (
     IntentKind,
     LocalPackageExecutionEvidence,
@@ -1188,7 +1189,7 @@ def _exec_package_spec(tokens: tuple[str, ...]) -> str | None:
         return option_value(tokens, "--package") or first_positional(tokens[1:], skip_value_options={"--package"})
     if command_name in {"bunx", "uvx"}:
         return first_positional(tokens[1:], skip_value_options=set())
-    return _package_token(command_name=command_name, args=tokens[1:])
+    return context_package_launcher_token(command_name, tokens[1:])
 
 
 def _normalized_command_tokens(command_text: str) -> tuple[str, ...]:

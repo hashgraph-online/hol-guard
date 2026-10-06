@@ -29,7 +29,6 @@ from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots,
 from . import native_execution as _native_execution
 from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .adapters.base import HarnessContext
-from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .approval_scope_support import package_request_runtime_workspace_scope
 from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig, resolve_risk_action
@@ -1537,6 +1536,11 @@ def _build_package_protect_authority(
         raise ValueError("package workspace must resolve to an existing directory") from None
     if not launch_cwd.is_dir():
         raise ValueError("package workspace must resolve to an existing directory")
+    from .native_context import bind_context_digest_home
+    from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+
+    provision_native_verifier_key_for_store(store)
+    bind_context_digest_home(store.guard_home)
     launch_environment = _package_manager_launch_environment(
         os.environ,
         guard_home=store.guard_home,
@@ -2875,47 +2879,15 @@ def recompute_package_protect_artifact_hash(
     return authority.artifact_hash if authority is not None else None
 
 
-def _package_target_identities(artifact: GuardArtifact) -> tuple[ProtectTargetIdentity, ...]:
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
-    targets = metadata.get("targets")
-    if not isinstance(targets, list):
-        return ()
-    identities: list[ProtectTargetIdentity] = []
-    for item in targets:
-        if not isinstance(item, dict):
-            continue
-        ecosystem = str(item.get("ecosystem") or "")
-        package_name = item.get("package_name") if isinstance(item.get("package_name"), str) else None
-        raw_spec = str(item.get("raw_spec") or package_name or "")
-        version = item.get("requested_specifier") if isinstance(item.get("requested_specifier"), str) else None
-        source_url = item.get("source_url") if isinstance(item.get("source_url"), str) else None
-        artifact_id = f"{ecosystem}:{package_name or raw_spec}"
-        artifact_name = package_name or raw_spec
-        identities.append(
-            ProtectTargetIdentity(
-                artifact_id=artifact_id,
-                artifact_name=artifact_name,
-                ecosystem=ecosystem,
-                package_name=package_name,
-                package_url=build_package_url(ecosystem, package_name, version),
-                source_url=source_url,
-            )
-        )
-    return tuple(identities)
-
-
 def _package_matched_cached_advisory_ids(store: Any, artifact: GuardArtifact) -> tuple[str, ...]:
-    advisories = store.list_cached_advisories(limit=None)
-    identities = _package_target_identities(artifact)
-    matched_ids: set[str] = set()
-    for advisory in advisories:
-        for identity in identities:
-            if advisory_matches_target(advisory, identity):
-                advisory_id = advisory.get("id")
-                if isinstance(advisory_id, str) and advisory_id:
-                    matched_ids.add(advisory_id)
-                break
-    return tuple(sorted(matched_ids))
+    from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+
+    provision_native_verifier_key_for_store(store)
+    return _native_package_authority_module().package_advisory_ids_native(
+        artifact=artifact.to_dict(),
+        store_path=store.path,
+        guard_home=store.guard_home,
+    )
 
 
 def _package_feed_snapshot_hash(store: Any) -> str | None:

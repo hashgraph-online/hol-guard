@@ -328,6 +328,29 @@ def test_cli_publishes_only_the_selected_numeric_artifact_ids(tmp_path, monkeypa
     )
     assert "reused 127" in capsys.readouterr().out
 
+@pytest.mark.parametrize("event,expected", [("pull_request", False), ("push", True), ("merge_group", True)])
+def test_cli_marks_change_planner_skippable_only_off_pull_request(tmp_path, monkeypatch, event, expected):
+    # Regression for run 37388945442: the planner job is `if: pull_request`, so
+    # on push it is always skipped. The selector must wire plan_skippable from
+    # GITHUB_EVENT_NAME; without this test a comparison change silently
+    # re-breaks main-push coverage selection.
+    output = tmp_path / "selected.json"
+    monkeypatch.setenv("GITHUB_REPOSITORY", REPOSITORY)
+    monkeypatch.setenv("GITHUB_RUN_ID", str(RUN))
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
+    # Isolate the workflow-command file; in CI GITHUB_OUTPUT is a real file.
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "action-output"))
+    captured = {}
+
+    def wait(repository, run, attempt, **kwargs):
+        captured["plan_skippable"] = kwargs.get("plan_skippable")
+
+    monkeypatch.setattr(selection.barrier, "wait_for_shards", wait)
+    monkeypatch.setattr(selection, "select_with_retries", lambda *args: select(fixture()))
+    assert selection.main(["--output", str(output)]) == 0
+    assert captured["plan_skippable"] is expected
+
 
 def test_cli_does_not_publish_ids_when_a_producer_is_bad(tmp_path, monkeypatch):
     output = tmp_path / "selected.json"

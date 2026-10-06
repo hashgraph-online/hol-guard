@@ -19,6 +19,7 @@ sha2.workspace = true
 hex.workspace = true
 idna.workspace = true
 percent-encoding.workspace = true
+pep440_rs.workspace = true
 toml.workspace = true
 roxmltree.workspace = true
 getrandom.workspace = true

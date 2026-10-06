@@ -210,18 +210,3 @@ pub(super) fn is_bundle_stale(
     let _ = bundle_response;
     false
 }
-
-#[allow(dead_code)]
-pub(super) fn policy_rule_get_str(rule: &Map<String, Value>, key: &str) -> Option<String> {
-    rule.get(key).and_then(|v| match v {
-        Value::String(s) => {
-            let t = s.trim();
-            if t.is_empty() {
-                None
-            } else {
-                Some(t.to_string())
-            }
-        }
-        _ => None,
-    })
-}

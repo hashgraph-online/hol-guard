@@ -311,12 +311,16 @@ def append_cli_config_artifacts(
 
     hooks_section = payload.get("hooks")
     if isinstance(hooks_section, dict):
+        # Hook artifacts from the CLI file-config need distinct ids so they
+        # never collide with config.json entries of the same event and index.
+        id_suffix = "" if config_path.name == ZCODE_CLI_CONFIG_FILE else f":{config_path.name}"
         _append_hook_groups(
             harness=harness,
             artifacts=artifacts,
             hooks=hook_event_groups(hooks_section),
             config_path=config_path,
             scope=scope,
+            id_suffix=id_suffix,
         )
 
 
@@ -327,6 +331,7 @@ def _append_hook_groups(
     hooks: Mapping[str, object],
     config_path: Path,
     scope: str,
+    id_suffix: str = "",
 ) -> None:
     for event_name, entries in hooks.items():
         if not isinstance(event_name, str) or not isinstance(entries, list):
@@ -350,7 +355,7 @@ def _append_hook_groups(
             for artifact_suffix, command in collected:
                 artifacts.append(
                     GuardArtifact(
-                        artifact_id=f"{harness}:{scope}:hook:{artifact_suffix}",
+                        artifact_id=f"{harness}:{scope}:hook:{artifact_suffix}{id_suffix}",
                         name=_hook_name(event_name, matcher),
                         harness=harness,
                         artifact_type="hook",

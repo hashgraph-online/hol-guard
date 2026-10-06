@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from ..action_lattice import most_restrictive_guard_action
@@ -349,7 +349,16 @@ def _readline_with_timeout(
     raise RuntimeError("guard_proxy_io_failed")
 
 
-def _quarantine_process(process: subprocess.Popen[str]) -> None:
+class _ChildLifecycle(Protocol):
+    """Lifecycle operations shared by native sessions and stdio children."""
+
+    def poll(self) -> int | None: ...
+    def terminate(self) -> None: ...
+    def kill(self) -> None: ...
+    def wait(self, timeout: float | None = None) -> int: ...
+
+
+def _quarantine_process(process: _ChildLifecycle) -> None:
     if process.poll() is not None:
         return
     with suppress(Exception):

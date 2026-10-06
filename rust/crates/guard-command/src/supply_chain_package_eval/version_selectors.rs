@@ -14,16 +14,16 @@ pub(super) fn pypi_caret_specifier(deps: &SupplyChainEvalDeps<'_>, value: &str) 
         }
     }?;
     let parsed = deps.semver.version(&base).ok()?;
-    let release = &parsed.release;
+    let release = parsed.release();
     let major = release.first().copied().unwrap_or(0);
     let minor = release.get(1).copied().unwrap_or(0);
     let patch = release.get(2).copied().unwrap_or(0);
     let upper_bound = if major > 0 {
-        format!("{}", major + 1)
+        format!("{}", u128::from(major) + 1)
     } else if minor > 0 {
-        format!("0.{}", minor + 1)
+        format!("0.{}", u128::from(minor) + 1)
     } else {
-        format!("0.0.{}", patch + 1)
+        format!("0.0.{}", u128::from(patch) + 1)
     };
     Some(format!(">={base},<{upper_bound}"))
 }
@@ -42,12 +42,12 @@ pub(super) fn pypi_tilde_specifier(deps: &SupplyChainEvalDeps<'_>, value: &str) 
         }
     }?;
     let parsed = deps.semver.version(&base).ok()?;
-    let release = &parsed.release;
+    let release = parsed.release();
     let major = release.first().copied().unwrap_or(0);
     let upper_bound = if release.len() >= 2 {
-        format!("{major}.{}", release[1] + 1)
+        format!("{major}.{}", u128::from(release[1]) + 1)
     } else {
-        format!("{}", major + 1)
+        format!("{}", u128::from(major) + 1)
     };
     Some(format!(">={base},<{upper_bound}"))
 }

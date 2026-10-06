@@ -26,6 +26,15 @@ pub fn write_canonical_json_with_limit(
     limit: usize,
     err: &'static str,
 ) -> Result<(), &'static str> {
+    write_sorted_json::<false>(value, out, limit, err)
+}
+
+fn write_sorted_json<const SPACED: bool>(
+    value: &Value,
+    out: &mut Vec<u8>,
+    limit: usize,
+    err: &'static str,
+) -> Result<(), &'static str> {
     if out.len() > limit {
         return Err(err);
     }
@@ -33,10 +42,9 @@ pub fn write_canonical_json_with_limit(
         Value::Null => out.extend_from_slice(b"null"),
         Value::Bool(flag) => out.extend_from_slice(if *flag { b"true" } else { b"false" }),
         Value::Number(number) => {
-            if let Some(int) = number.as_i64() {
-                out.extend_from_slice(int.to_string().as_bytes());
-            } else if let Some(uint) = number.as_u64() {
-                out.extend_from_slice(uint.to_string().as_bytes());
+            let raw = number.as_str();
+            if !raw.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E')) {
+                out.extend_from_slice(if raw == "-0" { b"0" } else { raw.as_bytes() });
             } else if let Some(float) = number.as_f64() {
                 if !float.is_finite() {
                     return Err(err);
@@ -52,8 +60,11 @@ pub fn write_canonical_json_with_limit(
             for (index, item) in items.iter().enumerate() {
                 if index > 0 {
                     out.push(b',');
+                    if SPACED {
+                        out.push(b' ');
+                    }
                 }
-                write_canonical_json_with_limit(item, out, limit, err)?;
+                write_sorted_json::<SPACED>(item, out, limit, err)?;
             }
             out.push(b']');
         }
@@ -65,11 +76,17 @@ pub fn write_canonical_json_with_limit(
             for (key, item) in entries.iter() {
                 if !first {
                     out.push(b',');
+                    if SPACED {
+                        out.push(b' ');
+                    }
                 }
                 first = false;
                 write_json_string(key, out);
                 out.push(b':');
-                write_canonical_json_with_limit(item, out, limit, err)?;
+                if SPACED {
+                    out.push(b' ');
+                }
+                write_sorted_json::<SPACED>(item, out, limit, err)?;
             }
             out.push(b'}');
         }
@@ -84,6 +101,12 @@ pub fn write_canonical_json_with_limit(
 /// Unbounded canonical JSON (for producers that already bound input size).
 pub fn write_canonical_json(value: &Value, out: &mut Vec<u8>) -> Result<(), &'static str> {
     write_canonical_json_with_limit(value, out, usize::MAX, "canonical_json_unencodable")
+}
+
+/// Sorted, ASCII-escaped JSON with CPython's default comma/colon spacing.
+/// The producer must bound input size, as with the compact unbounded writer.
+pub fn write_python_default_json(value: &Value, out: &mut Vec<u8>) -> Result<(), &'static str> {
+    write_sorted_json::<true>(value, out, usize::MAX, "canonical_json_unencodable")
 }
 
 /// Escape a string body the way CPython's `ensure_ascii` encoder does:

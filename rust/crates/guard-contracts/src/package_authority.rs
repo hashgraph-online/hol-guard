@@ -182,3 +182,15 @@ pub struct PackageAuthorityDecideResultV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }
+
+/// Native cached-feed matching for a package policy context. The runtime reads
+/// the complete advisory cache; callers cannot provide preselected matches.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageAdvisoryIdsRequestV1 {
+    pub schema: String,
+    pub request_id: String,
+    pub store_path: String,
+    pub guard_home: String,
+    pub artifact: Value,
+}

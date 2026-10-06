@@ -123,7 +123,7 @@ def test_mcp_probe_uses_resolved_or_explicit_guard_home(monkeypatch, tmp_path, e
 
     def probe(*_args, **kwargs):
         captured.update(kwargs)
-        return {"status": "failed", "reason": "test"}
+        return {"status": "failed", "reason": "test", "tools": [], "complete": False}
 
     monkeypatch.setattr(native_execution, "mcp_stdio_probe_native", probe)
     monkeypatch.setattr(config, "resolve_guard_home", lambda: tmp_path / "resolved")
@@ -300,12 +300,12 @@ def test_prompt_decoder_preserves_valid_remediation():
         {"capabilities": "invalid"},
     ],
 )
-def test_mcp_native_catalog_falls_back_for_malformed_payload(monkeypatch, fields):
-    fallback = local_mcp_stdio.McpCatalogResult(reason="python-fallback")
-    native = {"status": "ok", "tools": [], **fields}
+def test_mcp_native_catalog_rejects_malformed_payload_without_python_fallback(monkeypatch, fields):
+    native = {"status": "ok", "tools": [], "complete": True, **fields}
     monkeypatch.setattr(native_execution, "mcp_stdio_probe_native", lambda *_a, **_k: native)
-    monkeypatch.setattr(local_mcp_stdio, "_exchange_tools_list", lambda *_a, **_k: fallback)
-    assert local_mcp_stdio.run_mcp_catalog(["test-server"]) is fallback
+    assert not hasattr(local_mcp_stdio, "_exchange_tools_list")
+    with pytest.raises(local_mcp_stdio.NativeMcpAuthorityError):
+        local_mcp_stdio.run_mcp_catalog(["test-server"])
 
 
 def test_mcp_native_catalog_preserves_valid_fields():
@@ -313,6 +313,7 @@ def test_mcp_native_catalog_preserves_valid_fields():
     result = local_mcp_stdio._native_catalog_result(
         {
             "status": "ok",
+            "complete": True,
             "tools": tools,
             "protocol_version": "2025-11-25",
             "server_info": {"name": "test"},
