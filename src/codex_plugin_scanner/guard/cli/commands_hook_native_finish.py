@@ -45,9 +45,6 @@ if TYPE_CHECKING:
 
 
 from ._commands_shared import *
-from .commands_support_runtime_artifact_policy import (
-    _runtime_artifact_fail_closed_floor,
-)
 from .commands_parser_helpers import *
 from .native_hook_exit_code import native_hook_verdict_exit_code
 
@@ -275,13 +272,15 @@ def finalize_native_artifact_hook(
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "grok":
-            from ..adapters.grok_hooks import emit_grok_hook_response, grok_hook_process_exit
+            from ..adapters.grok_hooks import emit_grok_hook_response
             emit_grok_hook_response(
                 policy_action=policy_action, event_name=event_name,
                 reason=native_block_reason, approval_payload=response_payload,
                 output_stream=output_stream,
             )
-            return grok_hook_process_exit(policy_action)
+            return native_hook_verdict_exit_code(
+                _canonical_harness_name(args.harness), policy_action, event_name
+            )
         elif _canonical_harness_name(args.harness) in {"pi", "omp"}:
             from ..adapters.pi_hooks import emit_pi_hook_response
 
@@ -292,7 +291,7 @@ def finalize_native_artifact_hook(
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response, zcode_hook_process_exit
+            from ..adapters.zcode_hooks import emit_zcode_hook_response
 
             emit_zcode_hook_response(
                 policy_action=policy_action,
@@ -378,16 +377,6 @@ def finalize_native_artifact_hook(
             system_message=system_message,
             native_protocol_payload="hook_event_name" in payload or "event" not in payload,
             command_surface=action_envelope is not None and action_envelope.action_type == "shell_command",
-            replayed_decision=isinstance(payload.get("policy_action"), str)
-            and any(
-                isinstance(payload.get(key), str) and payload.get(key)
-                for key in ("artifact_id", "artifact_name", "tool_call_id")
-            ),
-            envelope_keyed="hook_event_name" in payload or "event" in payload,
-            fail_closed_native_floor=(
-                runtime_artifact is not None
-                and _runtime_artifact_fail_closed_floor(runtime_artifact)
-            ),
         )
         if json_result is not None:
             json_doc, json_rc = json_result
@@ -410,7 +399,7 @@ def finalize_native_artifact_hook(
         output_stream=output_stream,
     ):
         if canonical_harness == "grok":
-            from ..adapters.grok_hooks import emit_grok_hook_response, grok_hook_process_exit
+            from ..adapters.grok_hooks import emit_grok_hook_response
 
             emit_grok_hook_response(
                 policy_action=policy_action, event_name=event_name,
@@ -423,7 +412,7 @@ def finalize_native_artifact_hook(
                 payload=payload,
                 policy_action=policy_action,
             )
-            return grok_hook_process_exit(policy_action)
+            return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
         if canonical_harness in {"pi", "omp"}:
             from ..adapters.pi_hooks import emit_pi_hook_response
 
@@ -441,7 +430,7 @@ def finalize_native_artifact_hook(
             )
             return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
         if canonical_harness == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response, zcode_hook_process_exit
+            from ..adapters.zcode_hooks import emit_zcode_hook_response
 
             emit_zcode_hook_response(
                 policy_action=policy_action,
@@ -456,7 +445,7 @@ def finalize_native_artifact_hook(
                 payload=payload,
                 policy_action=policy_action,
             )
-            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name)
+            return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
         if canonical_harness == "devin":
             from ..adapters.devin_hooks import emit_devin_hook_response
 
@@ -488,7 +477,7 @@ def finalize_native_artifact_hook(
             payload=payload,
             policy_action=policy_action,
         )
-        return 0
+        return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
     if event_name == "PostToolUse":
         # PostToolUse can never pause the tool (it already ran): the emitted
         # surface always continues the session. Codex reads the native block

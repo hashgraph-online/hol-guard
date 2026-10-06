@@ -4,7 +4,9 @@ Exercises both the shared ``native_hook_verdict_exit_code`` table and the
 availability wrapper ``_native_unavailable_exit_code`` that feeds an emitted
 deny/allow envelope through it.
 """
+
 import argparse
+
 import pytest
 
 from codex_plugin_scanner.guard.cli.commands_hook_native_availability import (
@@ -74,6 +76,7 @@ class TestVerdictExitCodeContract:
         # action.  Gauntlet-verified for omp.
         assert native_hook_verdict_exit_code(h, "block", "PreToolUse") == 0
         assert native_hook_verdict_exit_code(h, "block", "UserPromptSubmit") == 0
+        assert native_hook_verdict_exit_code(h, "block", "PermissionRequest") == 0
         assert native_hook_verdict_exit_code(h, "allow", "PreToolUse") == 0
 
     @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
@@ -82,6 +85,7 @@ class TestVerdictExitCodeContract:
         # verdict flags the violation on the exit status instead.
         assert native_hook_verdict_exit_code(h, "block", "PostToolUse") == 1
         assert native_hook_verdict_exit_code(h, "allow", "PostToolUse") == 0
+
     def test_unknown_harness_fails_safe(self):
         assert native_hook_verdict_exit_code("some-future-harness", "block") == 1
         assert native_hook_verdict_exit_code("some-future-harness", "allow") == 0
@@ -96,6 +100,7 @@ class TestNativeUnavailableExitCode:
 
     def test_grok_uses_adapter(self, monkeypatch):
         from codex_plugin_scanner.guard.adapters import grok_hooks
+
         monkeypatch.setattr(grok_hooks, "_last_grok_policy_action", "block")
         assert _native_unavailable_exit_code(_args("grok"), {"policy_action": "block"}, "PreToolUse") == 2
         monkeypatch.setattr(grok_hooks, "_last_grok_policy_action", "allow")

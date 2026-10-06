@@ -1334,9 +1334,7 @@ def run_native_generic_payload(
             ),
             output_stream=output_stream,
         )
-        return native_hook_verdict_exit_code(
-            _canonical_harness_name(args.harness), policy_action, hook_event_name
-        )
+        return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
     if config.mode == "observe" and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
         observed_artifact = GuardArtifact(
             artifact_id=artifact_id,
@@ -1475,7 +1473,7 @@ def run_native_generic_payload(
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "grok":
-            from ..adapters.grok_hooks import emit_grok_hook_response, grok_hook_process_exit
+            from ..adapters.grok_hooks import emit_grok_hook_response
 
             emit_grok_hook_response(
                 policy_action=policy_action,
@@ -1483,8 +1481,12 @@ def run_native_generic_payload(
                 event_name=hook_event_name,
                 output_stream=output_stream,
             )
-            if grok_hook_process_exit(policy_action) == 0:
-                return 0
+            exit_code = native_hook_verdict_exit_code(
+                _canonical_harness_name(args.harness), policy_action, hook_event_name
+            )
+            if exit_code != 0:
+                _emit_native_hook_block_stderr(block_reason)
+            return exit_code
         elif _canonical_harness_name(args.harness) in {"pi", "omp"}:
             from ..adapters.pi_hooks import emit_pi_hook_response
 
@@ -1495,7 +1497,7 @@ def run_native_generic_payload(
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response, zcode_hook_process_exit
+            from ..adapters.zcode_hooks import emit_zcode_hook_response
 
             emit_zcode_hook_response(
                 policy_action=policy_action,
@@ -1516,9 +1518,7 @@ def run_native_generic_payload(
             )
         # Kimi surfaces stderr to the user as the blocking explanation.
         _emit_native_hook_block_stderr(block_reason)
-        return native_hook_verdict_exit_code(
-            _canonical_harness_name(args.harness), policy_action, hook_event_name
-        )
+        return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
     if _canonical_harness_name(args.harness) == "codex" and (
         hook_event_name == "UserPromptSubmit" or approval_context is not None
     ):
@@ -1576,12 +1576,6 @@ def run_native_generic_payload(
                     home_dir=home_dir,
                 )
             ),
-            replayed_decision=isinstance(payload_map.get("policy_action"), str)
-            and any(
-                isinstance(payload_map.get(key), str) and payload_map.get(key)
-                for key in ("artifact_id", "artifact_name", "tool_call_id")
-            ),
-            envelope_keyed="hook_event_name" in payload_map or "event" in payload_map,
         )
         if json_result is not None:
             json_doc, json_rc = json_result
@@ -1598,7 +1592,7 @@ def run_native_generic_payload(
         output_stream=output_stream,
     ):
         if _canonical_harness_name(args.harness) == "grok":
-            from ..adapters.grok_hooks import emit_grok_hook_response, grok_hook_process_exit
+            from ..adapters.grok_hooks import emit_grok_hook_response
 
             emit_grok_hook_response(
                 policy_action=policy_action,
@@ -1606,7 +1600,7 @@ def run_native_generic_payload(
                 event_name=hook_event_name,
                 output_stream=output_stream,
             )
-            return grok_hook_process_exit(policy_action)
+            return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
         if _canonical_harness_name(args.harness) in {"pi", "omp"}:
             from ..adapters.pi_hooks import emit_pi_hook_response
 
@@ -1616,11 +1610,9 @@ def run_native_generic_payload(
                 approval_payload=payload_map,
                 output_stream=output_stream,
             )
-            return native_hook_verdict_exit_code(
-                _canonical_harness_name(args.harness), policy_action, hook_event_name
-            )
+            return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
         if _canonical_harness_name(args.harness) == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response, zcode_hook_process_exit
+            from ..adapters.zcode_hooks import emit_zcode_hook_response
 
             emit_zcode_hook_response(
                 policy_action=policy_action,
@@ -1629,7 +1621,7 @@ def run_native_generic_payload(
                 payload=payload_map,
                 output_stream=output_stream,
             )
-            return zcode_hook_process_exit(policy_action=policy_action, event_name=hook_event_name)
+            return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
         if _canonical_harness_name(args.harness) == "devin":
             from ..adapters.devin_hooks import emit_devin_hook_response
 
@@ -1640,9 +1632,7 @@ def run_native_generic_payload(
                 payload=payload_map,
                 output_stream=output_stream,
             )
-            return native_hook_verdict_exit_code(
-                _canonical_harness_name(args.harness), policy_action, hook_event_name
-            )
+            return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
         system_message = None
         canonical_harness = _canonical_harness_name(args.harness)
         if (
@@ -1664,9 +1654,7 @@ def run_native_generic_payload(
             system_message=system_message,
             output_stream=output_stream,
         )
-        return native_hook_verdict_exit_code(
-            _canonical_harness_name(args.harness), policy_action, hook_event_name
-        )
+        return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
     if hook_event_name == "PostToolUse":
         _apply_native_edge_envelope_fields(hook_envelope, native_edge_result)
         _emit_native_post_tool_envelope(
@@ -1677,9 +1665,7 @@ def run_native_generic_payload(
             output_stream=output_stream,
             as_json=getattr(args, "json", False),
         )
-        return native_hook_verdict_exit_code(
-            _canonical_harness_name(args.harness), policy_action, hook_event_name
-        )
+        return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
     blocking = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     hook_envelope["continue"] = True
     hook_envelope["decision"] = "block" if blocking else "allow"
@@ -1692,9 +1678,7 @@ def run_native_generic_payload(
         # The caller replayed a decision that was already recorded upstream;
         # the envelope acknowledges it without re-blocking the harness.
         return 0
-    return native_hook_verdict_exit_code(
-        _canonical_harness_name(args.harness), policy_action, hook_event_name
-    )
+    return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
 
 
 __all__ = [

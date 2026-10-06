@@ -735,7 +735,9 @@ clearer UX and an implementation plan with technical references.
         assert requests == []
 
     def test_prompt_requests_to_artifacts_generates_session_prompt_artifacts(
-        self, tmp_path, native_prompt_analysis,
+        self,
+        tmp_path,
+        native_prompt_analysis,
     ) -> None:
         context = HarnessContext(
             home_dir=tmp_path / "home",
