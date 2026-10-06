@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 const prefix = process.argv[2];
 if (!prefix || !prefix.startsWith('/tmp/hol-business-dashboard-policy-recovery-')) throw new Error('Pass a synthetic isolated fixture prefix');

@@ -2,12 +2,49 @@
 
 import time
 from pathlib import Path
+from threading import Event, Thread
 
 from codex_plugin_scanner.guard import native_policy_snapshot_publisher as publisher_api
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_native_business_document_compile import document
 from tests.test_native_business_source_store import _grant, _install
+
+
+def test_source_verification_does_not_block_readiness(tmp_path, native_mcp_probe, monkeypatch):
+    store = GuardStore(tmp_path / "readiness-home")
+    native_mcp_probe(store.guard_home)
+    (store.guard_home / "config.toml").write_text('mode = "prompt"\nprotection_posture = "protected"\n')
+    _install(store, document(), _grant(store, document()))
+    publisher = NativePolicySnapshotPublisher(store=store)
+    read = publisher._compiled_business_source
+    reads = []
+    readers = []
+
+    def verify():
+        reads.append(1)
+        if len(reads) == 3:
+            completed = Event()
+
+            def readiness():
+                publisher.is_ready()
+                completed.set()
+
+            reader = Thread(target=readiness)
+            readers.append(reader)
+            reader.start()
+            assert completed.wait(1), "source verification held the readiness condition"
+        return read()
+
+    monkeypatch.setattr(publisher, "_compiled_business_source", verify)
+    try:
+        publisher._publish_once()
+        assert len(reads) == 3
+        assert publisher.is_ready(), publisher.last_error
+    finally:
+        publisher.close()
+        for reader in readers:
+            reader.join(timeout=2)
 
 
 def test_actual_publisher_admits_exact_source_and_withdraws_on_source_loss(tmp_path: Path, native_mcp_probe):

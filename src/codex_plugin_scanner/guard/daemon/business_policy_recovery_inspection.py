@@ -6,7 +6,7 @@ from typing import cast
 from .. import native_business_source_store as owner
 from ..business_policy_document_view import without_provenance
 from ..mcp.policy_recovery_state import request_recovery_recorded
-from ..native_business_source_bridge import _consumer, verify_business_source_record
+from ..native_business_source_bridge import _consumer, _remaining, verify_business_source_record
 from ..native_business_source_retention import read_retained_business_source_anchor
 from ..native_command_control_authority_io import hold_command_control_authority_lock, read_private_state
 from ..native_policy_snapshot_codec import derive_native_policy_verifier_key
@@ -20,7 +20,7 @@ def inspect_business_policy_recovery(store, request, document):
     status = _consumer(deadline, anchor=True)
     if status.capabilities is None or owner.CURRENT_FENCE_CAPABILITY not in status.capabilities.features:
         raise owner._error("native_business_source_current_fence_unavailable")
-    with hold_command_control_authority_lock(store.guard_home, timeout_seconds=5):
+    with hold_command_control_authority_lock(store.guard_home, shared=True, timeout_seconds=_remaining(deadline)):
         recovered = request_recovery_recorded(store, request.request_id)
         material = store._policy_integrity_secret_material(create=False)
         if material is None or material[0] is None:

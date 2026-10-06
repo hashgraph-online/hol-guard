@@ -15,6 +15,38 @@ from tests.test_native_business_document_compile import document
 from tests.test_native_business_source_store import _grant, _install, _key
 
 
+def test_read_only_inspection_allows_native_publication(store, env_flags, native_mcp_probe, monkeypatch):
+    from codex_plugin_scanner.guard.daemon import business_policy_recovery_inspection as inspection
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
+
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    staged = _stage(store, candidate, monkeypatch)
+    _install(store, candidate, _grant(store, candidate))
+    (store.guard_home / "config.toml").write_text('mode = "prompt"\nprotection_posture = "protected"\n')
+    request = MCPolicyRequestRepository(store).get_request(staged["requestId"])
+    assert request is not None
+    publisher = NativePolicySnapshotPublisher(store=store)
+    publisher._publish_once()
+    assert publisher.is_ready(), publisher.last_error
+    verify = inspection.verify_business_source_record
+    publications = []
+
+    def publish_during_inspection(*args, **kwargs):
+        publisher._publish_once()
+        assert publisher.is_ready(), publisher.last_error
+        publications.append(publisher.current_snapshot())
+        return verify(*args, **kwargs)
+
+    monkeypatch.setattr(inspection, "verify_business_source_record", publish_during_inspection)
+    try:
+        result = inspection.inspect_business_policy_recovery(store, request, candidate)
+        assert result["state"] == "installed"
+        assert len(publications) == 1
+    finally:
+        publisher.close()
+
+
 @pytest.mark.parametrize("authorized", [False, True])
 @pytest.mark.parametrize("expired", [False, True])
 def test_dashboard_recovery_requires_fresh_factor_and_preserves_request_status(
