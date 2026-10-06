@@ -26,7 +26,7 @@
     "icon": {
       "background": "#0F172A",
       "kind": "react-icon",
-      "name": "HiDatabase"
+      "name": "HiMiniCommandLine"
     },
     "license": "MIT",
     "name": "DataMan command protection",
@@ -296,8 +296,18 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.init",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.init"
+        "rule_id": "command.dataman.rule.init",
+        "rule_version": "1.0.0",
+        "title": "DataMan init",
+        "severity": "medium",
+        "risk_classes": [
+          "database_mutation"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Check the working directory to ensure it is the intended project root before initializing."
+        ]
       },
       {
         "action_classes": [
@@ -337,8 +347,19 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.create-table",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.create-table"
+        "rule_id": "command.dataman.rule.create-table",
+        "rule_version": "1.0.0",
+        "title": "DataMan create table",
+        "severity": "medium",
+        "risk_classes": [
+          "database_mutation"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Review the table name and operations flags before scaffolding.",
+          "Check existing tables/ directory to avoid naming collisions."
+        ]
       },
       {
         "action_classes": [
@@ -373,8 +394,19 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.create-database",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.create-database"
+        "rule_id": "command.dataman.rule.create-database",
+        "rule_version": "1.0.0",
+        "title": "DataMan create database",
+        "severity": "medium",
+        "risk_classes": [
+          "database_mutation"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Confirm the database identifier does not conflict with existing database aliases.",
+          "Verify the connection URL in database.py before migrating."
+        ]
       },
       {
         "action_classes": [
@@ -408,8 +440,18 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.makemigration",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.makemigration"
+        "rule_id": "command.dataman.rule.makemigration",
+        "rule_version": "1.0.0",
+        "title": "DataMan makemigration",
+        "severity": "medium",
+        "risk_classes": [
+          "database_mutation"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Inspect generated migration files before executing dataman migrate."
+        ]
       },
       {
         "action_classes": [
@@ -446,8 +488,19 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.migrate",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.migrate"
+        "rule_id": "command.dataman.rule.migrate",
+        "rule_version": "1.0.0",
+        "title": "DataMan migrate",
+        "severity": "high",
+        "risk_classes": [
+          "database_mutation"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Run dataman makemigration first and inspect the generated migration files.",
+          "Check target database connection before executing migrations on production databases."
+        ]
       },
       {
         "action_classes": [
@@ -482,8 +535,18 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.user-admin",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.create-admin"
+        "rule_id": "command.dataman.rule.create-admin",
+        "rule_version": "1.0.0",
+        "title": "DataMan create-admin",
+        "severity": "high",
+        "risk_classes": [
+          "security_credential_provisioning"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Verify the username and use strong, unique passwords for administrative accounts."
+        ]
       },
       {
         "action_classes": [
@@ -518,8 +581,18 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.user-admin",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.change-password"
+        "rule_id": "command.dataman.rule.change-password",
+        "rule_version": "1.0.0",
+        "title": "DataMan change-password",
+        "severity": "high",
+        "risk_classes": [
+          "security_credential_provisioning"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Verify the username and use strong, unique passwords for administrative accounts."
+        ]
       },
       {
         "action_classes": [
@@ -557,8 +630,19 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.create-token",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.create-token"
+        "rule_id": "command.dataman.rule.create-token",
+        "rule_version": "1.0.0",
+        "title": "DataMan create-token",
+        "severity": "high",
+        "risk_classes": [
+          "security_credential_provisioning"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Limit token scopes to only the required tables and operations.",
+          "Set an explicit expiration duration using --expires-in."
+        ]
       },
       {
         "action_classes": [
@@ -603,8 +687,18 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.export-logs",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.export-audit"
+        "rule_id": "command.dataman.rule.export-audit",
+        "rule_version": "1.0.0",
+        "title": "DataMan export-audit",
+        "severity": "medium",
+        "risk_classes": [
+          "data_export"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Confirm the export target path is secure and does not expose sensitive PII or telemetry data."
+        ]
       },
       {
         "action_classes": [
@@ -645,9 +739,25 @@
           "op": "executable.v1"
         },
         "permission_id": "command.dataman.permission.export-logs",
-        "priority": 100,
-        "rule_id": "command.dataman.rule.export-telemetry"
+        "rule_id": "command.dataman.rule.export-telemetry",
+        "rule_version": "1.0.0",
+        "title": "DataMan export-telemetry",
+        "severity": "medium",
+        "risk_classes": [
+          "data_export"
+        ],
+        "safe_variants": [],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Confirm the export target path is secure and does not expose sensitive PII or telemetry data."
+        ]
       }
+    ],
+    "version": "1.0.0",
+    "source": "built-in",
+    "safer_alternatives": [
+      "Inspect migration files and verify target database connections before applying database schema changes.",
+      "Review user administration and token creation parameters before provisioning credentials."
     ]
   },
   "schema": "guard.command-extension-source.v1"
