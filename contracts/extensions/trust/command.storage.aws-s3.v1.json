@@ -1,0 +1,5 @@
+{
+  "extension": "command.storage.aws-s3",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "trusted-library"
+}

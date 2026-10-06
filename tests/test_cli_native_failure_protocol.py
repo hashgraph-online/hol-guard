@@ -57,14 +57,13 @@ def test_native_failure_preserves_codex_wire_response(
     )
     captured = capsys.readouterr()
     response = json.loads(captured.out)
-    # rc mirrors the emitted verdict per the harness's adapter contract:
-    # codex deny -> 1 (generic CLI contract), allow -> 0. A blanket 0 lets a
-    # denied protected action pass shell harnesses that read only the process
-    # status (PRD S10: unavailable authority cannot produce permit).
+    # codex denies via the hookSpecificOutput.permissionDecision envelope;
+    # rc stays 0 so codex honors the deny rather than treating a nonzero rc
+    # as a hook error and permitting the action.
     assert response["hookSpecificOutput"]["hookEventName"] == event
     if event == "PreToolUse":
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert result == 1
+        assert result == 0
     else:
         assert response["continue"] is True
         assert "permissionDecision" not in response["hookSpecificOutput"]
@@ -91,11 +90,11 @@ def test_pipeline_unavailable_preserves_codex_wire_response(
         ),
     )
     response = json.loads(capsys.readouterr().out)
-    # rc mirrors the emitted verdict: codex deny -> 1, allow -> 0.
+    # codex deny rides the permissionDecision envelope; rc stays 0.
     assert response["hookSpecificOutput"]["hookEventName"] == event
     if event == "PreToolUse":
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert result == 1
+        assert result == 0
     else:
         assert response["continue"] is True
         assert "permissionDecision" not in response["hookSpecificOutput"]

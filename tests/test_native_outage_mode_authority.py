@@ -46,8 +46,7 @@ def test_disabled_cli_evidence_failure_never_changes_denial(
         runtime_workspace=None,
         store=store,
     )
-    # opencode follows the generic CLI contract: block -> rc 1, matching
-    # commands_hook_native_finish. The payload is the authoritative denial.
+    # opencode is rc-driven: its pretool plugin maps exitCode 1 -> block.
     assert status == 1
     assert responses[0]["policy_action"] == "block"
     assert responses[0]["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -142,13 +141,10 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
             runtime_workspace=None,
             store=store,
         )
-        # rc mirrors the emitted verdict: trusted-outage allow (observe state
-        # with an acked snapshot) -> 0; every deny path -> 1 under the codex
-        # generic contract. cli_disabled denies even in observe.
-        expected_status = 0 if (
-            state == "observe" and failure in {"worker_exception", "worker_none"}
-        ) else 1
-        assert status == expected_status
+        # codex denies via the hookSpecificOutput.permissionDecision envelope;
+        # rc stays 0 whether the outage resolves allow (observe+acked snapshot)
+        # or deny, because a nonzero rc would read as a hook error and permit.
+        assert status == 0
         assert len(responses) == 1
         response = responses[0]
     hook_output = response["hookSpecificOutput"]

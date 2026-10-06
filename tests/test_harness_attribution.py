@@ -117,6 +117,6 @@ def test_guard_hook_records_cursor_harness_for_cursor_env(
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 2  # canonical: detected cursor harness, _RC_BLOCK_IS_TWO
     assert isinstance(payload, dict)
     assert payload["harness"] == "cursor"

@@ -310,7 +310,7 @@ def test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses(
 
     pending = store.list_approval_requests(limit=5)
     native = harness == "hermes"
-    assert rc == (2 if native else 1)
+    assert rc == (2 if native else 0 if harness in {"codex", "claude-code", "copilot"} else 1)
     if native:
         assert output["decision"] == "block"
     else:
@@ -374,9 +374,9 @@ def test_phase14_package_hook_retry_after_block_reuses_saved_decision(
         monkeypatch=monkeypatch,
     )
 
-    assert first_rc == 1
+    assert first_rc == 0
     assert first_output["policy_action"] == "require-reapproval"
-    assert second_rc == 1
+    assert second_rc == 0
     assert second_output["policy_action"] == "block"
     assert second_output.get("approval_requests") in (None, [])
     assert store.count_approval_requests(status="pending") == 0
@@ -406,7 +406,7 @@ def test_phase14_package_hook_evidence_includes_source_details(
     evidence = store.list_evidence()
     details = evidence[0]["details"]
 
-    assert rc == 1
+    assert rc == 0
     assert details["harness"] == "codex"
     assert details["agent_app"] == "codex"
     assert details["workspace_fingerprint"]
@@ -441,7 +441,7 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
 
     native = harness == "hermes"
     message = str(output["reason"] if native else output["decision_v2_json"]["harness_message"])
-    assert rc == (2 if native else 1)
+    assert rc == (2 if native else 0 if harness in {"codex", "claude-code", "copilot"} else 1)
     if native:
         assert output["decision"] == "block"
     else:
