@@ -208,7 +208,7 @@ fn evaluate(
 #[allow(dead_code)]
 pub(crate) fn evaluate_command_effect_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value = crate::strict_json_value(bytes)?;
-    let request: CommandEffectRequestV1 = serde_json::from_value(value)
+    let request: CommandEffectRequestV1 = crate::strict_json::from_value(value)
         .map_err(|_| "native_command_effect_invalid_json".to_owned())?;
     evaluate_command_effect_request(&request)
 }

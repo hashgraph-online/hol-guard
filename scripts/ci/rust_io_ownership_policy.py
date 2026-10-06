@@ -88,8 +88,14 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Resident-op dispatch bridge: decodes the bounded native response and
         # returns a DTO; it does not interpret response content into a decision.
         "src/codex_plugin_scanner/guard/native_execution.py",
+        # Bounded response decoding for native package-authority results.
+        "src/codex_plugin_scanner/guard/native_package_authority.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_context.py",
+        # Same bridge shape for the package-intent / package-authority ops the
+        # hook pipeline now routes natively (`_resident_request` decodes the
+        # bounded resident response into a DTO).
+        "src/codex_plugin_scanner/guard/native_package_authority.py",
     }
 )
 _STRUCTURED_OUTPUT_MEDIATION_PATHS: Final = frozenset(

@@ -544,3 +544,29 @@ def test_overlapping_runtime_spelling_replaces_the_stale_pool(
         assert (str(runtime), str(client_module._pinned_state_dir(second))) in client_module._CLIENT_POOLS
     finally:
         client_module.close_native_resident_clients()
+
+
+def test_pool_reports_readiness_only_for_live_idle_clients(tmp_path: Path) -> None:
+    """Readiness is what lets a caller know whether it must budget for a spawn.
+
+    A resident that a test or an operator killed leaves a parked client whose
+    process is gone; counting it as ready makes the next request pay a spawn
+    inside a steady-state budget and time out.
+    """
+
+    pool = _pool(tmp_path)
+    assert pool.has_idle_client() is False
+
+    alive = SimpleNamespace(_process=SimpleNamespace(poll=lambda: None))
+    pool._idle.append(alive)
+    assert pool.has_idle_client() is True
+
+    pool._idle[:] = [SimpleNamespace(_process=SimpleNamespace(poll=lambda: 1))]
+    assert pool.has_idle_client() is False
+
+    pool._idle[:] = [SimpleNamespace(_process=None)]
+    assert pool.has_idle_client() is False
+
+    pool._idle[:] = [alive]
+    pool._closed = True
+    assert pool.has_idle_client() is False

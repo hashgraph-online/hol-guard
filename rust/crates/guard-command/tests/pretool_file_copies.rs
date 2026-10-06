@@ -32,6 +32,7 @@ fn ordinary_copies_keep_source_and_destination_risk_boundaries() {
     let project = home.join("project");
     let linked = home.join("linked");
     let outside = home.join("outside");
+    let _ = std::fs::remove_dir_all(&home);
     std::fs::create_dir_all(&project).unwrap();
     std::fs::create_dir_all(&outside).unwrap();
     for args in [

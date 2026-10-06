@@ -127,7 +127,10 @@ def test_sync_credentials_preserve_installation_id_when_cloud_workspace_changes(
     assert store.get_sync_payload("policy") == {"policy": "team"}
 
 
-def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     artifact = _artifact(tmp_path)
@@ -173,9 +176,15 @@ def test_evaluate_detection_queues_instruction_access_graph_edges(tmp_path: Path
     assert any(edge["edgeType"] == "agent_uses_instruction" for edge in graph_payload["edges"])
 
 
-def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
+    workspace_script = tmp_path / "workspace" / "workspace.js"
+    workspace_script.parent.mkdir(parents=True, exist_ok=True)
+    workspace_script.write_text("console.log('ok');\n", encoding="utf-8")
     artifact = _artifact(tmp_path)
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
@@ -198,6 +207,7 @@ class _FailingAccessGraphEventStore(GuardStore):
         super().add_guard_event_v1(event)
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_path: Path) -> None:
     store = _FailingAccessGraphEventStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")

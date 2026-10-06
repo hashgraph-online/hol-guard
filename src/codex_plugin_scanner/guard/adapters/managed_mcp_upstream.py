@@ -26,7 +26,19 @@ MAX_PROXY_ARGS = 512
 MAX_PROXY_ARGS_BYTES = 262_144
 MAX_PROXY_UNWRAP_LAYERS = 4
 PROXY_LAUNCHER_ENV_KEYS = frozenset(
-    {"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONBREAKPOINT", "__PYVENV_LAUNCHER__"}
+    {
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONBREAKPOINT",
+        "__PYVENV_LAUNCHER__",
+        # Native-authority bindings are persisted by the launcher from the
+        # installer's ambient env; server env must never inject them.
+        "HOL_GUARD_NATIVE",
+        "HOL_GUARD_NATIVE_BINARY",
+        "HOL_GUARD_NATIVE_DIAGNOSTIC",
+        "HOL_GUARD_TEST_MODE",
+    }
 )
 _PROXY_HARNESSES = {
     "codex-mcp-proxy": "codex",

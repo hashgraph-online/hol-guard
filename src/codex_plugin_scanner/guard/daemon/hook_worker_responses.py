@@ -239,6 +239,8 @@ def harness_json_from_native_prompt(harness: str, response: Mapping[str, object]
             "reason_code": reason_code,
             "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
         }
+        if canonical in {"pi", "omp"}:
+            output["decision"] = response["decision"]
         if risk_signals and canonical != "copilot":
             output["risk_signals"] = risk_signals
         return output

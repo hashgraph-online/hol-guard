@@ -16,6 +16,8 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import run_mcp_catalog
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
+
 
 def _finished(pool: McpDiscoveryJobs, job_id: str) -> dict[str, object]:
     deadline = time.monotonic() + 3
