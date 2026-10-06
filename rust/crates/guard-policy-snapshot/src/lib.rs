@@ -15,6 +15,7 @@ use thiserror::Error;
 
 pub mod business_match;
 pub mod business_policy;
+pub mod business_policy_document;
 
 #[path = "policy_snapshot_canonical.rs"]
 mod canonical;

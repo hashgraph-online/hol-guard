@@ -16,6 +16,12 @@ pub struct BusinessPolicyRuleV1 {
     pub action: String,
     #[serde(rename = "match")]
     pub selector: BusinessPolicyMatchV1,
+    #[serde(
+        default,
+        deserialize_with = "present_expiry",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub expires_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,12 +54,23 @@ impl BusinessPolicyBindingV1 {
                 || !ids.insert(&rule.id)
                 || !super::validate_action(&rule.action)
                 || rule.selector.validate().is_err()
+                || rule.expires_at.as_deref().is_some_and(|expiry| {
+                    guard_contracts::canonical_policy_timestamp_nanos(expiry).is_none()
+                })
             {
                 return Err(SnapshotError::Policy);
             }
         }
         Ok(())
     }
+}
+
+fn present_expiry<'de, D>(d: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // An explicit null must not turn a bounded rule into a permanent one.
+    String::deserialize(d).map(Some)
 }
 
 // An explicit null must not silently remove an installed business policy.

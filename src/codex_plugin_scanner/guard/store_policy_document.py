@@ -11,6 +11,8 @@ from typing import Literal
 from .approval_gate import ApprovalGateGrant, require_high_risk
 from .policy_authority import validate_policy_write_authority
 from .policy_document import GuardPolicyDocument, policy_document_digest
+from .policy_document_authority import policy_import_approval_binding
+from .policy_document_compile import compile_policy_document
 from .policy_document_io import CompiledPolicyRow
 from .store_base import _validate_scoped_policy_artifact_target
 
@@ -30,6 +32,17 @@ class PolicyDocumentImportPlan:
     additions: tuple[str, ...]
     replacements: tuple[str, ...]
     removals: tuple[str, ...]
+
+
+def _validate_compiled_document_rows(
+    document: GuardPolicyDocument,
+    compiled_rows: tuple[CompiledPolicyRow, ...],
+) -> None:
+    # Reuse the canonical adapter; do not trust a caller's claimed projection.
+    # This check adds no matcher or policy evaluator and preserves refusal of
+    # documents the existing adapter cannot represent.
+    if compile_policy_document(document) != compiled_rows:
+        raise ValueError("policy_document_compilation_mismatch")
 
 
 class StorePolicyDocumentMixin:
@@ -113,9 +126,12 @@ class StorePolicyDocumentMixin:
 
         normalized_rows = self._normalize_compiled_rows(compiled_rows)
 
+        _validate_compiled_document_rows(document, compiled_rows)
+
         require_high_risk(
             self.guard_home,
             purpose="policy_import",
+            **policy_import_approval_binding(document, mode),
             approval_gate_grant=approval_gate_grant,
             now=now,
         )
@@ -300,9 +316,11 @@ class StorePolicyDocumentMixin:
         if mode not in {"merge", "replace"}:
             raise ValueError("invalid_policy_import_mode")
         normalized_rows = self._normalize_compiled_rows(compiled_rows)
+        _validate_compiled_document_rows(document, compiled_rows)
         require_high_risk(
             self.guard_home,
             purpose="policy_import",
+            **policy_import_approval_binding(document, mode),
             approval_gate_grant=approval_gate_grant,
             now=now,
         )
