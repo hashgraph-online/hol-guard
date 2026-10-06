@@ -167,7 +167,6 @@ from ..trusted_local_tools import (
 )
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from .native_hook_exit_code import native_hook_verdict_exit_code
 from .commands_support_apply_patch_policy import verified_non_sensitive_codex_apply_patch
 from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
 from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
@@ -181,6 +180,7 @@ from .commands_support_command_activity import (
 )
 from .commands_support_observe_queue import queue_observe_mode_request
 from .commands_support_runtime_policy import _runtime_hook_effective_policy_config
+from .native_hook_exit_code import native_hook_verdict_exit_code
 
 # Bump when generic-hook classification or action-composition semantics change.
 _GENERIC_HOOK_EVALUATOR_POLICY_VERSION = "generic-hook-evaluation-v3"
