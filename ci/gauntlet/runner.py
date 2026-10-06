@@ -434,7 +434,7 @@ def run_case(
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
             if scenario.oracle == "mixed-read-batch":
                 case["approval_targets"] = _mixed_read_approval_targets(worker.store, approval_ids_before)
-            case["inference"] = relay.evidence()
+            case["inference"] = relay.evidence(wait_seconds=3)
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
             case["stderr_sha256"] = digest_file(error_log)
