@@ -15,7 +15,7 @@ For a regular declarative command extension, author these inputs:
 
 1. `contributions/command-sources/command.<name>.json`;
 2. `tests/fixtures/command-source-<slug>.v1.json`, bound to that exact source document; and
-3. the external trust-class entry in `contracts/extensions/trust-class-map.v1.json`.
+3. the external trust-class binding `contracts/extensions/trust/command.<name>.v1.json`.
 
 Do not add Python detector modules or hand-edit generated descriptors, native programs, package
 resources, or public catalogs. The Builder writes the deterministic projections from the reviewed
@@ -102,7 +102,8 @@ review kit with [Extension Builder](../extension-builder/README.md).
 | --- | --- |
 | `contributions/command-sources/command.<name>.json` | Authoritative metadata, permissions, rules, safe variants, and typed native matcher trees |
 | `tests/fixtures/command-source-<slug>.v1.json` | Portable command cases, synthetic controls, expected actions, and rule/segment observations |
-| `contracts/extensions/trust-class-map.v1.json` | Separately reviewed trust classification; community contributions are external |
+| `contracts/extensions/trust/command.<name>.v1.json` | Separately reviewed per-extension trust binding; community contributions are external |
+| `contracts/extensions/trust-class-map.v1.json` | Generated projection of `contracts/extensions/trust/`; never edited by hand |
 | `contributions/extensions/command.<name>.json` | Maintainer-generated v2 descriptor, including source identity |
 | `contracts/extensions/native-command-program.v1.json` and `command-catalog.v1.json` | Maintainer-generated native program and catalog; the build also updates package resource copies |
 | `contributions/extension-listings/<contribution-id>.json` | Optional public presentation and reviewed numeric GitHub claimant IDs |

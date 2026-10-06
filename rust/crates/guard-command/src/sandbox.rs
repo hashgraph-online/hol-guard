@@ -624,20 +624,15 @@ fn spawn_bounded(
 
 /// `os.killpg(os.getpgid(proc.pid), signal.SIGKILL)` — signals the spawned
 /// process group. `libc::killpg` requires `unsafe` (crate-forbidden); the
-/// child was started with `process_group(0)` so its group id equals its pid
-/// and the same result is reachable through `pkill -KILL -g <pgid>` which
-/// needs no `unsafe` in this crate.
+/// child was started with `process_group(0)` so its group id equals its pid.
+/// `nix::killpg` is the safe-Rust equivalent — a `/bin/kill` spawn silently
+/// no-ops on images that ship no kill binary (e.g. `python:3.12-slim`).
 fn kill_process_group(pgid: i32) -> Result<(), String> {
-    let status = Command::new("/bin/kill")
-        .args(["-KILL", &format!("-{pgid}")])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    match status {
-        Ok(status) if status.success() => Ok(()),
-        _ => Err(format!("killpg failed for pgid {pgid}")),
-    }
+    nix::sys::signal::killpg(
+        nix::unistd::Pid::from_raw(pgid),
+        nix::sys::signal::Signal::SIGKILL,
+    )
+    .map_err(|error| format!("killpg failed for pgid {pgid}: {error}"))
 }
 
 /// `tempfile.TemporaryDirectory(prefix=...)` stand-in — RAII removal plus a

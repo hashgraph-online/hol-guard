@@ -6,6 +6,11 @@ browser approval page, or an MCP approval prompt. The agent receives the reason
 and guidance to use a permitted alternative. It must preserve the protection,
 avoid equivalent retries, and explain the limitation if it cannot finish safely.
 
+The denial is still recorded. The inbox keeps the pending review, and that same
+write is what analytics and cloud review use for later policy. Recording does
+not open a prompt and does not tell the agent to ask for approval. If the inbox
+write fails, the action stays blocked.
+
 In **Settings → Approval gate → When Guard blocks a request**, select **Ask me
 for approval** to restore approval prompts. The existing ask-surface setting
 then selects where prompts appear. Hard blocks and sandbox requirements remain

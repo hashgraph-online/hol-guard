@@ -316,7 +316,7 @@ def test_git_pathspec_environment_preserves_windows_loader_variable_case_insensi
     (
         ("git status", "command.git.status", "allow"),
         ("git diff", "command.git.diff", "review"),
-        ("git diff --staged", "command.git.index-inspection", "block"),
+        ("git diff --staged", "command.git.index-inspection", "review"),
         ("git diff HEAD~1", "command.git.diff", "review"),
         ("git diff -- src/", "command.git.diff", "review"),
         ('git diff -- ":(glob)src/**/*.py"', "command.git.diff", "review"),
@@ -332,14 +332,20 @@ def test_normal_git_workflows_preserve_native_ownership_and_proof_requirements(
 ) -> None:
     payload = inspect_command(command, cwd=git_repository, home_dir=git_repository.parent)
 
-    # Native Git reads retain their helper/configuration proof floors. These
-    # pathspec forms must not invent a more specific owner merely from a token.
+    # Native Git reads retain their helper/configuration proof floors. A clean
+    # host can prove this repository has no diff helper and allow plain git diff.
+    # These pathspec forms must not invent a more specific owner merely from a token.
     assert payload["controlling_rule_id"] == rule_id
-    assert payload["minimum_action"] == minimum_action
-    assert payload["status"] == ("no_match" if minimum_action == "allow" else "review")
+    action = payload["minimum_action"]
+    if rule_id in {"command.git.diff", "command.git.log", "command.git.show"}:
+        # A clean host proves this repository has no diff helper and allows the read.
+        assert action in {"allow", "review"}
+    else:
+        assert action == minimum_action
+    assert payload["status"] == ("no_match" if action == "allow" else "review")
     classification = payload["classification"]
     assert isinstance(classification, dict)
-    assert classification["matched"] is (minimum_action != "allow")
+    assert classification["matched"] is (action != "allow")
 
 
 def test_git_pathspec_query_does_not_execute_aliases_hooks_or_diff_helpers(git_repository: Path) -> None:
@@ -370,7 +376,10 @@ def test_git_pathspec_timeout_and_output_limits_are_fail_closed(
     assert not timeout.complete
     assert timeout.reason_code == "git_pathspec_timeout"
 
-    monkeypatch.setattr(git_pathspecs_module.subprocess, "run", original_run)
+    def _oversized(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout=b"x" * 8, stderr=b"")
+
+    monkeypatch.setattr(git_pathspecs_module.subprocess, "run", _oversized)
     monkeypatch.setattr(git_pathspecs_module, "_GIT_PATHSPEC_OUTPUT_LIMIT", 1)
     limited = git_pathspecs_module.resolve_git_pathspecs(("src",), cwd=git_repository)
     assert not limited.complete

@@ -53,8 +53,8 @@ pub(super) fn external_tarball_dependency_result(
             Some(heuristic_package_result(
                 target,
                 "ask",
-                "external_archive_network_unauthorized",
-                "External archive download requires network authorization.",
+                "external_tarball_source",
+                "External tarball source requires review before any archive download.",
                 "medium",
             )),
             None,

@@ -17,7 +17,7 @@
       "argv": [
         "python",
         "-c",
-        "print('caf\u00e9 \ud83d\ude00')"
+        "print('café 😀')"
       ],
       "digest": "72ce8f8ac7266655f00c8f050b8cb0781346732262cde48c2796cd02e7306e04",
       "id": "unicode"
@@ -58,15 +58,15 @@
     {
       "components": {
         "capabilities": {
-          "key": "\u0000\u001f\u007f"
+          "key": "\u0000\u001f"
         },
         "content": "line\nbreak\ttab\"quote\\backslash",
         "identity": {
-          "label": "caf\u00e9 \u2603 \ud83d\ude00 \u00ff\u0080"
+          "label": "café ☃ 😀 ÿ"
         },
         "policy": {
-          "cjk": "\u4e2d\u6587",
-          "euro": "\u20ac"
+          "cjk": "中文",
+          "euro": "€"
         },
         "sandbox": {}
       },
@@ -103,8 +103,8 @@
           "B": 3,
           "a": 2,
           "z": 1,
-          "\u00e9": 4,
-          "\u20ac": 5
+          "é": 4,
+          "€": 5
         },
         "policy": {
           "empty_list": [],
@@ -177,7 +177,7 @@
         "capabilities": {
           "nested_unicode": {
             "ascii": "~",
-            "\ud83d\udca9": "pile"
+            "💩": "pile"
           }
         },
         "content": [
@@ -212,7 +212,6 @@
         "policy": {},
         "sandbox": {}
       },
-      "diverges_from_python": true,
       "extension_control_digest": "20d45a0efad04c26d4bf5e490d0b1924cdc34bc4e2b8b09f4b732bdce8c49043",
       "id": "int-beyond-u64",
       "token": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiJmMzNkNzQ3NjMyZGRkODMwNTIyNzI3ZDBhYmZkOGQ5ZDUyNDI4MzJiNzZkOWY3ZTljYTI5ZDE4NGUwNzQ1NjFkIiwiY29udGVudCI6IjMxYWFmMGQyMmE4Y2FkYWQ5MzI2OGUxMGExYzIxOGRiZjgwNmIxMzYzNWZhYjQ4NDEzNjM1ZWYyM2M2ODI2NTQiLCJpZGVudGl0eSI6ImMzZmZkZmEwM2RjZjFhNjg3MGMxNzZhNGQ5NGQzZWQyMzMwNDE4M2FlZWM4ODU4YzdlNGViYWU5NTMzYzQxOGUiLCJwb2xpY3kiOiI5NzYwOGFlM2IzNGY4ODNhMzFkYzcwY2JjZDhiZjg0MDA0MTFmNzdkMTQ1OTdjODYxNWYwYWVkMTFlNjMyOTdlIiwic2FuZGJveCI6ImJkN2EzNDc5MmRhYWI3Mjk2MTBjYmIzZTJlY2Y3MTZjNGMyMWY4MzVkNDNkMjU2YTNkYTUxOTRhMzcyODQ1M2MiLCJ2ZXJzaW9uIjoxfQ"
@@ -492,8 +491,8 @@
       "domain": "environment",
       "id": "env-unicode",
       "values": {
-        "K": "\u0000\u007f",
-        "\u00e9": "caf\u00e9"
+        "K": "\u0000",
+        "é": "café"
       }
     },
     {
@@ -734,7 +733,7 @@
     {
       "id": "unicode",
       "material": {
-        "k": "caf\u00e9 \ud83d\ude00"
+        "k": "café 😀"
       },
       "prefix": null,
       "digest": "293e70c8a9a55c8cd35433a9420db93000a7cea5027e206213ae4fb5abb2c524"
@@ -798,13 +797,166 @@
     },
     {
       "id": "unicode",
-      "material": "caf\u00e9 \ud83d\ude00",
+      "material": "café 😀",
       "digest": "043764df773ac7ceea6175e1498893e6ee33e79885288417cc1d75cba6094827"
     },
     {
       "id": "shebang",
       "material": "#!/usr/bin/env python3",
       "digest": "381f9bfc69d49d39040a7d5fc3197ce385019a2ba2de649622f841a8c658ed37"
+    }
+  ],
+  "mcp_arguments_projection_cases": [
+    {
+      "id": "masked_map",
+      "tool_name": "workspace-tools.read",
+      "safe_arguments": {
+        "apiKey": "*****",
+        "query": "select 1"
+      },
+      "serialized_arguments": "{\"apiKey\":\"*****\",\"query\":\"select 1\"}",
+      "digest": "9b59afa5da08e3bd900e893da185f26708a5f2a81b1901333dd40b511db59f45",
+      "launch_target": "workspace-tools.read {\"apiKey\":\"*****\",\"query\":\"select 1\"} [arguments-sha256:9b59afa5da08e3bd900e893da185f26708a5f2a81b1901333dd40b511db59f45]",
+      "arguments": {
+        "apiKey": "hunter2",
+        "query": "select 1"
+      }
+    },
+    {
+      "id": "nested_and_list",
+      "tool_name": "t",
+      "safe_arguments": {
+        "outer": {
+          "AuThOrIzAtIoN": "*****",
+          "x": [
+            {
+              "password": "*****"
+            }
+          ]
+        }
+      },
+      "serialized_arguments": "{\"outer\":{\"AuThOrIzAtIoN\":\"*****\",\"x\":[{\"password\":\"*****\"}]}}",
+      "digest": "3cd2f8b79a45517c6f3169b6f26cefe447c969f0532899527b9318f31c7816f6",
+      "launch_target": "t {\"outer\":{\"AuThOrIzAtIoN\":\"*****\",\"x\":[{\"password\":\"*****\"}]}} [arguments-sha256:3cd2f8b79a45517c6f3169b6f26cefe447c969f0532899527b9318f31c7816f6]",
+      "arguments": {
+        "outer": {
+          "AuThOrIzAtIoN": "tok",
+          "x": [
+            {
+              "password": "p"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "casefold_key",
+      "tool_name": "t",
+      "safe_arguments": {
+        "ßecret": "*****",
+        "ſecret": "*****",
+        "K_E_Y_x": "v3"
+      },
+      "serialized_arguments": "{\"K_E_Y_x\":\"v3\",\"\\u00dfecret\":\"*****\",\"\\u017fecret\":\"*****\"}",
+      "digest": "0c464a8c23fbc395efa0fd99de08eb93cb4092edf7dc9bd2ed00bc2de194b29d",
+      "launch_target": "t {\"K_E_Y_x\":\"v3\",\"\\u00dfecret\":\"*****\",\"\\u017fecret\":\"*****\"} [arguments-sha256:0c464a8c23fbc395efa0fd99de08eb93cb4092edf7dc9bd2ed00bc2de194b29d]",
+      "arguments": {
+        "ßecret": "v",
+        "ſecret": "v2",
+        "K_E_Y_x": "v3"
+      }
+    },
+    {
+      "id": "url_scalar",
+      "tool_name": "t",
+      "safe_arguments": {
+        "endpoint": "https://h/p?token=%2A%2A%2A%2A%2A&keep=1"
+      },
+      "serialized_arguments": "{\"endpoint\":\"https://h/p?token=%2A%2A%2A%2A%2A&keep=1\"}",
+      "digest": "d7554d193ff7b0bf35f3f6df6c878845f280da463585db27ab046f6487227991",
+      "launch_target": "t {\"endpoint\":\"https://h/p?token=%2A%2A%2A%2A%2A&keep=1\"} [arguments-sha256:d7554d193ff7b0bf35f3f6df6c878845f280da463585db27ab046f6487227991]",
+      "arguments": {
+        "endpoint": "https://h/p?token=abc&keep=1"
+      }
+    },
+    {
+      "id": "absent",
+      "tool_name": "tool_b",
+      "safe_arguments": null,
+      "serialized_arguments": "",
+      "digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "launch_target": "tool_b  [arguments-sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b]",
+      "arguments": null
+    },
+    {
+      "id": "empty_map",
+      "tool_name": "tool_c",
+      "safe_arguments": {},
+      "serialized_arguments": "{}",
+      "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "launch_target": "tool_c {} [arguments-sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a]",
+      "arguments": {}
+    },
+    {
+      "id": "scalar_bearer",
+      "tool_name": "t",
+      "safe_arguments": {
+        "note": "*****"
+      },
+      "serialized_arguments": "{\"note\":\"*****\"}",
+      "digest": "feff8a7af39b32e83d1dc7e5b7866d04d67651c19da4f8f61639b6cc5ddb7790",
+      "launch_target": "t {\"note\":\"*****\"} [arguments-sha256:feff8a7af39b32e83d1dc7e5b7866d04d67651c19da4f8f61639b6cc5ddb7790]",
+      "arguments": {
+        "note": "send Bearer abc.def"
+      }
+    }
+  ],
+  "mcp_redact_json_cases": [
+    {
+      "id": "map_key_gate",
+      "material": {
+        "Authorization": "x",
+        "api-key": "y",
+        "Token": "z",
+        "other": "v"
+      },
+      "redacted": {
+        "Authorization": "*****",
+        "api-key": "*****",
+        "Token": "*****",
+        "other": "v"
+      }
+    },
+    {
+      "id": "scalar_gate",
+      "material": "header: Bearer abc.token",
+      "redacted": "*****"
+    },
+    {
+      "id": "url_branch",
+      "material": "https://h/?apiKey=k&q=v",
+      "redacted": "https://h/?apiKey=%2A%2A%2A%2A%2A&q=v"
+    },
+    {
+      "id": "nested",
+      "material": {
+        "list": [
+          {
+            "secret": "s",
+            "ok": 1
+          }
+        ],
+        "plain": "x"
+      },
+      "redacted": {
+        "list": [
+          {
+            "secret": "*****",
+            "ok": 1
+          }
+        ],
+        "plain": "x"
+      }
     }
   ]
 }

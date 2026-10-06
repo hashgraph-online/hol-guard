@@ -215,4 +215,4 @@ def test_parser_uncertainty_cannot_reduce_sensitive_evidence_below_review() -> N
     extension = _extension("command.uncertain", "command.uncertain.rule", default_mode="disabled")
     evaluation = _evaluate(_catalog(extension), uncertainty=True)
     assert evaluation.command.confidence == "fallback"
-    assert evaluation.minimum_action == "block"
+    assert evaluation.minimum_action == "review"

@@ -167,7 +167,7 @@ pub(super) fn normalize_package_name(
 // supply_chain_package_eval.py:2803-2807
 #[allow(dead_code)]
 pub(super) fn normalize_evaluation_timestamp(now_value: &str) -> Option<f64> {
-    crate::local_supply_chain::parse_timestamp(now_value).map(|t| t.unix_seconds() as f64)
+    crate::local_supply_chain::parse_timestamp(now_value).map(|t| t.unix_seconds_f64())
 }
 
 /// `_parse_evaluation_timestamp` (:2803-2807) — alias kept for callers that

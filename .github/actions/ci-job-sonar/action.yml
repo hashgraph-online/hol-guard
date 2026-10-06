@@ -93,3 +93,25 @@ runs:
       SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
       SONAR_SCANNER_JAVA_OPTS: -Xmx6g
     if: inputs.has-token == 'true'
+  - name: Check standard Sonar gate for PRs and qualification
+    if: inputs.has-token == 'true' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
+    uses: sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa
+    with:
+      pollingTimeoutSec: 280
+    env:
+      SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
+  - name: SonarQube Quality Gate check
+    if: inputs.has-token == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    shell: bash
+    # Composite steps lack timeout-minutes; the process cap backs up the client deadline.
+    run: timeout --signal=TERM --kill-after=5s 300s python -m scripts.ci.check_sonar_quality
+    env:
+      SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
+  - name: Preserve analysis-specific quality evidence
+    if: always() && inputs.has-token == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+    with:
+      name: sonar-quality-evidence-${{ github.run_attempt }}
+      path: sonar-quality-evidence/
+      if-no-files-found: warn
+      retention-days: 14

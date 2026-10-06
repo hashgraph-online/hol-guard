@@ -85,7 +85,7 @@ pub use service_contracts::{
 mod bundle_contracts;
 pub use bundle_contracts::{
     CanonicalPackageIdentity, JsSemverApi, ManifestDepsApi, PackageIdentityApi, RiskDetectApi,
-    SpecifierSet, SupplyChainBundleApi, SupplyChainBundleResponse, Version,
+    SupplyChainBundleApi, SupplyChainBundleResponse,
 };
 #[path = "supply_chain_package_eval/runtime_contracts.rs"]
 mod runtime_contracts;
@@ -98,13 +98,10 @@ pub use runtime_contracts::{
 mod evaluation;
 use evaluation::{
     artifact_has_flag, artifact_has_package_material, cache_reusable_cloud_validation_error,
-    cached_eval_has_reason_code, cached_supply_chain_eval_is_reusable, decision_rank,
-    decision_to_guard_action_variant, empty_package_material_result, normalize_package_name,
-    parse_evaluation_timestamp, reason_severity, severity_rank_value,
+    decision_rank, decision_to_guard_action_variant, empty_package_material_result,
+    normalize_package_name, parse_evaluation_timestamp, reason_severity, severity_rank_value,
 };
 pub use evaluation::{evaluate_package_request_artifact, EvaluationDraft, SupplyChainEvalDeps};
-#[path = "supply_chain_package_eval/cache_retry.rs"]
-mod cache_retry;
 
 #[path = "supply_chain_package_eval/decisions.rs"]
 mod decisions;
@@ -158,7 +155,7 @@ use request_payload::{build_request_payload, workspace_fingerprint};
 mod package_resolution;
 use package_resolution::{
     bundle_package, bundle_package_label, exact_version, hash_paths, lockfile_target_key,
-    npm_source_spec, optional_string_map, policy_rule_get_str, registry_resolved_target_version,
+    npm_source_spec, optional_string_map, registry_resolved_target_version,
     resolved_target_version, split_namespace_name, stable_hash, value_to_plain_string,
 };
 #[path = "supply_chain_package_eval/bundle_policy.rs"]
@@ -199,6 +196,9 @@ use lockfile_helpers::{
 };
 #[path = "supply_chain_package_eval/package_lock.rs"]
 mod package_lock;
+
+#[path = "supply_chain_package_eval/manifest_dependency_targets.rs"]
+mod manifest_dependency_targets;
 
 #[path = "supply_chain_package_eval/manifest_dependencies.rs"]
 mod manifest_dependencies;

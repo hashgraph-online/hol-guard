@@ -39,6 +39,25 @@ fn evaluate(request: ContextDigestRequestV1) -> ContextDigestResultV1 {
 }
 
 #[test]
+fn persisted_mcp_approval_digest_survives_byte_and_resident_numeric_decoding() {
+    let raw = br#"{"schema":"guard-context-digest-request.v1","request_id":"numeric-approval","kind":"mcp_tool_approval_digest","request":{"content":{"artifact_id":"codex:mcp:filesystem:read_file","config_path":".mcp.json","arguments":{"path":"/opt/neutral/data/\u65e5\u672c\u8a9e.txt","limits":[1.0,-0.0,1e-7,1208925819614629174706177],"nested":{"empty":{},"missing":null}}},"transport":"stdio","server_fingerprint":{"resolved_executable":"/opt/bin/server","tool_catalog_fingerprint":"catalog"},"server_identity":{"identity_hash":"server"},"tool_identity":{"schema_hash":"schema"},"authority_hash":{"revision":1},"provider_hash":false,"workspace":null}}"#;
+    let direct: ContextDigestResultV1 =
+        serde_json::from_slice(&evaluate_context_digest_bytes(raw).unwrap()).unwrap();
+    assert_eq!(
+        direct.digest.as_deref(),
+        Some("42166ca3ebc09245c93f0b33ce989a75df475c38817fded4168ab4ec5699b0e4")
+    );
+    let request: Value = serde_json::from_slice(raw).unwrap();
+    let envelope =
+        serde_json::to_vec(&json!({"operation": "context_digest", "request": request})).unwrap();
+    let resident: ContextDigestResultV1 = serde_json::from_slice(
+        &crate::resident_ops::evaluate_resident_bytes(&envelope, None).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(resident.digest, direct.digest);
+}
+
+#[test]
 fn component_cases_match_python_tokens() {
     for case in corpus()["component_cases"].as_array().unwrap() {
         let components = components_of(
@@ -51,13 +70,7 @@ fn component_cases_match_python_tokens() {
         assert_eq!(result.status, "ok", "case {}", case["id"]);
         let expected = case["token"].as_str().unwrap();
         let actual = result.token.as_deref().unwrap();
-        if case.get("diverges_from_python").and_then(Value::as_bool) == Some(true) {
-            // Integers beyond u64::MAX cannot round-trip through serde_json;
-            // the adapter's request-digest check prevents shipping these.
-            assert_ne!(actual, expected, "case {}", case["id"]);
-        } else {
-            assert_eq!(actual, expected, "case {}", case["id"]);
-        }
+        assert_eq!(actual, expected, "case {}", case["id"]);
     }
 }
 
@@ -176,6 +189,75 @@ fn opaque_material_cases_match_python_digests() {
         assert_eq!(
             result.digest.as_deref(),
             case["digest"].as_str(),
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+#[test]
+fn mcp_arguments_projection_cases_match_python() {
+    for case in corpus()["mcp_arguments_projection_cases"]
+        .as_array()
+        .unwrap()
+    {
+        let arguments = case["arguments"].clone();
+        let arguments = if arguments.is_null() {
+            // `null` in the fixture encodes "no arguments key" — serde maps
+            // absent and `null` to `None`, matching `params.get("arguments")`.
+            None
+        } else {
+            Some(arguments)
+        };
+        let result = evaluate(request_for(ContextDigestKindV1::McpArgumentsProjection {
+            tool_name: case["tool_name"].as_str().unwrap().to_owned(),
+            arguments,
+        }));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.digest.as_deref(),
+            case["digest"].as_str(),
+            "case {}",
+            case["id"]
+        );
+        assert_eq!(
+            result.mcp_launch_target.as_deref(),
+            case["launch_target"].as_str(),
+            "case {}",
+            case["id"]
+        );
+        assert_eq!(
+            result.mcp_serialized_arguments.as_deref(),
+            case["serialized_arguments"].as_str(),
+            "case {}",
+            case["id"]
+        );
+        let expected_safe = if case["safe_arguments"].is_null() {
+            // Wire `null` parses as `None`; Python `_safe_mcp_arguments(None)`
+            // also yields `None`.
+            None
+        } else {
+            Some(&case["safe_arguments"])
+        };
+        assert_eq!(
+            result.mcp_safe_arguments.as_ref(),
+            expected_safe,
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+#[test]
+fn mcp_redact_json_cases_match_python() {
+    for case in corpus()["mcp_redact_json_cases"].as_array().unwrap() {
+        let result = evaluate(request_for(ContextDigestKindV1::McpRedactJson {
+            material: case["material"].clone(),
+        }));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.mcp_redacted_value.as_ref(),
+            Some(&case["redacted"]),
             "case {}",
             case["id"]
         );

@@ -21,6 +21,7 @@ from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_workflow_matrix import _workflow_prompt, contained_vitest_cases
 
 from .catalog import catalog_digest
+from .cleanup import cleanup_case_resources
 from .contained_judge import (
     _CONTAINED_PROFILE,
     _contained_project_checks,
@@ -299,12 +300,10 @@ def run_contained_profile(
         (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
     finally:
         if daemon is not None:
-            try:
-                probe._cleanup_installed_daemon(daemon)
-                probe._cleanup_native(identity, fixture.root / "guard-home")
-                cleanup_ok = True
-            except Exception as exc:
-                execution_error = execution_error or type(exc).__name__
+            cleanup = cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private)
+            cleanup_ok = cleanup.get("cleanup_ok") is True
+            if not cleanup_ok:
+                execution_error = execution_error or str(cleanup.get("cleanup_error") or "ProbeError")
     filesystem, after_snapshot = _contained_project_checks(project, before_snapshot)
     public_commands = [redact_value(case.command, replacements) for case in cases]
     public_callers = [redact_value(str(path), replacements) for path in caller_workspaces]

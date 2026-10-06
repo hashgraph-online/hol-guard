@@ -174,7 +174,7 @@ def select_desktop_core_latest(
             parsed = Version(candidate)
         except InvalidVersion:
             continue
-        if (parsed.major, parsed.minor) != series:
+        if parsed.major != series[0] or (include_alpha and parsed.minor != series[1]):
             continue
         if not _version_matches_channel(parsed, include_alpha=include_alpha):
             continue

@@ -60,9 +60,22 @@ class TestGrokManagedCompat:
         assert merged.count("[compat.claude]") == 1
         tomllib.loads(merged)
 
+    def test_prepare_and_restore_mixed_newline_hooks_value(self) -> None:
+        existing = "[compat.claude]\nskills = true\nhooks = true\r\n\n[ui]\nsimple_mode = true\n"
+        merged, prior = prepare_managed_config_text(existing, "guard hook --json")
+        assert prior["claude"] == "true"
+        claude_block = merged.split("[ui]", 1)[0]
+        assert "hooks = false" in claude_block
+        assert "hooks = true" not in claude_block
+        restored = restore_compat_hooks(remove_managed_block(merged), prior)
+        restored_claude = restored.split("[ui]", 1)[0]
+        assert "hooks = true" in restored_claude
+        assert "hooks = false" not in restored_claude
+        tomllib.loads(restored)
+
     def test_install_merges_preexisting_compat_tables(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        managed = ctx.home_dir / ".grok" / "managed_config.toml"
+        managed = ctx.home_dir / ".grok" / "config.toml"
         managed.parent.mkdir(parents=True, exist_ok=True)
         managed.write_text("[compat.claude]\nskills = true\nhooks = true\n", encoding="utf-8")
         monkeypatch.setattr(

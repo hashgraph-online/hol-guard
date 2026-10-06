@@ -8,7 +8,28 @@ from typing import Any, cast
 
 from ..approval_link_output import native_review_reason
 from ..native_decision_receipt import valid_prompt_risk_classes
-from .hook_availability_policy import hook_action_is_emergency_safe
+from .hook_availability_policy import availability_harness_response, hook_action_is_emergency_safe
+
+
+def post_tool_unavailable_response(
+    payload: dict[str, object],
+    *,
+    harness: str,
+    reason_code: str,
+    workspace: Path | None,
+    home_dir: Path,
+    guard_home: Path,
+) -> dict[str, object]:
+    return availability_harness_response(
+        payload,
+        harness=harness,
+        event_name="PostToolUse",
+        reason_code=reason_code,
+        reason="HOL Guard could not complete the native local hook review safely.",
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+    )
 
 
 def prepare_native_hook_policy(
@@ -218,6 +239,8 @@ def harness_json_from_native_prompt(harness: str, response: Mapping[str, object]
             "reason_code": reason_code,
             "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
         }
+        if canonical in {"pi", "omp"}:
+            output["decision"] = response["decision"]
         if risk_signals and canonical != "copilot":
             output["risk_signals"] = risk_signals
         return output
