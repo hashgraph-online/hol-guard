@@ -53,8 +53,11 @@ class TestNativeUnavailableExitCode:
         assert _native_unavailable_exit_code(_args("cursor"), {"permission": "deny"}, "PreToolUse") == 2
         assert _native_unavailable_exit_code(_args("cursor"), {"permission": "allow"}, "PreToolUse") == 0
 
-    def test_grok_deny_uses_adapter(self):
-        # grok_hook_process_exit returns 2 for blocking action, 0 for allow.
+    def test_grok_deny_uses_adapter(self, monkeypatch):
+        from codex_plugin_scanner.guard.adapters import grok_hooks
+
+        monkeypatch.setattr(grok_hooks, "_last_grok_policy_action", "")
+        monkeypatch.setattr(grok_hooks, "_recording_only_from_guard_home", lambda: False)
         deny_rc = _native_unavailable_exit_code(_args("grok"), {"policy_action": "block"}, "PreToolUse")
         allow_rc = _native_unavailable_exit_code(_args("grok"), {"policy_action": "allow"}, "PreToolUse")
         assert deny_rc == 2
