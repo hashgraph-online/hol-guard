@@ -4,6 +4,28 @@ Local harness protection works without signing in to Guard Cloud. Cloud adds syn
 history, visibility, and team controls around the same adapters. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md).
 
+## Hook verdict exit codes
+
+`guard/cli/native_hook_exit_code.py::native_hook_verdict_exit_code` is the
+authority for verdict exit codes, including `--json` responses. Emitters pass
+the canonical harness, resolved policy action, and normalized hook event;
+they do not maintain independent exit-code tables.
+
+| Harness | Blocking verdict | Nonblocking verdict |
+| --- | --- | --- |
+| Codex, Claude Code, Copilot, Pi, OMP | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
+| Cursor, Devin, Kimi, Hermes | `2` | `0` |
+| OpenCode, Superagent | `1` | `0` |
+| Grok, ZCode | Adapter-defined event/recording-mode behavior, through the shared authority. | Adapter-defined |
+| Unknown harness | `1` | `0` |
+
+Blocking actions are `review`, `require-reapproval`, `sandbox-required`, and
+`block`. Missing event context does not imply that an envelope will be consumed.
+`PostToolUse` reports a policy violation; it cannot undo an executed tool.
+
+## Harness coverage
+
+
 Current Guard support in this repo:
 
 - `codex`

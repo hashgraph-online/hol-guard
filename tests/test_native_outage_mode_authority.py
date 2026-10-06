@@ -11,12 +11,26 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
 from codex_plugin_scanner.guard.daemon import server as daemon
+from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
 from codex_plugin_scanner.guard.store import GuardStore
 
 from .native_policy_snapshot_test_fixtures import _config
 from .test_native_policy_snapshot_cache_binding import _write_resident_authority
+
+
+def test_hermes_pre_tool_worker_failure_never_allows_execution() -> None:
+    response = availability_harness_response(
+        {"hook_event_name": "pre_tool_call", "tool_name": "terminal", "tool_input": {"command": "rm -rf ./build"}},
+        harness="hermes",
+        event_name="pre_tool_call",
+        reason_code="native_hook_worker_exception",
+        reason="Native hook worker failed.",
+    )
+
+    assert response["decision"] == "block"
+    assert response["policy_action"] == "block"
 
 
 @pytest.mark.parametrize("failure", ["start", "submit", "stop"])
@@ -46,8 +60,7 @@ def test_disabled_cli_evidence_failure_never_changes_denial(
         runtime_workspace=None,
         store=store,
     )
-    # opencode follows the generic CLI contract: block -> rc 1, matching
-    # commands_hook_native_finish. The payload is the authoritative denial.
+    # opencode is rc-driven: its pretool plugin maps exitCode 1 -> block.
     assert status == 1
     assert responses[0]["policy_action"] == "block"
     assert responses[0]["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -142,13 +155,10 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
             runtime_workspace=None,
             store=store,
         )
-        # rc mirrors the emitted verdict: trusted-outage allow (observe state
-        # with an acked snapshot) -> 0; every deny path -> 1 under the codex
-        # generic contract. cli_disabled denies even in observe.
-        expected_status = 0 if (
-            state == "observe" and failure in {"worker_exception", "worker_none"}
-        ) else 1
-        assert status == expected_status
+        # codex denies via the hookSpecificOutput.permissionDecision envelope;
+        # rc stays 0 whether the outage resolves allow (observe+acked snapshot)
+        # or deny, because a nonzero rc would read as a hook error and permit.
+        assert status == 0
         assert len(responses) == 1
         response = responses[0]
     hook_output = response["hookSpecificOutput"]

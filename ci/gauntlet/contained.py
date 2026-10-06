@@ -282,7 +282,7 @@ def run_contained_profile(
             time.sleep(0.1)
             native_routes = worker.metrics.snapshot().get("routes", {})
             approval_delta = worker.store.count_approval_requests(status=None) - before_approvals
-            inference = relay.evidence()
+            inference = relay.evidence(wait_seconds=3)
             egress_requests = list(collector.requests)
             events = public_events(raw_events, replacements)
             if guard_log.exists():

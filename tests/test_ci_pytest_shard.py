@@ -142,6 +142,12 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
     scheduling_job = "\n".join(step.get("run", "") for step in jobs["scheduling-sensitive"]["steps"])
     assert "--cov --cov-branch --cov-report=" in coverage_job
+    assert 'github.event_name }}" != "pull_request"' in coverage_job
+    assert "coverage_args=(--cov --cov-branch --cov-report=)" in coverage_job
+    coverage_upload = next(
+        step for step in jobs["coverage"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"
+    )
+    assert coverage_upload["if"] == "always() && github.event_name != 'pull_request'"
     assert "COVERAGE_CORE" not in coverage_job
     assert "-p pytest_coverage_core" not in coverage_job
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
