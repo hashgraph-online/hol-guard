@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.runner import extract_prompt_requests
+
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
 
 def test_plain_user_prompt_has_no_runtime_risk_artifact() -> None:

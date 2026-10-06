@@ -70,6 +70,9 @@ class NativeRuntimeCapabilities:
     build_sha: str
     target: str
     features: tuple[str, ...]
+    program_digest: str = ""
+    catalog_digest: str = ""
+    trust_digest: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +163,12 @@ def decode_runtime_manifest(
     )
 
 
+def _advertised_digest(value: object) -> str:
+    if isinstance(value, str) and _is_lower_hex(value, 64):
+        return value
+    return ""
+
+
 def _decode_capabilities(payload: object) -> NativeRuntimeCapabilities | None:
     if not isinstance(payload, dict):
         return None
@@ -186,6 +195,9 @@ def _decode_capabilities(payload: object) -> NativeRuntimeCapabilities | None:
         build_sha=build_sha,
         target=target,
         features=tuple(features),
+        program_digest=_advertised_digest(payload.get("program_digest")),
+        catalog_digest=_advertised_digest(payload.get("catalog_digest")),
+        trust_digest=_advertised_digest(payload.get("trust_digest")),
     )
 
 

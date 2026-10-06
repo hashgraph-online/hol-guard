@@ -97,6 +97,14 @@ def set_native_artifact_hook_final_action(
         ),
         signals=state.decision_signals,
     ).to_dict()
+    package_review_cloud_reason_code = state.decision_v2_payload.get("package_review_cloud_reason_code")
+    if package_review_cloud_reason_code in {
+        "cloud_auth_error",
+        "cloud_http_error",
+        "cloud_timeout",
+        "cloud_validation_error",
+    }:
+        decision_v2_payload["package_review_cloud_reason_code"] = package_review_cloud_reason_code
     state.decision_v2_payload = decision_v2_payload
     state.response_payload["decision_v2_json"] = decision_v2_payload
 

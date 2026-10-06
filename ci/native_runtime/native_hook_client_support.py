@@ -9,6 +9,7 @@ import secrets
 import signal
 import socket
 import subprocess
+import tempfile
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
@@ -35,15 +36,24 @@ def native_runtime(tmp_path: Path) -> Iterator[tuple[Path, Path]]:
         pytest.skip("compiled native runtime is required")
     assert _NATIVE_BINARY is not None
     runtime = Path(_NATIVE_BINARY).resolve(strict=True)
-    state_dir = tmp_path / "native-runtime"
-    state_dir.mkdir(mode=0o700)
-    yield runtime, state_dir
-    subprocess.run(
-        (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
-        check=False,
-        capture_output=True,
-        timeout=2,
+    state_root = (
+        tempfile.TemporaryDirectory(prefix="hol-guard-native-runtime-", dir=Path.home()) if os.name == "nt" else None
     )
+    state_dir = (Path(state_root.name) if state_root is not None else tmp_path) / "native-runtime"
+    state_dir.mkdir(mode=0o700)
+    try:
+        yield runtime, state_dir
+    finally:
+        try:
+            subprocess.run(
+                (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        finally:
+            if state_root is not None:
+                state_root.cleanup()
 
 
 def _rule_digest(runtime: Path) -> str:

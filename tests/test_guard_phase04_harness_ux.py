@@ -169,7 +169,7 @@ def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_pat
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_path: Path) -> None:
+def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_path: Path, native_hook_force) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")

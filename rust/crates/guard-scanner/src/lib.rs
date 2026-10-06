@@ -1,5 +1,11 @@
 #![forbid(unsafe_code)]
 
+pub mod git_read;
+pub mod precommit;
+pub mod repository_scanner;
+pub mod secret_detection;
+pub mod staged_scanner;
+
 use guard_rules::{CONTEXT_CHARS, MAX_MATCHES, MAX_SCAN_BYTES};
 use regex::{Regex, RegexBuilder};
 use std::collections::BTreeMap;

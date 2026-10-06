@@ -143,7 +143,7 @@ def test_real_configured_hook_native_protection_commits_repair(
     prepared_repair,
     tmp_path,
     monkeypatch,
-    boundary,  # noqa: F811 -- shared fixture
+    boundary,
 ):
     from codex_plugin_scanner.guard import codex_hook_recovery as recovery
     from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer

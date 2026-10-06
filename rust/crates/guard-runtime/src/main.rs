@@ -1,19 +1,45 @@
 #![forbid(unsafe_code)]
 
 mod approval;
+mod approval_gate_consumers;
+mod approval_gate_enrollment;
+mod approval_gate_grants;
+mod approval_gate_op;
+mod approval_gate_settings;
+mod approval_gate_state;
+mod approval_gate_verify;
+mod approval_reuse;
 mod archive_inspect;
 mod archive_inspect_containment;
+mod claim_approval_reuse_op;
+mod claim_reuse;
+mod command_effect;
+#[cfg(unix)]
+mod contained_op;
 mod context_digest;
 mod context_digest_json;
 mod edge;
+mod encrypted_secret_store;
+mod github_workflow_runtime_authorization;
 mod hardening;
+mod hook_process_spawn;
+mod local_once_store;
 mod managed_resident;
+mod mcp_probe_op;
+mod mcp_stdio_session_op;
 mod native_hook_receipt;
+mod native_runtime_admission;
+mod native_runtime_resilience;
 mod oneshot;
+mod package_authority_op;
+mod policy_decision_lookup_op;
 mod policy_enforcement;
+mod policy_integrity_resolver;
 mod policy_store;
+mod prompt_analyze_op;
 mod resident_client;
 mod resident_endpoint;
+mod resident_ops;
 mod resident_process_identity;
 mod resident_protocol;
 mod resident_state;
@@ -21,9 +47,12 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod shim_op;
 #[cfg(unix)]
 mod state_directory_lock;
 mod strict_json;
+mod totp;
+mod workflow_capability_store;
 
 pub(crate) use resident_protocol::{capabilities, encode_response, strict_json_value};
 pub(crate) use resident_transport::{
@@ -319,12 +348,14 @@ fn run() -> Result<(), String> {
                 && owner_flag == "--owner-process-id"
                 && digest_flag == "--runtime-sha256" =>
         {
-            managed_resident::serve_managed(
+            let result = managed_resident::serve_managed(
                 std::path::Path::new(state_dir),
                 managed_resident::parse_generation(generation)?,
                 managed_resident::parse_process_id(owner_process_id)?,
                 digest,
-            )
+            );
+            mcp_stdio_session_op::close_all_sessions();
+            result
         }
         [command, state_flag, state_dir, generation_flag, generation, digest_flag, digest]
             if command == "supervise-managed"
@@ -412,6 +443,23 @@ mod tests {
     fn strict_json_rejects_duplicate_keys_and_trailing_values() {
         assert!(strict_json_value(br#"{"a":1,"a":2}"#).is_err());
         assert!(strict_json_value(br#"{"a":1} {}"#).is_err());
+    }
+
+    #[test]
+    fn strict_json_preserves_numeric_fields_and_literal_serde_marker_objects() {
+        let parsed = strict_json_value(
+            br#"{"timeout_seconds":6.0,"fraction":0.125,"maximum":1208925819614629174706177,"literal":{"$serde_json::private::Number":"123"}}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed["timeout_seconds"].as_f64(), Some(6.0));
+        assert_eq!(parsed["fraction"].as_f64(), Some(0.125));
+        assert_eq!(
+            parsed["maximum"].as_number().unwrap().as_str(),
+            "1208925819614629174706177"
+        );
+        assert_eq!(parsed["literal"]["$serde_json::private::Number"], "123");
+        assert!(strict_json_value(br#"{"value":1e999}"#).is_err());
+        assert!(strict_json_value(br#"{"name":1,"name":2}"#).is_err());
     }
 
     #[test]

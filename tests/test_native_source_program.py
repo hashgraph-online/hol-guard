@@ -191,9 +191,21 @@ def test_depth_and_configuration_limits(compiler: Path, example: dict) -> None:
     assert invoke(compiler, example).returncode != 0
 
 
+def test_native_input_above_legacy_budget_is_accepted(compiler: Path, build: dict) -> None:
+    payload = canonical(build)
+    legacy_limit = 4 * 1024 * 1024
+    current_limit = 8 * 1024 * 1024
+    if len(payload) <= legacy_limit:
+        payload += b" " * (legacy_limit + 1 - len(payload))
+    assert legacy_limit < len(payload) <= current_limit
+
+    result = subprocess.run([str(compiler), "compile"], input=payload, capture_output=True, timeout=60)
+    assert result.returncode == 0, result.stderr.decode(errors="replace") + result.stdout.decode(errors="replace")
+
+
 def test_native_input_byte_budget(compiler: Path, example: dict) -> None:
     result = subprocess.run(
-        [str(compiler), "compile"], input=canonical(example) + b" " * (4 * 1024 * 1024), capture_output=True, timeout=60
+        [str(compiler), "compile"], input=canonical(example) + b" " * (8 * 1024 * 1024), capture_output=True, timeout=60
     )
     assert result.returncode != 0
 

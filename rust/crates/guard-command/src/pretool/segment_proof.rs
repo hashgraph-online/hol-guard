@@ -82,12 +82,15 @@ pub(super) fn exact_safe_cwd_compound(
                     | "ls"
                     | "cat"
                     | "stat"
+                    | "test"
+                    | "find"
                     | "head"
                     | "tail"
                     | "git"
                     | "gh"
                     | "jq"
                     | "wc"
+                    | "od"
                     | "rg"
                     | "grep"
                     | "sed"
@@ -152,6 +155,8 @@ pub(crate) fn benign_command_segments(
                         && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
                     || (basename == "wc"
                         && safe_reads::safe_word_count_stdin_arguments(&segment.arguments))
+                    || (basename == "od"
+                        && safe_reads::safe_byte_dump_stdin_arguments(&segment.arguments))
                     || (basename == "grep"
                         && search::safe_grep_stdin_arguments(&segment.arguments))
                     || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
@@ -189,7 +194,10 @@ pub(crate) fn benign_command_segments(
                         | "grep"
                         | "sed"
                         | "wc"
+                        | "od"
                         | "stat"
+                        | "test"
+                        | "find"
                 );
             let ls_has_explicit_target = basename != "ls" || {
                 let mut skip_next = false;
@@ -274,6 +282,8 @@ pub(super) fn exact_safe_segment_with_context(
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
         "sleep" => safe_reads::safe_sleep_arguments(&segment.arguments),
         "ls" => safe_reads::safe_listing_arguments(&segment.arguments, context),
+        "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
+        "find" => safe_reads::safe_find_listing_arguments(&segment.arguments, context),
         "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments, context),
         "stat" => matches!(segment.arguments.as_slice(), [target]
             if !target.starts_with('-')
@@ -298,6 +308,11 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments)
         }
         "wc" => safe_reads::safe_word_count_arguments(
+            &segment.arguments,
+            segment.pipeline_index > 0,
+            context,
+        ),
+        "od" => safe_reads::safe_byte_dump_arguments(
             &segment.arguments,
             segment.pipeline_index > 0,
             context,

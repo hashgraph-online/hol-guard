@@ -32,6 +32,7 @@ jobs:
           version: "0.9.26"
           enable-cache: true
           cache-dependency-glob: uv.lock
+      - uses: ./.github/actions/stage-command-projections
       - name: Install policy dependencies
         run: uv sync --frozen --extra dev
       - name: Validate workflow policy code
@@ -130,6 +131,8 @@ jobs:
           GOBIN="$RUNNER_TEMP/gitleaks-bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
       - name: Add Gitleaks to PATH
         run: echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+      - name: Verify Gitleaks fixture exclusion scope
+        run: python3 scripts/ci/check_gitleaks_fixture_scope.py
       - name: Determine Gitleaks scope
         id: gitleaks-scope
         env:

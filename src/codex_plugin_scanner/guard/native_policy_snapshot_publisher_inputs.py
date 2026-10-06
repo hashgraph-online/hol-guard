@@ -146,7 +146,20 @@ class NativePolicySnapshotPublisherInputs:
         """Reject ACKs that do not identify the resident observed after push."""
 
         if before and before != observed:
-            return None
+            # resident-stop removes the generation file, not its scope directory.
+            # A new authenticated ACK may create the first generation in those
+            # same empty roots. Treat that like cold startup, not replacement
+            # of a resident observed before publication. A pre-existing generation
+            # still requires the original unchanged-before/after fence.
+            before_roots = {path for path, _mtime, _size in before}
+            observed_roots = {path for path, _mtime, _size in observed if "/" not in path}
+            started_in_empty_roots = (
+                all(path.startswith("resident-v3-") and "/" not in path for path in before_roots)
+                and before_roots == observed_roots
+                and any("/generation-" in path and path.endswith(".json") for path, _mtime, _size in observed)
+            )
+            if not started_in_empty_roots:
+                return None
         if not self._resident_fingerprint_matches_generation(observed, resident_generation):
             return None
         # Re-read only bounded metadata while the barrier is held. A changed

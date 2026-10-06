@@ -47,8 +47,12 @@ For a command extension, contributors submit these files together in the same ch
    synthetic local controls, the expected action, the owning rule, and the
    expected effective segments. Cases are data; they never invoke the target
    executable.
-3. The external entry for the extension ID in
-   `contracts/extensions/trust-class-map.v1.json`.
+
+Extension builder CI adds missing IDs to the shared trust map as external/opt-in
+before installing dependencies and compiling Rust. Contributors do not need to
+edit that shared list or pull unrelated main changes to refresh generated
+catalogs. Existing reviewed trust classifications are never promoted or changed
+by this preparation step.
 
 The compiler derives these projections. Contributors do not edit or include
 them as independent inputs:
@@ -58,10 +62,12 @@ them as independent inputs:
 - `contracts/extensions/native-command-program.v1.json`;
 - `contracts/extensions/command-catalog.v1.json`.
 
-After source review, a maintainer runs the preparation command to validate the
-exact source/fixture binding and synchronize the derived files:
+After source review, a maintainer stages missing external defaults, then runs
+the preparation command to validate the exact source/fixture binding and
+synchronize the derived files. CI does this on the PR merge checkout:
 
 ```sh
+python scripts/refresh_extension_artifacts.py --trust-only
 uv run --no-sync python scripts/prepare_extension_contribution.py \
   --source contributions/command-sources/command.<name>.json \
   --fixture tests/fixtures/command-source-<slug>.v1.json
@@ -86,27 +92,42 @@ permission. Use existing native operations and compose them with `any.v1`,
 callbacks, imports, candidate indexes, and contributor-supplied native
 function names are rejected.
 
-Build the compiler with the locked Rust toolchain:
+Contributors do not need a Rust toolchain. The reviewed compiler ships inside the
+installed `hol-guard` package at `codex_plugin_scanner/_native/guard-command-source`
+and is digest-verified on every invocation. Resolve it once, then pass it to the
+preparation command:
 
 ```sh
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+COMPILER=$(uv run --no-sync python -c \
+  'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler as f; print(f())')
+
+uv run --no-sync python scripts/prepare_extension_contribution.py \
+  --compiler "$COMPILER" \
+  --source contributions/command-sources/command.<name>.json \
+  --fixture tests/fixtures/command-source-<slug>.v1.json
 ```
 
-The compiler reads one bounded JSON build envelope from standard input. For a
-single addition, assemble an envelope with the independently reviewed trust
-map and the packaged baseline. This runnable example uses the checked-in
-synthetic `command.example-cli` source:
+For lower-level control, run the packaged compiler directly. It reads one bounded JSON
+build envelope from standard input. For a single addition, assemble an envelope with the
+independently reviewed trust map and the packaged baseline. This runnable example uses
+the checked-in synthetic `command.example-cli` source and the packaged binary:
 
 ```sh
+COMPILER=$(uv run --no-sync python -c \
+  'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler as f; print(f())')
+
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust contracts/extensions/trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
   > source-build.json
 
-rust/target/debug/guard-command-source validate < source-build.json
-rust/target/debug/guard-command-source compile < source-build.json > source-compiled.json
+"$COMPILER" validate < source-build.json
+"$COMPILER" compile < source-build.json > source-compiled.json
 ```
+
+Building from source with `cargo +1.88.0 build --locked -p guard-command` is only needed
+when reviewing or changing the native contract itself, not to compose existing operations.
 
 `base: "packaged"` compiles an addition against the admitted baseline and
 labels the result `addition-only-not-release-catalog`. It cannot replace an
@@ -151,8 +172,8 @@ uv run --no-sync python scripts/render_command_extension_directory.py --check
 
 Maintainers commit the canonical sources, reviewed trust changes, generated
 descriptors, program/catalog artifacts, and changed public directory files
-together after preparation. Contributors need only submit the source, fixture,
-and trust-map inputs.
+together after preparation. Contributors need only submit the source and fixture;
+shared trust-map defaults and generated projections are maintainer-owned.
 Release packaging supplies the native compiler and its identity manifest from
 the platform build; an installed compiler does not fall back to a checkout.
 

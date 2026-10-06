@@ -91,17 +91,25 @@ def command_descriptor_names(root: Path) -> set[str]:
     return {json.loads(path.read_bytes())["extension"]["extension_id"] + ".json" for path in command_source_paths(root)}
 
 
-def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None:
-    """Check source changes, fixture isolation, handoff, packaging and restoration with the real compiler."""
+def acceptance_environment(root: Path, target: Path, compiler: Path) -> dict[str, str]:
+    """Keep isolated builds and compiler exports out of the calling workflow."""
     env = dict(os.environ)
+    env.pop("GITHUB_ENV", None)
     env.update(
         PYTHONPATH=os.pathsep.join((str(root / "src"), str(root))),
         CARGO_TARGET_DIR=str(target),
         CARGO_BUILD_JOBS="2",
         CARGO_PROFILE_DEV_DEBUG="0",
         CARGO_PROFILE_DEV_INCREMENTAL="false",
+        HOL_GUARD_BUILD_SOURCE_COMPILER=str(compiler),
     )
+    return env
+
+
+def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None:
+    """Check source changes, fixture isolation, handoff, packaging and restoration with the real compiler."""
     compiler = target / "debug" / ("guard-command-source.exe" if os.name == "nt" else "guard-command-source")
+    env = acceptance_environment(root, target, compiler)
     build_command = [
         "cargo",
         "+1.88.0",
@@ -219,7 +227,8 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     trust = json.loads(old_trust)
     trust["classes"]["external"].append(EXTENSION_ID)
     trust["classes"]["external"].sort()
-    source_path.write_text(json.dumps(source, indent=2) + "\n")
+    # Keep synthetic-fixture formatting from exhausting the production input budget.
+    source_path.write_text(json.dumps(source, separators=(",", ":")) + "\n")
     trust_path.write_text(json.dumps(trust, indent=2) + "\n")
     fixture = {
         "schema": "guard.command-extension-fixtures.v1",
@@ -271,7 +280,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     record("incorrect_behavior_fixture_rejected")
 
     source["extension"]["description"] = "Isolated CI contribution acceptance."
-    source_path.write_text(json.dumps(source, indent=2) + "\n")
+    source_path.write_text(json.dumps(source, separators=(",", ":")) + "\n")
     fixture_path.write_text(json.dumps(fixture, indent=2) + "\n")
     build()
     verify()
@@ -337,7 +346,7 @@ def main() -> int:
     failure = None
     target = args.target_dir.resolve()
     with tempfile.TemporaryDirectory(prefix="guard-fixture-acceptance-") as temporary:
-        checkout = Path(temporary) / "checkout"
+        checkout = Path(temporary).resolve() / "checkout"
         subprocess.run(["git", "worktree", "add", "--detach", str(checkout), "HEAD"], cwd=ROOT, check=True)
         try:
             exercise(checkout, target, results)

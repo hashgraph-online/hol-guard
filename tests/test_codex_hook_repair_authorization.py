@@ -51,11 +51,23 @@ def _grant(plan, owner, *, action=None, subject=None, nonce=None):
     )
 
 
+def _protected_tree(root):
+    # Repair-authorization read-only checks cover the hook config and manifest
+    # artifacts. The native resident writes operational lock/lease files under
+    # ``native-runtime/`` (mtime + content churn on every spawn) which are not
+    # part of the protected surface — exclude them from the snapshot.
+    return {
+        rel: meta
+        for rel, meta in _tree(root).items()
+        if "/native-runtime" not in rel
+    }
+
+
 def test_exact_repair_grant_is_owner_bound_and_read_only(prepared_repair, tmp_path):
     context, config, manifest, prepared = prepared_repair
     with codex_install_transaction(context.guard_home, config, actor=manifests.CODEX_AUTHORITY_REPAIR_ACTION) as owner:
         grant = _grant(prepared, owner)
-        before = _tree(tmp_path)
+        before = _protected_tree(tmp_path)
         authorization = repair.authorize_codex_hook_repair(
             prepared,
             authority_home=context.guard_home,
@@ -63,7 +75,7 @@ def test_exact_repair_grant_is_owner_bound_and_read_only(prepared_repair, tmp_pa
             deadline_monotonic=time.monotonic() + 5,
         )
         authorization.compare_before()
-        assert _tree(tmp_path) == before
+        assert _protected_tree(tmp_path) == before
         assert not manifest.exists()
     with pytest.raises(CodexHookIntegrityError):
         authorization.check()

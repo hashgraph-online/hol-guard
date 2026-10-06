@@ -407,7 +407,16 @@ def test_compound_stdin_only_python_observer_requires_host_binary_proof(
             assert not is_trusted_absolute_command_path(Path(sys.executable), cwd=workspace, home_dir=home)
         assert artifact is not None
         assert artifact.metadata["compound_segment_count"] == 3
-        assert artifact.metadata["reason_code"] == "interpreter_host_binding_unverified"
+        # Which fail-closed reason fires depends on where the launch identity
+        # check lands: an interpreter the host classifies as untrusted reports
+        # that identity first, and one it trusts reaches the Windows host-ACL
+        # floor below.  A real Windows host takes the first path, a host faking
+        # `os.name` for the classifier can take either, so both are accepted —
+        # what must hold is that the compound launch is not allowed outright.
+        assert artifact.metadata["reason_code"] in {
+            "interpreter_identity_untrusted",
+            "interpreter_host_binding_unverified",
+        }
         assert artifact.metadata["guard_default_action"] == "require-reapproval"
     else:
         assert artifact is None

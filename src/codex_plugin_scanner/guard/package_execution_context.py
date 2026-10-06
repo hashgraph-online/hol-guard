@@ -9,14 +9,13 @@ never registry credentials or configuration contents.
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from .models import GuardArtifact
-from .native_context import context_sha256_digest
+from .native_context import context_package_evidence, context_sha256_digest
 from .package_execution_context_configuration import configuration_material, environment_material
 from .package_execution_context_inputs import (
     ContextFiles,
@@ -200,61 +199,27 @@ def build_package_execution_context(
     )
 
 
-def package_execution_context_from_evidence(value: object) -> PackageExecutionContext | None:
-    """Load and strictly validate a package context from persisted safe evidence."""
-
-    if not isinstance(value, Mapping):
+def _project_native_package_context(context: dict[str, Any] | None) -> PackageExecutionContext | None:
+    if context is None:
         return None
-    if value.get("kind") != PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND:
-        return None
-    if value.get("schema_version") != PACKAGE_EXECUTION_CONTEXT_VERSION:
-        return None
-    digest = _sha256_value(value.get("context_digest"))
-    if digest is None or not isinstance(value.get("portable"), bool):
-        return None
-    raw_components = value.get("components")
-    if not isinstance(raw_components, list):
-        return None
-    components: list[PackageExecutionContextComponent] = []
-    seen: set[str] = set()
-    for item in raw_components:
-        if not isinstance(item, Mapping):
-            return None
-        name = _string_value(item.get("name"))
-        component_digest = _sha256_value(item.get("digest"))
-        if name is None or component_digest is None or name in seen:
-            return None
-        seen.add(name)
-        components.append(PackageExecutionContextComponent(name=name, digest=component_digest))
-    if not components:
-        return None
-    portable = bool(value["portable"])
-    expected_digest = _digest_json(
-        {
-            "components": [{"name": item.name, "digest": item.digest} for item in components],
-            "portable": portable,
-            "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
-        }
-    )
-    if digest != expected_digest:
-        return None
-    reason = _string_value(value.get("non_portable_reason"))
     return PackageExecutionContext(
-        digest=digest,
-        portable=portable,
-        components=tuple(components),
-        non_portable_reason=reason,
+        digest=context["digest"],
+        portable=context["portable"],
+        components=tuple(
+            PackageExecutionContextComponent(name=item["name"], digest=item["digest"]) for item in context["components"]
+        ),
+        non_portable_reason=context["non_portable_reason"],
     )
+
+
+def package_execution_context_from_evidence(value: object) -> PackageExecutionContext | None:
+    """Project native validation of persisted package context evidence."""
+
+    return _project_native_package_context(context_package_evidence(value))
 
 
 def package_execution_context_from_scanner_evidence(value: object) -> PackageExecutionContext | None:
-    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
-        return None
-    for item in value:
-        context = package_execution_context_from_evidence(item)
-        if context is not None:
-            return context
-    return None
+    return _project_native_package_context(context_package_evidence(value, scanner_evidence=True))
 
 
 def changed_package_execution_context_components(
@@ -277,10 +242,11 @@ def _component(name: str, material: object) -> PackageExecutionContextComponent:
 
 
 def _digest_json(value: object) -> str:
-    # Canonical-JSON component digest — owned by the native canonical_sha256 op.
-    # Identity/dedup digest whose stored values share this producer: strict=False
-    # degrades to the byte-identical local canonical hash when resident is absent.
-    return context_sha256_digest(value, unbound_label="package-context-component", strict=False)
+    # Approval-context components require native canonical hashing.
+    digest = context_sha256_digest(value, unbound_label="package-context-component")
+    if digest.startswith("guard-context-unbound:"):
+        raise ValueError("native_package_context_digest_unavailable")
+    return digest
 
 
 def _string_value(value: object) -> str | None:
@@ -291,12 +257,6 @@ def _string_items(value: object) -> tuple[str, ...]:
     if not isinstance(value, list | tuple):
         return ()
     return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
-
-
-def _sha256_value(value: object) -> str | None:
-    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
-        return None
-    return value
 
 
 def _is_global_request(metadata: Mapping[str, object]) -> bool:

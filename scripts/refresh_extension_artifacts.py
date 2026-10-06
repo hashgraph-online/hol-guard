@@ -9,6 +9,7 @@ independent inputs and are never rewritten here.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -128,8 +129,19 @@ def verify() -> None:
     _run([sys.executable, "scripts/export_extension_directory.py", "--check"])
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Refresh maintainer-owned product artifacts without replacing independent test expectations."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--trust-only",
+        action="store_true",
+        help="Stage missing contribution ids as external before dependency installation and native compilation.",
+    )
+    args = parser.parse_args(argv)
+    if args.trust_only:
+        changed = sync_trust_map()
+        print(json.dumps({"ok": True, "trust_map_changed": changed}, sort_keys=True))
+        return 0
     pending = pending_contribution_ids()
     sync_trust_map()
     regenerate_projections()
