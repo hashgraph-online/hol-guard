@@ -124,6 +124,16 @@ class StorePolicyDocumentMixin:
         if mode not in {"merge", "replace"}:
             raise ValueError("invalid_policy_import_mode")
 
+        from .business_policy_document_import import (
+            has_business_rules,
+            import_business_document,
+            refuse_legacy_import_over_business_source,
+        )
+
+        if has_business_rules(document):
+            if compiled_rows:
+                raise ValueError("policy_document_compilation_mismatch")
+            return import_business_document(self, document, mode=mode, now=now, approval_gate_grant=approval_gate_grant)
         normalized_rows = self._normalize_compiled_rows(compiled_rows)
 
         _validate_compiled_document_rows(document, compiled_rows)
@@ -138,7 +148,10 @@ class StorePolicyDocumentMixin:
 
         digest = policy_document_digest(document)
         secret_material = self._policy_integrity_secret_material(create=True)
-        with self._connect() as connection:
+        from .native_command_control_authority_io import hold_command_control_authority_lock
+
+        with hold_command_control_authority_lock(self.guard_home), self._connect() as connection:
+            refuse_legacy_import_over_business_source(self)
             connection.execute("begin immediate")
             result = self._import_policy_rows_on_connection(
                 connection,
@@ -315,6 +328,12 @@ class StorePolicyDocumentMixin:
         """
         if mode not in {"merge", "replace"}:
             raise ValueError("invalid_policy_import_mode")
+        from .business_policy_document_import import has_business_rules, refuse_legacy_import_over_business_source
+
+        if has_business_rules(document):
+            # MCP must hold the source-owner lease outside its request/status
+            # transaction and call apply_business_document_on_connection.
+            raise ValueError("native_business_source_transaction_owner_required")
         normalized_rows = self._normalize_compiled_rows(compiled_rows)
         _validate_compiled_document_rows(document, compiled_rows)
         require_high_risk(
@@ -326,13 +345,19 @@ class StorePolicyDocumentMixin:
         )
         digest = policy_document_digest(document)
         secret_material = self._policy_integrity_secret_material(create=True)
-        return self._import_policy_rows_on_connection(
-            connection,
-            document=document,
-            compiled_rows=compiled_rows,
-            normalized_rows=normalized_rows,
-            mode=mode,
-            now=now,
-            digest=digest,
-            secret_material=secret_material,
-        )
+        from .native_command_control_authority_io import hold_command_control_authority_lock
+
+        # Direct transaction callers cannot wait on a lease held by another
+        # owner waiting for this SQLite writer. Refuse immediately and rollback.
+        with hold_command_control_authority_lock(self.guard_home, timeout_seconds=0):
+            refuse_legacy_import_over_business_source(self)
+            return self._import_policy_rows_on_connection(
+                connection,
+                document=document,
+                compiled_rows=compiled_rows,
+                normalized_rows=normalized_rows,
+                mode=mode,
+                now=now,
+                digest=digest,
+                secret_material=secret_material,
+            )

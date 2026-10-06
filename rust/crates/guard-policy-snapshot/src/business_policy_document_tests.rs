@@ -18,6 +18,10 @@ fn document() -> Value {
 fn complete_source_is_retained_and_bound() {
     let source = document();
     let compiled = compile_business_document(&source).unwrap();
+    assert_eq!(
+        compiled.binding().source_document_digest.as_deref(),
+        Some(compiled.source_digest())
+    );
     assert_eq!(compiled.binding().rules[0].action, "review");
     assert_eq!(
         serde_json::from_slice::<Value>(compiled.canonical_source()).unwrap(),
@@ -34,9 +38,11 @@ fn complete_source_is_retained_and_bound() {
         } else {
             *changed.pointer_mut(pointer).unwrap() = value;
         }
+        let updated = compile_business_document(&changed).unwrap();
+        assert_ne!(updated.source_digest(), compiled.source_digest());
         assert_ne!(
-            compile_business_document(&changed).unwrap().source_digest(),
-            compiled.source_digest()
+            updated.binding().source_document_digest,
+            compiled.binding().source_document_digest
         );
     }
 }

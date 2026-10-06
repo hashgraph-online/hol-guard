@@ -14,6 +14,34 @@ fn binding() -> BusinessPolicyBindingV1 {
 }
 
 #[test]
+fn complete_source_digest_changes_signed_identity_and_cannot_be_null_or_malformed() {
+    let original = signed_business_snapshot();
+    let mut sourced = original.clone();
+    sourced
+        .business_policy
+        .as_mut()
+        .unwrap()
+        .source_document_digest = Some("a".repeat(64));
+    assert_ne!(policy_digest(&sourced).unwrap(), original.policy_digest);
+    assert_ne!(
+        integrity_mac(&sourced, &[7; 32]).unwrap(),
+        integrity_mac(&original, &[7; 32]).unwrap()
+    );
+    for value in [
+        Value::Null,
+        json!(""),
+        json!("A".repeat(64)),
+        json!("a".repeat(63)),
+    ] {
+        let mut payload = binding_value();
+        payload["sourceDocumentDigest"] = value;
+        assert!(serde_json::from_value::<BusinessPolicyBindingV1>(payload)
+            .map(|binding| binding.validate().is_err())
+            .unwrap_or(true));
+    }
+}
+
+#[test]
 fn expiry_is_signed_and_malformed_or_null_expiry_cannot_be_permanent() {
     let permanent = binding_value();
     assert_eq!(serde_json::to_value(binding()).unwrap(), permanent);

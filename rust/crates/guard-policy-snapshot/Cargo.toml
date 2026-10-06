@@ -9,6 +9,7 @@ rust-version.workspace = true
 guard-contracts = { path = "../guard-contracts" }
 serde.workspace = true
 serde_json.workspace = true
+zeroize = "1.9.0"
 sha2.workspace = true
 hex.workspace = true
 thiserror.workspace = true

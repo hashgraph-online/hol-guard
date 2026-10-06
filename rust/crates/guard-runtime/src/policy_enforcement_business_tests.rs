@@ -32,6 +32,28 @@ fn facts() -> BusinessActionV1 {
 }
 
 #[test]
+fn signed_budget_declarations_require_the_durable_reservation_owner() {
+    let mut value = serde_json::to_value(binding("allow", "allow")).unwrap();
+    value["budgets"] = json!([{"schema":"guard.business-budget.v1","version":1,
+        "id":"mail.daily","scope":"account","windowMs":86400000,
+        "maximumActions":10,"maximumRecipients":20,"maximumRecords":10,"maximumBytes":1048576,
+        "match":{"schema":"guard.business-policy-match.v1","version":1,
+            "services":["google_gmail"],"operations":["mail_send"]}}]);
+    let binding: BusinessPolicyBindingV1 = serde_json::from_value(value).unwrap();
+    let policy = CompiledBusinessPolicy::new(&binding).unwrap();
+    assert_eq!(
+        policy.floor(ActionFloor::Allow, Some(&facts())).action,
+        ActionFloor::Block
+    );
+    let admitted = snapshot(Some(binding), "enforce");
+    assert_eq!(
+        super::super::ensure_business_review_permitted(admitted.snapshot(), &facts(), "review")
+            .unwrap_err(),
+        "native_business_budget_executor_unavailable"
+    );
+}
+
+#[test]
 fn expiry_equality_removes_allow_and_preserves_intrinsic_floor() {
     let mut value = binding("block", "allow");
     let expiry_text = "2026-07-16T12:00:00.123456789Z";

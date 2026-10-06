@@ -84,6 +84,11 @@ impl CompiledBusinessPolicy {
             action: ActionFloor::Block,
             matched_rule_ids: Vec::new(),
         };
+        // A signed budget declaration is not a durable reservation. Preserve
+        // the reviewed refusal until the authenticated executor is integrated.
+        if self.binding.budgets.is_some() {
+            return blocked();
+        }
         let Some(facts) = facts else {
             return blocked();
         };

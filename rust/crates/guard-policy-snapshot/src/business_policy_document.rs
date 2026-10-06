@@ -229,17 +229,20 @@ pub fn compile_business_document(
     if rules.len() > crate::POLICY_SNAPSHOT_MAX_MAP_ENTRIES {
         return Err(BusinessDocumentError::Bounds);
     }
+    let source_digest = digest_bytes(&canonical_source);
     let binding = BusinessPolicyBindingV1 {
         schema: BUSINESS_POLICY_BINDING_SCHEMA.to_owned(),
         version: 1,
         default_action: default_action.to_owned(),
         rules,
+        source_document_digest: Some(source_digest.clone()),
+        budgets: None,
     };
     binding
         .validate()
         .map_err(|_| BusinessDocumentError::InvalidDocument)?;
     Ok(CompiledBusinessDocument {
-        source_digest: digest_bytes(&canonical_source),
+        source_digest,
         canonical_source,
         binding,
     })
