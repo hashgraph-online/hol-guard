@@ -48,7 +48,7 @@ dependencies = [
     "cryptography>=50.0.0",
     "keyring>=25.0",
     "packaging>=24.0",
-    "idna==3.15",
+    "idna==3.20",
     "jsonschema>=4.26.0",
     "pyyaml>=6.0.3",
     "regex>=2025.0.0,<2027",
