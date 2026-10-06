@@ -388,7 +388,10 @@ def _should_use_decision_v2_harness_message(response_payload: dict[str, object],
     )
     if any(message.startswith(prefix) for prefix in generic_prefixes):
         return False
-    return not message.startswith("HOL Guard needs a fresh approval because this action changed.")
+    return not message.startswith((
+        "HOL Guard needs a fresh approval because this action changed.",
+        "HOL Guard needs a fresh approval before this action can run.",
+    ))
 
 def _claude_prompt_additional_context(
     *,

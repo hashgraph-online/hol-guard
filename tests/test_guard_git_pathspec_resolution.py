@@ -376,7 +376,10 @@ def test_git_pathspec_timeout_and_output_limits_are_fail_closed(
     assert not timeout.complete
     assert timeout.reason_code == "git_pathspec_timeout"
 
-    monkeypatch.setattr(git_pathspecs_module.subprocess, "run", original_run)
+    def _oversized(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout=b"x" * 8, stderr=b"")
+
+    monkeypatch.setattr(git_pathspecs_module.subprocess, "run", _oversized)
     monkeypatch.setattr(git_pathspecs_module, "_GIT_PATHSPEC_OUTPUT_LIMIT", 1)
     limited = git_pathspecs_module.resolve_git_pathspecs(("src",), cwd=git_repository)
     assert not limited.complete

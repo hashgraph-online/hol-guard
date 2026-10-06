@@ -11,11 +11,15 @@ pub(super) fn artifact_manifest_dependency_map(
     relative_path: &str,
     manifest_text: &str,
 ) -> BTreeMap<String, String> {
+    // `deadline_ms` mirrors the Python default (`parse_manifest_dependencies`,
+    // deadline_ms=50): the parse budget is a soft cap, never `0` — a `0`ms
+    // deadline instantiates an already-expired `Deadline` and returns an empty
+    // map for every manifest.
     let dependency_map = deps.manifest.parse_manifest_dependencies(
         relative_path,
         manifest_text,
         crate::local_supply_chain::DEFAULT_MANIFEST_PARSE_BYTE_LIMIT,
-        0,
+        crate::local_supply_chain::DEFAULT_MANIFEST_PARSE_DEADLINE_MS,
     );
     if !dependency_map.is_empty() || package_manager != "pip" {
         return dependency_map;
@@ -24,7 +28,7 @@ pub(super) fn artifact_manifest_dependency_map(
         "requirements.txt",
         manifest_text,
         crate::local_supply_chain::DEFAULT_MANIFEST_PARSE_BYTE_LIMIT,
-        0,
+        crate::local_supply_chain::DEFAULT_MANIFEST_PARSE_DEADLINE_MS,
     )
 }
 

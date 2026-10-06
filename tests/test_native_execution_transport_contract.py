@@ -96,7 +96,11 @@ def test_native_transport_keeps_executable_home_environment_and_payload_bound(tr
     assert arguments["guard_home"] == tmp_path
     assert arguments["environment"] is transport.environment
     assert arguments["timeout_seconds"] == 4.5
-    assert json.loads(arguments["payload"]) == {"operation": "contained_execute", "request": request}
+    assert json.loads(arguments["payload"]) == {
+        "operation": "contained_execute",
+        "request": request,
+        "deadline_budget_ms": 4500,
+    }
     transport.failed.assert_not_called()
     transport.succeeded.assert_called_once_with("a" * 64, tmp_path)
 
@@ -172,3 +176,61 @@ def test_contained_adapters_report_missing_authority_without_fabricating_results
     transport.client.assert_called_once()
     transport.failed.assert_called_once()
     transport.succeeded.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "operation,feature,schema,status",
+    [
+        ("mcp_stdio_session_open", "mcp-stdio-session-v1", "guard-mcp-stdio-session-result.v1", "opened"),
+        ("mcp_stdio_session_recv", "mcp-stdio-session-v1", "guard-mcp-stdio-session-result.v1", "timeout"),
+        ("policy_decision_lookup", "policy-decision-lookup-v1", "guard-policy-decision-lookup-result.v1", "error"),
+    ],
+)
+@pytest.mark.parametrize("schema_kind", ["matching", "wrong", "missing"])
+def test_versioned_operation_replies_validate_schema_before_status(
+    transport,
+    tmp_path,
+    operation,
+    feature,
+    schema,
+    status,
+    schema_kind,
+):
+    transport.status.capabilities.features = ("resident-protocol-v2", feature)
+    reply = {"status": status, "code": "native_policy_decision_lookup_write_failed"}
+    if schema_kind != "missing":
+        reply["schema"] = schema if schema_kind == "matching" else "unrelated-result.v1"
+    transport.client.return_value = json.dumps(reply).encode()
+    actual = bridge._resident_request(
+        operation=operation,
+        request={},
+        guard_home=tmp_path,
+        timeout_seconds=1.0,
+        required_feature=feature,
+        response_schema=schema,
+    )
+    if schema_kind == "matching":
+        assert actual == reply
+        transport.succeeded.assert_called_once()
+    else:
+        assert actual is None
+        transport.succeeded.assert_not_called()
+        transport.failed.assert_called_once()
+
+
+@pytest.mark.parametrize("result", [{"status": "ok", "tools": []}, {"status": "failed", "reason": "timeout"}])
+def test_mcp_probe_accepts_native_result_without_outer_status(transport, tmp_path, result):
+    transport.status.capabilities.features = ("resident-protocol-v2", "mcp-stdio-probe-v1")
+    reply = {"schema": "guard-mcp-stdio-probe-result.v1", "result": result}
+    transport.client.return_value = json.dumps(reply).encode()
+    assert (
+        bridge._resident_request(
+            operation="mcp_stdio_probe",
+            request={},
+            guard_home=tmp_path,
+            timeout_seconds=1.0,
+            required_feature="mcp-stdio-probe-v1",
+            response_schema="guard-mcp-stdio-probe-result.v1",
+        )
+        == reply
+    )

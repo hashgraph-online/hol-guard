@@ -6,7 +6,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-_ARTIFACTS = {
+_STATIC_ARTIFACTS = {
     "contracts/extensions/native-command-program.v1.json": "extensions/native-command-program.v1.json",
     "contracts/guard-cloud-review/v2/contract.json": "guard-cloud-review/v2/contract.json",
     "contracts/guard-cloud-review/v2/command-result.json": "guard-cloud-review/v2/command-result.json",
@@ -14,21 +14,30 @@ _ARTIFACTS = {
     "docs/guard/contracts/guard-cloud-review.md": "guard-cloud-review/guard-cloud-review.md",
     "contracts/extensions/trust-class-map.v1.json": "extensions/trust-class-map.v1.json",
     "contracts/extensions/contribution.v1.schema.json": "extensions/contribution.v1.schema.json",
-    "contributions/extensions/command.blitcp.json": "extensions/contributions/command.blitcp.json",
-    "contributions/extensions/command.noodle.json": "extensions/contributions/command.noodle.json",
-    "contributions/extensions/command.ollama.json": "extensions/contributions/command.ollama.json",
-    "contributions/extensions/command.probe.json": "extensions/contributions/command.probe.json",
-    "contributions/extensions/command.repo2nb.json": "extensions/contributions/command.repo2nb.json",
-    "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
-    "contributions/extensions/command.tui-runner.json": "extensions/contributions/command.tui-runner.json",
-    "contributions/extensions/command.uivoid.json": "extensions/contributions/command.uivoid.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
-    "contributions/mcp-servers/mcp.contribos.json": "mcp_servers/contributions/mcp.contribos.json",
-    "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
-    "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",
-    "contributions/mcp-servers/mcp.pr-ui-compare.json": "mcp_servers/contributions/mcp.pr-ui-compare.json",
-    "contributions/mcp-servers/mcp.reaper.json": "mcp_servers/contributions/mcp.reaper.json",
 }
+
+# Contribution payloads are enumerated, not listed: every regular JSON file
+# present in the contributions tree is staged so a new contribution never
+# needs to edit this script.
+_CONTRIBUTION_SOURCES = (
+    ("contributions/extensions", "command.*.json", "extensions/contributions"),
+    ("contributions/mcp-servers", "mcp.*.json", "mcp_servers/contributions"),
+)
+
+
+def _artifacts(source_root: Path) -> dict[str, str]:
+    artifacts = dict(_STATIC_ARTIFACTS)
+    for relative_dir, pattern, destination_dir in _CONTRIBUTION_SOURCES:
+        source_dir = source_root / relative_dir
+        if not source_dir.is_dir():
+            raise FileNotFoundError(f"required contribution directory is missing: {relative_dir}")
+        matched = [path for path in sorted(source_dir.glob(pattern)) if path.is_file() and not path.is_symlink()]
+        if not matched:
+            raise FileNotFoundError(f"required contribution directory holds no payloads: {relative_dir} ({pattern})")
+        for path in matched:
+            artifacts[path.relative_to(source_root).as_posix()] = f"{destination_dir}/{path.name}"
+    return artifacts
 
 
 def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) -> tuple[Path, ...]:
@@ -40,11 +49,21 @@ def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) 
         if destination_root is not None
         else source_root / "src/codex_plugin_scanner/guard/contracts/data"
     )
-    staged: list[Path] = []
-    for source_name, destination_name in _ARTIFACTS.items():
-        source = source_root / source_name
-        if not source.is_file():
+    # Validate the complete artifact map before touching staged files so a
+    # missing source can never leave a half-staged bundle behind.
+    artifacts = _artifacts(source_root)
+    for source_name in artifacts:
+        if not (source_root / source_name).is_file():
             raise FileNotFoundError(f"required packaged contract artifact is missing: {source_name}")
+    # Stale copies of removed contributions must not linger in a bundle: the
+    # contribution destinations hold only staged payloads, so reset them.
+    for _relative_dir, _pattern, destination_dir in _CONTRIBUTION_SOURCES:
+        staged_dir = data_root / destination_dir
+        if staged_dir.is_dir():
+            shutil.rmtree(staged_dir)
+    staged: list[Path] = []
+    for source_name, destination_name in artifacts.items():
+        source = source_root / source_name
         destination = data_root / destination_name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)

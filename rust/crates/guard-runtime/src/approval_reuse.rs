@@ -60,7 +60,7 @@ fn evaluate(request: &ApprovalReuseRequestV1) -> Result<serde_json::Value, Strin
 #[allow(dead_code)]
 pub(crate) fn evaluate_approval_reuse_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value = crate::strict_json_value(bytes)?;
-    let request: ApprovalReuseRequestV1 = serde_json::from_value(value)
+    let request: ApprovalReuseRequestV1 = crate::strict_json::from_value(value)
         .map_err(|_| "native_approval_reuse_invalid_json".to_owned())?;
     evaluate_approval_reuse_request(&request)
 }

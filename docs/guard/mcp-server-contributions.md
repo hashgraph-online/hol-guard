@@ -27,9 +27,9 @@ Operators can still add an unlisted MCP server with **Add custom extension**. Cu
 
 1. Add `contributions/mcp-servers/mcp.<name>.json`.
 2. New catalog ids default to `external` and opt-in. Extension builder CI stages missing entries in the shared trust map before building; contributors do not need to edit that shared list.
-3. Package the JSON through Hatch force-include and the packaged-contract copy script. The Builder's reviewed `apply` plan handles these integration edits for generated kits.
-4. Submit the authored MCP input and tests together with the packaging integration edits in step 3. In particular, the frozen-build copy list must include the new MCP JSON; source-only trust preparation does not replace that packaging integration. Do not commit generated catalogs or directory files. CI prepares and verifies projections on the PR merge checkout, and maintainer artifact regeneration publishes shared outputs after merge.
-5. Run `tests/test_guard_mcp_server_contribution.py`, the trust checks, and any generated MCP test file using the [validation workflow](extension-builder/VALIDATION.md#source-tree-checks).
+3. Package the JSON through Hatch force-include. The packaged-contract copy script enumerates `contributions/mcp-servers/` automatically, so no script edit is required. The Builder's reviewed `apply` plan handles any remaining integration edits for generated kits.
+4. Submit the authored MCP input together with the packaging integration edits in step 3. Do not commit generated catalogs or directory files. CI prepares and verifies projections on the PR merge checkout, and maintainer artifact regeneration publishes shared outputs after merge.
+5. Run `tests/test_guard_mcp_server_contribution.py` and the trust checks using the [validation workflow](extension-builder/VALIDATION.md#source-tree-checks).
 
 Do not declare `trusted-library` or `first-party`. The schema only allows `external`.
 

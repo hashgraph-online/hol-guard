@@ -1,3 +1,3 @@
 """Single source of truth for tool version."""
 
-__version__ = "3.25.2"  # x-release-please-version
+__version__ = "3.26.0"  # x-release-please-version
