@@ -1666,7 +1666,12 @@ def run_native_generic_payload(
             output_stream=output_stream,
             as_json=getattr(args, "json", False),
         )
-        return 1 if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} else 0
+        from .commands_support_runtime_resolution import _canonical_harness_name
+        from .native_hook_exit_code import native_hook_verdict_exit_code
+
+        return native_hook_verdict_exit_code(
+            _canonical_harness_name(args.harness), policy_action, hook_event_name
+        )
     blocking = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     hook_envelope["continue"] = True
     hook_envelope["decision"] = "block" if blocking else "allow"
@@ -1679,7 +1684,12 @@ def run_native_generic_payload(
         # The caller replayed a decision that was already recorded upstream;
         # the envelope acknowledges it without re-blocking the harness.
         return 0
-    return 1 if blocking else 0
+    from .commands_support_runtime_resolution import _canonical_harness_name
+    from .native_hook_exit_code import native_hook_verdict_exit_code
+
+    return native_hook_verdict_exit_code(
+        _canonical_harness_name(args.harness), policy_action, hook_event_name
+    )
 
 
 __all__ = [

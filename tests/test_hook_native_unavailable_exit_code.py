@@ -55,13 +55,13 @@ class TestAvailabilityResponseIsDeny:
 class TestVerdictExitCodeContract:
     """The shared table every emit path delegates to."""
 
-    @pytest.mark.parametrize("h", ("cursor", "devin", "kimi", "hermes"))
+    @pytest.mark.parametrize("h", ("pi", "omp", "cursor", "devin", "kimi", "hermes"))
     def test_rc_block_is_two(self, h):
         assert native_hook_verdict_exit_code(h, "block") == 2
         assert native_hook_verdict_exit_code(h, "allow") == 0
         assert native_hook_verdict_exit_code(h, "review") == 2
 
-    @pytest.mark.parametrize("h", ("pi", "omp", "opencode", "superagent"))
+    @pytest.mark.parametrize("h", ("opencode", "superagent"))
     def test_rc_block_is_one(self, h):
         # rc-driven generic contract: exitCode 1 -> block, 0 -> allow.
         assert native_hook_verdict_exit_code(h, "block") == 1
@@ -105,7 +105,12 @@ class TestNativeUnavailableExitCode:
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 0, h
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
 
+    def test_rc2_harnesses_deny(self):
+        for h in ("pi", "omp"):
+            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 2, h
+            assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
+
     def test_rc_driven_deny_rc1(self):
-        for h in ("pi", "omp", "opencode", "superagent"):
+        for h in ("opencode", "superagent"):
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 1, h
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h

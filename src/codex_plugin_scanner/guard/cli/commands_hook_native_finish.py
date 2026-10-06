@@ -49,6 +49,7 @@ from .commands_support_runtime_artifact_policy import (
     _runtime_artifact_fail_closed_floor,
 )
 from .commands_parser_helpers import *
+from .native_hook_exit_code import native_hook_verdict_exit_code
 
 from .commands_hook_native_state import (
     NativeArtifactHookState,
@@ -318,7 +319,9 @@ def finalize_native_artifact_hook(
             payload=payload,
             policy_action=policy_action,
         )
-        return 2
+        return native_hook_verdict_exit_code(
+            _canonical_harness_name(args.harness), policy_action, event_name
+        )
     if _canonical_harness_name(args.harness) == "codex" and (
         event_name == "UserPromptSubmit"
         or approval_context is not None
@@ -436,7 +439,7 @@ def finalize_native_artifact_hook(
                 payload=payload,
                 policy_action=policy_action,
             )
-            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+            return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
         if canonical_harness == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response, zcode_hook_process_exit
 
@@ -470,7 +473,7 @@ def finalize_native_artifact_hook(
                 payload=payload,
                 policy_action=policy_action,
             )
-            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+            return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
         _emit_native_hook_response(
             harness=args.harness,
             policy_action=policy_action,
@@ -506,8 +509,8 @@ def finalize_native_artifact_hook(
         )
         # A flagged outcome still exits nonzero: the machine envelope carries
         # the pending re-approval or masked-output evidence consumers expect
-        # a failing rc for.
-        return 1 if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} else 0
+        # a failing rc for.  The shared per-harness contract maps it.
+        return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
     response_payload["continue"] = True
     response_payload["decision"] = (
         "block" if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} else "allow"
@@ -523,7 +526,7 @@ def finalize_native_artifact_hook(
         # The caller replayed a decision that was already recorded upstream;
         # the envelope acknowledges it without re-blocking the harness.
         return 0
-    return 1 if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} else 0
+    return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
 
 __all__ = [
     "finalize_native_artifact_hook",

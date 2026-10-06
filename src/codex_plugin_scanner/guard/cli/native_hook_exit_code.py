@@ -36,8 +36,11 @@ _BLOCKING_ACTIONS = frozenset(
 # branches on ``result.exitCode === 1`` to throw the block (see
 # adapters/opencode_pretool_template.py); codex/claude/kimi are NOT listed —
 # they read ``permissionDecision`` and must exit 0 on deny.
-_RC_BLOCK_IS_ONE = frozenset({"pi", "omp", "opencode", "superagent"})
-_RC_BLOCK_IS_TWO = frozenset({"cursor", "devin", "kimi", "hermes"})
+_RC_BLOCK_IS_ONE = frozenset({"opencode", "superagent"})
+# pi/omp/devin/cursor/kimi/hermes exit 2 on a blocking verdict in the
+# native-managed finish path (commands_hook_native_finish); the emitted JSON
+# is advisory and the exit status is what denies the action.
+_RC_BLOCK_IS_TWO = frozenset({"pi", "omp", "cursor", "devin", "kimi", "hermes"})
 # Envelope-driven harnesses that must exit 0 even on a blocking verdict.
 _RC_BLOCK_IS_ZERO_ENVELOPE = frozenset({"codex", "claude-code"})
 

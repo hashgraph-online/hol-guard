@@ -303,7 +303,8 @@ def test_cli_native_unavailable_preserves_native_recording_posture(
         recording_only=recording_only,
     )
 
-    # pi/omp are generic-contract harnesses: block verdict -> rc 1, allow -> 0.
-    assert rc == (1 if decision == "block" else 0)
+    # pi/omp exit 2 on a blocking verdict (matches commands_hook_native_finish
+    # native-managed rc 2); allow -> 0.
+    assert rc == (2 if decision == "block" else 0)
     assert response["decision"] == decision
     assert response["reason_code"] == reason_code
