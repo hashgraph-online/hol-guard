@@ -24,6 +24,7 @@ mod safe_scalar;
 mod safe_writes;
 mod search;
 mod search_scope;
+mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
 mod segment_proof;

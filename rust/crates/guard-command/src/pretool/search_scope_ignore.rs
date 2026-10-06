@@ -13,7 +13,7 @@ pub(super) const MAX_IGNORE_RULES: usize = 4_096;
 
 #[derive(Debug, Clone)]
 pub(super) struct IgnoreRule {
-    /// Directory containing the rule source, relative to the repository root.
+    /// Directory containing the rule source, in `slash_path` form.
     base: String,
     pattern: String,
     negated: bool,
@@ -108,19 +108,32 @@ fn trim_unescaped_trailing_spaces(line: &str) -> &str {
     &line[..end]
 }
 
-/// Apply git's last-match-wins rule. `relative` is relative to the
-/// repository root and uses `/` separators.
+/// Apply ripgrep's precedence: a matching `.rgignore`/`.ignore` rule
+/// decides first; otherwise git sources decide. Within each tier the last
+/// matching rule wins. `path` and every rule base share `slash_path` form.
 pub(super) fn is_ignored(
-    rules: &[IgnoreRule],
-    relative: &str,
+    custom: &[IgnoreRule],
+    git: &[IgnoreRule],
+    path: &str,
     is_directory: bool,
 ) -> Result<bool, ScopeUnproven> {
-    let mut ignored = false;
+    if let Some(ignored) = last_match(custom, path, is_directory)? {
+        return Ok(ignored);
+    }
+    Ok(last_match(git, path, is_directory)?.unwrap_or(false))
+}
+
+fn last_match(
+    rules: &[IgnoreRule],
+    path: &str,
+    is_directory: bool,
+) -> Result<Option<bool>, ScopeUnproven> {
+    let mut decision = None;
     for rule in rules {
         if rule.directory_only && !is_directory {
             continue;
         }
-        let Some(local) = path_below_base(relative, &rule.base) else {
+        let Some(local) = path_below_base(path, &rule.base) else {
             continue;
         };
         let target = if rule.anchored {
@@ -129,22 +142,35 @@ pub(super) fn is_ignored(
             local.rsplit('/').next().unwrap_or(local)
         };
         match glob_matches(&rule.pattern, target) {
-            Ok(true) => ignored = !rule.negated,
+            Ok(true) => decision = Some(!rule.negated),
             Ok(false) => {}
             // A re-include rule could expose a file this proof would skip.
             Err(_) if rule.negated => return Err(ScopeUnproven),
             Err(_) => {}
         }
     }
-    Ok(ignored)
+    Ok(decision)
 }
 
-fn path_below_base<'a>(relative: &'a str, base: &str) -> Option<&'a str> {
+fn path_below_base<'a>(path: &'a str, base: &str) -> Option<&'a str> {
     if base.is_empty() {
-        return Some(relative);
+        return Some(path).filter(|path| !path.is_empty());
     }
-    relative
-        .strip_prefix(base)
+    path.strip_prefix(base)
         .and_then(|rest| rest.strip_prefix('/'))
         .filter(|rest| !rest.is_empty())
+}
+
+/// Render an absolute path as `/`-joined normal components so rule bases and
+/// entries compare the same way on every platform.
+pub(super) fn slash_path(path: &Path) -> Option<String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(part) => parts.push(part.to_str()?),
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {}
+            _ => return None,
+        }
+    }
+    Some(parts.join("/"))
 }

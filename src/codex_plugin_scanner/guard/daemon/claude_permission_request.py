@@ -11,13 +11,17 @@ if TYPE_CHECKING:
 
 
 def claude_permission_request_response(store: GuardStore, payload: dict[str, object]) -> dict[str, object]:
-    """Defer Claude's permission dialog to the user, with any pending Guard context.
+    """Present a Claude permission dialog without granting approval.
 
-    Claude raises this event only after PreToolUse let the call continue. The
-    native PreToolUse verdict already decided the action, so this response
-    presents Guard context and never supplies a decision.
+    Claude raises this event only after PreToolUse let the call continue. A
+    pending Guard review that expects an explicit answer keeps its gate: the
+    dialog is denied and Claude is directed to the Guard approval question.
+    Otherwise Guard adds any review context and defers to Claude's dialog.
     """
     from ..cli.commands_support_claude_approval import (
+        _claude_guard_approval_question_message,
+        _claude_permission_notice_prefers_ask_user_question,
+        _claude_permission_prompt_system_message,
         _claude_permission_request_additional_context,
         _claude_permission_request_system_message,
     )
@@ -34,6 +38,18 @@ def claude_permission_request_response(store: GuardStore, payload: dict[str, obj
     if notice is None:
         return response
     _mark_claude_pending_permission_prompt_seen(store=store, payload=payload, notice=notice)
+    if _claude_permission_notice_prefers_ask_user_question(notice):
+        return {
+            "systemMessage": _claude_permission_prompt_system_message(payload=payload, notice=notice),
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {
+                    "behavior": "deny",
+                    "message": _claude_guard_approval_question_message(notice),
+                    "interrupt": False,
+                },
+            },
+        }
     reason = str(notice.get("reason") or "HOL Guard requires review before this action can execute.")
     response["systemMessage"] = _claude_permission_request_system_message(payload=payload, native_reason=reason)
     response["hookSpecificOutput"] = {

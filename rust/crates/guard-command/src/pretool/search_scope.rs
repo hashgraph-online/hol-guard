@@ -1,19 +1,21 @@
 //! Native search-scope proof for Claude Code's structured `Grep` tool.
 //!
-//! Claude's `Grep` searches hidden files, honors `.gitignore`, and skips
+//! Claude's `Grep` searches hidden files, honors ignore files, and skips
 //! `.git`. A directory search is allowed only after a bounded metadata walk
 //! shows that no sensitive file is reachable. File contents are never read;
 //! only ignore files are parsed. Any ambiguity falls back to normal review.
 
-use super::search_scope_glob::{expand_braces, glob_matches};
-use super::search_scope_ignore::{is_ignored, load_ignore_file, IgnoreRule, ScopeUnproven};
+use super::search_scope_filter::{Override, SearchFilter};
+use super::search_scope_ignore::{
+    is_ignored, load_ignore_file, slash_path, IgnoreRule, ScopeUnproven,
+};
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 const MAX_SCOPE_ENTRIES: usize = 20_000;
 const MAX_SCOPE_DEPTH: usize = 64;
-const MAX_REPOSITORY_ANCESTORS: usize = 64;
+const MAX_ANCESTORS: usize = 64;
 
 /// Keys Claude Code documents for `Grep`. Unknown keys could change scope.
 const CLAUDE_GREP_KEYS: &[&str] = &[
@@ -114,124 +116,57 @@ fn verified_directory_root(
     canonical.is_dir().then_some(canonical)
 }
 
-/// The structured `glob` filter. `None` from `from_input` means the filter
-/// cannot be modeled, so the caller must not claim a proof.
-struct SearchFilter {
-    include: Vec<String>,
-    exclude: Vec<String>,
-}
-
-impl SearchFilter {
-    fn from_input(input: &Map<String, Value>) -> Option<Self> {
-        let mut filter = Self {
-            include: Vec::new(),
-            exclude: Vec::new(),
-        };
-        let Some(glob) = input.get("glob") else {
-            return Some(filter);
-        };
-        let glob = glob.as_str()?;
-        // Hosts may split lists on whitespace or commas; that would add
-        // globs this proof did not model.
-        if glob.is_empty() || glob.contains(char::is_whitespace) || has_top_level_comma(glob) {
-            return None;
-        }
-        let (negated, body) = match glob.strip_prefix('!') {
-            Some(rest) => (true, rest),
-            None => (false, glob),
-        };
-        let expanded = expand_braces(body).ok()?;
-        for pattern in &expanded {
-            // Prove the pattern parses before it is used to skip files.
-            glob_matches(pattern, "probe").ok()?;
-        }
-        // Path-shaped globs depend on ripgrep's match base. Never let one
-        // skip a file: drop exclusions and treat inclusion as unrestricted.
-        if expanded.iter().any(|pattern| pattern.contains('/')) {
-            return Some(filter);
-        }
-        if negated {
-            filter.exclude = expanded;
-        } else {
-            filter.include = expanded;
-        }
-        Some(filter)
-    }
-
-    /// Whether the host search reads this file. Only basename globs reach
-    /// here; an unmatched pattern error never skips a file.
-    fn searches(&self, relative: &str) -> bool {
-        let basename = relative.rsplit('/').next().unwrap_or(relative);
-        if self
-            .exclude
-            .iter()
-            .any(|pattern| glob_matches(pattern, basename).unwrap_or(false))
-        {
-            return false;
-        }
-        self.include.is_empty()
-            || self
-                .include
-                .iter()
-                .any(|pattern| glob_matches(pattern, basename).unwrap_or(true))
-    }
-}
-
-fn has_top_level_comma(glob: &str) -> bool {
-    let mut depth = 0_i32;
-    for character in glob.chars() {
-        match character {
-            '{' => depth += 1,
-            '}' => depth -= 1,
-            ',' if depth == 0 => return true,
-            _ => {}
-        }
-    }
-    false
-}
-
-/// Locate the enclosing repository so its ignore files apply, as ripgrep's
-/// `.gitignore` handling only applies inside a Git repository.
+/// Locate the enclosing repository so its `.gitignore` files apply, as
+/// ripgrep honors them only inside a Git repository.
 fn repository_root(root: &Path) -> Option<PathBuf> {
-    let mut current = Some(root);
-    for _ in 0..MAX_REPOSITORY_ANCESTORS {
-        let directory = current?;
-        if std::fs::symlink_metadata(directory.join(".git")).is_ok() {
-            return Some(directory.to_path_buf());
-        }
-        current = directory.parent();
-    }
-    None
+    root.ancestors()
+        .take(MAX_ANCESTORS)
+        .find(|directory| std::fs::symlink_metadata(directory.join(".git")).is_ok())
+        .map(Path::to_path_buf)
 }
 
-fn relative_slash_path(path: &Path, base: &Path) -> Option<String> {
-    let relative = path.strip_prefix(base).ok()?;
-    let mut rendered = Vec::new();
-    for component in relative.components() {
-        rendered.push(component.as_os_str().to_str()?.to_owned());
+/// `.ignore` and `.rgignore` rules from every ancestor above the search
+/// root, outermost first. ripgrep reads these with or without a repository.
+fn ancestor_custom_rules(root: &Path) -> Result<Vec<IgnoreRule>, ScopeUnproven> {
+    let mut rules = Vec::new();
+    let ancestors: Vec<&Path> = root.ancestors().skip(1).take(MAX_ANCESTORS).collect();
+    if root.ancestors().skip(1).nth(MAX_ANCESTORS).is_some() {
+        return Err(ScopeUnproven);
     }
-    Some(rendered.join("/"))
+    for directory in ancestors.into_iter().rev() {
+        load_custom_rules(directory, &mut rules)?;
+    }
+    Ok(rules)
 }
 
-fn ancestor_rules(root: &Path, repository: &Path) -> Result<Vec<IgnoreRule>, ScopeUnproven> {
+fn load_custom_rules(directory: &Path, rules: &mut Vec<IgnoreRule>) -> Result<(), ScopeUnproven> {
+    let base = slash_path(directory).ok_or(ScopeUnproven)?;
+    // `.rgignore` outranks `.ignore` in the same directory.
+    load_ignore_file(&directory.join(".ignore"), &base, rules)?;
+    load_ignore_file(&directory.join(".rgignore"), &base, rules)
+}
+
+/// Repository exclude rules and `.gitignore` files from the repository root
+/// down to the search root's parent.
+fn ancestor_git_rules(root: &Path, repository: &Path) -> Result<Vec<IgnoreRule>, ScopeUnproven> {
     let mut rules = Vec::new();
     let git_directory = repository.join(".git");
     if std::fs::symlink_metadata(&git_directory).is_ok_and(|metadata| metadata.is_dir()) {
-        load_ignore_file(&git_directory.join("info").join("exclude"), "", &mut rules)?;
+        let base = slash_path(repository).ok_or(ScopeUnproven)?;
+        load_ignore_file(
+            &git_directory.join("info").join("exclude"),
+            &base,
+            &mut rules,
+        )?;
     }
-    let relative = relative_slash_path(root, repository).ok_or(ScopeUnproven)?;
-    let mut directory = repository.to_path_buf();
-    let mut base = String::new();
-    load_ignore_file(&directory.join(".gitignore"), &base, &mut rules)?;
-    for part in relative.split('/').filter(|part| !part.is_empty()) {
-        directory.push(part);
-        base = if base.is_empty() {
-            part.to_owned()
-        } else {
-            format!("{base}/{part}")
-        };
-        // An ignored ancestor would make the search root itself ignored;
-        // ripgrep still searches an explicit root, so keep walking.
+    let mut chain: Vec<&Path> = root
+        .ancestors()
+        .skip(1)
+        .take_while(|directory| directory.starts_with(repository))
+        .collect();
+    chain.reverse();
+    for directory in chain {
+        let base = slash_path(directory).ok_or(ScopeUnproven)?;
         load_ignore_file(&directory.join(".gitignore"), &base, &mut rules)?;
     }
     Ok(rules)
@@ -242,37 +177,52 @@ fn sensitive_scope_file(path: &Path) -> bool {
         || guard_secure_fs::credential_named_path(path)
 }
 
+struct PendingDirectory {
+    path: PathBuf,
+    depth: usize,
+    custom: Rc<Vec<IgnoreRule>>,
+    git: Rc<Vec<IgnoreRule>>,
+}
+
 fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root);
-    let rules = match &repository {
-        Some(repository) => ancestor_rules(root, repository)?,
+    let git = match &repository {
+        Some(repository) => ancestor_git_rules(root, repository)?,
         None => Vec::new(),
     };
-    let repository_base = repository.as_deref().unwrap_or(root);
-    let mut pending = vec![(root.to_path_buf(), 0_usize, Rc::new(rules))];
+    let mut pending = vec![PendingDirectory {
+        path: root.to_path_buf(),
+        depth: 0,
+        custom: Rc::new(ancestor_custom_rules(root)?),
+        git: Rc::new(git),
+    }];
     let mut inspected = 0_usize;
-    while let Some((directory, depth, inherited)) = pending.pop() {
-        if depth > MAX_SCOPE_DEPTH {
+    while let Some(directory) = pending.pop() {
+        if directory.depth > MAX_SCOPE_DEPTH {
             return Err(ScopeUnproven);
         }
-        let mut rules = Rc::clone(&inherited);
-        if repository.is_some() && depth > 0 {
-            let base = relative_slash_path(&directory, repository_base).ok_or(ScopeUnproven)?;
+        let base = slash_path(&directory.path).ok_or(ScopeUnproven)?;
+        let mut git = Rc::clone(&directory.git);
+        if repository.is_some() {
             // A nested repository may not inherit outer rules. Dropping them
             // can only widen the modeled scope.
-            let nested = std::fs::symlink_metadata(directory.join(".git")).is_ok();
-            let mut extended = if nested {
-                Vec::new()
-            } else {
-                (*inherited).clone()
-            };
+            let nested = directory.depth > 0
+                && std::fs::symlink_metadata(directory.path.join(".git")).is_ok();
+            let mut extended = if nested { Vec::new() } else { (*git).clone() };
             let before = extended.len();
-            load_ignore_file(&directory.join(".gitignore"), &base, &mut extended)?;
+            load_ignore_file(&directory.path.join(".gitignore"), &base, &mut extended)?;
             if nested || extended.len() != before {
-                rules = Rc::new(extended);
+                git = Rc::new(extended);
             }
         }
-        let entries = std::fs::read_dir(&directory).map_err(|_| ScopeUnproven)?;
+        let mut custom = Rc::clone(&directory.custom);
+        let mut extended = (*custom).clone();
+        let before = extended.len();
+        load_custom_rules(&directory.path, &mut extended)?;
+        if extended.len() != before {
+            custom = Rc::new(extended);
+        }
+        let entries = std::fs::read_dir(&directory.path).map_err(|_| ScopeUnproven)?;
         for entry in entries {
             let entry = entry.map_err(|_| ScopeUnproven)?;
             inspected += 1;
@@ -280,7 +230,9 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
                 return Err(ScopeUnproven);
             }
             let path = entry.path();
-            if entry.file_name() == ".git" {
+            let name = entry.file_name();
+            let name = name.to_str().ok_or(ScopeUnproven)?;
+            if name == ".git" {
                 continue;
             }
             // Metadata only: never follow links or open a candidate secret.
@@ -302,18 +254,25 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
             if !is_directory && !metadata.is_file() {
                 return Err(ScopeUnproven);
             }
-            if repository.is_some() {
-                let relative = relative_slash_path(&path, repository_base).ok_or(ScopeUnproven)?;
-                if is_ignored(&rules, &relative, is_directory)? {
-                    continue;
+            let searched = match filter.override_for(name, is_directory) {
+                Override::Skipped => continue,
+                Override::Searched => true,
+                Override::Undecided => {
+                    let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
+                    if is_ignored(&custom, &git, &rendered, is_directory)? {
+                        continue;
+                    }
+                    is_directory || filter.type_allows(name)
                 }
-            }
+            };
             if is_directory {
-                pending.push((path, depth + 1, Rc::clone(&rules)));
-                continue;
-            }
-            let search_relative = relative_slash_path(&path, root).ok_or(ScopeUnproven)?;
-            if filter.searches(&search_relative) && sensitive_scope_file(&path) {
+                pending.push(PendingDirectory {
+                    path,
+                    depth: directory.depth + 1,
+                    custom: Rc::clone(&custom),
+                    git: Rc::clone(&git),
+                });
+            } else if searched && sensitive_scope_file(&path) {
                 return Err(ScopeUnproven);
             }
         }

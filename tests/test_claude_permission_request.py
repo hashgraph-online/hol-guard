@@ -31,12 +31,14 @@ def test_permission_request_without_pending_guard_review_is_a_bare_passthrough(t
     }
 
 
-def test_permission_request_with_pending_guard_review_adds_context_but_no_decision(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pending_package_review_adds_context_but_no_decision(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     seen: list[dict[str, object] | None] = []
-    notice = {"tool_name": "Bash", "reason": "HOL Guard requires fresh approval for this command."}
+    notice = {
+        "tool_name": "npm",
+        "artifact_type": "package_request",
+        "reason": "HOL Guard requires fresh approval for this command.",
+    }
     monkeypatch.setattr(commands_support_hook_state, "_peek_claude_permission_notice", lambda _store, _payload: notice)
     monkeypatch.setattr(
         commands_support_hook_state,
@@ -76,3 +78,24 @@ def test_worker_routes_claude_permission_requests_before_native_review(
 
     assert response["guard_permission_passthrough"] is True
     assert "decision" not in response["hookSpecificOutput"]
+
+
+def test_pending_tool_review_keeps_the_guard_approval_question_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    notice = {"tool_name": "Bash", "reason": "HOL Guard requires fresh approval for this command."}
+    monkeypatch.setattr(commands_support_hook_state, "_peek_claude_permission_notice", lambda _store, _payload: notice)
+    monkeypatch.setattr(
+        commands_support_hook_state,
+        "_mark_claude_pending_permission_prompt_seen",
+        lambda *, store, payload, notice: None,
+    )
+
+    response = claude_permission_request.claude_permission_request_response(store, dict(_PAYLOAD))
+
+    assert "guard_permission_passthrough" not in response
+    decision = response["hookSpecificOutput"]["decision"]
+    assert decision["behavior"] == "deny"
+    assert decision["interrupt"] is False
+    assert "AskUserQuestion" in decision["message"]

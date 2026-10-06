@@ -171,10 +171,17 @@ fn evaluate_envelope(
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
+    // A search pattern is data, not a command: a proven Claude `Grep` scope
+    // skips the command authority but still passes the command controls below.
+    let search_scope_proven = event == "PreToolUse"
+        && harness == "claude-code"
+        && signals.tool_name.as_deref() == Some("Grep")
+        && signals.url_values.is_empty()
+        && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd);
     if let Some(projection) = signals
         .command
         .as_deref()
-        .filter(|_| project_redirects)
+        .filter(|_| project_redirects && !search_scope_proven)
         .and_then(|command| redirect_projection::project(command, context))
     {
         let projected_payload = payload_with_command(payload, &projection.command);
@@ -202,15 +209,41 @@ fn evaluate_envelope(
             return redirect_projection::join(projected, raw, projection.writes_file);
         }
     }
-    if event == "PreToolUse"
-        && harness == "claude-code"
-        && signals.tool_name.as_deref() == Some("Grep")
-        && signals.url_values.is_empty()
-        && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd)
-    {
-        // A search pattern is data, not a command, so it never reaches the
-        // command authority on this path.
-        return generic_result(
+    let task_metadata = event == "PreToolUse"
+        && agent_metadata::bounded_task_list(payload, signals.tool_name.as_deref())
+        && signals.command.is_none()
+        && !signals.package_present
+        && signals.path_values.is_empty()
+        && signals.url_values.is_empty();
+    let command_decision = signals
+        .command
+        .as_deref()
+        .filter(|_| !search_scope_proven)
+        .map(|command| {
+            evaluate_pre_tool_with_execution_context(
+                &CommandModelRequestV1 {
+                    command: command.to_owned(),
+                    dialect: "posix".to_owned(),
+                    transport: "shell_string".to_owned(),
+                    extraction_provenance: "pre-tool-generic".to_owned(),
+                },
+                home_dir,
+                cwd,
+                deadline,
+                execution_environment,
+            )
+        });
+    // Parsed benign commands may contain credential words as search patterns.
+    // Preserve independent structured-path/content risk, not the raw-text hint.
+    if command_decision.as_ref().is_some_and(|decision| {
+        decision
+            .as_ref()
+            .is_ok_and(|decision| decision.explicitly_benign)
+    }) {
+        signals.sensitive_target = signals.independent_sensitive_target;
+    }
+    let mut result = if search_scope_proven {
+        generic_result(
             generic_action(
                 harness,
                 event,
@@ -222,38 +255,8 @@ fn evaluate_envelope(
             "allow",
             "native_bounded_search_scope",
             "The Rust authority proved this directory search cannot reach a sensitive file.",
-        );
-    }
-    let task_metadata = event == "PreToolUse"
-        && agent_metadata::bounded_task_list(payload, signals.tool_name.as_deref())
-        && signals.command.is_none()
-        && !signals.package_present
-        && signals.path_values.is_empty()
-        && signals.url_values.is_empty();
-    let command_decision = signals.command.as_deref().map(|command| {
-        evaluate_pre_tool_with_execution_context(
-            &CommandModelRequestV1 {
-                command: command.to_owned(),
-                dialect: "posix".to_owned(),
-                transport: "shell_string".to_owned(),
-                extraction_provenance: "pre-tool-generic".to_owned(),
-            },
-            home_dir,
-            cwd,
-            deadline,
-            execution_environment,
         )
-    });
-    // Parsed benign commands may contain credential words as search patterns.
-    // Preserve independent structured-path/content risk, not the raw-text hint.
-    if command_decision.as_ref().is_some_and(|decision| {
-        decision
-            .as_ref()
-            .is_ok_and(|decision| decision.explicitly_benign)
-    }) {
-        signals.sensitive_target = signals.independent_sensitive_target;
-    }
-    let mut result = if task_metadata {
+    } else if task_metadata {
         generic_result(
             generic_action(harness, event, PreToolActionTypeV1::Harness,
                 if signals.tool_name.as_deref() == Some("TaskOutput") { PreToolOperationV1::Read } else { PreToolOperationV1::Set }, true, false),
