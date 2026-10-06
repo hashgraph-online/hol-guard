@@ -264,7 +264,7 @@ def test_grok_protection_checks_flag_literal_home_prefix_deny_rules(tmp_path: Pa
     GrokHarnessAdapter().install(ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
     (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
-    managed_config = ctx.home_dir / ".grok" / "managed_config.toml"
+    managed_config = ctx.home_dir / ".grok" / "config.toml"
     managed_text = managed_config.read_text(encoding="utf-8")
     legacy_text = managed_text.replace(
         "Read(**/.ssh/**)",

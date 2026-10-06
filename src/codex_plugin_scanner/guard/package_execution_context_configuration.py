@@ -8,7 +8,7 @@ import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from .native_context import context_opaque_digest, context_sha256_digest
+from .native_context import context_package_environment_values, context_sha256_digest
 from .package_execution_context_inputs import ContextFiles, ContextUnavailableError
 
 _JS_MANAGERS = frozenset({"bun", "bunx", "npm", "npx", "pnpm", "yarn"})
@@ -17,63 +17,6 @@ _RUBY_MANAGERS = frozenset({"bundle", "bundler", "gem"})
 _MAX_CONFIG_FILE_BYTES = 2 * 1024 * 1024
 _MAX_TREE_FILES = 512
 
-_GENERIC_ENVIRONMENT_NAMES = frozenset(
-    {
-        "ALL_PROXY",
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "NO_PROXY",
-        "REQUESTS_CA_BUNDLE",
-        "SSL_CERT_DIR",
-        "SSL_CERT_FILE",
-        "all_proxy",
-        "http_proxy",
-        "https_proxy",
-        "no_proxy",
-    }
-)
-_MANAGER_ENVIRONMENT_NAMES: dict[str, frozenset[str]] = {
-    "js": frozenset(
-        {
-            "BUN_CONFIG_REGISTRY",
-            "NODE_AUTH_TOKEN",
-            "NPM_CONFIG_CAFILE",
-            "NPM_CONFIG_HTTPS_PROXY",
-            "NPM_CONFIG_PROXY",
-            "NPM_CONFIG_REGISTRY",
-            "NPM_CONFIG_STRICT_SSL",
-            "NPM_CONFIG_USERCONFIG",
-            "NPM_TOKEN",
-            "YARN_ENABLE_NETWORK",
-            "YARN_ENABLE_SCRIPTS",
-            "YARN_HTTP_PROXY",
-            "YARN_HTTPS_PROXY",
-            "YARN_NPM_AUTH_TOKEN",
-            "YARN_NPM_REGISTRY_SERVER",
-            "YARN_RC_FILENAME",
-        }
-    ),
-    "python": frozenset(
-        {
-            "PIP_CERT",
-            "PIP_CLIENT_CERT",
-            "PIP_CONFIG_FILE",
-            "PIP_EXTRA_INDEX_URL",
-            "PIP_FIND_LINKS",
-            "PIP_INDEX_URL",
-            "PIP_NO_INDEX",
-            "PIP_TRUSTED_HOST",
-            "UV_DEFAULT_INDEX",
-            "UV_EXTRA_INDEX_URL",
-            "UV_INDEX",
-            "UV_INDEX_URL",
-            "UV_NO_INDEX",
-        }
-    ),
-    "go": frozenset({"GONOPROXY", "GONOSUMDB", "GOPRIVATE", "GOPROXY", "GOSUMDB"}),
-    "jvm": frozenset({"GRADLE_OPTS", "MAVEN_ARGS", "MAVEN_OPTS"}),
-    "php": frozenset({"COMPOSER_AUTH", "COMPOSER_HOME", "COMPOSER_REPO_PACKAGIST"}),
-}
 _DYNAMIC_CODE_LOAD_RE = re.compile(r"(?:require\s*\(|import\s*\()")
 _ENV_REFERENCE_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _NPM_DYNAMIC_CONFIG_RE = re.compile(r"^\s*(?:globalconfig|userconfig)\s*=", re.IGNORECASE | re.MULTILINE)
@@ -347,32 +290,11 @@ def environment_material(
     environment: Mapping[str, str],
     referenced_names: Sequence[str],
 ) -> dict[str, object]:
-    """Hash policy-relevant environment values without persisting secrets."""
+    """Project native policy-relevant environment evidence; never hash locally."""
 
-    names = set(_GENERIC_ENVIRONMENT_NAMES)
-    manager_names: set[str] = set()
-    if manager in _JS_MANAGERS:
-        manager_names.update(_MANAGER_ENVIRONMENT_NAMES["js"])
-    elif manager in _PYTHON_MANAGERS:
-        manager_names.update(_MANAGER_ENVIRONMENT_NAMES["python"])
-    elif manager == "go":
-        manager_names.update(_MANAGER_ENVIRONMENT_NAMES["go"])
-    elif manager in {"gradle", "gradlew", "mvn", "mvnw"}:
-        manager_names.update(_MANAGER_ENVIRONMENT_NAMES["jvm"])
-    elif manager == "composer":
-        manager_names.update(_MANAGER_ENVIRONMENT_NAMES["php"])
-    names.update(manager_names)
-    names.update(name.lower() for name in manager_names)
-    names.update(referenced_names)
-    # identity hash; strict=False degrades to byte-identical local hash
-    values = {
-        name: (
-            context_opaque_digest(environment[name], unbound_label="env-var", strict=False)
-            if name in environment
-            else None
-        )
-        for name in sorted(names)
-    }
+    values = context_package_environment_values(manager, environment, referenced_names)
+    if not isinstance(values, dict):
+        raise ContextUnavailableError("native_package_context_runtime_unavailable")
     return {"variables": values}
 
 

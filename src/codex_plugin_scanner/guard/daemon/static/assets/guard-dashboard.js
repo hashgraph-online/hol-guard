@@ -28358,7 +28358,7 @@ const TIER_LABEL = {
 };
 function QueueBulkStickyBar(props) {
   if (!props.visible) return null;
-  const unit = props.selectedActionCount === 1 ? "read" : "reads";
+  const unit = props.selectedActionCount === 1 ? "action" : "actions";
   const ChipIcon = toneIcon(props.riskTone);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -28419,7 +28419,7 @@ function QueueBulkStatusBanner(props) {
 }
 function QueueBulkGatePrompt(props) {
   if (!props.visible) return null;
-  const unit = props.eligibleActionCount === 1 ? "read" : "reads";
+  const unit = props.eligibleActionCount === 1 ? "action" : "actions";
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
@@ -28429,7 +28429,7 @@ function QueueBulkGatePrompt(props) {
         unit,
         " at once"
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up a local approval password to unlock bulk approval for read-only file reads. Bulk approval always approves once and never remembers future reads." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Enable Ask for proof with a configured approval password to review eligible actions together. Bulk approval approves each action once and never remembers future actions." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",

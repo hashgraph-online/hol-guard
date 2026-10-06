@@ -195,7 +195,9 @@ fn required_nullable<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<St
     Option::<String>::deserialize(d)
 }
 
-fn domain(value: &str) -> bool {
+/// Canonical DNS-name syntax shared by recipient facts and policy selectors.
+/// This proves neither provider resolution nor organization membership.
+pub fn is_canonical_business_domain(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 253
         && value.split('.').all(|label| {
@@ -273,7 +275,7 @@ impl BusinessActionV1 {
                 .audience
                 .recipients
                 .iter()
-                .all(|r| digest(&r.identity_binding) && domain(&r.domain))
+                .all(|r| digest(&r.identity_binding) && is_canonical_business_domain(&r.domain))
         {
             return Err(Error::Invalid);
         }

@@ -64,6 +64,7 @@ fn execution_intent_evidence_is_authenticated_without_changing_decision_id() {
 fn every_receipt_field_is_authenticated() {
     let key = [0x5a; 32];
     let mut original = receipt();
+    original.business_review_binding = Some("f".repeat(64));
     authenticate_with_key(&mut original, &key).unwrap();
     let value = serde_json::to_value(&original).unwrap();
     for (field, previous) in value.as_object().unwrap() {
@@ -188,6 +189,22 @@ fn private_request_loading_rejects_forged_origin_and_preserves_legacy_review() {
             .unwrap();
     };
     write(&state);
+    super::super::workspace_review_request::load(&store, "request-1").unwrap();
+    assert_eq!(
+        super::super::workspace_review_decision::verify_and_claim_request(
+            &store,
+            "request-1",
+            &json!({}),
+        )
+        .unwrap_err(),
+        "native_policy_snapshot_missing"
+    );
+    // Also cover loading after ordinary policy admission, preserving the
+    // bot-added fixture while checking the missing-policy boundary first.
+    let snapshot = super::super::tests::signed_snapshot(1, &key_bytes, &root);
+    store
+        .push(&json!({"schema":"guard-policy-snapshot-push.v1", "snapshot":snapshot}))
+        .unwrap();
     super::super::workspace_review_request::load(&store, "request-1").unwrap();
     state["action"]["action_envelope"]["native_origin_receipt"]["request_digest"] =
         json!("c".repeat(64));

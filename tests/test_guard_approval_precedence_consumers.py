@@ -331,6 +331,7 @@ def test_package_policy_and_sandbox_context_changes_invalidate_review_approval(
     tmp_path: Path,
     changed_dimension: str,
     expected_reason: str,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -393,6 +394,7 @@ def test_package_policy_and_sandbox_context_changes_invalidate_review_approval(
 def test_package_lockfile_parser_version_changes_approval_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -474,6 +476,60 @@ def _dangerous_tool_artifact() -> GuardArtifact:
         config_path="/shared/.mcp.json",
         transport="stdio",
     )
+
+
+@pytest.mark.parametrize(
+    ("include_authority", "expected"),
+    [
+        (True, "42166ca3ebc09245c93f0b33ce989a75df475c38817fded4168ab4ec5699b0e4"),
+        (False, "5fcdb3a88b76692ed5f3344ac4bdecaa6034b5012eecdf602009a8e6004d333b"),
+    ],
+)
+def test_tool_call_hash_preserves_persisted_approval_identity(
+    native_context_digest: Path, include_authority: bool, expected: str,
+) -> None:
+    metadata = {
+        "server_fingerprint": {"resolved_executable": "/opt/bin/server", "tool_catalog_fingerprint": "catalog"},
+        "mcp_server_identity": {"identity_hash": "server"},
+        "mcp_tool_identity": {"schema_hash": "schema"},
+    }
+    if include_authority:
+        metadata.update({"mcp_tool_authority_hash": {"revision": 1}, "mcp_provider_catalog_hash": False})
+    artifact = GuardArtifact(
+        artifact_id="codex:mcp:filesystem:read_file", name="filesystem:read_file",
+        harness="codex", artifact_type="mcp_tool_call", source_scope="project",
+        config_path=".mcp.json", transport="stdio", metadata=metadata,
+    )
+    arguments = {
+        "path": "/opt/neutral/data/日本語.txt",
+        "limits": [1.0, -0.0, 1e-7, 2**80 + 1],
+        "nested": {"empty": {}, "missing": None},
+    }
+
+    assert build_tool_call_hash(artifact, arguments) == expected
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_tool_call_hash_cannot_mint_approval_when_native_digest_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: bool,
+) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    artifact = GuardArtifact(
+        artifact_id="codex:runtime:project:filesystem:read_file",
+        name="filesystem:read_file",
+        harness="codex",
+        artifact_type="tool_call",
+        source_scope="project",
+        config_path=".mcp.json",
+        command="read_file",
+        transport="stdio",
+    )
+    config = GuardConfig(workspace=tmp_path, guard_home=tmp_path / "guard-home") if configured else None
+    monkeypatch.setattr(native_context, "native_context_digest", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(ValueError, match="^native_mcp_tool_approval_hash_unavailable$"):
+        build_tool_call_hash(artifact, {"path": "data.txt"}, config=config)
 
 
 def test_tool_call_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path) -> None:

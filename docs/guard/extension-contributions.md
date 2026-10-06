@@ -92,27 +92,42 @@ permission. Use existing native operations and compose them with `any.v1`,
 callbacks, imports, candidate indexes, and contributor-supplied native
 function names are rejected.
 
-Build the compiler with the locked Rust toolchain:
+Contributors do not need a Rust toolchain. The reviewed compiler ships inside the
+installed `hol-guard` package at `codex_plugin_scanner/_native/guard-command-source`
+and is digest-verified on every invocation. Resolve it once, then pass it to the
+preparation command:
 
 ```sh
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+COMPILER=$(uv run --no-sync python -c \
+  'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler as f; print(f())')
+
+uv run --no-sync python scripts/prepare_extension_contribution.py \
+  --compiler "$COMPILER" \
+  --source contributions/command-sources/command.<name>.json \
+  --fixture tests/fixtures/command-source-<slug>.v1.json
 ```
 
-The compiler reads one bounded JSON build envelope from standard input. For a
-single addition, assemble an envelope with the independently reviewed trust
-map and the packaged baseline. This runnable example uses the checked-in
-synthetic `command.example-cli` source:
+For lower-level control, run the packaged compiler directly. It reads one bounded JSON
+build envelope from standard input. For a single addition, assemble an envelope with the
+independently reviewed trust map and the packaged baseline. This runnable example uses
+the checked-in synthetic `command.example-cli` source and the packaged binary:
 
 ```sh
+COMPILER=$(uv run --no-sync python -c \
+  'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler as f; print(f())')
+
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust contracts/extensions/trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
   > source-build.json
 
-rust/target/debug/guard-command-source validate < source-build.json
-rust/target/debug/guard-command-source compile < source-build.json > source-compiled.json
+"$COMPILER" validate < source-build.json
+"$COMPILER" compile < source-build.json > source-compiled.json
 ```
+
+Building from source with `cargo +1.88.0 build --locked -p guard-command` is only needed
+when reviewing or changing the native contract itself, not to compose existing operations.
 
 `base: "packaged"` compiles an addition against the admitted baseline and
 labels the result `addition-only-not-release-catalog`. It cannot replace an

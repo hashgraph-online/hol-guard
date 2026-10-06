@@ -58,6 +58,12 @@ pub fn policy_digest(snapshot: &PolicySnapshotV3) -> Result<String, SnapshotErro
                 &serde_json::to_value(binding).map_err(|_| SnapshotError::Serialization)?,
             )?));
     }
+    if let Some(binding) = &snapshot.business_policy {
+        value["business_policy_digest"] =
+            serde_json::Value::String(digest_bytes(&canonical_json_bytes(
+                &serde_json::to_value(binding).map_err(|_| SnapshotError::Serialization)?,
+            )?));
+    }
     Ok(digest_bytes(&canonical_json_bytes(&value)?))
 }
 

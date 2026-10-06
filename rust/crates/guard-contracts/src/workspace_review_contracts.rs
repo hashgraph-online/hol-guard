@@ -19,6 +19,10 @@ pub const NATIVE_WORKSPACE_REVIEW_DECISION_DOMAIN: &[u8] =
 pub const NATIVE_WORKSPACE_REVIEW_SEMANTIC_DECISION_DOMAIN: &[u8] =
     b"guard-native-workspace-review-semantic-decision-v1\0";
 pub const NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_RETRY_ONLY: &str = "validated_retry_only";
+/// For a native worker that retains the frozen provider input. This mode must
+/// never be accepted by the generic retry/grant-returning RPC.
+pub const NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_OWNED_DISPATCH: &str =
+    "owned_business_dispatch";
 pub const NATIVE_WORKSPACE_REVIEW_RETRY_SCOPE_DOMAIN: &[u8] =
     b"guard-native-workspace-review-retry-scope-v1\0";
 pub const NATIVE_WORKSPACE_REVIEW_REQUEST_BINDING_DOMAIN: &[u8] =
