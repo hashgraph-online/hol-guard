@@ -32,6 +32,6 @@
   ],
   "saferAlternatives": [
     "Keep index_project and index_now on Review: both write index artifacts into the project, and index_project can run heavy background indexing.",
-    "Read-only tools (map, explain, find_usages, impact_of_change, trace_call_chain, search_code, find_nodes, diff_context) stay on inherit; prefer them when the index is fresh."
+    "Read-only tools (get_context, read_graph, find_usages, impact_of_change, trace_call_chain, search_code, find_nodes, diff_context) stay on inherit; prefer them when the index is fresh."
   ]
 }
