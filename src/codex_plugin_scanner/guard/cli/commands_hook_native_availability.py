@@ -75,28 +75,16 @@ def _native_unavailable_exit_code(
     """
 
     from .commands_hook_native_finish import _canonical_harness_name
+    from .native_hook_exit_code import native_hook_verdict_exit_code
 
     harness = _canonical_harness_name(getattr(args, "harness", "codex"))
     deny = _availability_response_is_deny(response)
-    if harness == "cursor":
-        return 2 if deny else 0
-    if harness == "grok":
-        from ..adapters.grok_hooks import grok_hook_process_exit
-
-        return grok_hook_process_exit("block" if deny else "allow")
-    if harness == "zcode":
-        from ..adapters.zcode_hooks import zcode_hook_process_exit
-
-        return zcode_hook_process_exit(policy_action="block" if deny else "allow", event_name=event_name)
-    if harness == "devin":
-        return 2 if deny else 0
-    # opencode is rc-driven: its pretool plugin maps exitCode 1 -> block,
-    # 0 -> allow, anything else -> hook error (opencode_pretool_template).
-    # codex/kimi/claude-code carry the deny in hookSpecificOutput.permissionDecision,
-    # so their rc must stay 0 — nonzero would read as a hook error and permit.
-    if harness in {"pi", "omp", "opencode", "superagent"}:
-        return 1 if deny else 0
-    return 0
+    # Deny responses resolve to the fail-closed "block" action; allow / observe
+    # responses resolve to "allow".  The shared per-harness contract decides rc
+    # so this path can never diverge from the finish path's verdict mapping.
+    return native_hook_verdict_exit_code(
+        harness, "block" if deny else "allow", event_name=event_name
+    )
 
 
 def _emit_native_unavailable(
