@@ -5511,7 +5511,6 @@ struct StoredPackagePolicyResolution {
 /// `_resolve_stored_package_policy_override` — attempt to claim a saved
 /// approval; on success the evaluation carries the saved-package-approval
 /// evidence. On failure the evaluation is unchanged.
-#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 fn resolve_stored_package_policy_override(
     evaluation: &PackageRequestEvaluation,
@@ -5593,8 +5592,7 @@ fn resolve_stored_package_policy_override(
 /// `_apply_stored_package_policy_override` — claim the saved approval when the
 /// content hash still matches; returns the possibly-updated evaluation.
 #[allow(clippy::too_many_arguments)]
-#[allow(dead_code)]
-fn apply_stored_package_policy_override(
+pub fn apply_stored_package_policy_override(
     evaluation: &PackageRequestEvaluation,
     store: &dyn SupplyChainStore,
     artifact: &GuardArtifact,

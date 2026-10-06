@@ -191,6 +191,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::SupplyChainEval(request) => {
                 crate::package_authority_op::evaluate_supply_chain_eval(&request)
             }
+            ResidentOperationV1::ApplyStoredPackagePolicy(request) => {
+                crate::package_authority_op::evaluate_apply_stored_package_policy(&request)
+            }
             ResidentOperationV1::PackageAuthorityDecide(request) => {
                 crate::package_authority_op::evaluate_package_authority_decide(&request)
             }

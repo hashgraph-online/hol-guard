@@ -1,18 +1,18 @@
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
-    ApprovalChallengeRequestV3, ApprovalChallengeRequestV4, ApprovalConsumeRequestV3,
-    ApprovalConsumeRequestV4, ApprovalGateRequestV1, ApprovalReuseRequestV1,
-    ApprovalValidateRequestV3, ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1,
-    CommandEffectRequestV1, ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
-    ContainedPackageScriptExecuteRequestV1, ContainedTestHookRequestV1,
-    ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
-    ContextDigestRequestV1, GuardHookEnvelopeV2, McpStdioProbeRequestV1,
-    McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1,
-    McpStdioSessionSendRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
-    PackageAuthorityDecideRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1, SupplyChainEvalRequestV1,
-    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION,
-    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    ApplyStoredPackagePolicyRequestV1, ApprovalChallengeRequestV3, ApprovalChallengeRequestV4,
+    ApprovalConsumeRequestV3, ApprovalConsumeRequestV4, ApprovalGateRequestV1,
+    ApprovalReuseRequestV1, ApprovalValidateRequestV3, ApprovalValidateRequestV4,
+    ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1, ContainedExecuteRequestV1,
+    ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
+    ContainedTestHookRequestV1, ContainedTypescriptExecuteRequestV1,
+    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1, GuardHookEnvelopeV2,
+    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
+    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, NativeHookRequestV1,
+    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1, PackageIntentParseRequestV1,
+    PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1, RuntimeCapabilitiesV1,
+    ShimAdminRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -121,6 +121,7 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalGate(ApprovalGateRequestV1),
     PackageIntentParse(PackageIntentParseRequestV1),
     SupplyChainEval(SupplyChainEvalRequestV1),
+    ApplyStoredPackagePolicy(ApplyStoredPackagePolicyRequestV1),
     PackageAuthorityDecide(PackageAuthorityDecideRequestV1),
     #[allow(dead_code)]
     ContainedNodeExecute(ContainedNodeExecuteRequestV1),
