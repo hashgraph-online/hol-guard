@@ -90,7 +90,13 @@ def _native_unavailable_exit_code(
         return zcode_hook_process_exit(policy_action="block" if deny else "allow", event_name=event_name)
     if harness == "devin":
         return 2 if deny else 0
-    return 1 if deny else 0
+    # opencode is rc-driven: its pretool plugin maps exitCode 1 -> block,
+    # 0 -> allow, anything else -> hook error (opencode_pretool_template).
+    # codex/kimi/claude-code carry the deny in hookSpecificOutput.permissionDecision,
+    # so their rc must stay 0 — nonzero would read as a hook error and permit.
+    if harness in {"pi", "omp", "opencode", "superagent"}:
+        return 1 if deny else 0
+    return 0
 
 
 def _emit_native_unavailable(

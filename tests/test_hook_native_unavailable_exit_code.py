@@ -71,7 +71,18 @@ class TestNativeUnavailableExitCode:
     def test_devin_and_generic(self):
         assert _native_unavailable_exit_code(_args("devin"), {"policy_action": "block"}, "PreToolUse") == 2
         assert _native_unavailable_exit_code(_args("devin"), {"policy_action": "allow"}, "PreToolUse") == 0
-        # generic/codex/kimi/opencode: deny -> 1, allow -> 0
-        for h in ("codex", "kimi", "opencode", "omp", "pi"):
+
+    def test_envelope_driven_harnesses_deny_rc0(self):
+        # codex/kimi/claude-code/opencode/hermes encode the deny inside
+        # hookSpecificOutput.permissionDecision; nonzero rc would read as hook
+        # error and silently permit.
+        for h in ("codex", "kimi", "claude-code"):
+            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 0, h
+            assert _native_unavailable_exit_code(_args(h), {"policy_action": "deny"}, "PreToolUse") == 0, h
+            assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
+
+    def test_rc_driven_generic_harnesses_deny_rc1(self):
+        # pi/omp/superagent signal the block via exit code, not the envelope.
+        for h in ("pi", "omp", "opencode", "superagent"):
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 1, h
             assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
