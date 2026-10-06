@@ -1,5 +1,105 @@
 #![forbid(unsafe_code)]
+pub mod action_lattice;
+pub mod approval_reuse;
+pub mod browser_mcp_intent;
+pub mod business_gmail_plain;
+pub mod business_gmail_wire;
+pub mod business_gws_command;
+pub mod business_input;
+pub mod canonical_command;
+mod command_ascii_comparison;
+mod command_candidate_common;
+mod command_common_cli_matchers;
+pub mod command_compatibility;
+mod command_contained_routine_candidates;
+mod command_critical_floors;
+#[cfg(test)]
+mod command_critical_floors_tests;
+mod command_database_matchers;
+pub mod command_decision_adapter;
+pub mod command_evaluation;
+#[cfg(test)]
+mod command_evaluation_tests;
+mod command_launcher_floors;
+pub mod command_model;
+mod command_operand_matchers;
+pub mod command_option_parsing;
+mod command_segment_parsing;
+#[cfg(unix)]
+pub mod command_shell_read_factors;
+mod command_specialized_matchers;
+mod command_structure;
+mod command_structured_matchers;
+mod command_tokens;
+mod command_verified_read_candidates;
+#[cfg(test)]
+mod command_verified_read_candidates_tests;
+mod command_workspace_write_candidates;
+mod data_flow;
+pub mod effect_decision;
+mod env_wrapper;
+mod executable_flag_contract;
+pub mod extension_control;
+pub mod extension_evidence;
+pub mod extension_trust;
+mod github_capability_contract;
+#[cfg(test)]
+mod github_capability_contract_tests;
+mod github_capability_interaction;
+mod github_command_capabilities;
+#[cfg(test)]
+mod github_command_capabilities_tests;
+pub mod github_workflow_approval_record;
+pub mod github_workflow_authorization;
+pub mod github_workflow_operations;
+mod home_path_text;
+pub mod homebrew_intent;
+pub mod jsonc;
+#[cfg(unix)]
+pub mod launch_identity;
+#[cfg(not(unix))]
+#[path = "launch_identity_stub.rs"]
+pub mod launch_identity;
+#[cfg(unix)]
+pub mod launch_identity_binding;
+pub mod launch_identity_environment;
+pub mod mcp_arguments;
+pub mod mcp_launch_environment;
+pub mod mcp_tool_approval;
+pub mod mcp_tool_catalog;
+pub mod mcp_tool_policy;
+pub mod mcp_tool_risk;
+pub mod native_command_catalog;
+pub mod native_command_controls;
+pub mod native_command_extension_evidence;
+#[cfg(test)]
+mod native_command_extension_evidence_tests;
+pub mod native_command_program;
+pub mod npm_source_spec;
+pub mod package_execution_context;
+pub mod package_intent_common;
+pub mod package_intent_parser;
+pub mod package_manager_command;
+pub mod package_manifest_diff;
+mod parser_wrappers;
 pub mod pretool;
+#[cfg(unix)]
+mod runtime_read_paths;
+mod shell_command_wrappers;
+mod shell_execution_context;
+mod shell_execution_context_support;
+mod shell_read_literal_wrapper;
+mod shell_secret_read_flow;
+mod shell_secret_read_support;
+#[cfg(unix)]
+pub mod shell_secret_reads;
+mod shell_structure;
+pub mod typescript_launch_evidence;
+
+pub mod package_context_environment;
+
+pub use command_evaluation::{evaluate_command, CompositeCommandEvaluation};
+pub use command_model::parse_shell_command;
 
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +153,8 @@ pub struct CommandSegmentV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CanonicalCommandV1 {
+    #[serde(skip)]
+    pub(crate) exact_raw_text: bool,
     pub normalized_text: String,
     pub dialect: String,
     pub transport: String,
@@ -63,6 +165,13 @@ pub struct CanonicalCommandV1 {
     pub uncertainty_reason: Option<String>,
     pub path_overridden: bool,
     pub parser_profile: String,
+    /// Python `CanonicalCommand.security_identity` — the authoritative
+    /// `command-security-v2:` digest serialized on `to_dict`. The wire omits
+    /// embedded-command `text` and redirect spans, so the identity cannot be
+    /// re-derived from the public model; the resident path supplies it. Empty
+    /// string on the pure-native path → `from_v1` recomputes it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub security_identity: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +194,10 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
     if raw.is_empty() {
         return Err("command_text_empty".to_owned());
     }
+    // Unquoted Windows paths keep backslash separators. Quoted POSIX escapes
+    // stay intact, and cmd/PowerShell stay uncertain until they have their own
+    // separator and quoting rules.
+    let preserve_unquoted_backslash = cfg!(windows) && request.dialect == "posix";
     if request.dialect != "posix" || request.transport != "shell_string" {
         return Ok(uncertain(request, raw, "unsupported_dialect_or_transport"));
     }
@@ -92,9 +205,13 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
         return Ok(uncertain(request, raw, "command_byte_limit_exceeded"));
     }
 
-    let raw_segments = match split_execution_segments(raw) {
-        Ok(value) => value,
-        Err(reason) => return Ok(uncertain(request, raw, reason)),
+    let raw_segments = if let Some(value) = contained_compile_check_segments(raw) {
+        value
+    } else {
+        match split_execution_segments(raw, preserve_unquoted_backslash) {
+            Ok(value) => value,
+            Err(reason) => return Ok(uncertain(request, raw, reason)),
+        }
     };
     if raw_segments.len() > MAX_COMMAND_SEGMENTS {
         return Ok(uncertain(request, raw, "command_segment_limit_exceeded"));
@@ -105,7 +222,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
     let mut total_tokens = 0usize;
     for raw_segment in raw_segments {
         let text: String = chars[raw_segment.start..raw_segment.end].iter().collect();
-        let tokens = match shell_tokens(&text) {
+        let tokens = match shell_tokens(&text, preserve_unquoted_backslash) {
             Ok(value) => value,
             Err(reason) => return Ok(uncertain(request, raw, reason)),
         };
@@ -123,6 +240,11 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
             environment_names.push(name.to_owned());
             executable_index += 1;
         }
+        let (executable_index, wrapper_chain) =
+            match parser_wrappers::unwrap_sudo(&tokens, executable_index) {
+                Ok(value) => value,
+                Err(reason) => return Ok(uncertain(request, raw, reason)),
+            };
         let executable = tokens.get(executable_index).cloned();
         let arguments = if executable.is_some() {
             tokens[executable_index + 1..].to_vec()
@@ -132,7 +254,14 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
         if executable.as_deref().is_some_and(is_shell_control_keyword) {
             return Ok(uncertain(request, raw, "compound_shell_not_yet_supported"));
         }
-        if executable.as_deref().is_some_and(is_transparent_wrapper) {
+        if executable.as_deref().is_some_and(is_transparent_wrapper)
+            && !parser_wrappers::is_encoded_stdin_shell(
+                executable.as_deref(),
+                &arguments,
+                &raw_segment,
+                segments.last(),
+            )
+        {
             return Ok(uncertain(
                 request,
                 raw,
@@ -156,7 +285,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
             executable,
             arguments,
             environment_names,
-            wrapper_chain: Vec::new(),
+            wrapper_chain,
             path_overridden,
             execution_context: format!("top:{}", raw_segment.group_index),
             pipeline_index: raw_segment.pipeline_index,
@@ -169,22 +298,34 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
     }
 
     let path_overridden = segments.iter().any(|segment| segment.path_overridden);
+    let wrapper_chain = segments
+        .iter()
+        .flat_map(|segment| segment.wrapper_chain.iter().cloned())
+        .collect::<Vec<_>>();
+    let parser_profile = if wrapper_chain.is_empty() {
+        "posix-simple-v1"
+    } else {
+        "posix-bounded-wrappers-v2"
+    };
     Ok(CanonicalCommandV1 {
+        exact_raw_text: true,
         normalized_text: raw.to_owned(),
         dialect: request.dialect.clone(),
         transport: request.transport.clone(),
         extraction_provenance: request.extraction_provenance.clone(),
-        wrapper_chain: Vec::new(),
+        wrapper_chain,
         segments,
         confidence: "exact".to_owned(),
         uncertainty_reason: None,
         path_overridden,
-        parser_profile: "posix-simple-v1".to_owned(),
+        parser_profile: parser_profile.to_owned(),
+        security_identity: String::new(),
     })
 }
 
 fn uncertain(request: &CommandModelRequestV1, raw: &str, reason: &str) -> CanonicalCommandV1 {
     CanonicalCommandV1 {
+        exact_raw_text: false,
         normalized_text: raw.to_owned(),
         dialect: request.dialect.clone(),
         transport: request.transport.clone(),
@@ -195,10 +336,14 @@ fn uncertain(request: &CommandModelRequestV1, raw: &str, reason: &str) -> Canoni
         uncertainty_reason: Some(reason.to_owned()),
         path_overridden: false,
         parser_profile: "posix-simple-v1".to_owned(),
+        security_identity: String::new(),
     }
 }
 
-fn split_execution_segments(command: &str) -> Result<Vec<RawSegment>, &'static str> {
+fn split_execution_segments(
+    command: &str,
+    preserve_unquoted_backslash: bool,
+) -> Result<Vec<RawSegment>, &'static str> {
     let chars: Vec<char> = command.chars().collect();
     let mut quote = Quote::None;
     let mut escaped = false;
@@ -240,10 +385,14 @@ fn split_execution_segments(command: &str) -> Result<Vec<RawSegment>, &'static s
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
+            '\\' if preserve_unquoted_backslash => {}
             '\\' => escaped = true,
             '`' => return Err("command_substitution_not_yet_supported"),
             '$' if chars.get(index + 1) == Some(&'(') => {
                 return Err("command_substitution_not_yet_supported");
+            }
+            '$' if chars.get(index + 1) == Some(&'{') => {
+                return Err("parameter_expansion_not_yet_supported");
             }
             '$' if chars
                 .get(index + 1)
@@ -251,9 +400,28 @@ fn split_execution_segments(command: &str) -> Result<Vec<RawSegment>, &'static s
             {
                 return Err("non_posix_quoting_not_yet_supported");
             }
+            '<' | '>'
+                if is_stderr_to_stdout_redirect(&chars, index, preserve_unquoted_backslash) => {}
+            '>' if index.checked_sub(1).is_some_and(|start| {
+                is_stderr_to_null_redirect(&chars, start, preserve_unquoted_backslash)
+            }) => {}
             '<' | '>' => return Err("command_redirect_not_yet_supported"),
-            '(' | ')' | '{' | '}' => return Err("compound_shell_not_yet_supported"),
+            '(' | ')' => return Err("compound_shell_not_yet_supported"),
+            '{' | '}'
+                if (index == 0
+                    || is_shell_token_whitespace(chars[index - 1])
+                    || matches!(chars[index - 1], ';' | '&' | '|'))
+                    && chars.get(index + 1).is_none_or(|value| {
+                        is_shell_token_whitespace(*value) || matches!(*value, ';' | '&' | '|')
+                    }) =>
+            {
+                return Err("compound_shell_not_yet_supported");
+            }
             '&' => {
+                if is_stderr_to_stdout_redirect(&chars, index, preserve_unquoted_backslash) {
+                    index += 1;
+                    continue;
+                }
                 if chars.get(index + 1) != Some(&'&') {
                     return Err("background_job_not_yet_supported");
                 }
@@ -324,6 +492,112 @@ fn split_execution_segments(command: &str) -> Result<Vec<RawSegment>, &'static s
     Ok(segments)
 }
 
+fn contained_compile_check_segments(command: &str) -> Option<Vec<RawSegment>> {
+    let chars: Vec<char> = command.chars().collect();
+    let and_index = chars.windows(2).position(|window| window == ['&', '&'])?;
+    if chars[and_index + 2..]
+        .windows(2)
+        .any(|window| window == ['&', '&'])
+    {
+        return None;
+    }
+    let (cd_start, cd_end) = trimmed_bounds(&chars, 0, and_index)?;
+    let (find_start, find_end) = trimmed_bounds(&chars, and_index + 2, chars.len())?;
+    let cd: String = chars[cd_start..cd_end].iter().collect();
+    let find: String = chars[find_start..find_end].iter().collect();
+    let cd_tokens = shell_tokens(&cd, false).ok()?;
+    let find_tokens = shell_tokens(&find, false).ok()?;
+    if cd_tokens.len() != 2
+        || cd_tokens.first().map(String::as_str) != Some("cd")
+        || !is_plain_cd_target(&cd_tokens[1])
+        || find_tokens.first().map(String::as_str) != Some("find")
+        || !is_contained_compile_check_arguments(&find_tokens[1..])
+    {
+        return None;
+    }
+    Some(vec![
+        RawSegment {
+            group_index: 0,
+            pipeline_index: 0,
+            start: cd_start,
+            end: cd_end,
+        },
+        RawSegment {
+            group_index: 1,
+            pipeline_index: 0,
+            start: find_start,
+            end: find_end,
+        },
+    ])
+}
+
+fn trimmed_bounds(chars: &[char], start: usize, end: usize) -> Option<(usize, usize)> {
+    let mut left = start;
+    let mut right = end;
+    while left < right && chars[left].is_whitespace() {
+        left += 1;
+    }
+    while right > left && chars[right - 1].is_whitespace() {
+        right -= 1;
+    }
+    (left < right).then_some((left, right))
+}
+
+fn is_stderr_to_stdout_redirect(chars: &[char], index: usize, preserve_backslash: bool) -> bool {
+    let start = match chars.get(index) {
+        Some('&') => index.checked_sub(2),
+        Some('>') => index.checked_sub(1),
+        _ => None,
+    };
+    let Some(start) = start else {
+        return false;
+    };
+    let Some(redirect) = chars.get(start..start.saturating_add(4)) else {
+        return false;
+    };
+    redirect == ['2', '>', '&', '1']
+        && starts_at_shell_token_boundary(chars, start, preserve_backslash)
+        && chars.get(start + 4).is_none_or(|value| {
+            is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
+        })
+}
+
+fn is_stderr_to_null_redirect(chars: &[char], start: usize, preserve_backslash: bool) -> bool {
+    // Only Unix's fixed stderr sink is inert; arbitrary paths and descriptors
+    // must still pass through the unsupported-redirection guard.
+    cfg!(unix)
+        && chars.get(start..start.saturating_add(11))
+            == Some(&['2', '>', '/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l'])
+        && starts_at_shell_token_boundary(chars, start, preserve_backslash)
+        && chars.get(start + 11).is_none_or(|value| {
+            is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
+        })
+}
+
+fn starts_at_shell_token_boundary(chars: &[char], start: usize, preserve_backslash: bool) -> bool {
+    start == 0
+        || (is_shell_token_whitespace(chars[start - 1])
+            && (preserve_backslash
+                || chars[..start - 1]
+                    .iter()
+                    .rev()
+                    .take_while(|value| **value == '\\')
+                    .count()
+                    % 2
+                    == 0))
+}
+
+fn is_plain_cd_target(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && !value.chars().any(|value| {
+            matches!(
+                value,
+                '$' | '`' | '<' | '>' | '|' | ';' | '&' | '(' | ')' | '{' | '}' | '\0'
+            )
+        })
+}
+
 fn push_segment(
     chars: &[char],
     start: usize,
@@ -352,14 +626,19 @@ fn push_segment(
     Ok(())
 }
 
-fn shell_tokens(command: &str) -> Result<Vec<String>, &'static str> {
+pub(crate) fn shell_tokens(
+    command: &str,
+    preserve_backslash: bool,
+) -> Result<Vec<String>, &'static str> {
     let mut tokens = Vec::new();
     let mut token = String::new();
     let mut token_started = false;
     let mut quote = Quote::None;
     let mut escaped = false;
 
-    for current in command.chars() {
+    let chars: Vec<char> = command.chars().collect();
+    let mut characters = chars.iter().copied().enumerate();
+    while let Some((index, current)) = characters.next() {
         if escaped {
             if quote == Quote::Double && current != '"' && current != '\\' {
                 token.push('\\');
@@ -390,12 +669,25 @@ fn shell_tokens(command: &str) -> Result<Vec<String>, &'static str> {
                 }
             }
             Quote::None => match current {
+                '2' if !token_started
+                    && is_stderr_to_null_redirect(&chars, index, preserve_backslash) =>
+                {
+                    // A shell redirection is not an argv operand. Preserve it
+                    // in segment.text/spans, but exclude it from argument proofs.
+                    for _ in 0..10 {
+                        characters.next();
+                    }
+                }
                 '\'' => {
                     quote = Quote::Single;
                     token_started = true;
                 }
                 '"' => {
                     quote = Quote::Double;
+                    token_started = true;
+                }
+                '\\' if preserve_backslash => {
+                    token.push('\\');
                     token_started = true;
                 }
                 '\\' => {
@@ -501,10 +793,93 @@ fn is_nested_command_executor(executable: &str, arguments: &[String]) -> bool {
     ) {
         return true;
     }
+    if matches!(basename, "fd" | "fd.exe") {
+        return fd_arguments_execute_command(arguments);
+    }
     basename == "find"
+        && !is_contained_compile_check_arguments(arguments)
         && arguments
             .iter()
             .any(|argument| matches!(argument.as_str(), "-exec" | "-execdir" | "-ok" | "-okdir"))
+}
+
+fn fd_arguments_execute_command(arguments: &[String]) -> bool {
+    // fd substitutes filesystem search results into a subprocess invocation.
+    // Its exec modes need their own bounded source and execution proof; an
+    // exact shell tokenization must not silently treat them as a plain search.
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        if argument == "--" {
+            return false;
+        }
+        if matches!(argument.as_str(), "--exec" | "--exec-batch")
+            || argument.starts_with("--exec=")
+            || argument.starts_with("--exec-batch=")
+        {
+            return true;
+        }
+        if argument.starts_with("--") {
+            if matches!(
+                argument.as_str(),
+                "--base-directory"
+                    | "--changed-after"
+                    | "--changed-before"
+                    | "--changed-within"
+                    | "--color"
+                    | "--exact-depth"
+                    | "--exclude"
+                    | "--extension"
+                    | "--format"
+                    | "--ignore-file"
+                    | "--max-depth"
+                    | "--max-results"
+                    | "--min-depth"
+                    | "--owner"
+                    | "--path-separator"
+                    | "--search-path"
+                    | "--size"
+                    | "--threads"
+                    | "--type"
+            ) {
+                arguments.next();
+            }
+            continue;
+        }
+        let Some(cluster) = argument.strip_prefix('-') else {
+            continue;
+        };
+        for (offset, flag) in cluster.char_indices() {
+            if matches!(flag, 'x' | 'X') {
+                return true;
+            }
+            if matches!(flag, 'c' | 'd' | 'E' | 'e' | 'j' | 'o' | 'S' | 't') {
+                if offset + flag.len_utf8() == cluster.len() {
+                    arguments.next();
+                }
+                break;
+            }
+        }
+    }
+    false
+}
+
+fn is_contained_compile_check_arguments(arguments: &[String]) -> bool {
+    const EXPECTED: [&str; 9] = [
+        "src",
+        "-name",
+        "*.py",
+        "-exec",
+        "python",
+        "-m",
+        "py_compile",
+        "{}",
+        "+",
+    ];
+    arguments.len() == EXPECTED.len()
+        && arguments
+            .iter()
+            .zip(EXPECTED)
+            .all(|(actual, expected)| actual == expected)
 }
 
 #[cfg(test)]
@@ -529,6 +904,44 @@ mod tests {
         assert_eq!(parsed.segments[0].arguments, ["status", "--short"]);
         assert_eq!(parsed.segments[0].span.start, 0);
         assert_eq!(parsed.segments[0].span.end, 18);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parses_only_literal_stderr_null_sink_without_changing_quoted_arguments() {
+        let parsed = parse_command(&request("ls -la src 2>/dev/null; echo done")).unwrap();
+        assert_eq!(parsed.confidence, "exact");
+        assert_eq!(parsed.segments[0].arguments, ["-la", "src"]);
+        assert_eq!(parsed.segments[0].text, "ls -la src 2>/dev/null");
+        let quoted = parse_command(&request("echo '2>/dev/null'")).unwrap();
+        assert_eq!(quoted.segments[0].arguments, ["2>/dev/null"]);
+        for command in [
+            "ls 2>/dev/null.env",
+            "ls 2>/dev/null/other",
+            "ls 12>/dev/null",
+            "ls 2>>/dev/null",
+            "ls >/dev/null",
+            "ls 2> .env",
+            "ls src2>/dev/null",
+            "cat foo\\ 2>/dev/null",
+            "cat foo\\\n2>/dev/null",
+            "cat foo\\ 2>&1",
+        ] {
+            assert_ne!(
+                parse_command(&request(command)).unwrap().confidence,
+                "exact",
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn redirect_boundary_respects_backslash_profile() {
+        let escaped: Vec<char> = "foo\\ 2>&1".chars().collect();
+        assert!(!starts_at_shell_token_boundary(&escaped, 5, false));
+        assert!(starts_at_shell_token_boundary(&escaped, 5, true));
+        let paired: Vec<char> = "foo\\\\ 2>&1".chars().collect();
+        assert!(starts_at_shell_token_boundary(&paired, 6, false));
     }
 
     #[test]
@@ -564,6 +977,18 @@ mod tests {
     }
 
     #[test]
+    fn unquoted_backslash_preservation_keeps_quoted_escapes() {
+        let tokens = shell_tokens(r#"printf "%s" "a\q" "a\$b" "a\"b" "a\\b""#, true).unwrap();
+        assert_eq!(tokens, ["printf", "%s", "a\\q", "a\\$b", "a\"b", "a\\b"]);
+        let path = shell_tokens(r"cmd /c echo C:\Work\file.txt", true).unwrap();
+        assert_eq!(path, ["cmd", "/c", "echo", r"C:\Work\file.txt"]);
+        let segments = split_execution_segments(r"dir C:\Work\", true).unwrap();
+        assert_eq!(segments.len(), 1);
+        let trailing = shell_tokens(r"dir C:\Work\", true).unwrap();
+        assert_eq!(trailing, ["dir", r"C:\Work\"]);
+    }
+
+    #[test]
     fn splits_pipeline_but_not_quoted_pipe() {
         let parsed = parse_command(&request("printf 'a|b' | grep b")).unwrap();
         assert_eq!(parsed.segments.len(), 2);
@@ -574,13 +999,53 @@ mod tests {
     }
 
     #[test]
+    fn parses_frozen_contained_routine_forms_without_general_shell_expansion() {
+        let stderr_pipeline = parse_command(&request(
+            "cd workspace/service && bun run typecheck 2>&1 | head -40",
+        ))
+        .unwrap();
+        assert_eq!(
+            stderr_pipeline.confidence, "exact",
+            "{:?}",
+            stderr_pipeline.uncertainty_reason
+        );
+        assert_eq!(stderr_pipeline.segments.len(), 3);
+        assert_eq!(
+            stderr_pipeline.segments[1].arguments,
+            ["run", "typecheck", "2>&1"]
+        );
+        assert_eq!(stderr_pipeline.segments[2].tokens, ["head", "-40"]);
+
+        let compile_check = parse_command(&request(
+            "cd workspace/service && find src -name '*.py' -exec python -m py_compile {} +",
+        ))
+        .unwrap();
+        assert_eq!(compile_check.confidence, "exact");
+        assert_eq!(compile_check.segments.len(), 2);
+        assert_eq!(
+            compile_check.segments[1].arguments,
+            [
+                "src",
+                "-name",
+                "*.py",
+                "-exec",
+                "python",
+                "-m",
+                "py_compile",
+                "{}",
+                "+"
+            ]
+        );
+    }
+
+    #[test]
     fn marks_complex_shell_forms_uncertain_without_partial_segments() {
         for command in [
             "echo $(uname)",
             "cat <<EOF",
             "echo hello > out.txt",
             "sleep 1 &",
-            "sudo rm -rf /tmp/example",
+            "sudo -s rm -rf /tmp/example",
             "sh -c 'rm -rf /tmp/example'",
             "eval 'rm -rf /tmp/example'",
             "if true; then echo yes; fi",
@@ -607,3 +1072,62 @@ mod tests {
         assert!(parsed.segments.is_empty());
     }
 }
+
+// RTM-019 pending modules — compile signal only until legs complete
+pub mod audit_receipt;
+pub mod cloud_audit_sync;
+pub mod guard_run_launch;
+pub mod install_time_event;
+pub mod local_supply_chain;
+pub mod package_approval;
+pub mod package_policy_override;
+pub mod package_protect_projection;
+pub mod prompt_analysis;
+pub mod redacted_command_tokens;
+pub mod supply_chain_package_eval;
+pub mod target_identities;
+pub mod workspace_inventory;
+
+// RTM-014/017/020/023 pending modules — compile signal only until legs complete.
+pub mod aibom_reporting;
+pub mod aibom_trust_metadata;
+pub mod archive_inspection;
+pub mod command_operation_classification;
+pub mod composition_rules;
+#[cfg(unix)]
+pub mod contained_execution;
+pub mod data_flow_rules;
+pub mod decisions;
+pub mod detectors;
+#[cfg(unix)]
+pub mod direct_vitest;
+pub mod false_positive_rules;
+pub mod guard_sync_transport;
+pub mod hook_evidence_writer;
+pub mod hook_responses;
+pub mod inventory_contract;
+pub mod js_semver;
+pub mod linux_artifact_supply_chain;
+#[cfg(unix)]
+pub mod local_mcp_stdio;
+#[cfg(all(unix, test))]
+mod local_mcp_stdio_tests;
+pub mod mcp_decision;
+#[cfg(unix)]
+pub mod mcp_stdio_session;
+pub mod pep440;
+pub mod restricted_archive;
+pub mod restricted_archive_transport;
+#[cfg(unix)]
+pub mod restricted_pytest;
+pub mod resume_template;
+pub mod review_event_outbox;
+pub mod review_event_outbox_schema;
+#[cfg(unix)]
+pub mod sandbox;
+pub mod shims;
+pub mod signals;
+pub mod supply_chain_bundle;
+pub mod supply_chain_package_identity;
+pub mod supply_chain_risk;
+pub mod supply_chain_support;

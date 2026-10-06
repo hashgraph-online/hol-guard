@@ -71,7 +71,9 @@ def build_test_shards(root: Path, shard_count: int) -> list[list[Path]]:
 def discover_test_nodes(root: Path) -> list[str]:
     collector = _NodeCollector()
     result = pytest.main(
-        [str(root / "tests"), "--collect-only", "-p", "no:terminal"],
+        # Collecting IDs needs normal Python assertions, but not pytest's costly
+        # assertion-message rewriting. Execution runners retain normal rewriting.
+        [str(root / "tests"), "--collect-only", "--assert=plain", "-p", "no:terminal"],
         plugins=[collector],
     )
     if result != pytest.ExitCode.OK:

@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import base64
 import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Literal
-
-from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
 from .approval_scope_support import (
     APPROVAL_SCOPE_CONTRACT_VERSION,
@@ -21,22 +15,36 @@ from .approval_scope_support import (
 )
 from .continuation_snapshot import canonical_continuation_correlation_id
 from .models import DECISION_SCOPE_VALUES
-from .policy_bundle_trusted_keys import (
-    PolicyBundleVerificationKey,
-    merge_policy_bundle_trusted_keys,
-    policy_bundle_keys_from_supply_chain_keyring,
-    resolve_policy_bundle_signing_key,
-    safe_load_policy_bundle_verification_keys,
-    signing_key_is_current,
-)
 from .project_identity import resolve_portable_project_identity
+from .review_claim_hashing import (
+    compute_legacy_local_review_request_claim_hash,
+    compute_local_review_request_claim_hash,
+    local_review_request_claim_hash_matches,  # noqa: F401 - public compatibility re-export
+)
 from .review_exact_capability_advertisement import attach_exact_review_capability
+from .review_native_claim_bindings import (
+    NATIVE_BINDING_FIELDS,
+    NATIVE_BINDING_VERSION,
+    native_binding_commitment_matches,
+)
+from .review_native_claim_bindings import (
+    canonical_native_launch_target as _canonical_native_launch_target,  # noqa: F401 - compatibility re-export
+)
+from .review_native_claim_bindings import (
+    native_review_claim_bindings as _native_review_claim_bindings,
+)
 from .review_oauth_binding import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
     guard_review_oauth_metadata,  # noqa: F401 - compatibility re-export
 )
-from .review_verification_keyring import REVIEW_VERIFICATION_KEYRING_SYNC_KEY
+from .review_signature_verification import (
+    _anchored_review_verification_keys,  # noqa: F401 - compatibility re-export
+    _resolve_anchored_signing_key,  # noqa: F401 - compatibility re-export
+    _verification_keys_from_payload,  # noqa: F401 - compatibility re-export
+    _verify_signed_payload,
+    validated_review_verification_keys_from_sync,  # noqa: F401 - public compatibility re-export
+)
 from .stable_digest import sha256_content_digest
 from .stable_json import stable_json_serialize
 
@@ -50,7 +58,9 @@ _REMOTE_APPROVAL_WORKSPACE_ADMIN_MFA_AUTHORITY = "workspace_admin_mfa"
 _REMOTE_APPROVAL_KEY_PURPOSE = "remote_approval"
 _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
-_CLAIM_HASH_EXCLUDED_KEYS = ("claimHash", "exactReviewCapability", "recommendedScope")
+_NATIVE_ACTION_BINDING_DOMAIN = "guard-native-workspace-review-action-binding-v1\0"
+_NATIVE_INTENT_BINDING_DOMAIN = "guard-native-workspace-review-intent-binding-v1\0"
+_NATIVE_POLICY_BINDING_DOMAIN = "guard-native-workspace-review-policy-binding-v1\0"
 _SIGNED_PAYLOAD_STRIP_KEYS = ("payloadHash", "signature", "signatureAlgorithm", "verificationKeys", "bundleHash")
 
 RemoteApprovalDecision = Literal["allow", "block"]
@@ -106,132 +116,6 @@ def _parse_iso_timestamp(value: object, *, field_name: str) -> datetime:
 
 def _canonical_signed_payload(value: dict[str, object]) -> str:
     return _stable_serialize(_strip_keys(value, _SIGNED_PAYLOAD_STRIP_KEYS))
-
-
-def _verification_keys_from_payload(value: object) -> tuple[PolicyBundleVerificationKey, ...]:
-    if not isinstance(value, list) or not value:
-        raise GuardReviewContractError("missing_verification_keys")
-    parsed: list[PolicyBundleVerificationKey] = []
-    for item in value:
-        if not isinstance(item, dict):
-            raise GuardReviewContractError("invalid_verification_key")
-        parsed.append(PolicyBundleVerificationKey.from_dict(item))
-    return tuple(parsed)
-
-
-def _anchored_review_verification_keys(store) -> tuple[PolicyBundleVerificationKey, ...]:
-    return merge_policy_bundle_trusted_keys(
-        policy_bundle_keys_from_supply_chain_keyring(store.get_sync_payload("supply_chain_bundle_keyring")),
-        safe_load_policy_bundle_verification_keys(store.get_sync_payload("policy_bundle_keyring")),
-        safe_load_policy_bundle_verification_keys(store.get_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY)),
-    )
-
-
-def validated_review_verification_keys_from_sync(
-    value: object,
-    *,
-    store,
-    workspace_id: str,
-) -> tuple[PolicyBundleVerificationKey, ...]:
-    """Admit purpose-scoped Review keys only when their material is already anchored."""
-
-    if not isinstance(value, list):
-        raise GuardReviewContractError("review_verification_keys_invalid")
-    keys = safe_load_policy_bundle_verification_keys(value)
-    if not keys or len(keys) != len(value):
-        raise GuardReviewContractError("review_verification_keys_invalid")
-    anchored_fingerprints = {key.fingerprint_sha256 for key in _anchored_review_verification_keys(store)}
-    for key in keys:
-        if key.purpose != _REMOTE_APPROVAL_KEY_PURPOSE:
-            raise GuardReviewContractError("signing_key_purpose_mismatch")
-        if key.workspace_id != workspace_id:
-            raise GuardReviewContractError("signing_key_workspace_mismatch")
-        if key.fingerprint_sha256 not in anchored_fingerprints:
-            raise GuardReviewContractError("unknown_signing_key")
-        if key.state == "revoked" or not signing_key_is_current(key):
-            raise GuardReviewContractError("expired_signing_key")
-    return keys
-
-
-def _resolve_anchored_signing_key(
-    *,
-    advertised_keys: tuple[PolicyBundleVerificationKey, ...],
-    anchored_keys: tuple[PolicyBundleVerificationKey, ...],
-    key_id: str,
-    expected_purpose: str | None = None,
-    expected_workspace_id: str | None = None,
-) -> PolicyBundleVerificationKey:
-    signing_key = resolve_policy_bundle_signing_key(key_id, anchored_keys)
-    if signing_key is None:
-        raise GuardReviewContractError("unknown_signing_key")
-    advertised_key = resolve_policy_bundle_signing_key(key_id, advertised_keys)
-    if advertised_key is None:
-        raise GuardReviewContractError("missing_signing_key")
-    if advertised_key.fingerprint_sha256 != signing_key.fingerprint_sha256:
-        raise GuardReviewContractError("untrusted_signing_key")
-    if expected_purpose is not None and (
-        signing_key.purpose != expected_purpose or advertised_key.purpose != expected_purpose
-    ):
-        raise GuardReviewContractError("signing_key_purpose_mismatch")
-    if expected_workspace_id is not None and (
-        signing_key.workspace_id != expected_workspace_id or advertised_key.workspace_id != expected_workspace_id
-    ):
-        raise GuardReviewContractError("signing_key_workspace_mismatch")
-    if not signing_key_is_current(signing_key):
-        raise GuardReviewContractError("expired_signing_key")
-    return signing_key
-
-
-def _verify_signed_payload(
-    payload: dict[str, object],
-    *,
-    signature_algorithm: str,
-    store,
-    expected_key_purpose: str | None = None,
-    expected_workspace_id: str | None = None,
-) -> None:
-    if signature_algorithm not in {_REMOTE_APPROVAL_SIGNATURE_ALGORITHM, _DECISION_MEMORY_SIGNATURE_ALGORITHM}:
-        raise GuardReviewContractError("invalid_signature_algorithm")
-    signature = _non_empty_string(payload.get("signature"))
-    if signature is None:
-        raise GuardReviewContractError("missing_signature")
-    key_id = _non_empty_string(payload.get("issuerKeyId")) or _non_empty_string(payload.get("keyId"))
-    if key_id is None:
-        verifier = payload.get("verifier")
-        if isinstance(verifier, dict):
-            key_id = _non_empty_string(verifier.get("keyId"))
-    advertised_keys = _verification_keys_from_payload(payload.get("verificationKeys"))
-    if key_id is None and len(advertised_keys) == 1:
-        key_id = advertised_keys[0].key_id
-    if key_id is None:
-        raise GuardReviewContractError("missing_signing_key_id")
-    signing_key = _resolve_anchored_signing_key(
-        advertised_keys=advertised_keys,
-        anchored_keys=_anchored_review_verification_keys(store),
-        key_id=key_id,
-        expected_purpose=expected_key_purpose,
-        expected_workspace_id=expected_workspace_id,
-    )
-    try:
-        public_key = serialization.load_pem_public_key(signing_key.public_key_pem.encode("utf-8"))
-    except (UnsupportedAlgorithm, ValueError, TypeError) as error:
-        raise GuardReviewContractError("invalid_signing_key") from error
-    if not isinstance(public_key, RSAPublicKey):
-        raise GuardReviewContractError("invalid_signing_key")
-    try:
-        signature_bytes = base64.b64decode(signature)
-    except Exception as error:  # pragma: no cover - defensive
-        raise GuardReviewContractError("invalid_signature") from error
-    canonical_payload = _canonical_signed_payload(payload).encode("utf-8")
-    try:
-        public_key.verify(
-            signature_bytes,
-            canonical_payload,
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.AUTO),
-            hashes.SHA256(),
-        )
-    except (InvalidSignature, ValueError, TypeError) as error:
-        raise GuardReviewContractError("signature_mismatch") from error
 
 
 def _action_envelope_hash(request_row: dict[str, object]) -> str:
@@ -315,6 +199,7 @@ def build_local_review_request_claim(
     if None in required_fields:
         raise GuardReviewContractError("invalid_request_row")
     assert local_request_id is not None
+    native_bindings = _native_review_claim_bindings(request_row)
     claim: dict[str, object] = {
         "contractVersion": _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION,
         "correlationId": canonical_continuation_correlation_id(
@@ -337,6 +222,7 @@ def build_local_review_request_claim(
         "localRequestId": local_request_id,
         "machineId": oauth.machine_id,
         "machineInstallationId": oauth.installation_id,
+        **native_bindings,
         "nonce": _non_empty_string(request_row.get("queue_group_id")) or local_request_id,
         "policyAction": policy_action,
         "policyVersion": _policy_version(request_row),
@@ -351,15 +237,19 @@ def build_local_review_request_claim(
     return attach_exact_review_capability(claim, oauth, store)
 
 
-def compute_local_review_request_claim_hash(claim: dict[str, object]) -> str:
-    return _sha256_hex(_stable_serialize(_strip_keys(claim, _CLAIM_HASH_EXCLUDED_KEYS)))
-
-
 def validate_local_review_request_claim(claim: dict[str, object]) -> dict[str, object]:
     if claim.get("contractVersion") != _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION:
         raise GuardReviewContractError("unsupported_claim_contract_version")
+    has_native_bindings = any(isinstance(claim.get(key), str) for key in NATIVE_BINDING_FIELDS) or any(
+        key in claim for key in ("nativeBindingVersion", "nativeBindingDigest")
+    )
+    if has_native_bindings and not native_binding_commitment_matches(claim):
+        raise GuardReviewContractError("native_binding_digest_mismatch")
     expected_hash = compute_local_review_request_claim_hash(claim)
-    if _non_empty_string(claim.get("claimHash")) != expected_hash:
+    claim_hash = _non_empty_string(claim.get("claimHash"))
+    if claim_hash != expected_hash and (
+        has_native_bindings or claim_hash != compute_legacy_local_review_request_claim_hash(claim)
+    ):
         raise GuardReviewContractError("claim_hash_mismatch")
     return claim
 
@@ -432,7 +322,9 @@ def validate_remote_approval_request_binding(
     request_row: dict[str, object],
     oauth: GuardReviewOAuthMetadata,
     store,
+    claim_request_row: dict[str, object] | None = None,
 ) -> None:
+    claim_row = claim_request_row if claim_request_row is not None else request_row
     if _non_empty_string(envelope.get("localRequestId")) != _non_empty_string(request_row.get("request_id")):
         raise GuardReviewContractError("remote_approval_request_id_mismatch")
     if _non_empty_string(envelope.get("approvalId")) != _non_empty_string(request_row.get("request_id")):
@@ -456,14 +348,27 @@ def validate_remote_approval_request_binding(
             raise GuardReviewContractError("remote_approval_reviewer_not_authorized")
         if _non_empty_string(envelope.get("stepUpChallengeId")) is None:
             raise GuardReviewContractError("remote_approval_step_up_required")
-    if _non_empty_string(envelope.get("harnessId")) != _non_empty_string(request_row.get("harness")):
+    if _non_empty_string(envelope.get("harnessId")) != _non_empty_string(claim_row.get("harness")):
         raise GuardReviewContractError("remote_approval_harness_mismatch")
-    if _non_empty_string(envelope.get("actionEnvelopeHash")) != _action_envelope_hash(request_row):
+    if _non_empty_string(envelope.get("actionEnvelopeHash")) != _action_envelope_hash(claim_row):
         raise GuardReviewContractError("remote_approval_action_hash_mismatch")
-    if _non_empty_string(envelope.get("policyVersion")) != _policy_version(request_row):
+    if _non_empty_string(envelope.get("policyVersion")) != _policy_version(claim_row):
         raise GuardReviewContractError("remote_approval_policy_version_mismatch")
-    expected_claim = build_local_review_request_claim(request_row=request_row, oauth=oauth, store=store)
-    if _non_empty_string(envelope.get("sourceClaimHash")) != _non_empty_string(expected_claim.get("claimHash")):
+    expected_claim = build_local_review_request_claim(request_row=claim_row, oauth=oauth, store=store)
+    source_claim_hash = envelope.get("sourceClaimHash")
+    if envelope.get("nativeBindingVersion") == NATIVE_BINDING_VERSION:
+        hash_matches = native_binding_commitment_matches(expected_claim) and (
+            _non_empty_string(source_claim_hash) == _non_empty_string(expected_claim.get("claimHash"))
+            and _non_empty_string(envelope.get("nativeBindingDigest"))
+            == _non_empty_string(expected_claim.get("nativeBindingDigest"))
+        )
+    elif envelope.get("nativeBindingVersion") is None:
+        hash_matches = envelope.get("nativeBindingDigest") is None and (
+            _non_empty_string(source_claim_hash) == compute_legacy_local_review_request_claim_hash(expected_claim)
+        )
+    else:
+        hash_matches = False
+    if not hash_matches:
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
     expected_nonce = _non_empty_string(expected_claim.get("nonce"))
     receipt_id = _non_empty_string(envelope.get("receiptId"))
@@ -474,12 +379,12 @@ def validate_remote_approval_request_binding(
     action = normalize_remote_approval_decision(envelope.get("decision"))
     if action is None:
         raise GuardReviewContractError("invalid_remote_approval_decision")
-    contract = request_scope_contract(request_row)
+    contract = request_scope_contract(claim_row)
     if envelope_scope is None:
         raise GuardReviewContractError("remote_approval_scope_mismatch")
     try:
         resolve_request_scope_selection(
-            request_row,
+            claim_row,
             action=action,
             requested_scope=envelope_scope,
             contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,

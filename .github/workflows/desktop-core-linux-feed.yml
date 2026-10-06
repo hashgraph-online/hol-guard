@@ -4,6 +4,8 @@ on:
     paths:
       - .github/workflows/desktop-core-linux-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
+      - tests/test_desktop_core_feed_queue.py
+      - tests/test_core_feed_publication_handoff.py
       - tests/test_stage_native_runtime_for_desktop_core.py
       - tests/test_verify_*.py
       - tests/test_seal_pyinstaller_native_manifest.py
@@ -26,15 +28,8 @@ on:
       core_version:
         description: Optional exact published stable Core version to backfill
         type: string
-  workflow_run:
-    workflows: ["Publish to PyPI"]
-    types: [completed]
-    branches: [main]
 permissions:
   contents: read
-concurrency:
-  group: desktop-core-stable-feed
-  cancel-in-progress: false
 jobs:
   validate:
     name: Validate workflow
@@ -48,21 +43,26 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: "1.24.2"
           cache: false
       - name: Install Actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
       - name: Validate workflow syntax
-        run: '"$(go env GOPATH)/bin/actionlint" .github/workflows/desktop-core-linux-feed.yml'
+        # Actionlint 1.7.11 lacks the documented queue key; retain all other diagnostics.
+        run: '"$(go env GOPATH)/bin/actionlint" -ignore ''^unexpected key "queue" for "concurrency" section\.'' .github/workflows/desktop-core-linux-feed.yml'
   publish-linux-x64:
     name: Publish Linux x64 Core sidecar
-    if: >-
-      github.event_name != 'pull_request' &&
-      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    concurrency:
+      group: desktop-core-stable-feed
+      cancel-in-progress: false
+      queue: max
+    if: github.event_name != 'pull_request'
     needs: validate
-    runs-on: ubuntu-24.04
+    # Keep libpython compatible with Pop!_OS 22.04.
+    # Move this build baseline into a container before runner retirement on 2027-04-17.
+    runs-on: ubuntu-22.04
     timeout-minutes: 90
     permissions:
       contents: write
@@ -94,7 +94,7 @@ jobs:
           test -z "$(git status --porcelain)"
       - name: Verify runner architecture
         run: test "$(uname -m)" = "x86_64"
-      - name: Discover newest published stable Core 3.x release
+      - name: Discover newest published stable Core release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -112,7 +112,7 @@ jobs:
           python3 -I scripts/release/desktop_core_alpha_feed.py discover-release "${ARGS[@]}" >> "$GITHUB_OUTPUT"
       - name: Stop when no stable Core release is published
         if: steps.release.outputs.available != 'true'
-        run: echo "No published stable HOL Guard Core 3.x release is available yet."
+        run: echo "No published stable HOL Guard Core release is available yet."
       - name: Authorize exact Core source with release provenance
         if: steps.release.outputs.available == 'true'
         id: source
@@ -155,14 +155,37 @@ jobs:
           test -f "$WHEEL"
           BUNDLE="$TRUST_ASSETS/hol-guard-v${CORE_VERSION}.intoto.jsonl"
           test -s "$BUNDLE"
-          gh attestation verify "$WHEEL" \
-            --repo "$GITHUB_REPOSITORY" \
-            --bundle "$BUNDLE" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
-            --signer-digest "$SOURCE_SHA" \
-            --source-digest "$SOURCE_SHA" \
-            --source-ref "refs/heads/${RELEASE_BRANCH}" \
-            --deny-self-hosted-runners >/dev/null
+          verify_published_wheel() {
+            local source_ref="$1"
+            gh attestation verify "$WHEEL" \
+              --repo "$GITHUB_REPOSITORY" \
+              --bundle "$BUNDLE" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
+              --signer-digest "$SOURCE_SHA" \
+              --source-digest "$SOURCE_SHA" \
+              --source-ref "$source_ref" \
+              --deny-self-hosted-runners >/dev/null
+          }
+          # Release Please attests the tag. A manual stable dispatch attests main.
+          # A repair dispatch attests the later main commit that checked out this tag.
+          if ! verify_published_wheel "refs/tags/${CORE_TAG}"; then
+            if ! verify_published_wheel "refs/heads/${RELEASE_BRANCH}"; then
+              attested_commit=$(python3 -I scripts/release/read_publish_attestation_commit.py \
+                "$BUNDLE" "refs/heads/${RELEASE_BRANCH}")
+              [[ "$attested_commit" =~ ^[0-9a-f]{40}$ ]]
+              git -C "$TRUST_REPO" fetch --force --no-recurse-submodules origin \
+                "+${attested_commit}:refs/repair-attested"
+              git -C "$TRUST_REPO" merge-base --is-ancestor "$SOURCE_SHA" "$attested_commit"
+              gh attestation verify "$WHEEL" \
+                --repo "$GITHUB_REPOSITORY" \
+                --bundle "$BUNDLE" \
+                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
+                --signer-digest "$attested_commit" \
+                --source-digest "$attested_commit" \
+                --source-ref "refs/heads/${RELEASE_BRANCH}" \
+                --deny-self-hosted-runners >/dev/null
+            fi
+          fi
           cp "$WHEEL" "$RUNNER_TEMP/attested-linux-x64.whl"
           test -f "$RUNNER_TEMP/attested-linux-x64.whl"
           echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
@@ -270,6 +293,13 @@ jobs:
               *) echo "Version stamping changed an unexpected Core file: $changed_path" >&2; exit 1 ;;
             esac
           done < <(git -C "$SOURCE" diff --name-only)
+          SOURCE_COMPILER="$RUNNER_TEMP/guard-command-source"
+          unzip -p "$RUNNER_TEMP/attested-linux-x64.whl" \
+            codex_plugin_scanner/_native/guard-command-source > "$SOURCE_COMPILER"
+          chmod 0755 "$SOURCE_COMPILER"
+          test -x "$SOURCE_COMPILER"
+          python3 -I "$SOURCE/scripts/build_native_command_program.py" \
+            --compiler "$SOURCE_COMPILER"
           python3 -I scripts/release/stage_guard_cloud_review_artifacts.py \
             --source-root "$SOURCE"
           mkdir -p "$RUNNER_TEMP/native-runtime"
@@ -282,6 +312,11 @@ jobs:
           NATIVE_MANIFEST="$RUNNER_TEMP/native-runtime/runtime-manifest.json"
           test -f "$NATIVE_RUNTIME"
           test -f "$NATIVE_MANIFEST"
+          # Freeze the attested package data, not stale projections in the tag.
+          WHEELS=("$RUNNER_TEMP/core-trust-assets/hol_guard-${CORE_VERSION}-"*-manylinux_*_x86_64.whl)
+          test "${#WHEELS[@]}" -eq 1
+          cmp "${WHEELS[0]}" "$RUNNER_TEMP/attested-linux-x64.whl"
+          uv pip install --python "$SOURCE/.venv/bin/python" --no-deps --force-reinstall "${WHEELS[0]}"
           (
             cd "$SOURCE"
             uv run --no-sync pyinstaller \
@@ -289,6 +324,7 @@ jobs:
               --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
               --add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native" \
               --add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native" \
+              --add-data "$SOURCE/src/codex_plugin_scanner/version.py:." \
               --distpath "$DIST" --workpath "$RUNNER_TEMP/pyinstaller" --specpath "$RUNNER_TEMP/spec" \
               scripts/mdm/hol-guard-entry.py
           )
@@ -367,7 +403,7 @@ jobs:
           python3 -I scripts/release/verify_desktop_core_attestation.py --binary "$BASE" --manifest "$BASE.json" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --team-id "" --output "$RUNNER_TEMP/desktop-core-evidence.json"
       - name: Attest complete hardened Core asset set
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: |
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}

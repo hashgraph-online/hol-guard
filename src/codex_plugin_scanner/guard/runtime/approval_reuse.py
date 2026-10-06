@@ -11,7 +11,7 @@ keeps both exceptions explicit and independently testable.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from ..action_lattice import (
@@ -33,6 +33,7 @@ ApprovalReuseValidationFailure = Literal[
     "approval_reuse_integrity_failure",
     "approval_reuse_claim_failed",
     "approval_reuse_launch_identity_unverified",
+    "approval_reuse_provider_account_unverified",
     "approval_reuse_context_changed_after_claim",
 ]
 
@@ -67,6 +68,7 @@ class ApprovalReuseDecision:
     original_saved_action: str | None = None
     original_current_type: str = "str"
     original_saved_type: str | None = None
+    saved_artifact_hash_is_context_token: bool | None = None
 
     @property
     def accepted(self) -> bool:
@@ -75,7 +77,7 @@ class ApprovalReuseDecision:
     def to_evidence(self) -> dict[str, object]:
         """Return stable, non-secret diagnostics for receipts and UI evidence."""
 
-        return {
+        evidence: dict[str, object] = {
             "action": self.action,
             "status": self.status,
             "reason_code": self.reason_code,
@@ -89,6 +91,32 @@ class ApprovalReuseDecision:
             "original_current_type": self.original_current_type,
             "original_saved_type": self.original_saved_type,
         }
+        if self.saved_artifact_hash_is_context_token is not None:
+            evidence["saved_artifact_hash_is_context_token"] = self.saved_artifact_hash_is_context_token
+        return evidence
+
+
+def with_saved_artifact_hash_provenance(
+    reuse: ApprovalReuseDecision,
+    stored_artifact_hash: object,
+) -> ApprovalReuseDecision:
+    """Record whether the saved approval was bound to the context-token contract.
+
+    A rejected saved approval whose stored hash predates the context-token
+    format is stale-format evidence: it could never have bound to the current
+    request, so its rejection is housekeeping rather than the invalidation of
+    a live approval.  Emit layers use this non-secret flag to distinguish the
+    two cases without exposing either hash value.
+    """
+
+    if not isinstance(stored_artifact_hash, str) or not stored_artifact_hash:
+        return reuse
+    from .approval_context import parse_approval_context_token
+
+    return replace(
+        reuse,
+        saved_artifact_hash_is_context_token=parse_approval_context_token(stored_artifact_hash) is not None,
+    )
 
 
 def evaluate_approval_reuse(

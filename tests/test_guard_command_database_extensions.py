@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_database_matchers import LeadingSubcommandMatcher
+import pytest
+
+from codex_plugin_scanner.guard.runtime.command_database_matchers import (
+    ArgumentCommandMatcher,
+    CommandSequenceMatcher,
+    LeadingSubcommandMatcher,
+    database_matcher_index_hints,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.command_rules import ExecutableMatcher
 from tests.command_extension_contracts import (
     assert_review_required_cases,
     assert_reviewed_command_cases,
@@ -161,3 +169,153 @@ def test_database_matcher_does_not_treat_attached_option_values_as_flags(tmp_pat
     command = parse_shell_command("db-admin -uroot drop production", cwd=tmp_path, home_dir=tmp_path)
 
     assert matcher.match(command) == ()
+
+
+def test_database_matcher_rejects_combined_exit_flag_before_execution(tmp_path: Path) -> None:
+    matcher = LeadingSubcommandMatcher(
+        executables=frozenset({"db-admin"}),
+        subcommands=("run",),
+        forbidden_flags_before_delimiter=frozenset({"-h"}),
+    )
+    command = parse_shell_command("db-admin -vh run", cwd=tmp_path, home_dir=tmp_path)
+
+    assert matcher.match(command) == ()
+
+
+@pytest.mark.parametrize(
+    ("executables", "command", "minimum_abbreviation_length", "minimum_position", "message"),
+    (
+        (frozenset(), ".restore", 5, 0, "requires executables and a command"),
+        (frozenset({"sqlite3"}), " ", 1, 0, "requires executables and a command"),
+        (frozenset({"sqlite3"}), ".restore", 0, 0, "invalid minimum abbreviation length"),
+        (frozenset({"sqlite3"}), ".restore", 9, 0, "invalid minimum abbreviation length"),
+        (frozenset({"sqlite3"}), ".restore", 5, -1, "minimum position cannot be negative"),
+    ),
+)
+def test_argument_command_matcher_rejects_invalid_configuration(
+    executables: frozenset[str],
+    command: str,
+    minimum_abbreviation_length: int,
+    minimum_position: int,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        ArgumentCommandMatcher(
+            executables=executables,
+            command=command,
+            minimum_abbreviation_length=minimum_abbreviation_length,
+            minimum_position=minimum_position,
+        )
+
+
+def test_argument_command_matcher_requires_a_minimum_abbreviation_and_payload(tmp_path: Path) -> None:
+    matcher = ArgumentCommandMatcher(
+        executables=frozenset({"sqlite3"}),
+        command=".restore",
+        minimum_abbreviation_length=5,
+        minimum_position=1,
+    )
+
+    matched = parse_shell_command("sqlite3 app.db '.rest backup.db'", cwd=tmp_path, home_dir=tmp_path)
+    assert len(matcher.match(matched)) == 1
+
+    for text in (
+        "sqlite3 app.db '.res backup.db'",
+        "sqlite3 app.db '.repair backup.db'",
+        "sqlite3 app.db .restore",
+        "psql app.db '.restore backup.db'",
+    ):
+        command = parse_shell_command(text, cwd=tmp_path, home_dir=tmp_path)
+        assert matcher.match(command) == ()
+
+
+@pytest.mark.parametrize(
+    ("executables", "command_arities", "target_commands", "message"),
+    (
+        (frozenset(), (("drop", 1),), frozenset({"drop"}), "requires executables, commands, and targets"),
+        (frozenset({"mysqladmin"}), (), frozenset({"drop"}), "requires executables, commands, and targets"),
+        (frozenset({"mysqladmin"}), (("drop", 1),), frozenset(), "requires executables, commands, and targets"),
+        (
+            frozenset({"mysqladmin"}),
+            (("drop", 1), ("drop", 0)),
+            frozenset({"drop"}),
+            "unique commands with non-negative arities",
+        ),
+        (
+            frozenset({"mysqladmin"}),
+            (("drop", -1),),
+            frozenset({"drop"}),
+            "unique commands with non-negative arities",
+        ),
+        (
+            frozenset({"mysqladmin"}),
+            (("drop", 1),),
+            frozenset({"truncate"}),
+            "targets must exist in the command grammar",
+        ),
+    ),
+)
+def test_command_sequence_matcher_rejects_invalid_grammar(
+    executables: frozenset[str],
+    command_arities: tuple[tuple[str, int], ...],
+    target_commands: frozenset[str],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        CommandSequenceMatcher(
+            executables=executables,
+            command_arities=command_arities,
+            target_commands=target_commands,
+        )
+
+
+def test_command_sequence_matcher_skips_declared_arguments_and_rejects_ambiguous_or_forbidden_commands(
+    tmp_path: Path,
+) -> None:
+    matcher = CommandSequenceMatcher(
+        executables=frozenset({"mysqladmin"}),
+        command_arities=(("create", 1), ("drop", 1), ("dry-run", 0), ("status", 0)),
+        target_commands=frozenset({"drop"}),
+        options_with_values=frozenset({"--host"}),
+        forbidden_flags=frozenset({"--help"}),
+    )
+
+    matched = parse_shell_command(
+        "mysqladmin --host db.example create scratch status drop production",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert len(matcher.match(matched)) == 1
+
+    for text in (
+        "mysqladmin d production",
+        "mysqladmin status",
+        "mysqladmin --help drop production",
+    ):
+        command = parse_shell_command(text, cwd=tmp_path, home_dir=tmp_path)
+        assert matcher.match(command) == ()
+
+
+def test_database_matcher_index_hints_cover_each_supported_matcher() -> None:
+    argument_matcher = ArgumentCommandMatcher(
+        executables=frozenset({"sqlite3"}),
+        command=".restore",
+        minimum_abbreviation_length=5,
+    )
+    sequence_matcher = CommandSequenceMatcher(
+        executables=frozenset({"mysqladmin"}),
+        command_arities=(("drop", 1), ("status", 0)),
+        target_commands=frozenset({"drop"}),
+    )
+    leading_matcher = LeadingSubcommandMatcher(
+        executables=frozenset({"redis-cli"}),
+        subcommands=("flushall", "flushdb"),
+    )
+
+    assert database_matcher_index_hints(argument_matcher) == (frozenset({"sqlite3"}), frozenset({".restore"}))
+    assert database_matcher_index_hints(sequence_matcher) == (frozenset({"mysqladmin"}), frozenset({"drop"}))
+    assert database_matcher_index_hints(leading_matcher) == (
+        frozenset({"redis-cli"}),
+        frozenset({"flushall", "flushdb"}),
+    )
+    assert database_matcher_index_hints(ExecutableMatcher(executables=frozenset({"echo"}))) is None

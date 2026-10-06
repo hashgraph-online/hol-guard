@@ -32,6 +32,8 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
+
 
 def test_package_decision_v2_ignores_malformed_reason_items() -> None:
     evaluation = SimpleNamespace(
@@ -93,8 +95,6 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "dpop_key_material": None,
     }
 
-
-pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
 WORKSPACE_ID = "workspace-alpha"
 

@@ -29,6 +29,8 @@ const DEFAULT_TERMINAL_COMMANDS = {
   recover_authority: "hol-guard command controls recover-authority",
 } as const;
 
+const GATE_SETUP_SUFFIX = " Enable Ask for proof and set an Approval password in Settings > Approval gate, then return here.";
+
 /**
  * The single surface for every protection-authority state that needs the
  * operator's attention. Every state gets a plain-language cause and exactly
@@ -44,45 +46,51 @@ function authorityNoticeView(
   const terminalName = terminalCommands?.shell === "powershell" ? "PowerShell" : "your terminal";
   switch (health) {
     case "tampered":
-    case "recovery-required":
+    case "recovery-required": {
+      const gateBlocked = approvalGateReady === false;
       return {
         tone: "warning",
         title: "Protection needs repair",
-        body: "Guard found a problem with this device's trusted protection settings and is staying fail-safe. Protection changes stay locked until the settings are rebuilt with your approval. Commands keep being checked in the meantime.",
-        action: { kind: "repair" },
-        actionLabel: "Repair protection",
+        body: `Guard found a problem with this device's trusted protection settings and is staying fail-safe. Protection changes stay locked until the settings are rebuilt with your approval. Commands keep being checked in the meantime.${gateBlocked ? ` Rebuilding needs your approval password, and local approval is not ready on this device.${GATE_SETUP_SUFFIX}` : ""}`,
+        action: gateBlocked ? { kind: "configure-approval" } : { kind: "repair" },
+        actionLabel: gateBlocked ? "Set up approval" : "Repair protection",
         actionDetail: "Rebuilding the trusted settings needs your approval password. Guard verifies the repair before protection changes unlock again.",
         command: commands.recover_authority,
         commandLabel: "Repair from the terminal",
         copyButtonLabel: "Copy repair command",
         terminalSummary: `Run this in ${terminalName} if the button above cannot reach the approval gate.`,
       };
-    case "degraded-unacknowledged":
+    }
+    case "degraded-unacknowledged": {
+      const gateBlocked = approvalGateReady === false;
       return {
         tone: "warning",
         title: "Protection is limited",
-        body: "Guard cannot fully verify the trusted protection settings and is staying fail-safe until that is resolved. Acknowledging records the limited state honestly — it does not restore full protection.",
-        action: { kind: "acknowledge" },
-        actionLabel: "Acknowledge limited state",
+        body: `Guard cannot fully verify the trusted protection settings and is staying fail-safe until that is resolved. Acknowledging records the limited state honestly — it does not restore full protection.${gateBlocked ? ` Acknowledging needs your approval password, and local approval is not ready on this device.${GATE_SETUP_SUFFIX}` : ""}`,
+        action: gateBlocked ? { kind: "configure-approval" } : { kind: "acknowledge" },
+        actionLabel: gateBlocked ? "Set up approval" : "Acknowledge limited state",
         actionDetail: "Acknowledging the limited state needs your approval password. Guard keeps protecting fail-safe afterwards.",
         command: commands.recover_authority,
         commandLabel: "Repair from the terminal",
         copyButtonLabel: "Copy repair command",
         terminalSummary: `A full repair runs from ${terminalName}.`,
       };
-    case "degraded-acknowledged":
+    }
+    case "degraded-acknowledged": {
+      const gateBlocked = approvalGateReady === false;
       return {
         tone: "warning",
         title: "Protection is limited",
-        body: "The limited state is acknowledged. Guard keeps protection changes locked until the trusted settings are rebuilt from this device's terminal. Commands keep being checked in the meantime.",
-        action: { kind: "none" },
-        actionLabel: null,
+        body: `The limited state is acknowledged. Guard keeps protection changes locked until the trusted settings are rebuilt from this device's terminal. Commands keep being checked in the meantime.${gateBlocked ? ` The rebuild needs your approval password, and local approval is not ready on this device.${GATE_SETUP_SUFFIX}` : ""}`,
+        action: gateBlocked ? { kind: "configure-approval" } : { kind: "none" },
+        actionLabel: gateBlocked ? "Set up approval" : null,
         actionDetail: null,
         command: commands.recover_authority,
         commandLabel: "Repair from the terminal",
         copyButtonLabel: "Copy repair command",
         terminalSummary: `Run this in ${terminalName} to rebuild the trusted settings.`,
       };
+    }
     default:
       if (approvalGateReady === null) {
         return {

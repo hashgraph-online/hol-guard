@@ -10,15 +10,16 @@ export const SUPPORTED_APP_SLUGS = [
   "openclaw",
   "kimi",
   "grok",
+  "devin",
 ] as const;
 
 export type SupportedAppSlug = (typeof SUPPORTED_APP_SLUGS)[number];
 
 export const SUPPORTED_APPS_BRIEF =
-  "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, and Grok.";
+  "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, and Devin.";
 
 export const SUPPORTED_APPS_FULL =
-  "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, and more. Run your AI app once and Guard will detect it automatically.";
+  "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, Devin, and more. Run your AI app once and Guard will detect it automatically.";
 
 export function defaultConnectHarness(
   repairHarness?: string,

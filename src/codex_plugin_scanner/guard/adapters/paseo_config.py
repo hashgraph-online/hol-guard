@@ -9,6 +9,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..strict_json_pairs import unique_json_object
 from .base import HarnessContext
 
 PASEO_NATIVE_HARNESSES = {
@@ -116,12 +117,7 @@ def require_local_path(root: Path, path: Path, *, home_dir: Path | None = None) 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     """Reject duplicate keys instead of silently accepting ambiguous provider settings."""
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate JSON keys are not supported in Paseo configuration.")
-        result[key] = value
-    return result
+    return unique_json_object(pairs, "Duplicate JSON keys are not supported in Paseo configuration.")
 
 
 def read_config_object(path: Path) -> dict[str, object]:

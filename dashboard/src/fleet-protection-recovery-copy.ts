@@ -43,3 +43,13 @@ export function repairButtonLabel(
   if (repairState?.status === "error") return "Retry repair";
   return hasUnsupportedGaps ? "Repair supported protection" : "Repair protection";
 }
+
+export const STALLED_REPAIR_SUMMARY =
+  "Repair stopped after two attempts ended the same way.";
+
+export const STALLED_RECHECK_SUMMARY =
+  "Repair stopped after two attempts could not recheck protection.";
+
+export const RUNTIME_STOP_COMMAND = "hol-guard daemon stop";
+
+export const RUNTIME_START_COMMAND = "hol-guard bootstrap";

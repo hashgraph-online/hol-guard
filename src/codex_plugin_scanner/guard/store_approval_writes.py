@@ -34,9 +34,44 @@ def add_approval_request(
         reject_contradiction=True,
     )
     _begin_immediate(connection)
+    # Callers may own a larger transaction and catch a failed insert. Keep
+    # expired predecessors and their replacement in one atomic unit anyway.
+    connection.execute("savepoint approval_request_write")
+    try:
+        result = _add_approval_request_in_transaction(
+            connection,
+            request,
+            now,
+            oauth_source=oauth_source,
+            canonical_decision=canonical_decision,
+        )
+    except BaseException:
+        connection.execute("rollback to savepoint approval_request_write")
+        connection.execute("release savepoint approval_request_write")
+        raise
+    connection.execute("release savepoint approval_request_write")
+    return result
+
+
+def _add_approval_request_in_transaction(
+    connection: sqlite3.Connection,
+    request: GuardApprovalRequest,
+    now: str,
+    *,
+    oauth_source: str,
+    canonical_decision: CanonicalApprovalSurfaces,
+) -> str:
     normalized_oauth_source = oauth_source.strip().lower() or "default"
     identity_key = _normalized_identity_key(request.launch_target)
     action_identity, queue_group_id = approval_queue_identity_for_request(request)
+    _expire_inconsistent_group_requests(
+        connection,
+        request_id=request.request_id,
+        harness=request.harness,
+        oauth_source=normalized_oauth_source,
+        queue_group_id=queue_group_id,
+        now=now,
+    )
     request_id = _existing_request_id(
         connection,
         request,
@@ -44,6 +79,18 @@ def add_approval_request(
         identity_key=identity_key,
         queue_group_id=queue_group_id,
     )
+    if request_id is not None and not _consistent_pending_request(connection, request_id):
+        if request_id == request.request_id:
+            raise ValueError("fresh_review_request_id_required")
+        # Only a new, canonically validated host attempt can replace this row.
+        # Never repair its authority under the old ID or authorize a replay.
+        connection.execute(
+            """update approval_requests set status = 'expired', resolved_at = ?,
+            resolution_action = null, resolution_scope = null, reason = ?
+            where request_id = ? and status = 'pending'""",
+            (now, "superseded_by_fresh_review:" + request.request_id, request_id),
+        )
+        request_id = None
     if request_id is not None:
         _update_request(
             connection,
@@ -68,6 +115,59 @@ def add_approval_request(
         now=now,
     )
     return request.request_id
+
+
+def _expire_inconsistent_group_requests(
+    connection: sqlite3.Connection,
+    *,
+    request_id: str,
+    harness: str,
+    oauth_source: str,
+    queue_group_id: str,
+    now: str,
+) -> None:
+    """Retire invalid older cards even when a newer valid card wins deduplication."""
+
+    rows = connection.execute(
+        """select request_id from approval_requests
+           where queue_group_id = ? and harness = ? and oauth_source = ? and status = 'pending'
+           order by last_seen_at desc, request_id desc""",
+        (queue_group_id, harness, oauth_source),
+    ).fetchall()
+    valid_ids: list[str] = []
+    invalid_ids: list[str] = []
+    for row in rows:
+        existing_id = str(row["request_id"])
+        (valid_ids if _consistent_pending_request(connection, existing_id) else invalid_ids).append(existing_id)
+    if request_id in invalid_ids:
+        raise ValueError("fresh_review_request_id_required")
+    replacement_id = valid_ids[0] if valid_ids else request_id
+    for invalid_id in invalid_ids:
+        connection.execute(
+            """update approval_requests set status = 'expired', resolved_at = ?,
+            resolution_action = null, resolution_scope = null, reason = ?
+            where request_id = ? and status = 'pending'""",
+            (now, "superseded_by_fresh_review:" + replacement_id, invalid_id),
+        )
+
+
+def _consistent_pending_request(connection: sqlite3.Connection, request_id: str) -> bool:
+    row = connection.execute(
+        "select policy_action, decision_v2_json, action_envelope_json from approval_requests where request_id = ?",
+        (request_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    try:
+        canonical = canonical_approval_surfaces(
+            row[0],
+            json.loads(row[1]) if row[1] is not None else None,
+            json.loads(row[2]) if row[2] is not None else None,
+            reject_contradiction=False,
+        )
+        return canonical.contract_error is None
+    except (TypeError, ValueError):
+        return False
 
 
 def _existing_request_id(

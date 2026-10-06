@@ -21,6 +21,8 @@ import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 import { FindingDetailPanel, FindingRow } from "./package-workbench-finding-detail";
 import { ActiveFilterChip, FilterModal, buildFilterSummary } from "./package-workbench-filter-modal";
 import { WorkbenchHeader, WorkbenchPagination } from "./package-workbench-common";
+import { normalizeSupplyChainAuditWorkspaceInput } from "./supply-chain-audit-workspace";
+import { WorkspaceAuditFolderField } from "./workspace-audit-folder-field";
 
 const WORKBENCH_PAGE_SIZE = 25;
 
@@ -30,7 +32,14 @@ type PackageWorkbenchPanelProps = {
   auditConnectGate?: AuditConnectGateViewState | null;
   auditError?: string | null;
   auditSnapshot: SupplyChainAuditSnapshot | null;
+  auditWorkspaceDir?: string;
+  auditWorkspaceChoices?: readonly string[];
+  auditWorkspaceSelectionRequired?: boolean;
+  folderPickerBusy?: boolean;
+  folderPickerError?: string | null;
   onRunAudit?: () => void;
+  onChooseAuditWorkspace?: () => void;
+  onAuditWorkspaceDirChange?: (workspaceDir: string) => void;
   auditRunning?: boolean;
   auditPhase?: AuditRunPhase;
   cloudState?: string | null;
@@ -119,7 +128,14 @@ export function PackageWorkbenchPanel({
   auditConnectGate = null,
   auditError = null,
   auditSnapshot,
+  auditWorkspaceDir = "",
+  auditWorkspaceChoices = [],
+  auditWorkspaceSelectionRequired = false,
+  folderPickerBusy = false,
+  folderPickerError = null,
   onRunAudit,
+  onChooseAuditWorkspace,
+  onAuditWorkspaceDirChange,
   auditRunning = false,
   auditPhase = "idle",
   cloudState = null,
@@ -142,6 +158,8 @@ export function PackageWorkbenchPanel({
 
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
+  const showFolderField = auditWorkspaceSelectionRequired || auditSnapshot === null || Boolean(auditError) || Boolean(onChooseAuditWorkspace);
+  const workspacePathMissing = normalizeSupplyChainAuditWorkspaceInput(auditWorkspaceDir).length === 0;
   const tableSource = viewMode === "review" ? findings : packages;
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === undefined);
@@ -275,8 +293,10 @@ export function PackageWorkbenchPanel({
             <ActionButton
               variant="outline"
               onClick={handleRunAudit}
-              disabled={auditRunning}
+              disabled={auditRunning || workspacePathMissing}
+              aria-disabled={auditRunning || workspacePathMissing}
               aria-busy={auditRunning}
+              data-testid="workspace-audit-run"
             >
               {auditRunning ? (
                 <HiMiniArrowPath className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -305,6 +325,18 @@ export function PackageWorkbenchPanel({
         ) : (
           <>
             {auditError ? <WorkbenchAuditErrorBanner message={auditError} /> : null}
+
+            {showFolderField ? (
+              <WorkspaceAuditFolderField
+                value={auditWorkspaceDir}
+                choices={auditWorkspaceChoices}
+                choosing={folderPickerBusy}
+                disabled={auditRunning}
+                pickerError={folderPickerError}
+                onChange={onAuditWorkspaceDirChange}
+                onChoose={onChooseAuditWorkspace}
+              />
+            ) : null}
 
             {progressActive ? (
               <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4">

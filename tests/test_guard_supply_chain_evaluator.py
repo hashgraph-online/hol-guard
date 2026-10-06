@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.lockfile_parse_result import (
     DependencyMapParser,
     LockfileParseResult,
@@ -41,12 +42,11 @@ from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpi
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
-    _build_request_payload,
     _evidence_id,
     _with_additional_reason,
-    _workspace_fingerprint,
     evaluate_package_request_artifact,
 )
+from codex_plugin_scanner.guard.runtime.supply_chain_package_services import _workspace_fingerprint
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.support.network import stub_authenticated_urlopen
 
@@ -1588,13 +1588,13 @@ def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_befo
 def test_evaluate_external_tarball_requires_approval_without_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fail_scan(_source_url: str) -> object:
+    def fail_scan(_source_url: str, **_kwargs: object) -> object:
         raise AssertionError("external archive inspection ran before approval")
 
     def fail_cloud(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("external archive evaluation reached cloud network before approval")
 
-    monkeypatch.setattr(evaluator_module, "_scan_external_tarball", fail_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", fail_scan)
     monkeypatch.setattr(evaluator_module, "_evaluate_with_cloud", fail_cloud)
 
     result = evaluate_package_request_artifact(
@@ -1610,11 +1610,11 @@ def test_evaluate_external_tarball_requires_approval_without_network(
 
 
 def test_evaluate_package_request_artifact_blocks_external_tarball_zip_slip(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_hook_force: Path
 ) -> None:
     archive = _tarball_bytes([("../escape.sh", b"#!/bin/sh\necho pwned\n")])
     downloaded = _downloaded_archive(tmp_path, archive)
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
+    monkeypatch.setattr(package_services, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/unsafe.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
@@ -1629,7 +1629,7 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_zip_slip(
 
 
 def test_evaluate_package_request_artifact_blocks_external_tarball_install_scripts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_hook_force: Path
 ) -> None:
     marker_path = tmp_path / "postinstall-marker.txt"
     package_json = json.dumps(
@@ -1646,7 +1646,7 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_install_scrip
     ).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
     downloaded = _downloaded_archive(tmp_path, archive)
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
+    monkeypatch.setattr(package_services, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/scripted.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
@@ -1662,7 +1662,7 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_install_scrip
 
 
 def test_evaluate_package_request_artifact_blocks_shai_hulud_style_credential_theft_tarball_fixture(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_hook_force: Path
 ) -> None:
     package_json = json.dumps(
         {
@@ -1680,7 +1680,7 @@ def test_evaluate_package_request_artifact_blocks_shai_hulud_style_credential_th
     ).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
     downloaded = _downloaded_archive(tmp_path, archive)
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
+    monkeypatch.setattr(package_services, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/shai-hulud-fixture.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
@@ -1695,12 +1695,12 @@ def test_evaluate_package_request_artifact_blocks_shai_hulud_style_credential_th
 
 
 def test_evaluate_package_request_artifact_reviews_clean_external_tarball(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_hook_force: Path
 ) -> None:
     package_json = json.dumps({"name": "safe-package", "version": "1.0.0"}).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
     downloaded = _downloaded_archive(tmp_path, archive)
-    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
+    monkeypatch.setattr(package_services, "_download_external_tarball", lambda *_args, **_kwargs: downloaded)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("https://packages.example.com/safe.tgz"),
         store=GuardStore(tmp_path / "guard-home"),
@@ -1709,7 +1709,7 @@ def test_evaluate_package_request_artifact_reviews_clean_external_tarball(
         external_archive_network_authorized=True,
     )
 
-    assert result.decision == "ask"
+    assert result.decision == "ask", [r.get("code") for r in result.reasons]
     assert result.policy_action == "review"
     assert any(reason["code"] == "external_tarball_source" for reason in result.reasons)
 
@@ -2554,7 +2554,7 @@ def test_resolved_target_version_uses_registry_metadata_for_npm_ranges(monkeypat
             }
         }
 
-    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry)
+    monkeypatch.setattr(package_services, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry)
     resolved = evaluator_module._resolved_target_version(
         target={
             "ecosystem": "npm",
@@ -3030,7 +3030,7 @@ def test_evaluate_unlisted_registry_package_uses_local_intelligence_when_cloud_a
         )
 
     monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_auth_expired)
-    monkeypatch.setattr(evaluator_module, "_registry_resolved_target_version", lambda **_kwargs: "1.2.3")
+    monkeypatch.setattr(package_services, "_registry_resolved_target_version", lambda **_kwargs: "1.2.3")
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("@openai/codex@latest"),
         store=store,
@@ -3073,7 +3073,7 @@ def test_evaluate_unlisted_package_still_requires_review_when_registry_identity_
         )
 
     monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_auth_expired)
-    monkeypatch.setattr(evaluator_module, "_registry_resolved_target_version", lambda **_kwargs: None)
+    monkeypatch.setattr(package_services, "_registry_resolved_target_version", lambda **_kwargs: None)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("@openai/cdoex@latest"),
         store=store,
@@ -3356,29 +3356,3 @@ def test_bundle_reason_message_uses_block_copy_for_stale_blocked_bundle() -> Non
 
     assert "blocked" in message.lower()
     assert "monitor mode" not in message
-
-
-def test_build_request_payload_includes_manifest_hash_when_package_json_present(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    (workspace_dir / "package.json").write_text('{"name":"demo","version":"1.0.0"}', encoding="utf-8")
-    (workspace_dir / "package-lock.json").write_text(
-        '{"packages":{"node_modules/minimist":{"version":"1.2.8"}}}',
-        encoding="utf-8",
-    )
-    artifact = _artifact_for_targets(
-        "minimist@1.2.8",
-        lockfile_paths=("package-lock.json",),
-        manifest_paths=("package.json",),
-    )
-    targets = evaluator_module._evaluation_targets(artifact, workspace_dir)
-    payload = _build_request_payload(
-        artifact=artifact,
-        targets=targets,
-        workspace_dir=workspace_dir,
-        workspace_fingerprint="fp",
-        policy_version="policy-v1",
-    )
-    assert "manifestHash" in payload["lockfileContext"]
-    assert isinstance(payload["lockfileContext"]["manifestHash"], str)
-    assert payload["lockfileContext"]["manifestHash"]

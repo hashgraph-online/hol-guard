@@ -149,6 +149,25 @@ pub(super) fn persist_authority(
     snapshot: Option<&PolicySnapshotV3>,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
 ) -> Result<(), String> {
+    let floor = super::policy_store_command_floor::snapshot_floor(snapshot);
+    persist_authority_with_control_floor(
+        path,
+        generation_floor,
+        policy_digest,
+        snapshot,
+        verifier_key,
+        floor.as_ref(),
+    )
+}
+
+pub(super) fn persist_authority_with_control_floor(
+    path: &Path,
+    generation_floor: u64,
+    policy_digest: &str,
+    snapshot: Option<&PolicySnapshotV3>,
+    verifier_key: &[u8; VERIFIER_KEY_BYTES],
+    command_control_floor: Option<&super::policy_store_command_floor::CommandControlFloor>,
+) -> Result<(), String> {
     let private_root = path
         .parent()
         .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())
@@ -166,7 +185,13 @@ pub(super) fn persist_authority(
         generation_floor,
         policy_digest: policy_digest.to_owned(),
         snapshot: snapshot.cloned(),
-        floor_mac: generation_floor_mac(generation_floor, policy_digest, verifier_key),
+        floor_mac: super::policy_store_command_floor::authority_floor_mac(
+            generation_floor,
+            policy_digest,
+            command_control_floor,
+            verifier_key,
+        )?,
+        command_control_floor: command_control_floor.cloned(),
     };
     let value = serde_json::to_value(record)
         .map_err(|_| "native_policy_snapshot_authority_encode_failed".to_owned())?;
@@ -189,12 +214,34 @@ pub(super) fn is_lower_hex(value: &str, length: usize) -> bool {
 
 #[cfg(windows)]
 pub(super) fn map_private_read_error(kind: &str, error: String) -> String {
+    if is_stable_native_code(&error) {
+        return error;
+    }
     if error.ends_with("_invalid") {
         format!("native_policy_snapshot_{kind}_invalid")
     } else if error.ends_with("_not_private") {
         format!("native_policy_snapshot_{kind}_not_private")
     } else {
         format!("native_policy_snapshot_{kind}_read_failed")
+    }
+}
+
+fn is_stable_native_code(error: &str) -> bool {
+    (1..=128).contains(&error.len())
+        && error.starts_with("native_")
+        && error
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+/// Keep an already-stable resident code. Collapsing it into an unlisted
+/// `native_policy_snapshot_{kind}_*` string makes `safe_error_response`
+/// rewrite the real failure to `native_request_invalid_json`.
+fn surfaced_persist_error(kind: &str, suffix: &str, error: &str) -> String {
+    if is_stable_native_code(error) {
+        error.to_owned()
+    } else {
+        format!("native_policy_snapshot_{kind}_{suffix}")
     }
 }
 
@@ -312,7 +359,7 @@ pub(super) fn persist_private_bytes(
     #[cfg(windows)]
     let mut file = match persistence_fault(PersistBoundary::TemporaryCreate).and_then(|()| {
         crate::resident_state::private_file(&temporary, true, private_root)
-            .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+            .map_err(|error| surfaced_persist_error(kind, "write_failed", &error))
     }) {
         Ok(file) => file,
         Err(error) => {
@@ -323,7 +370,7 @@ pub(super) fn persist_private_bytes(
     let mut file = match persistence_fault(PersistBoundary::TemporaryCreate).and_then(|()| {
         options
             .open(&temporary)
-            .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+            .map_err(|error| surfaced_persist_error(kind, "write_failed", &error.to_string()))
     }) {
         Ok(file) => file,
         Err(error) => {
@@ -334,12 +381,12 @@ pub(super) fn persist_private_bytes(
     let write_result = persistence_fault(PersistBoundary::Write)
         .and_then(|()| {
             file.write_all(bytes)
-                .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+                .map_err(|error| surfaced_persist_error(kind, "write_failed", &error.to_string()))
         })
         .and_then(|()| persistence_fault(PersistBoundary::FileSync))
         .and_then(|()| {
             file.sync_all()
-                .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+                .map_err(|error| surfaced_persist_error(kind, "write_failed", &error.to_string()))
         });
     if let Err(error) = write_result {
         #[cfg(windows)]
@@ -380,11 +427,11 @@ pub(super) fn persist_private_bytes(
     #[cfg(unix)]
     {
         persistence_fault(PersistBoundary::DirectorySync)?;
-        let directory =
-            File::open(parent).map_err(|_| format!("native_policy_snapshot_{kind}_sync_failed"))?;
+        let directory = File::open(parent)
+            .map_err(|error| surfaced_persist_error(kind, "sync_failed", &error.to_string()))?;
         directory
             .sync_all()
-            .map_err(|_| format!("native_policy_snapshot_{kind}_sync_failed"))?;
+            .map_err(|error| surfaced_persist_error(kind, "sync_failed", &error.to_string()))?;
     }
     // Windows has no directory fsync primitive exposed by std. Keep a
     // separate fault boundary for the post-replacement durability point so
@@ -401,7 +448,8 @@ pub(super) fn replace_temporary(
     kind: &str,
     _private_root: &Path,
 ) -> Result<(), String> {
-    fs::rename(temporary, path).map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))
+    fs::rename(temporary, path)
+        .map_err(|error| surfaced_persist_error(kind, "replace_failed", &error.to_string()))
 }
 
 #[cfg(windows)]
@@ -412,7 +460,7 @@ pub(super) fn replace_temporary(
     private_root: &Path,
 ) -> Result<(), String> {
     crate::resident_state::replace_windows_private_file(temporary, path, private_root)
-        .map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))
+        .map_err(|error| surfaced_persist_error(kind, "replace_failed", &error))
 }
 
 #[cfg(all(test, windows))]

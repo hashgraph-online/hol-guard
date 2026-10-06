@@ -21,6 +21,9 @@ from .security_secret_patterns import (
     SecretPattern,
     _field_name_map_spans,
     _is_generated_token_expression,
+    _is_symbolic_reference_literal,
+    _python_symbolic_reference_spans,
+    _screen_route_map_spans,
 )
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
@@ -239,12 +242,57 @@ def _looks_like_interpolated_secret(value: str) -> bool:
     return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
 
 
+BRACKETED_PLACEHOLDER_RE = re.compile(
+    r"^(?:<[A-Za-z][A-Za-z0-9 _.,:()/\-]{0,80}>|\[[A-Za-z][A-Za-z0-9 _.,:()/\-]{0,120}\])$"
+)
+
+
+def _is_bracketed_placeholder_text(candidate: str) -> bool:
+    """True if a fully-captured string is an enclosed, word-like bracketed placeholder.
+
+    Credential-shaped contents do not qualify: a bare alphanumeric token containing
+    a digit (e.g. [hunter2hunter2]) or any alphanumeric run mixing case and digits
+    (e.g. [Xk9q-2mZ7], <Prod_Db.Pass2024>) looks like a real secret, not wording.
+    """
+    if not BRACKETED_PLACEHOLDER_RE.fullmatch(candidate):
+        return False
+    inner = candidate[1:-1]
+    segments = re.findall(r"[A-Za-z0-9]+", inner)
+    return not any(
+        re.search(r"[0-9]", segment)
+        and (len(segments) == 1 or (re.search(r"[a-z]", segment) and re.search(r"[A-Z]", segment)))
+        for segment in segments
+    )
+
+
+def _is_bracketed_placeholder_literal(content: str, detector: SecretPattern, match: re.Match[str]) -> bool:
+    """True if the matched generic secret value is an enclosed bracketed placeholder.
+
+    Valid placeholders must have matching delimiters (<...> or [...]) and word-like
+    placeholder text (e.g. <password>, [redacted - retrieve token via auth]), preventing
+    unclosed or real bracket-prefixed credentials from bypassing security checks.
+    """
+    start = match.start(detector.value_group)
+    if start == 0 or content[start - 1] not in "\"'`":
+        candidate = match.group(detector.value_group).strip().strip("\"'`")
+        return _is_bracketed_placeholder_text(candidate)
+
+    quote = content[start - 1]
+    end = content.find(quote, start)
+    if end == -1 or "\n" in content[start:end]:
+        return False
+
+    literal = content[start:end].strip()
+    return _is_bracketed_placeholder_text(literal)
+
+
 def _looks_like_placeholder_secret(value: str) -> bool:
+    """Check if a candidate string matches placeholder heuristic markers on example surfaces."""
     normalized = _normalize_secret_candidate(value)
     lowered = normalized.lower()
     if not normalized:
         return True
-    if _looks_like_interpolated_secret(normalized) or normalized.startswith(("<", "[")):
+    if _looks_like_interpolated_secret(normalized) or _is_bracketed_placeholder_text(normalized):
         return True
     if "..." in normalized or "…" in normalized:
         return True
@@ -415,12 +463,19 @@ def _should_skip_secret_match(
     lines: list[str] | None = None,
     offsets: tuple[int, ...] | None = None,
     field_name_spans: tuple[tuple[int, int], ...] = (),
+    python_reference_spans: frozenset[tuple[int, int]] = frozenset(),
 ) -> bool:
     """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
     if _looks_like_interpolated_secret(candidate):
         return True
+    # Fully-enclosed bracketed placeholders (<password>, [redacted...]) are universal documentation
+    # markers allowed across all scanned paths, but bare prefix unclosed credentials remain guarded.
+    if detector.kind == "generic" and _is_bracketed_placeholder_literal(content, detector, match):
+        return True
     if detector.kind == "generic" and _provider_payload(candidate) is None:
+        if _is_symbolic_reference_literal(relative_path, content, match, python_reference_spans):
+            return True
         if _is_generated_token_expression(relative_path, content, match):
             return True
         span_index = bisect.bisect_right(field_name_spans, (match.start(), len(content))) - 1
@@ -450,7 +505,10 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
     """Find the first retained secret line while enforcing the per-file match budget."""
     offsets = _newline_offsets(content)
     lines = content.splitlines()
-    field_name_spans = _field_name_map_spans(relative_path, content)
+    python_reference_spans = _python_symbolic_reference_spans(relative_path, content)
+    field_name_spans = tuple(
+        sorted(_field_name_map_spans(relative_path, content) + _screen_route_map_spans(relative_path, content))
+    )
     first_line = _first_private_key_line(relative_path, content, lines=lines, offsets=offsets)
     first_offset: int | None = None
     matches_seen = 0
@@ -473,6 +531,7 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
                 lines=lines,
                 offsets=offsets,
                 field_name_spans=field_name_spans,
+                python_reference_spans=python_reference_spans,
             ):
                 continue
             first_offset = match.start()

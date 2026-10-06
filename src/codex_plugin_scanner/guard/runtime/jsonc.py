@@ -15,9 +15,13 @@ def loads_jsonc(
 ) -> object:
     """Decode JSONC while preserving JSON's duplicate-key hook semantics."""
 
-    without_comments = _strip_comments(text, deadline_check=deadline_check)
-    normalized = _strip_trailing_commas(without_comments, deadline_check=deadline_check)
+    normalized = normalize_jsonc(text, deadline_check=deadline_check)
     return cast(object, json.loads(normalized, object_pairs_hook=object_pairs_hook))
+
+
+def normalize_jsonc(text: str, *, deadline_check: Callable[[], None] | None = None) -> str:
+    """Replace JSONC syntax with whitespace without changing character offsets."""
+    return _strip_trailing_commas(_strip_comments(text, deadline_check=deadline_check), deadline_check=deadline_check)
 
 
 def _strip_comments(text: str, *, deadline_check: Callable[[], None] | None) -> str:

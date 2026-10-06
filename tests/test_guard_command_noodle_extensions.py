@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
 from tests.command_extension_contracts import assert_safe_command_cases
+from tests.native_command_test_support import real_native_command_evaluation
 
 NOODLE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     (
@@ -37,7 +37,7 @@ NOODLE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 def test_noodle_run_commands_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in NOODLE_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.noodle" for item in evaluation.extension_observations)
 

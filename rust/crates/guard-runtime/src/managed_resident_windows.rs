@@ -1,6 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::path::Path;
+use std::time::Instant;
 
 use guard_runtime_windows_process::{spawn_managed_child, ManagedChild};
 
@@ -12,6 +13,7 @@ pub(crate) fn spawn_managed(
     digest: &str,
     token: &[u8],
     owner_process_id: u32,
+    overall_deadline: Instant,
 ) -> Result<ManagedChild, String> {
     let executable =
         std::env::current_exe().map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
@@ -31,7 +33,12 @@ pub(crate) fn spawn_managed(
         .map_err(|_| "native_resident_spawn_failed".to_owned())?;
     let write_result = {
         let Some(mut stdin) = child.take_stdin() else {
-            let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
+            super::containment::terminate_spawned_managed(
+                &mut child,
+                overall_deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(super::MANAGED_STOP_TIMEOUT),
+            )?;
             return Err("native_resident_spawn_stdin_failed".to_owned());
         };
         stdin
@@ -40,7 +47,12 @@ pub(crate) fn spawn_managed(
             .and_then(|()| stdin.flush())
     };
     if write_result.is_err() {
-        let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
+        super::containment::terminate_spawned_managed(
+            &mut child,
+            overall_deadline
+                .saturating_duration_since(Instant::now())
+                .min(super::MANAGED_STOP_TIMEOUT),
+        )?;
         return Err("native_resident_spawn_auth_failed".to_owned());
     }
     Ok(child)

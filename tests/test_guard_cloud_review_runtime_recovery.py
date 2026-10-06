@@ -209,18 +209,18 @@ def test_restart_after_application_before_result_ack_retries_without_reapplying(
     assert len(restarted.list_events(event_name="cloud_review.exact_used")) == 1
 
 
-@pytest.mark.soak
-def test_cloud_review_worker_survives_ten_thousand_recurring_disconnects(
+def _exercise_recurring_disconnects(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    *,
+    iterations: int,
+) -> int:
     store = GuardStore(tmp_path / "soak")
     monkeypatch.setattr(
         store,
         "get_cloud_sync_profile",
         lambda: {"workspace_id": "workspace-1", "sync_url": "https://guard.example/api/guard/receipts/sync"},
     )
-    iterations = 10_000
     attempts = 0
 
     stop_event = threading.Event()
@@ -236,7 +236,7 @@ def test_cloud_review_worker_survives_ten_thousand_recurring_disconnects(
 
     monkeypatch.setattr(cloud_review_sync, "_resolve_cloud_review_sync_auth_context", lambda _store: {})
     monkeypatch.setattr(cloud_review_sync, "sync_cloud_review_events_once", sync)
-    monkeypatch.setattr(cloud_review_sync._LOGGER, "exception", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cloud_review_sync_worker._LOGGER, "exception", lambda *_args, **_kwargs: None)
 
     cloud_review_sync_worker._cloud_sync_sync_loop(
         store,
@@ -246,4 +246,19 @@ def test_cloud_review_worker_survives_ten_thousand_recurring_disconnects(
         error_backoff=0.001,
     )
 
-    assert attempts == iterations
+    return attempts
+
+
+@pytest.mark.soak
+def test_cloud_review_worker_survives_ten_thousand_recurring_disconnects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert _exercise_recurring_disconnects(tmp_path, monkeypatch, iterations=10_000) == 10_000
+
+
+def test_cloud_review_worker_recovers_from_recurring_disconnects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert _exercise_recurring_disconnects(tmp_path, monkeypatch, iterations=300) == 300

@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import io
 import json
+import math
 import socket
 import time
 import urllib.error
@@ -35,9 +36,21 @@ def _interrupt_health_socket(stream: socket.socket) -> None:
         stream.shutdown(socket.SHUT_RDWR)
 
 
-def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, object] | None:
+def read_guard_health_details(
+    daemon_url: str,
+    auth_token: str,
+    *,
+    deadline_monotonic: float | None = None,
+) -> dict[str, object] | None:
     """Read bounded authenticated health details over direct, non-redirecting loopback IPC."""
     try:
+        deadline = time.monotonic() + _HEALTH_PROBE_DEADLINE_SECONDS
+        if deadline_monotonic is not None:
+            if isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic):
+                return None
+            deadline = min(deadline, deadline_monotonic)
+        if time.monotonic() >= deadline:
+            return None
         parsed = urlsplit(daemon_url)
         if (
             parsed.scheme != "http"
@@ -53,10 +66,10 @@ def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, obj
             return None
         # HTTPConnection neither consults proxy environment variables nor follows
         # redirects. Never forward the daemon token to a redirected authority.
-        deadline = time.monotonic() + _HEALTH_PROBE_DEADLINE_SECONDS
-        with closing(
-            HTTPConnection(parsed.hostname, parsed.port, timeout=_HEALTH_PROBE_DEADLINE_SECONDS)
-        ) as connection:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        with closing(HTTPConnection(parsed.hostname, parsed.port, timeout=remaining)) as connection:
             connection.connect()
             stream = connection.sock
             remaining = deadline - time.monotonic()
@@ -298,6 +311,9 @@ class GuardSurfaceDaemonClient:
 
     def preview_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/preview", payload)
+
+    def inspect_command(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._post("/v1/extension-controls/inspect", payload)
 
     def apply_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/apply", payload)

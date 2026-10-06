@@ -1,0 +1,2101 @@
+{
+  "note": "Oracle decisions recorded from the pre-deletion HookReviewEngine for deterministic synthetic cases; secrets below are synthetic tokens.",
+  "schema": "hol-guard.native-hook-differential-expectations.v1",
+  "source": "c4be30fb2",
+  "suites": {
+    "differential": {
+      "clean-small": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "8de5c07db8deb3b75dedd9b5bc999669936cea181ae0033c27c4e2071a6e434d"
+      },
+      "docs-placeholder": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "2c313e07822d6215031a70be9927f445f62a1936195dd648dcd4f8818ea7caf8"
+      },
+      "empty": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "inline-secret": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "large-clean": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "8ef336c658970e3a8b3a30d82d825741ee64a7e23d08931be163715139fc625a"
+      },
+      "multi-field-clean": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "2c939e1ed48a840639434c54931f932e61736c0b3b7ff75bde7104a6d6a1486d"
+      },
+      "source-allowed-.github-workflows-ci.yml": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "source_full_scan_allow",
+        "reviewed_output_sha256": "559e3b9f2cee0c0809bf40661fff3e2fed2644e1d0e07ce2204ed2ba39ea11b3"
+      },
+      "source-allowed-.nvmrc": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "source_full_scan_allow",
+        "reviewed_output_sha256": "5378796307535df3ec8d8b15a2e2dc5641419c3d3060cfe32238c0fa973f7aa3"
+      },
+      "source-allowed-docs-guide.md": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "source_full_scan_allow",
+        "reviewed_output_sha256": "bc553ffe57e544498b12a9865dbf3abc2004c474e349c52c378eaa402287424b"
+      },
+      "source-clean": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "source_full_scan_allow",
+        "reviewed_output_sha256": "5d8f65d2774e206bc9f7a7a4ad39ca2dc563b5c31e46ab57ef4874961237ce29"
+      },
+      "source-external-sibling": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "source_full_scan_allow",
+        "reviewed_output_sha256": "1dd1b0bfa427f83dcfd3bb0abd3504d675cccc0df81f50c0ecbea3581ea27322"
+      },
+      "source-known-skill": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "source_full_scan_allow",
+        "reviewed_output_sha256": "7735052563b8b9be8019d9fad8b23af5b32b58af9fbf6da687ed895d77a77153"
+      },
+      "source-rejected-.env": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "sensitive_path",
+        "reviewed_output_sha256": null
+      },
+      "source-rejected-.hidden-config.py": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "source-rejected-credentials": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "source-secret": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "source_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "source-symlink": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      }
+    },
+    "mutation": {
+      "mutation-113-0": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-1": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "e5eedf8ae32deb6f34df35c554b62d33809e7b39f2ef9c4aaa2a7b1d19936c4b"
+      },
+      "mutation-113-10": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "0a8952fed2d7736fd1e04e21127a05b6f133100e14d60679a7258cc45650d06f"
+      },
+      "mutation-113-11": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-12": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-13": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-14": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-15": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "0e90d79454af5842a1586100c021977f63cdb81e2a502c0a751c5ef66634608b"
+      },
+      "mutation-113-16": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-17": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-18": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "008e9af8636662f19115272f4cd1b00012471399d3fb5b1907fb847cd1bdc57c"
+      },
+      "mutation-113-19": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-2": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-20": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-21": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-22": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-23": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-24": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-25": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-26": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-27": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "ab6f7a8bb7eea43eecf5028a1ba98b2cb02a28d8b8387e6a7a6af5b3e91c0d50"
+      },
+      "mutation-113-28": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "d1e2a2aeb1c36b04fc8b4eae1c706e8acf5cc47d1dd05c406346a245e297deb3"
+      },
+      "mutation-113-29": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-3": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-30": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-31": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "fab93f51d445251d12b99bffe1d465716d0ba2a6ae8194ec5472d63f5e1e227f"
+      },
+      "mutation-113-32": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-33": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-34": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-35": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-36": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-37": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-38": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-113-39": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-4": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-40": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-41": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "553dcf98e619366e7b702d51827c02132f48e24a7d638d432d28d1cbbb4ab888"
+      },
+      "mutation-113-42": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-43": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-44": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-45": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-46": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-47": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-48": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "3dabd98e759d85fb022ea38b605346902fcf230109e730536feb65b1d396e090"
+      },
+      "mutation-113-49": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "033100d28630b3a6309d9854bc4a1bf407658e90e79bdacf1ad1d0cc0a8ff6ed"
+      },
+      "mutation-113-5": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "bd456e59d12d04bc7b61641c143f86ca5a4007ea46446b19f70494ad3a0661f2"
+      },
+      "mutation-113-50": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-51": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-52": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-53": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-54": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "0687a50dd6d732f5035d55c4f9d210643f52b166df1f93781cc2e0794b63c6c8"
+      },
+      "mutation-113-55": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "db8d9f8c2001586ebdc6ac325fb3c9d8cedd758eef29951e448ccdc4e4035dc8"
+      },
+      "mutation-113-56": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-57": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-58": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-59": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-6": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-60": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-61": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-113-62": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-63": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-7": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-8": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-113-9": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "7038f1c1aebe059a93f3e33e60dd8985a4548605d39f653a172eb230d6af2646"
+      },
+      "mutation-29-0": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-1": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-10": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-11": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-12": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-13": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-14": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-15": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-16": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-17": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-18": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "e078f562087e9c93cfc9f6b72d08b5e856f24b298d4bf2d6097fefcfa1d751cf"
+      },
+      "mutation-29-19": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-2": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-20": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-21": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-22": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "f407eb4597b01eda60427666689d2bae744b2dc7e759b3ccc03cb63b0702a028"
+      },
+      "mutation-29-23": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-24": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-29-25": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-26": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-27": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "3f8b052bae624ec7d0fe4958109289651d0efa17891df4247a8ad4d3acd77894"
+      },
+      "mutation-29-28": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-29": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-3": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-30": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-31": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-32": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-33": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-34": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "d946e4bbda6d13d69a07af02109447658ac9505ab7ee02f5547160ef2d387299"
+      },
+      "mutation-29-35": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "3e173f1e87b895d80200900d043bdc0bf74e2d4f52e210c7e926f353156011d2"
+      },
+      "mutation-29-36": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-29-37": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "af99575711930080094d22e2c34555313c3295c40bbc43024bcc4123c6e81437"
+      },
+      "mutation-29-38": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-39": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-4": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-40": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "97ad4857ce36416098fe50d582a96ac456db339f3291123552aed22e05927e1f"
+      },
+      "mutation-29-41": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "9c596978ad0015c70d9b92189844018521377179f2af1e85cd5d0d68097b956d"
+      },
+      "mutation-29-42": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-29-43": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-29-44": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-45": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-46": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-29-47": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "45750c47ff21cabfb012c4da25131c75c76563577e3f6f1ad69b3ed2cd1e92d8"
+      },
+      "mutation-29-48": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-49": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-5": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-50": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-51": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-52": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-53": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "8400eb7612529ba2ab9645364b8b5c201546a6fce4c5dd16950e76aa953c251c"
+      },
+      "mutation-29-54": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-55": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-56": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-57": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-58": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-59": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-6": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-60": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-61": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-62": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-63": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-7": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-8": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-29-9": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "a4785efa0307c138b463d0d7f18d5b7ee1bbbb7e845895113f3b204e3278242b"
+      },
+      "mutation-7-0": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-1": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "edaaba2742940ade2104621711a87bb6e4ac3f022ef8a4e9d6f02c5deede999e"
+      },
+      "mutation-7-10": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "9edaa76aa74b626409ed7416f8eaa4eac2e62b9c2a8a636e696c60f9b79533ce"
+      },
+      "mutation-7-11": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-12": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-13": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-14": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "3fc136e538e0c408610c222b8d7c861f9e1f0ae6f16efd91f486ec83584d317c"
+      },
+      "mutation-7-15": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-16": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-17": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-18": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-19": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-2": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-20": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-21": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-22": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "4a0c4fa33b9c61e3b3a0ca0c1955be05a240b2948051eadc05a6fa37c2e2d0fc"
+      },
+      "mutation-7-23": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-7-24": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-7-25": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-7-26": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-27": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-28": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-29": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-3": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-7-30": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "cc0c277f07b3f674625198f15a800a489942e58b44381c045c3303e05d955992"
+      },
+      "mutation-7-31": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "27337975c391248c3fe15722b475e97e5fdce525e6fb11fc74ee47c55454f949"
+      },
+      "mutation-7-32": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-33": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-34": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_empty_allow",
+        "reviewed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "mutation-7-35": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-36": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-37": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-38": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-39": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-4": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-40": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-41": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-42": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "28c2f5c78dfe59b68c56e30636add461f7cfc90ef5476126c5b44766ba7c4a66"
+      },
+      "mutation-7-43": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-44": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-45": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "a08b92154a107ca364fa4e356940b66b6bfa4b989899d105e967d545e0a8fd9d"
+      },
+      "mutation-7-46": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-47": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "b9a49e5c175b66372586c27e44fd16ebc50317239803e944c67720127050d8dd"
+      },
+      "mutation-7-48": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-49": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-5": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-50": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-51": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-52": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-53": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-54": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-55": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-56": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-57": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-58": {
+        "decision": "allow",
+        "excerpt_sha256": null,
+        "model_output_action": "allow_original",
+        "notice": "none",
+        "observed_policy_action": null,
+        "policy_action": "allow",
+        "reason_code": "output_scan_allow",
+        "reviewed_output_sha256": "80583a91537c37f7b2bbd17d8958b2aab50d91bad51ccc20caa6d2146feb0f5e"
+      },
+      "mutation-7-59": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-6": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-60": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-61": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-62": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-63": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-7": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "no_output_to_review",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-8": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      },
+      "mutation-7-9": {
+        "decision": "deny",
+        "excerpt_sha256": null,
+        "model_output_action": "block",
+        "notice": "warning",
+        "observed_policy_action": null,
+        "policy_action": null,
+        "reason_code": "output_secret_match",
+        "reviewed_output_sha256": null
+      }
+    }
+  }
+}

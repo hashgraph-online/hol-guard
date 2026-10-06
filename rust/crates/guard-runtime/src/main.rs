@@ -1,21 +1,61 @@
 #![forbid(unsafe_code)]
 
 mod approval;
+mod approval_gate_consumers;
+mod approval_gate_enrollment;
+mod approval_gate_grants;
+mod approval_gate_op;
+mod approval_gate_settings;
+mod approval_gate_state;
+mod approval_gate_verify;
+mod approval_reuse;
+mod archive_inspect;
+mod archive_inspect_containment;
+mod claim_approval_reuse_op;
+mod claim_reuse;
+mod command_effect;
+#[cfg(unix)]
+mod contained_op;
+mod context_digest;
+mod context_digest_json;
+mod daemon_policy_authority;
 mod edge;
+mod encrypted_secret_store;
+mod github_workflow_runtime_authorization;
 mod hardening;
+mod hook_process_spawn;
+mod local_once_store;
 mod managed_resident;
+mod mcp_probe_op;
+mod mcp_stdio_session_op;
 mod native_hook_receipt;
+mod native_runtime_admission;
+mod native_runtime_resilience;
+mod oauth_refresh;
+mod oauth_secret_authority;
 mod oneshot;
+mod package_authority_op;
+mod policy_decision_lookup_op;
 mod policy_enforcement;
+mod policy_integrity_resolver;
 mod policy_store;
+mod prompt_analyze_op;
 mod resident_client;
+mod resident_endpoint;
+mod resident_ops;
 mod resident_process_identity;
 mod resident_protocol;
 mod resident_state;
 mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
+mod resident_update_lock;
+mod shim_op;
+#[cfg(unix)]
+mod state_directory_lock;
 mod strict_json;
+mod totp;
+mod workflow_capability_store;
 
 pub(crate) use resident_protocol::{capabilities, encode_response, strict_json_value};
 pub(crate) use resident_transport::{
@@ -48,7 +88,8 @@ const AUTH_TOKEN_BYTES: usize = 32;
 const AUTH_NONCE_BYTES: usize = 32;
 const AUTH_PROOF_BYTES: usize = 32;
 const AUTH_WORKERS: usize = 4;
-const AUTH_QUEUE_CAPACITY: usize = 16;
+const AUTH_QUEUE_CAPACITY: usize = 32;
+const AUTH_QUEUE_CAPACITY_MAX: usize = 64;
 const EVALUATION_WORKERS: usize = 16;
 const EVALUATION_QUEUE_CAPACITY: usize = 32;
 const AUTHENTICATED_PREFETCH_BYTES: usize = 64 * 1024;
@@ -60,6 +101,30 @@ const SERVER_PROOF_LABEL: &[u8] = b"hol-guard-resident-server-v1\0";
 const CLIENT_PROOF_LABEL: &[u8] = b"hol-guard-resident-client-v1\0";
 #[cfg(unix)]
 const PARENT_LIVENESS_FD_ENV: &str = "HOL_GUARD_PARENT_LIVENESS_FD";
+
+pub(crate) fn evaluation_workers() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get().clamp(EVALUATION_WORKERS, 32))
+        .unwrap_or(EVALUATION_WORKERS)
+}
+
+pub(crate) fn auth_workers() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| (n.get() / 4).clamp(AUTH_WORKERS, 8))
+        .unwrap_or(AUTH_WORKERS)
+}
+
+pub(crate) fn evaluation_queue_capacity() -> usize {
+    evaluation_workers()
+        .saturating_mul(2)
+        .clamp(EVALUATION_QUEUE_CAPACITY, 64)
+}
+
+pub(crate) fn auth_queue_capacity() -> usize {
+    auth_workers()
+        .saturating_mul(8)
+        .clamp(AUTH_QUEUE_CAPACITY, AUTH_QUEUE_CAPACITY_MAX)
+}
 
 fn read_stdin_bounded() -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
@@ -142,6 +207,16 @@ fn run() -> Result<(), String> {
                 std::path::Path::new(record_path),
             )
         }
+        [command, state_flag, state_dir, record_flag, record_path]
+            if command == "enroll-workspace-review-authority"
+                && state_flag == "--state-dir"
+                && record_flag == "--record" =>
+        {
+            policy_store::workspace_review_authority::install_record(
+                std::path::Path::new(state_dir),
+                std::path::Path::new(record_path),
+            )
+        }
         [command, state_flag, state_dir, rp_flag, rp_id, origin_flag, origin]
             if command == "prepare-approval-v4-enrollment"
                 && state_flag == "--state-dir"
@@ -168,6 +243,9 @@ fn run() -> Result<(), String> {
                 && flag == "--stdin" =>
         {
             let bytes = read_stdin_bounded()?;
+            if let Err(error) = strict_json_value(&bytes) {
+                return write_bytes_response(&resident_protocol::safe_error_response(&error, false));
+            }
             let timeout = managed_resident::client_timeout(&bytes);
             let response = managed_resident::client_request(
                 std::path::Path::new(state_dir),
@@ -181,8 +259,15 @@ fn run() -> Result<(), String> {
         {
             managed_resident::client_stream(std::path::Path::new(state_dir))
         }
+        [command, flag, state_dir, retire_flag]
+            if command == "resident-stop"
+                && flag == "--state-dir"
+                && retire_flag == "--retire-clients" =>
+        {
+            managed_resident::stop_managed(std::path::Path::new(state_dir), true)
+        }
         [command, flag, state_dir] if command == "resident-stop" && flag == "--state-dir" => {
-            managed_resident::stop_managed(std::path::Path::new(state_dir))
+            managed_resident::stop_managed(std::path::Path::new(state_dir), false)
         }
         [command, flag] if command == "command-model" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -192,6 +277,57 @@ fn run() -> Result<(), String> {
         [command, flag] if command == "pre-tool" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_pre_tool_bytes(&bytes)?;
+            write_bytes_response(&response)
+        }
+        [command, flag, state_dir, request_flag, request_id]
+            if command == "workspace-review-decision"
+                && flag == "--stdin"
+                && request_flag == "--request-id" =>
+        {
+            let bytes = read_stdin_bounded()?;
+            let decision = strict_json_value(&bytes)?;
+            let canonical = guard_policy_snapshot::canonical_json_bytes(&decision)
+                .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
+            if canonical != bytes {
+                return Err("native_workspace_review_decision_noncanonical".to_owned());
+            }
+            let state_base = std::path::Path::new(state_dir);
+            let runtime_identity = resident_state::runtime_digest()?;
+            let policy_store = policy_store::PolicySnapshotStore::new_with_resident_generation(
+                state_base,
+                &runtime_identity,
+                0,
+            )?;
+            let verified = policy_store::workspace_review_decision::verify_and_claim_request(
+                &policy_store,
+                request_id,
+                &decision,
+            )?;
+            write_json(&serde_json::json!({
+                "status": if verified.replayed { "replayed" } else { "verified" },
+                "replayed": verified.replayed,
+                "request_id": request_id,
+                "decision": verified.decision,
+                "claim_id": verified.claim_id,
+                "authority_record_digest": verified.authority_record_digest,
+                "request_binding": verified.request_binding,
+                "action_binding": verified.action_binding,
+                "intent_binding": verified.intent_binding,
+                "revision_binding": verified.revision_binding,
+                "policy_binding": verified.policy_binding,
+                "retry_scope_binding": verified.retry_scope_binding,
+                "request_snapshot_digest": verified.request_snapshot_digest,
+                "envelope_digest": verified.envelope_digest,
+            }))
+        }
+        [command, flag] if command == "archive-inspect" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            let response = archive_inspect::evaluate_archive_inspection_bytes(&bytes)?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if command == "context-digest" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            let response = context_digest::evaluate_context_digest_bytes(&bytes)?;
             write_bytes_response(&response)
         }
         [command, flag, path] if command == "serve" && flag == "--socket" => serve(path),
@@ -215,12 +351,14 @@ fn run() -> Result<(), String> {
                 && owner_flag == "--owner-process-id"
                 && digest_flag == "--runtime-sha256" =>
         {
-            managed_resident::serve_managed(
+            let result = managed_resident::serve_managed(
                 std::path::Path::new(state_dir),
                 managed_resident::parse_generation(generation)?,
                 managed_resident::parse_process_id(owner_process_id)?,
                 digest,
-            )
+            );
+            mcp_stdio_session_op::close_all_sessions();
+            result
         }
         [command, state_flag, state_dir, generation_flag, generation, digest_flag, digest]
             if command == "supervise-managed"
@@ -259,7 +397,7 @@ fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
+            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
                 .into(),
         ),
     }
@@ -311,6 +449,23 @@ mod tests {
     }
 
     #[test]
+    fn strict_json_preserves_numeric_fields_and_literal_serde_marker_objects() {
+        let parsed = strict_json_value(
+            br#"{"timeout_seconds":6.0,"fraction":0.125,"maximum":1208925819614629174706177,"literal":{"$serde_json::private::Number":"123"}}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed["timeout_seconds"].as_f64(), Some(6.0));
+        assert_eq!(parsed["fraction"].as_f64(), Some(0.125));
+        assert_eq!(
+            parsed["maximum"].as_number().unwrap().as_str(),
+            "1208925819614629174706177"
+        );
+        assert_eq!(parsed["literal"]["$serde_json::private::Number"], "123");
+        assert!(strict_json_value(br#"{"value":1e999}"#).is_err());
+        assert!(strict_json_value(br#"{"name":1,"name":2}"#).is_err());
+    }
+
+    #[test]
     fn strict_json_rejects_deep_and_wide_values() {
         let deep = format!(
             "{}0{}",
@@ -345,5 +500,17 @@ mod tests {
         assert_ne!(first, second);
         first_nonce[0] ^= 1;
         assert_ne!(first, hmac_sha256(&token, SERVER_PROOF_LABEL, &first_nonce));
+    }
+
+    #[test]
+    fn resident_worker_pools_scale_within_bounds() {
+        let evaluation = super::evaluation_workers();
+        let auth = super::auth_workers();
+        assert!((EVALUATION_WORKERS..=32).contains(&evaluation));
+        assert!((AUTH_WORKERS..=8).contains(&auth));
+        assert!((EVALUATION_QUEUE_CAPACITY..=64).contains(&super::evaluation_queue_capacity()));
+        assert!(
+            (AUTH_QUEUE_CAPACITY..=AUTH_QUEUE_CAPACITY_MAX).contains(&super::auth_queue_capacity())
+        );
     }
 }

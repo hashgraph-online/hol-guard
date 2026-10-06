@@ -5,19 +5,23 @@ on:
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
-      - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+      - "src/codex_plugin_scanner/guard/native_resident_client.py"
+      - "src/codex_plugin_scanner/guard/native_resident_stream.py"
       - "src/codex_plugin_scanner/guard/runtime/hook_*.py"
-      - "ci/native_runtime/test_guard_native_runtime_differential.py"
+      - "ci/native_runtime/**"
       - ".github/workflows/rust-runtime-differential.yml"
+      - ".github/actions/setup-rust/**"
   push:
     branches: [main]
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
-      - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+      - "src/codex_plugin_scanner/guard/native_resident_client.py"
+      - "src/codex_plugin_scanner/guard/native_resident_stream.py"
       - "src/codex_plugin_scanner/guard/runtime/hook_*.py"
-      - "ci/native_runtime/test_guard_native_runtime_differential.py"
+      - "ci/native_runtime/**"
       - ".github/workflows/rust-runtime-differential.yml"
+      - ".github/actions/setup-rust/**"
   workflow_dispatch:
 
 permissions:
@@ -43,17 +47,16 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal
-          rustup default 1.88.0
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
       - name: Build version-matched native runtime
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
           rust/target/release/hol-guard-runtime self-test --json
       - name: Compare Python and Rust decisions
         env:
