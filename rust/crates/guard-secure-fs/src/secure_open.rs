@@ -95,7 +95,8 @@ fn same_unix_directory_identity(expected: &Metadata, actual: &Metadata) -> bool 
 #[cfg(windows)]
 pub(crate) fn secure_open(_path: &Path, canonical_path: &Path) -> Result<File, SecureOpenError> {
     // Hold each canonical ancestor open without delete sharing while the leaf
-    // is opened, the handle-bound equivalent of the Unix openat walk.
+    // is opened, the handle-bound equivalent of the Unix openat walk. Callers
+    // compare the handle's file ID with the file they inspected.
     guard_runtime_windows_process::open_bound_regular_file(canonical_path).map_err(|error| {
         // A component that is now a reparse point, directory, or alias
         // no longer names the canonical file the caller checked.

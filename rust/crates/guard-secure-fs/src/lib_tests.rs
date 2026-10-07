@@ -120,6 +120,27 @@ fn windows_handle_walk_denies_renaming_the_open_file() {
     let _ = fs::remove_dir_all(dir);
 }
 
+#[cfg(windows)]
+#[test]
+fn stable_context_read_follows_an_explicit_windows_executable_symlink() {
+    let dir = fixture_root("stable-symlink");
+    fs::create_dir_all(&dir).unwrap();
+    let path = fs::canonicalize(&dir).unwrap().join("npm.cmd");
+    fs::write(&path, b"@echo off\r\n").unwrap();
+    let executable = path.with_file_name("npm-link.cmd");
+    std::os::windows::fs::symlink_file(&path, &executable)
+        .expect("Windows regression runner must support file symlinks");
+    assert!(matches!(
+        read_stable(&executable, 256 * 1024, false),
+        Err(SecureReadError::SymlinkInPath)
+    ));
+    assert_eq!(
+        read_stable(&executable, 256 * 1024, true).unwrap().bytes,
+        b"@echo off\r\n"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 #[cfg(all(not(unix), not(windows)))]
 #[test]
 fn bounded_read_fails_closed_without_descriptor_path_walk() {

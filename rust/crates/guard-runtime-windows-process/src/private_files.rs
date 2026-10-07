@@ -3,7 +3,7 @@ use std::io;
 use std::mem::{offset_of, size_of, zeroed};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, RawHandle};
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
 use std::ptr::null_mut;
 
 use winapi::shared::minwindef::{BOOL, DWORD, FALSE};
@@ -161,68 +161,6 @@ pub fn is_single_link_file(path: &Path) -> io::Result<bool> {
     Ok(information.nNumberOfLinks == 1)
 }
 
-/// Open an existing single-link regular file for reading by walking its
-/// canonical path.
-///
-/// Every ancestor directory is held open without delete sharing until the
-/// leaf is open, so no component can be renamed or swapped for a link between
-/// the caller's canonicalization and this open. No component may be a reparse
-/// point, and the leaf handle also denies delete sharing.
-pub fn open_bound_regular_file(canonical_path: &Path) -> io::Result<std::fs::File> {
-    let mut components = canonical_path.components().peekable();
-    let mut current = PathBuf::new();
-    let mut ancestors = Vec::new();
-    while let Some(component) = components.next() {
-        match component {
-            Component::Prefix(prefix) => current.push(prefix.as_os_str()),
-            Component::RootDir => current.push(component.as_os_str()),
-            Component::Normal(name) => {
-                current.push(name);
-                if components.peek().is_some() {
-                    let directory = open_raw_with_access(
-                        &current,
-                        true,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE,
-                        GENERIC_READ | FILE_TRAVERSE,
-                    )?;
-                    validate_handle(&directory, true)?;
-                    ancestors.push(directory);
-                    continue;
-                }
-                let file = open_raw_with_access(
-                    &current,
-                    false,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE,
-                    GENERIC_READ,
-                )?;
-                validate_handle(&file, false)?;
-                let mut information = unsafe { zeroed::<BY_HANDLE_FILE_INFORMATION>() };
-                // SAFETY: The output buffer is correctly sized and the handle
-                // remains open for the synchronous query.
-                if unsafe {
-                    GetFileInformationByHandle(file.as_raw_handle() as HANDLE, &mut information)
-                } == FALSE
-                {
-                    return Err(io::Error::last_os_error());
-                }
-                if information.nNumberOfLinks != 1 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "opened file has more than one directory entry",
-                    ));
-                }
-                drop(ancestors);
-                return Ok(file);
-            }
-            Component::CurDir | Component::ParentDir => break,
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        "path must be canonical and name a file",
-    ))
-}
-
 pub(super) fn open_directory_bound(
     path: &Path,
     allow_acl_repair: bool,
@@ -282,13 +220,22 @@ fn open_raw_with_access(
     share_mode: DWORD,
     desired_access: DWORD,
 ) -> io::Result<std::fs::File> {
-    let path_w = super::wide_path(path)?;
     let flags = FILE_FLAG_OPEN_REPARSE_POINT
         | if directory {
             FILE_FLAG_BACKUP_SEMANTICS
         } else {
             0
         };
+    open_raw_with_flags(path, share_mode, desired_access, flags)
+}
+
+pub(super) fn open_raw_with_flags(
+    path: &Path,
+    share_mode: DWORD,
+    desired_access: DWORD,
+    flags: DWORD,
+) -> io::Result<std::fs::File> {
+    let path_w = super::wide_path(path)?;
     // SAFETY: The path is NUL-terminated and all pointers remain valid for
     // the synchronous CreateFileW call.
     let raw = unsafe {
