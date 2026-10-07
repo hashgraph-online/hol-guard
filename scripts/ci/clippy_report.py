@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -201,9 +202,28 @@ def select(
     raise ValueError("Timed out waiting for current-attempt Clippy report")
 
 
+def print_diagnostics(directory: Path) -> None:
+    report = directory / "clippy.jsonl"
+    if directory.is_symlink() or report.is_symlink() or not report.is_file():
+        raise ValueError("Clippy diagnostic report is not a regular file")
+    with report.open(encoding="utf-8") as stream:
+        for number, line in enumerate(stream, 1):
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                print(f"Invalid Clippy diagnostic JSON at line {number}", file=sys.stderr)
+                continue
+            if not isinstance(record, dict) or record.get("reason") != "compiler-message":
+                continue
+            message = record.get("message")
+            rendered = message.get("rendered") if isinstance(message, dict) else None
+            if isinstance(rendered, str):
+                print(rendered, file=sys.stderr, end="" if rendered.endswith("\n") else "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["bind", "select", "verify"])
+    parser.add_argument("operation", choices=["bind", "select", "verify", "diagnostics"])
     parser.add_argument("--directory", type=Path, default=Path("clippy-report"))
     args = parser.parse_args()
     root = Path.cwd().resolve()
@@ -211,6 +231,8 @@ def main() -> None:
         bind(root, args.directory)
     elif args.operation == "verify":
         verify(root, args.directory, identity(root))
+    elif args.operation == "diagnostics":
+        print_diagnostics(args.directory)
     else:
         artifact = select(
             os.environ["GITHUB_REPOSITORY"],

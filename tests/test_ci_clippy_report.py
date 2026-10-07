@@ -87,6 +87,21 @@ def test_missing_current_attempt_report_times_out_without_using_previous_attempt
         )
 
 
+def test_diagnostics_survive_partial_json_and_exclude_non_diagnostic_records(tmp_path, capsys):
+    (tmp_path / report.REPORT).write_text(
+        "incomplete JSON\n"
+        + json.dumps({"reason": "build-script-executed", "message": {"rendered": "not a diagnostic"}})
+        + "\n"
+        + json.dumps({"reason": "compiler-message", "message": {"rendered": "error: unused variable\n"}})
+        + "\n",
+        encoding="utf-8",
+    )
+    report.print_diagnostics(tmp_path)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "Invalid Clippy diagnostic JSON at line 1\nerror: unused variable\n"
+
+
 def test_clean_zero_issue_report_is_valid(tmp_path):
     path = tmp_path / report.REPORT
     path.write_text('{"reason":"build-finished","success":true}\n')

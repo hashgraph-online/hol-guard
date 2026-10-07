@@ -6,6 +6,7 @@ owns one bounded framed client so the pool registry remains small and testable.
 
 from __future__ import annotations
 
+import logging
 import os
 import struct
 import subprocess
@@ -18,7 +19,10 @@ from queue import Empty, Full, Queue
 from typing import Protocol
 
 from .codex_hook_launch_runtime import isolated_hook_environment
+from .native_mode import non_production_diagnostic_enabled
 from .native_resident_transport import write_frame
+
+logger = logging.getLogger(__name__)
 
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -99,6 +103,15 @@ class _PersistentNativeClient:
         # outside it so close() can interrupt a blocked platform pipe writer.
         self._lifecycle_lock = threading.RLock()
         self._request_lock = threading.Lock()
+
+    def _record_phase_failure(self, code: str, phase: str) -> None:
+        """Keep optional timeout diagnostics separate from stable failure codes."""
+        self._record_failure(code)
+        if code == "native_client_timed_out":
+            # A diagnostic handler must not change fail-closed transport results.
+            with suppress(Exception):
+                if non_production_diagnostic_enabled():
+                    logger.warning("native_client_timed_out phase=%s", phase)
 
     def _start(self, *, deadline_monotonic: float | None = None) -> bool:
         if self._closing:
@@ -218,11 +231,11 @@ class _PersistentNativeClient:
     ) -> tuple[subprocess.Popen[bytes], object, Queue[bytes | _StreamFailure]] | None:
         with _hold_until(self._lifecycle_lock, deadline_monotonic) as lifecycle:
             if not lifecycle:
-                self._record_failure("native_client_timed_out")
+                self._record_phase_failure("native_client_timed_out", "snapshot_lifecycle_lock")
                 return None
             with _hold_until(self._lock, deadline_monotonic) as state:
                 if not state:
-                    self._record_failure("native_client_timed_out")
+                    self._record_phase_failure("native_client_timed_out", "snapshot_state_lock")
                     return None
                 return self._snapshot_locked(deadline_monotonic=deadline_monotonic)
 
@@ -232,10 +245,11 @@ class _PersistentNativeClient:
         deadline_monotonic: float | None,
     ) -> tuple[subprocess.Popen[bytes], object, Queue[bytes | _StreamFailure]] | None:
         if not self._start(deadline_monotonic=deadline_monotonic):
-            self._record_failure(
+            self._record_phase_failure(
                 "native_client_timed_out"
                 if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
-                else "native_client_start_failed"
+                else "native_client_start_failed",
+                "snapshot_start",
             )
             return None
         process = self._process
@@ -251,17 +265,17 @@ class _PersistentNativeClient:
             return None
         with _hold_until(self._request_lock, deadline_monotonic) as acquired:
             if not acquired:
-                self._record_failure("native_client_timed_out")
+                self._record_phase_failure("native_client_timed_out", "request_lock")
                 return None
             if time.monotonic() >= deadline_monotonic:
-                self._record_failure("native_client_timed_out")
+                self._record_phase_failure("native_client_timed_out", "request_deadline")
                 return None
             snapshot = self._request_snapshot(deadline_monotonic=deadline_monotonic)
             if snapshot is None:
                 return None
             if time.monotonic() >= deadline_monotonic:
                 self.close(deadline_monotonic=deadline_monotonic)
-                self._record_failure("native_client_timed_out")
+                self._record_phase_failure("native_client_timed_out", "snapshot_start")
                 return None
             process, stdin, responses = snapshot
             if not self._request_is_current(process, responses, deadline_monotonic=deadline_monotonic):
@@ -279,10 +293,11 @@ class _PersistentNativeClient:
                 ),
             ):
                 self.close(deadline_monotonic=deadline_monotonic)
-                self._record_failure(
+                self._record_phase_failure(
                     "native_client_timed_out"
                     if time.monotonic() >= deadline_monotonic
-                    else "native_client_frame_write_failed"
+                    else "native_client_frame_write_failed",
+                    "frame_write",
                 )
                 return None
             if not self._request_is_current(process, responses, deadline_monotonic=deadline_monotonic):
@@ -296,7 +311,7 @@ class _PersistentNativeClient:
             # writer fallback.
             with _hold_until(self._lifecycle_lock, deadline_monotonic) as lifecycle:
                 if not lifecycle:
-                    self._record_failure("native_client_timed_out")
+                    self._record_phase_failure("native_client_timed_out", "response_lifecycle_lock")
                     return None
                 if not self._request_is_current(process, responses, deadline_monotonic=deadline_monotonic):
                     self._record_current_failure(deadline_monotonic)
@@ -304,13 +319,13 @@ class _PersistentNativeClient:
                 remaining = deadline_monotonic - time.monotonic()
                 if remaining <= 0:
                     self.close(deadline_monotonic=deadline_monotonic)
-                    self._record_failure("native_client_timed_out")
+                    self._record_phase_failure("native_client_timed_out", "response_deadline")
                     return None
                 try:
                     response = responses.get(timeout=remaining)
                 except Empty:
                     self.close(deadline_monotonic=deadline_monotonic)
-                    self._record_failure("native_client_timed_out")
+                    self._record_phase_failure("native_client_timed_out", "response_wait")
                     return None
                 if isinstance(response, _StreamFailure):
                     self.close(deadline_monotonic=deadline_monotonic)
@@ -319,8 +334,9 @@ class _PersistentNativeClient:
                 return response
 
     def _record_current_failure(self, deadline_monotonic: float) -> None:
-        self._record_failure(
-            "native_client_timed_out" if time.monotonic() >= deadline_monotonic else "native_client_stream_failed"
+        self._record_phase_failure(
+            "native_client_timed_out" if time.monotonic() >= deadline_monotonic else "native_client_stream_failed",
+            "current_snapshot",
         )
 
     def _request_is_current(
@@ -334,11 +350,11 @@ class _PersistentNativeClient:
 
         with _hold_until(self._lifecycle_lock, deadline_monotonic) as lifecycle:
             if not lifecycle:
-                self._record_failure("native_client_timed_out")
+                self._record_phase_failure("native_client_timed_out", "current_lifecycle_lock")
                 return False
             with _hold_until(self._lock, deadline_monotonic) as state:
                 if not state:
-                    self._record_failure("native_client_timed_out")
+                    self._record_phase_failure("native_client_timed_out", "current_state_lock")
                     return False
                 return (
                     not self._closing

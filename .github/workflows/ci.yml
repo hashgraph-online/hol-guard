@@ -176,7 +176,15 @@ jobs:
           case "$CARGO_CHECK" in
             clippy)
               mkdir -p clippy-report
-              cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets --message-format=json -- -D warnings > clippy-report/clippy.jsonl
+              if cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets --message-format=json -- -D warnings > clippy-report/clippy.jsonl; then
+                :
+              else
+                clippy_status=$?
+                if ! python3 -m scripts.ci.clippy_report diagnostics; then
+                  echo "Unable to render Clippy diagnostics" >&2
+                fi
+                exit "$clippy_status"
+              fi
               ;;
             test) cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
