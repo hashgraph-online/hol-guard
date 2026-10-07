@@ -65,12 +65,12 @@ def main() -> int:
     probe._installed_package_path(probe._REPO_ROOT)
     status, identity, _capabilities = probe._probe_native_identity()
     root = Path(tempfile.mkdtemp(prefix="guard-pi-restart-", dir="/tmp"))
+    guard_home = root / "home" / ".hol-guard"
     daemon = None
     child = None
     try:
         home = root / "home"
         workspace = home / "workspace"
-        guard_home = home / ".hol-guard"
         workspace.mkdir(parents=True)
         (workspace / "ordinary.ts").write_text("export const ordinary = 42;\n")
         (workspace / ".env").write_text("SYNTHETIC_SECRET=do-not-read\n")
@@ -101,6 +101,7 @@ def main() -> int:
         first = json.loads(child.stdout.readline())
         assert first == {"phase": "prepared"}
         probe._cleanup_installed_daemon(daemon)
+        daemon = None
         daemon = probe._start_installed_daemon(
             guard_home=guard_home,
             home=home,
@@ -115,7 +116,8 @@ def main() -> int:
             raise probe.ProbeError("replacement extension review exceeded its bounded deadline")
         ordinary = child.stdout.readline()
         if not ordinary or json.loads(ordinary) != {"phase": "ordinary-verified"}:
-            raise probe.ProbeError("ordinary review did not complete before the negative probe")
+            _rest, error = child.communicate(timeout=10)
+            raise probe.ProbeError(f"ordinary review did not complete before the negative probe: {probe._short(error)}")
         with sqlite3.connect(f"file:{guard_home / 'guard.db'}?mode=ro", uri=True) as database:
             ordinary_approvals = database.execute("SELECT COUNT(*) FROM approval_requests").fetchone()[0]
         assert ordinary_approvals == 0
@@ -136,12 +138,31 @@ def main() -> int:
         print(json.dumps({key: result[key] for key in ["ordinary_allowed", "secret_blocked", "tool_bytes_unchanged"]}))
         return 0
     finally:
-        if child is not None and child.poll() is None:
-            child.terminate()
-            child.wait(timeout=10)
+        failure = None
+        try:
+            if child is not None and child.poll() is None:
+                child.terminate()
+                child.wait(timeout=10)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            failure = probe.ProbeCleanupUnsafeError(f"probe runner containment failed: {type(error).__name__}")
         if daemon is not None:
-            probe._cleanup_installed_daemon(daemon)
-        probe._cleanup_native(identity, guard_home)
+            try:
+                probe._cleanup_installed_daemon(daemon)
+            except probe.ProbeError as error:
+                if failure is None or isinstance(error, probe.ProbeCleanupUnsafeError):
+                    failure = error
+        if not isinstance(failure, probe.ProbeCleanupUnsafeError):
+            try:
+                probe._cleanup_native(identity, guard_home)
+            except probe.ProbeError as error:
+                if failure is None or isinstance(error, probe.ProbeCleanupUnsafeError):
+                    failure = error
+        if failure is not None:
+            if isinstance(failure, probe.ProbeCleanupUnsafeError):
+                probe._retain_unsafe_cleanup_marker(root, failure)
+            else:
+                probe._retain_cleanup_receipt(root, failure)
+            raise failure from sys.exception()
         probe._remove_probe_root(root)
 
 

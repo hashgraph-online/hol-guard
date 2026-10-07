@@ -55,6 +55,20 @@ WORKSPACE_READINESS_CACHE_SOURCE = r"""  let workspaceReadiness = null;
     workspaceReadiness = null;
     return ensureGuardWorkspaceReady(cwd, true);
   };
+  async function toolWorkspaceReadiness(cwd, deadlineAt) {
+    let timeout;
+    try {
+      return await Promise.race([
+        ensureGuardWorkspaceReady(cwd),
+        new Promise((resolve) => {
+          timeout = setTimeout(() => resolve({ready: false, reasonCode: 'workspace_setup_pending'}),
+            Math.max(1, deadlineAt - Date.now() - GUARD_DAEMON_READINESS_RESPONSE_RESERVE_MS));
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
   const readinessFailureReason = (readiness) =>
     `HOL Guard blocked this tool call because native workspace readiness was not confirmed ` +
     `(${readiness.reasonCode ?? "native_workspace_not_ready"}).`;

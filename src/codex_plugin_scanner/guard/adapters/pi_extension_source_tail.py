@@ -15,7 +15,8 @@ def build_extension_source_tail(
     tool_approval_continuation_source: str,
 ) -> str:
     workspace_readiness_source = (
-        "    const workspaceSetup = ensureGuardWorkspaceReady(snapshot.cwd);\n"
+        "    const hookDeadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;\n"
+        "    const workspaceSetup = toolWorkspaceReadiness(snapshot.cwd, hookDeadlineAt);\n"
         "    const setupGeneration = approvalContinuationGeneration;\n"
         "    const workspaceReadiness = await workspaceSetup;\n"
         "    if (!workspaceReadiness.ready) {\n"
@@ -35,6 +36,11 @@ def build_extension_source_tail(
         lifecycle_abort_event_source=lifecycle_abort_event_source,
         tool_approval_continuation_source=tool_approval_continuation_source,
         workspace_readiness_source=workspace_readiness_source,
+    )
+    shared_source = shared_source.replace(
+        "const response = await runGuard(snapshot.payload, snapshot.cwd);",
+        "const response = await runGuard(snapshot.payload, snapshot.cwd, { deadlineAt: hookDeadlineAt });",
+        1,
     )
     input_start = shared_source.index('  pi.on("input",')
     input_end = shared_source.index('  pi.on("tool_call",', input_start)
