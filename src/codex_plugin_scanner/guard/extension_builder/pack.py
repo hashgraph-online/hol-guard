@@ -21,10 +21,15 @@ from jsonschema.exceptions import ValidationError
 from ..action_lattice import guard_action_severity, most_restrictive_guard_action
 from .errors import BuilderError
 from .io import canonical_json, checked_path, parse_json, read_bytes
+from .validation import text, token
 
 PACK_SCHEMA = "guard.extension-pack.v1"
 MAX_PACK_BYTES = 32_768
 PackRole = Literal["personal", "managed-team"]
+_PACK_ID = r"[a-z][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+"
+_LOCAL_ID = r"[a-z][a-z0-9-]*"
+_VERSION = r"[0-9]+\.[0-9]+\.[0-9]+"
+_DOCUMENT = r"docs/guard/[A-Za-z0-9._/-]+\.md"
 
 
 class _Extension(Protocol):
@@ -62,12 +67,20 @@ def pack_schema() -> dict[str, object]:
 
 
 def _plain(value: object) -> None:
-    if (
-        not isinstance(value, str)
-        or value != value.strip()
-        or any(ord(char) < 32 or ord(char) == 127 for char in value)
-    ):
-        raise BuilderError("pack_text", "Pack text must be trimmed, single-line plain text.")
+    try:
+        text(value, maximum=400)
+    except BuilderError as exc:
+        raise BuilderError("pack_text", "Pack text must be trimmed, single-line plain text.") from exc
+
+
+def _identifiers(values: list[tuple[object, str, int]]) -> None:
+    """Full-match identifiers; JSON Schema ``$`` also accepts a trailing newline."""
+
+    try:
+        for value, pattern, maximum in values:
+            token(value, pattern=pattern, maximum=maximum)
+    except BuilderError as exc:
+        raise BuilderError("pack_identity", "Pack identifiers must match their full pattern.") from exc
 
 
 def _unique(values: list[str], code: str, message: str) -> None:
@@ -75,7 +88,7 @@ def _unique(values: list[str], code: str, message: str) -> None:
         raise BuilderError(code, message)
 
 
-def validate_pack(payload: object, *, catalog: PackCatalog, repository: Path | None = None) -> dict[str, object]:
+def validate_pack(payload: object, *, catalog: PackCatalog, repository: Path) -> dict[str, object]:
     """Validate a proposed pack against the catalog without changing any extension state."""
 
     try:
@@ -90,8 +103,18 @@ def validate_pack(payload: object, *, catalog: PackCatalog, repository: Path | N
     texts: list[object] = [row["title"], row["summary"], *cast(list[str], row["limitations"])]
     texts += [item["title"] for item in families] + [item["title"] for item in recipes]
     texts += [value for item in not_covered for value in (item["title"], item["reason"])]
-    for text in texts:
-        _plain(text)
+    for value in texts:
+        _plain(value)
+    identifiers: list[tuple[object, str, int]] = [(row["packId"], _PACK_ID, 96)]
+    identifiers += [(item["extensionId"], _PACK_ID, 160) for item in extensions]
+    identifiers += [(item["version"], _VERSION, 32) for item in extensions]
+    for family in families:
+        identifiers.append((family["familyId"], _LOCAL_ID, 64))
+        identifiers += [(value, _PACK_ID, 160) for value in cast(list[str], family["permissionIds"])]
+    for recipe in recipes:
+        identifiers += [(recipe["recipeId"], _LOCAL_ID, 64), (recipe["documentationPath"], _DOCUMENT, 200)]
+        identifiers += [(value, _PACK_ID, 160) for value in cast(list[str], recipe["extensionIds"])]
+    _identifiers(identifiers)
     extension_ids = [item["extensionId"] for item in extensions]
     _unique(extension_ids, "pack_identity", "Pack extensions must be unique.")
     _unique([cast(str, item["familyId"]) for item in families], "pack_identity", "Operation families must be unique.")
@@ -121,16 +144,15 @@ def validate_pack(payload: object, *, catalog: PackCatalog, repository: Path | N
     for recipe in recipes:
         if not set(cast(list[str], recipe["extensionIds"])) <= set(extension_ids):
             raise BuilderError("pack_reference", "Setup recipes may reference only pack extensions.")
-        if repository is not None:
-            document = checked_path(repository / cast(str, recipe["documentationPath"]))
-            if not document.is_file():
-                raise BuilderError("pack_reference", "Setup recipe documentation must exist in the repository.")
+        document = checked_path(repository / cast(str, recipe["documentationPath"]))
+        if not document.is_file():
+            raise BuilderError("pack_reference", "Setup recipe documentation must exist in the repository.")
     if len(canonical_json(row).encode("utf-8")) > MAX_PACK_BYTES:
         raise BuilderError("pack_limit", "Pack exceeds its byte budget.")
     return row
 
 
-def load_pack(path: Path, *, catalog: PackCatalog, repository: Path | None = None) -> dict[str, object]:
+def load_pack(path: Path, *, catalog: PackCatalog, repository: Path) -> dict[str, object]:
     path = checked_path(path)
     row = validate_pack(parse_json(read_bytes(path, limit=MAX_PACK_BYTES)), catalog=catalog, repository=repository)
     if path.name != f"{row['packId']}.json":
