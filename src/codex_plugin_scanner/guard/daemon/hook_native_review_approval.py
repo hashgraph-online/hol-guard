@@ -282,6 +282,7 @@ def queue_native_pre_tool_review(
             payload=payload,
             native_receipt=native_receipt,
             workspace=workspace,
+            guard_home=guard_home,
             home_dir=home_dir,
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
@@ -492,12 +493,20 @@ def _native_review_action_envelope(
     native_receipt: Mapping[str, object] | None = None,
     workspace: Path | None,
     home_dir: Path | None,
+    guard_home: Path | None = None,
 ) -> dict[str, object] | None:
     """Store the canonical redacted envelope used by live revalidation."""
 
     try:
         envelope = (
-            normalize_harness_payload(harness, "PreToolUse", dict(payload), workspace=workspace, home_dir=home_dir)
+            normalize_harness_payload(
+                harness,
+                "PreToolUse",
+                dict(payload),
+                workspace=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+            )
             .with_pre_execution_result("review")
             .to_dict()
         )

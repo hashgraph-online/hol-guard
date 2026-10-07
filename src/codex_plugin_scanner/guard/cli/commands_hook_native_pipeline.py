@@ -286,6 +286,7 @@ def run_native_hook_pipeline(
             payload=payload,
             home_dir=context.home_dir,
             workspace=runtime_workspace,
+            guard_home=context.guard_home,
         )
         return run_native_generic_payload(
             args,
@@ -348,6 +349,7 @@ def _fresh_native_artifact_evaluation(
         payload=payload,
         home_dir=context.home_dir,
         workspace=runtime_workspace,
+        guard_home=context.guard_home,
     )
     fresh_data_flow_signals = _runtime_action_data_flow_signals(fresh_action_envelope, workspace=runtime_workspace)
     fresh_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
