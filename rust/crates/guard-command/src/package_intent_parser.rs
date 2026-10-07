@@ -1983,6 +1983,15 @@ fn redact_local_source_tokens(tokens: &[String]) -> Vec<String> {
             index += 1;
             continue;
         }
+        if package_source_env_assignment(token) {
+            if let Some((name, value)) = token.split_once('=') {
+                if value.contains("://") || value.contains("git@") || value.contains("file:") {
+                    redacted.push(format!("{name}=[REDACTED_URL]"));
+                    index += 1;
+                    continue;
+                }
+            }
+        }
         if token.contains("://") || token.contains("git@") || token.contains("file:") {
             let git_source = javascript_manager
                 && crate::npm_source_spec::parse_npm_source_spec(Some(token))

@@ -128,9 +128,11 @@ class PackageIntent:
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, object]) -> PackageIntent:
-        """Reconstruct an intent from a ``to_dict`` payload (e.g. the native
-        ``package_intent_parse`` result). Command tokens round-trip through
-        ``redacted_command`` exactly as the native surface serializes them."""
+        """Decode a public projection or a private native execution payload.
+
+        Private command tokens retain exact acquisition spelling; public
+        projections use the redacted command tokens.
+        """
 
         if not isinstance(payload.get("package_manager"), str):
             raise ValueError("package intent payload missing package_manager")
