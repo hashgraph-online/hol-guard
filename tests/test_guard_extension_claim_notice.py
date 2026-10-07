@@ -173,8 +173,8 @@ def configure_new_command_source(client: FakeGitHub, extension_id: str) -> str:
         {"status": "added", "filename": source_path},
         {"status": "added", "filename": f"tests/fixtures/command-source-{extension_id[8:]}.v1.json"},
     ]
-    client.file_payloads[(MERGE_SHA, source_path)] = {"schemaVersion": "guard.command-extension-source.v1"}
-    client.file_payloads[(client.default_branch, source_path)] = {"schemaVersion": "guard.command-extension-source.v1"}
+    client.file_payloads[(MERGE_SHA, source_path)] = {"schema": "guard.command-extension-source.v1"}
+    client.file_payloads[(client.default_branch, source_path)] = {"schema": "guard.command-extension-source.v1"}
     return source_path
 
 
@@ -214,7 +214,7 @@ def test_generated_descriptor_for_merged_source_does_not_repeat_guidance() -> No
     source_path = configure_new_command_source(client, "command.sourceonly")
     descriptor_path = "contributions/extensions/command.sourceonly.json"
     client.files = [{"status": "added", "filename": descriptor_path}]
-    client.file_payloads[(BEFORE_SHA, source_path)] = {"schemaVersion": "guard.command-extension-source.v1"}
+    client.file_payloads[(BEFORE_SHA, source_path)] = {"schema": "guard.command-extension-source.v1"}
     client.file_payloads[(MERGE_SHA, descriptor_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(client.default_branch, descriptor_path)] = {"schemaVersion": "v1"}
 
@@ -226,7 +226,7 @@ def test_updated_existing_command_source_does_not_repeat_guidance() -> None:
     client = FakeGitHub()
     source_path = configure_new_command_source(client, "command.sourceonly")
     client.files[0]["status"] = "modified"
-    client.file_payloads[(BEFORE_SHA, source_path)] = {"schemaVersion": "guard.command-extension-source.v1"}
+    client.file_payloads[(BEFORE_SHA, source_path)] = {"schema": "guard.command-extension-source.v1"}
 
     assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
     assert client.posted == []
