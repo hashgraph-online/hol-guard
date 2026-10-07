@@ -33,6 +33,7 @@ MANAGED_DENY_RULES = (
     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
     "Edit(**/.grok/hooks/hol-guard*)",
     "Edit(**/.grok/managed_config.toml)",
+    "Edit(**/.grok/config.toml)",
     "Read(**/.grok/auth/**)",
     "Read(**/.grok/auth.json)",
     "Read(**/.env)",
@@ -147,6 +148,23 @@ def _compat_table_span(text: str, vendor: str) -> tuple[int, int] | None:
     return match.start(), end
 
 
+def _compat_hooks_assignment(block: str) -> tuple[int, int, str, str] | None:
+    """Locate one compat hooks assignment and preserve its physical line ending."""
+
+    offset = 0
+    for line in block.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        newline = line[len(body) :]
+        stripped = body.lstrip(" \t")
+        if stripped.startswith("hooks"):
+            remainder = stripped[len("hooks") :].lstrip(" \t")
+            if remainder.startswith("="):
+                value = remainder[1:].lstrip(" \t").strip()
+                return offset, offset + len(line), value, newline
+        offset += len(line)
+    return None
+
+
 def force_compat_hooks_false(text: str, vendor: str) -> tuple[str, str | None]:
     """Set hooks=false on an existing compat table. Return prior hooks value."""
 
@@ -155,10 +173,11 @@ def force_compat_hooks_false(text: str, vendor: str) -> tuple[str, str | None]:
         return text, None
     start, end = span
     block = text[start:end]
-    previous_match = re.search(r"(?m)^[ \t]*hooks\s*=\s*(.+?)\s*$", block)
-    previous = previous_match.group(1).strip() if previous_match else ""
-    if previous_match:
-        block = re.sub(r"(?m)^[ \t]*hooks\s*=\s*.*$", "hooks = false", block, count=1)
+    assignment = _compat_hooks_assignment(block)
+    previous = assignment[2] if assignment is not None else ""
+    if assignment is not None:
+        line_start, line_end, _, newline = assignment
+        block = block[:line_start] + "hooks = false" + newline + block[line_end:]
     else:
         header = f"[compat.{vendor}]"
         block = block.replace(header, header + "\nhooks = false", 1)
@@ -200,11 +219,15 @@ def restore_compat_hooks(text: str, prior_hooks: Mapping[str, str | None]) -> st
             continue
         start, end = span
         block = updated[start:end]
+        assignment = _compat_hooks_assignment(block)
         if previous == "":
-            block = re.sub(r"(?m)^[ \t]*hooks\s*=\s*.*\n?", "", block, count=1)
+            if assignment is not None:
+                line_start, line_end, _, _ = assignment
+                block = block[:line_start] + block[line_end:]
         else:
-            if re.search(r"(?m)^[ \t]*hooks\s*=", block):
-                block = re.sub(r"(?m)^[ \t]*hooks\s*=\s*.*$", f"hooks = {previous}", block, count=1)
+            if assignment is not None:
+                line_start, line_end, _, newline = assignment
+                block = block[:line_start] + f"hooks = {previous}" + newline + block[line_end:]
             else:
                 header = f"[compat.{vendor}]"
                 block = block.replace(header, header + f"\nhooks = {previous}", 1)

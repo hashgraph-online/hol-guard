@@ -223,12 +223,6 @@ NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
         "bash -lc 'gh pr merge 17 --repo example/repo --squash'",
         "PATH=scratch/bin:$PATH hol-guard status",
         "printf '%s' \"$(cat workspace/sensitive)\"",
-        "docker compose ps",
-        "docker inspect container --format '{{.State.Status}}'",
-        (
-            "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread"
-            "(input:{threadId:$threadId}){thread{id}}}' -f threadId=T"
-        ),
     }
 )
 
@@ -280,19 +274,7 @@ CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
     "not-gh.exe pr merge 17 --repo example/repo --squash",
 )
 
-NATIVE_STRICTER_NEAR_MISSES = frozenset(
-    {
-        "rm -r workspace/cache",
-        "rm -rf ./build",
-        "rm --recursive --force ./dist ./coverage",
-        "docker compose version",
-        "rm -- -rf",
-        "rm -f -- -r",
-        "rm -r -- -f",
-        "gh api graphql -f query='mutation{updateIssue(input:{title:\"do not delete\"}){issue{id}}}'",
-        "gh api graphql -f query='mutation($removeLabel:String!){updateIssue(input:{title:$removeLabel}){issue{id}}}'",
-    }
-)
+NATIVE_STRICTER_NEAR_MISSES = frozenset[str]()
 
 
 @pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)

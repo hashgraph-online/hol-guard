@@ -69,6 +69,15 @@ def _input_to_wire(gate_input: ApprovalGateInput | None) -> dict[str, object] | 
 def _grant_to_wire(grant: ApprovalGateGrant | None) -> dict[str, object] | None:
     if grant is None:
         return None
+    from .approval_gate import ApprovalGateGrant
+
+    if not isinstance(grant, ApprovalGateGrant):
+        # Callers pass an opaque presence sentinel in tests (and the daemon may
+        # hand us an already-decoded foreign object). A grant we cannot marshal
+        # must not crash the bridge — treat it as "no grant" so the resident
+        # answer is the fail-closed `approval_gate_required` when a gate is
+        # actually enabled, and "no gate required" otherwise.
+        return None
     return {
         "grant_id": grant.grant_id,
         "purpose": grant.purpose,

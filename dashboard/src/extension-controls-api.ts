@@ -81,6 +81,10 @@ export type McpToolDefaultState = "inherit" | "allow" | "review" | "block";
 
 export type McpLaunch =
   | {
+      kind: "direct-command";
+      command: string;
+    }
+  | {
       kind: "package-launcher";
       command: string;
       package: string;

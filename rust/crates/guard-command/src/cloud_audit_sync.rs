@@ -388,7 +388,7 @@ fn check_netloc(netloc: &str) -> Result<(), String> {
 
 /// `urllib.parse.urlsplit(url)` at CPython 3.14 fidelity.
 /// `Err` carries the `ValueError` message text.
-fn urlsplit(url: &str) -> Result<UrlSplit, String> {
+pub(crate) fn urlsplit(url: &str) -> Result<UrlSplit, String> {
     // url.lstrip(_WHATWG_C0_CONTROL_OR_SPACE)
     let stripped = url.trim_start_matches(is_c0_or_space);
     // remove \t \r \n everywhere
@@ -446,7 +446,13 @@ fn urlsplit(url: &str) -> Result<UrlSplit, String> {
 /// `urllib.parse.urlunsplit((scheme, netloc, url, query, fragment))` —
 /// CPython 3.14: empty netloc re-materializes `//` when the scheme is in
 /// `uses_netloc` and the path is empty or absolute.
-fn urlunsplit(scheme: &str, netloc: &str, url: &str, query: &str, fragment: &str) -> String {
+pub(crate) fn urlunsplit(
+    scheme: &str,
+    netloc: &str,
+    url: &str,
+    query: &str,
+    fragment: &str,
+) -> String {
     let effective_netloc: Option<&str> = if netloc.is_empty() {
         if !scheme.is_empty()
             && USES_NETLOC.contains(&scheme)
@@ -509,17 +515,24 @@ fn parse_qsl(query: &str) -> Vec<(String, String)> {
     pairs
 }
 
+/// End of `urlparse(...).path`, excluding the final segment's `;params`.
+pub(crate) fn urlparse_path_end(parts: &UrlSplit) -> usize {
+    if USES_PARAMS.contains(&parts.scheme.as_str()) {
+        let start = parts.path.rfind('/').unwrap_or(0);
+        if let Some(index) = parts.path[start..].find(';') {
+            return start + index;
+        }
+    }
+    parts.path.len()
+}
+
 /// `urllib.parse.urlparse(remote).path` — scheme/netloc/path only; `;params`
 /// stripped when the scheme is in `uses_params`.
 fn urlparse_path(remote: &str) -> Result<String, String> {
     let parts = urlsplit(remote)?;
+    let end = urlparse_path_end(&parts);
     let mut path = parts.path;
-    if USES_PARAMS.contains(&parts.scheme.as_str()) {
-        let start = path.rfind('/').unwrap_or(0);
-        if let Some(i) = path[start..].find(';') {
-            path.truncate(start + i);
-        }
-    }
+    path.truncate(end);
     Ok(path)
 }
 

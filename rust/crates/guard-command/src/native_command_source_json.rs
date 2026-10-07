@@ -25,6 +25,18 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Value, &'static str> {
     .deserialize(&mut decoder)
     .map_err(|_| "command_source_json_invalid")?;
     decoder.end().map_err(|_| "command_source_json_invalid")?;
+    // A source program must be a JSON object. Under serde_json
+    // `arbitrary_precision`, a bare number decodes through the private
+    // `$serde_json::private::Number` marker map and `is_object()` reports true;
+    // reject that marker shape too so scalars and ambiguous top-levels are
+    // refused regardless of numeric encoding.
+    let is_number_marker = value
+        .as_object()
+        .map(|map| map.len() == 1 && map.contains_key("$serde_json::private::Number"))
+        .unwrap_or(false);
+    if !value.is_object() || is_number_marker {
+        return Err("command_source_json_invalid");
+    }
     Ok(value)
 }
 
@@ -97,6 +109,11 @@ impl<'de> Visitor<'de> for Seed<'_> {
     fn visit_map<A: MapAccess<'de>>(self, mut mapping: A) -> Result<Value, A::Error> {
         let mut values = Map::new();
         while let Some(key) = mapping.next_key::<String>()? {
+            // arbitrary_precision routes unsupported numbers through a private
+            // marker map, even when nested. Never admit that as source data.
+            if key == "$serde_json::private::Number" {
+                return Err(A::Error::custom("source_integer_limit"));
+            }
             if key.len() > 4_096 || values.len() >= 4_096 || values.contains_key(&key) {
                 return Err(A::Error::custom("source_duplicate_key_or_items_limit"));
             }
@@ -121,6 +138,10 @@ mod tests {
             r#"{"config":{"flag":true,"flag":false}}"#,
             "1.0",
             "9223372036854775808",
+            r#"{"limit":18446744073709551616}"#,
+            r#"{"limit":-9223372036854775809}"#,
+            r#"{"values":[1,1.0]}"#,
+            r#"{"nested":{"$serde_json::private::Number":"1"}}"#,
             "{} {}",
         ] {
             assert!(decode(input.as_bytes()).is_err(), "{input}");

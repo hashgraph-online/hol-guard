@@ -4,8 +4,8 @@ from __future__ import annotations
 
 SAFE_ALTERNATIVE_GUIDANCE = (
     "This action remains blocked. Continue with a safe, permitted alternative that respects "
-    "the same protection. Do not retry an equivalent command, bypass Guard, or ask the user "
-    "to approve this action. If no safe alternative can complete the task, explain the limitation."
+    "the same protection. Do not retry an equivalent command, bypass Guard, or seek permission "
+    "to run it. If no safe alternative can complete the task, explain the limitation."
 )
 
 

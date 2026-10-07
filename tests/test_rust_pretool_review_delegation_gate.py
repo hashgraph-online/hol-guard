@@ -1,9 +1,10 @@
 """Keep the source authority gate sensitive to detached native review paths."""
+
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 
 def test_delegated_review_must_reach_snapshot_native_edge(tmp_path: Path) -> None:
@@ -23,8 +24,7 @@ def test_delegated_review_must_reach_snapshot_native_edge(tmp_path: Path) -> Non
     helper = target / "hook_worker_native_review.py"
     source = helper.read_text()
     assert "worker._review_native_edge_with_snapshot(" in source
-    helper.write_text(source.replace(
-        "worker._review_native_edge_with_snapshot(", "worker._detached_native_edge("
-    ))
-    assert any("does not enter the snapshot-bound native edge" in failure
-               for failure in gate._worker_failures(tmp_path))
+    helper.write_text(source.replace("worker._review_native_edge_with_snapshot(", "worker._detached_native_edge("))
+    assert "module._review_native_edge_once does not invoke _review_native_edge_with_snapshot" in (
+        gate._worker_failures(tmp_path)
+    )

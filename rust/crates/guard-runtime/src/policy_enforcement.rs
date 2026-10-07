@@ -43,6 +43,9 @@ pub(crate) fn ensure_business_review_permitted(
         .business_policy
         .as_ref()
         .ok_or_else(|| "native_workspace_review_business_invalid".to_owned())?;
+    if binding.budgets.is_some() {
+        return Err("native_business_budget_executor_unavailable".to_owned());
+    }
     let intrinsic = ActionFloor::parse(intrinsic)
         .ok_or_else(|| "native_workspace_review_business_invalid".to_owned())?;
     let policy = policy_enforcement_business::CompiledBusinessPolicy::new(binding)?;

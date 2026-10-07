@@ -1,5 +1,5 @@
-from scripts.ci.generate_release_notes import render_notes
 from scripts.ci import generate_release_notes
+from scripts.ci.generate_release_notes import render_notes
 
 
 def test_release_notes_cli_accepts_deferred_flag(monkeypatch, capsys) -> None:

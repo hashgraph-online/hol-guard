@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from .bounded_cli_hook_script_native import BOUNDED_HOOK_NATIVE_TEMPLATE
+from .grok_hook_invocation_template import GROK_HOOK_INVOCATION_TEMPLATE
+from .grok_hook_readiness_template import GROK_HOOK_READINESS_TEMPLATE
 from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
 from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 
@@ -299,7 +301,8 @@ def _daemon_auth() -> tuple[str, int, str] | None:
 
 def _loopback_url(host: str, port: int, path: str) -> str:
     rendered = f"[{host}]" if host == "::1" else host
-    return f"http://{rendered}:{port}{path}"
+    query = "?home=" + quote(_GROK_HOME, safe="") if HARNESS == "grok" and _GROK_HOME is not None else ""
+    return f"http://{rendered}:{port}{path}{query}"
 
 
 __HOOK_NATIVE_RESPONSES__
@@ -423,7 +426,12 @@ def _apply_grok_wait(input_text: str, native: tuple[str, str, int]) -> tuple[str
     return text, stderr, 0 if allowed else exit_code
 
 
+__GROK_HOOK_READINESS__
+__GROK_HOOK_INVOCATION__
+
 def _post_hook(input_text: str) -> tuple[str, str, int] | None:
+    if HARNESS == "grok":
+        input_text = _grok_invocation_payload(input_text)
     if time.monotonic() >= _HOOK_DEADLINE_MONOTONIC:
         return None
     auth = _daemon_auth()
@@ -431,13 +439,22 @@ def _post_hook(input_text: str) -> tuple[str, str, int] | None:
         return None
     host, port, token = auth
     url = _loopback_url(host, port, f"/v1/hooks/{HARNESS}")
-    timeout = min(float(TIMEOUT_SECONDS) * 0.5, 5.0, _HOOK_DEADLINE_MONOTONIC - time.monotonic())
+    transport_cap = 10.0 if HARNESS == "grok" and _event_name(input_text) == "UserPromptSubmit" else 5.0
+    timeout = min(float(TIMEOUT_SECONDS) * 0.5, transport_cap, _HOOK_DEADLINE_MONOTONIC - time.monotonic())
     if HARNESS == "grok" and _compact(_event_name(input_text)) in _GROK_OBSERVE_EVENTS:
         # Keep the daemon request within 1s of Grok's 15s outer hook lifetime.
         # Observations must not hold up a session on an unavailable daemon.
         timeout = min(timeout, 1.0)
     if timeout <= 0:
         return None
+    if HARNESS == "grok" and _event_name(input_text) == "UserPromptSubmit":
+        deadline = min(_HOOK_DEADLINE_MONOTONIC, time.monotonic() + timeout)
+        input_text = _prepare_grok_prompt(input_text, host, port, token, deadline)
+        if input_text is None:
+            return None
+        timeout = deadline - time.monotonic()
+        if timeout <= 0:
+            return None
     parsed = _http_json(url, token, data=input_text.encode("utf-8"), timeout=timeout)
     if parsed is None:
         return None
@@ -454,6 +471,8 @@ def main() -> int:
         )
     except (TimeoutError, OSError, ValueError):
         return _fail("{}")
+    if HARNESS == "grok" and not _configure_grok_invocation():
+        return _fail(prefix)
     if HARNESS == "grok" and _grok_pretool_event_conflict(prefix):
         return _fail(prefix, reason="HOL Guard blocked this action because hook event labels conflict.")
     stamped_prefix = _stamp_hook_input(prefix)
@@ -472,5 +491,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 '''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE)
     .replace("__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE)
+    .replace("__GROK_HOOK_READINESS__", GROK_HOOK_READINESS_TEMPLATE)
+    .replace("__GROK_HOOK_INVOCATION__", GROK_HOOK_INVOCATION_TEMPLATE)
     .replace("__HOOK_NATIVE_RESPONSES__\n", BOUNDED_HOOK_NATIVE_TEMPLATE)
 )

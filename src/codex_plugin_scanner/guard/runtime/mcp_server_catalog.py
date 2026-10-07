@@ -9,6 +9,7 @@ from .command_extension_specs import CommandExtensionValues
 from .command_permission_catalog import permissions_for_action_classes
 from .mcp_server_contribution import (
     catalog_id_for_mcp_id,
+    direct_mcp_command_name,
     load_mcp_contribution_payloads,
     remote_mcp_endpoint_identity,
 )
@@ -70,6 +71,12 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
         if not isinstance(package, str) or not package.strip():
             raise ValueError(f"{mcp_id} launch package is invalid")
         example = package_launch_example(command, package)
+        executables = (command,)
+    elif launch_kind == "direct-command":
+        command = launch.get("command")
+        if not isinstance(command, str) or direct_mcp_command_name(command) != command:
+            raise ValueError(f"{mcp_id} direct command is invalid")
+        example = command
         executables = (command,)
     elif launch_kind == "remote-http":
         remote_url = launch.get("url")

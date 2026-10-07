@@ -418,11 +418,12 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         .any(|item| item.permission_id == "command.github.permission.read-remote"));
     for command in [
         "gh api graphql -f query='{ viewer { login } }'",
-        "git rev-parse --git-dir",
+        "git cat-file -p HEAD",
         "docker compose ps",
     ] {
         let result = decision(command, &unrestricted);
-        assert_eq!(result.minimum_action, "block", "{command}");
+        assert_eq!(result.minimum_action, "review", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
         assert!(result.command_extensions.unwrap().binding.uncertainty_count > 0);
     }
 }

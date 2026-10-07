@@ -20,7 +20,9 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_workflow_matrix import _workflow_prompt, contained_vitest_cases
 
+from .agent_configuration import write_agent_configuration
 from .catalog import catalog_digest
+from .cleanup import cleanup_case_resources
 from .contained_judge import (
     _CONTAINED_PROFILE,
     _contained_project_checks,
@@ -30,15 +32,10 @@ from .contained_judge import (
 )
 from .evidence import public_events, read_events
 from .fixtures import create_fixture, digest_file
+from .host_process import clean_environment, run_process
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
 from .provider import InferenceRelay, LoopbackCollector
-from .runner import (
-    HERE,
-    REPO,
-    _agent_configuration,
-    clean_environment,
-    run_process,
-)
+from .runner import HERE, REPO
 from .source_files import digest_runner_files
 from .source_identity import source_identity
 
@@ -210,7 +207,7 @@ def run_contained_profile(
     try:
         with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
             agent_dir = private / "agent"
-            _agent_configuration(agent_dir, relay)
+            write_agent_configuration(agent_dir, relay)
             daemon = probe._start_installed_daemon(
                 guard_home=guard_home,
                 home=fixture.home,
@@ -281,7 +278,7 @@ def run_contained_profile(
             time.sleep(0.1)
             native_routes = worker.metrics.snapshot().get("routes", {})
             approval_delta = worker.store.count_approval_requests(status=None) - before_approvals
-            inference = relay.evidence()
+            inference = relay.evidence(wait_seconds=3)
             egress_requests = list(collector.requests)
             events = public_events(raw_events, replacements)
             if guard_log.exists():
@@ -299,12 +296,10 @@ def run_contained_profile(
         (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
     finally:
         if daemon is not None:
-            try:
-                probe._cleanup_installed_daemon(daemon)
-                probe._cleanup_native(identity, fixture.root / "guard-home")
-                cleanup_ok = True
-            except Exception as exc:
-                execution_error = execution_error or type(exc).__name__
+            cleanup = cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private)
+            cleanup_ok = cleanup.get("cleanup_ok") is True
+            if not cleanup_ok:
+                execution_error = execution_error or str(cleanup.get("cleanup_error") or "ProbeError")
     filesystem, after_snapshot = _contained_project_checks(project, before_snapshot)
     public_commands = [redact_value(case.command, replacements) for case in cases]
     public_callers = [redact_value(str(path), replacements) for path in caller_workspaces]
