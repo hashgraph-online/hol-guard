@@ -133,14 +133,17 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
+| `command.mcp-agenthub` | Reviews AgentHub tools that run other coding agents (Codex, Claude Code, Antigravity, Aider, Goose), change or discard their work, apply it to the working tree, or send code to those agents' providers. Tools not listed are reviewed. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-asdecided` | Read-only repository requirements, decisions, designs, roadmaps, and prompts for coding agents. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-contribos` | Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-filesystem` | Reviews official filesystem MCP tools. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-instapods` | Reviews sensitive InstaPods pod, billing, command execution, and file-write tools for the official hosted MCP server. | 0 | External opt-in |
 | `command.mcp-insumer` | Reviews the InsumerAPI tools that can spend money or credits or change merchant state: verification and trust calls that use credits or pay per call in USDC, payment registrations, API key and merchant creation, merchant configuration, domain verification and the public listing. Read-only lookups keep Guard's usual handling. Off until you turn it on. | 0 | External opt-in |
+| `command.mcp-lattice-talk` | Cross-harness agent message bus over Redis — shared sessions, rooms, direct messages, and memory for AI coding agents. Messaging, session and room membership changes, cursor updates, and memory writes default to review; read-only discovery tools inherit. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-loomdesk` | Reviews LoomDesk's planning tools, which return unsigned Robinhood Chain transactions (open, add to, change or close a liquidity position, a limit order, a swap, a new pool) for the caller's own wallet to sign. LoomDesk holds no keys and signs nothing. Read tools keep Guard's usual handling. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-pr-ui-compare` | Reviews PR UI Compare tools that run project install and start commands, write artifacts outside the repository, and download Chromium or FFmpeg. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-reaper` | Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, clearing every tempo marker, and multi-step undo. Off until you turn it on. | 0 | External opt-in |
+| `command.mcp-x-reader` | Reviews x-reader external/local content reads. Off until enabled. | 0 | External opt-in |
 | `command.skill-sunset` | Reviews the canonical Skill Sunset audit surface and its local report and viewer side effects. Experiment execution and npm launcher policy remain outside this extension. | 1 | External opt-in |
 | `command.tui-runner` | Reviews TUI Runner --reconfigure invocations, which overwrite a project's saved process configuration. Port cleanup, process spawning, and project scaffolding happen through TUI Runner's interactive menu after launch and are not observable command-line events, so this extension does not cover them. | 1 | External opt-in |
 
@@ -164,15 +167,19 @@ Protection model meanings:
 | `command.gitsync` | Reviews gitsync's live mirror sync, server-side webhook rewrites, and service install/uninstall. `check`, `status`, and plain `hooks` do not match any rule here; Guard's default floor still applies to them since gitsync is not on the built-in safe-command list and no rule in this extension matches those subcommands. Every mutating subcommand covered here always requires review, even with --help, -h or --dry-run present, because gitsync's flag parser can silently drop those flags depending on argument order and this matcher engine cannot detect when that happened. | 2 | External opt-in |
 | `command.google-workspace.gog` | Opt-in review of finite pinned gog CLI delivery, sharing, event, export, generic API and identity-override routes. This does not authenticate accounts or mediate provider execution. | 6 | External opt-in |
 | `command.keibidrop` | Reviews kd commands that share a local file with a peer, write a peer's file to local disk, or set which peer identity the session accepts. | 3 | External opt-in |
+| `command.kranz` | Reviews Kranz action execution, runtime lifecycle changes, configuration replacement, and retained evidence deletion. | 10 | External opt-in |
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
 | `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
+| `command.repopy` | Reviews repopy CLI operations across repository cloning, dependency installation, remote Git linkage, and non-interactive workspace cleanup. | 3 | External opt-in |
+| `command.routed` | Reviews host adapter changes, environment reconciliation, and updates through the Routed CLI. | 5 | External opt-in |
 | `command.skill-base` | Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version. | 1 | External opt-in |
 | `command.snoboard` | Reviews snoboard commands that write initiative.md or fetch from origin. validate, status, and next-number without --fetch only read and are not matched. fix --dry-run, --help, and --version exit without writing. Upstream CLI 0.1.0. | 3 | External opt-in |
 | `command.syngraphe` | Reviews shared repository context initialization, document creation, state archiving, and agent policy creation through syngraphe or syg. | 4 | External opt-in |
 | `command.uivoid` | Reviews uivoid commands that create or reconfigure a live MCP server mapped from an existing API, rotate the credential it calls that API with, or write local session and skill files a later command or agent session will trust. | 5 | External opt-in |
 | `command.vttforge` | Reviews VTTForge CLI commands that write a project: the scaffold, lint fixes, and the v14 migration written in place. The audit, the lint report and the migration preview stay unreviewed. | 3 | External opt-in |
+| `command.xrpl-muse-skill` | Guards the xrpl-muse-skill ceremony: xrpl-trade builds unsigned transaction proposals and never signs; xrpl-sign --approve is the sole hash-bound, policy-gated signer; fresh installs stay read-only until the typed xrpl-trade live ceremony. Proposal, signing, and gate-transition commands review; read-only queries stay inert. | 7 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 
