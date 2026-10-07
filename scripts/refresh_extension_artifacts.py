@@ -66,15 +66,7 @@ def _detector():
 
 def contribution_ids() -> list[str]:
     """Derive trust inventory from canonical inputs, never published descriptors."""
-    commands = {
-        str(_read(path)["extension"]["extension_id"])
-        for path in (ROOT / "contributions/command-sources").glob("command.*.json")
-    }
-    servers = {
-        "command.mcp-" + str(_read(path)["id"]).removeprefix("mcp.")
-        for path in (ROOT / "contributions/mcp-servers").glob("*.json")
-    }
-    return sorted(commands | servers)
+    return sorted(_detector().contribution_ids(include_legacy=False))
 
 
 def catalog_ids() -> set[str]:
@@ -152,8 +144,8 @@ def _sync_aggregate_map() -> bool:
 def sync_trust_map() -> bool:
     """Add contribution ids missing a trust binding as ``external`` files.
 
-    The aggregate is disposable build output. Refresh it from the reviewed
-    bindings even when a previous build left a stale copy behind.
+    Authored bindings are the authority. Legacy aggregate copies can be stale
+    after merges; regenerate them without admitting their values into policy.
     """
     missing = sorted(set(contribution_ids()) - _read_binding_ids())
     changed = False

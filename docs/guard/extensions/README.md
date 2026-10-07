@@ -157,6 +157,7 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
+| `command.agentbridge` | Reviews AgentBridge CLI commands that can overwrite generated plugin files or execute with an attached app tool registry. | 2 | External opt-in |
 | `command.answerloops` | Reviews answerLoops CLI commands that start a self-hosted instance with Docker Compose or download agent skill files into ./.claude/skills/. Help and usage output are not reviewed. | 2 | External opt-in |
 | `command.appimg` | Conservative operation knowledge compiled from a contributor inventory. | 17 | External opt-in |
 | `command.blitcp` | Reviews blitcp copies that leave the host, elevate privileges, or skip verification. | 4 | External opt-in |

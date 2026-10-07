@@ -20,7 +20,9 @@ def refresh(tmp_path, monkeypatch):
         (tmp_path / "contributions" / directory).mkdir(parents=True)
     bindings = tmp_path / "contracts/extensions/trust"
     bindings.mkdir(parents=True)
+    detector = module._detector()
     monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(detector, "ROOT", tmp_path)
     monkeypatch.setattr(module, "TRUST_BINDINGS", bindings)
     monkeypatch.setattr(module, "TRUST_MAP", bindings.parent / "trust-class-map.v1.json")
     return module

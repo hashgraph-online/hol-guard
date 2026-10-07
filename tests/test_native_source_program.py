@@ -261,6 +261,10 @@ def test_native_input_byte_budget(compiler: Path, example: dict) -> None:
 
 
 def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
+    # Exercise the matcher budget independently of the growing product catalog.
+    example = copy.deepcopy(example)
+    example["sources"] = example["sources"][:1]
+    example["mcp_sources"] = []
     groups = [
         {
             "op": "any.v1",
@@ -280,7 +284,8 @@ def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
         "config": {},
         "matchers": groups,
     }
-    # Exercise the node limit independently of the current input-byte limit.
+    # Stay inside the 8 MiB native input envelope so the node budget, not the
+    # envelope, is what rejects the request; the catalog alone grows past 4 MiB.
     assert len(canonical(example)) < 8 * 1024 * 1024
     result = invoke(compiler, example)
     assert result.returncode != 0
