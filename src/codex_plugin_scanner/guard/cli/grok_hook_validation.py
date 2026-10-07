@@ -7,6 +7,7 @@ import os
 import shlex
 import sys
 from pathlib import Path
+from typing import cast
 
 from ..adapters.base import HarnessContext, _shell_command
 from ..stable_guard_cli import prune_safe_cli_executable
@@ -131,6 +132,48 @@ def is_grok_hook_command(command: str, context: HarnessContext | None = None) ->
             "raise SystemExit(main_from_argv(sys.argv[1:]))"
         )
         return args[3] == bootstrap
+    except (OSError, ValueError, TypeError, RuntimeError):
+        return False
+
+
+def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
+    """Recognize an orphaned generated client for the same user home.
+
+    This is migration recognition only, never proof that a hook is operational.
+    Parse canonical argv without executing either command or loading old code.
+    """
+    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+
+    def binding(text: str) -> tuple[Path, dict[str, str]] | None:
+        args = _arguments(text)
+        interpreter = isolated_cursor_hook_python()
+        if len(args) != 4 or args[1] != "-I" or interpreter is None:
+            return None
+        if not Path(args[0]).is_absolute() or Path(args[0]).resolve() != Path(interpreter).resolve():
+            return None
+        raw = json.loads(args[3])
+        if not isinstance(raw, dict) or not isinstance(raw.get("frozen_launcher"), bool):
+            return None
+        executable = raw.get("python_executable")
+        if not isinstance(executable, str) or not Path(executable).is_absolute():
+            return None
+        config = _config(args[3], executable, frozen=raw["frozen_launcher"], context=None)
+        if config is None:
+            return None
+        script = Path(args[2])
+        expected = Path(cast(str, config["guard_home"])) / "managed" / "bounded-hooks" / "grok.py"
+        if not script.is_absolute() or script != expected:
+            return None
+        cli_args = cast(list[str], config["cli_args"])
+        options = dict(zip(cli_args[2:-1:2], cli_args[3:-1:2], strict=True))
+        scope = {"--home": str(Path(options.get("--home", str(Path.home()))).resolve())}
+        # Workspace is a fallback for hosts without cwd, not an ownership
+        # boundary: these commands all live in the same global Grok config.
+        return script, scope
+
+    try:
+        old, new = binding(command), binding(replacement)
+        return bool(old and new and old[1] == new[1] and not old[0].exists())
     except (OSError, ValueError, TypeError, RuntimeError):
         return False
 
