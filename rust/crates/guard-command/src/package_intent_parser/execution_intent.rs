@@ -32,12 +32,16 @@ pub(super) fn parse_exec_intent(
             if token == "--" {
                 break;
             }
-            if token == "--with" && index + 1 < tokens.len() {
+            if matches!(token.as_str(), "--with" | "-w") && index + 1 < tokens.len() {
                 targets.push(python_target(&tokens[index + 1], false, None, Vec::new()));
                 index += 2;
                 continue;
             }
-            if let Some(spec) = token.strip_prefix("--with=") {
+            if let Some(spec) = token
+                .strip_prefix("--with=")
+                .or_else(|| token.strip_prefix("-w="))
+                .or_else(|| token.strip_prefix("-w").filter(|spec| !spec.is_empty()))
+            {
                 targets.push(python_target(spec, false, None, Vec::new()));
             }
             if matches!(
@@ -176,6 +180,7 @@ pub(super) fn exec_package_spec(tokens: &[String]) -> Option<String> {
                     "--from",
                     "--python",
                     "--with",
+                    "-w",
                     "--with-requirements",
                     "--with-editable",
                 ],

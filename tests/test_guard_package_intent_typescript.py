@@ -86,13 +86,17 @@ def test_typescript_launch_evidence_rejects_minimal_exploit_deltas(
         workspace=baseline_workspace,
     )
     assert baseline_intent is not None
+    assert "local-execution-requires-review" in baseline_intent.notes
     baseline_evidence = baseline_intent.local_executions[0].typescript_launch
     assert baseline_evidence is not None
     assert baseline_evidence.status == "complete"
+    assert baseline_evidence.review_disposition == "review_required"
+    assert baseline_evidence.direct_silent_verification is False
 
     intent = parse_package_intent(command, workspace=workspace)
 
     assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
     evidence = intent.local_executions[0].typescript_launch
     assert evidence is not None
     assert evidence.status == "incomplete"
@@ -125,7 +129,15 @@ def test_parse_package_intent_keeps_explicit_typescript_package_guarded(
     manager.chmod(0o755)
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert parse_package_intent(command, workspace=tmp_path) is not None
+    intent = parse_package_intent(command, workspace=tmp_path)
+    assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
+    assert len(intent.local_executions) == 1
+    evidence = intent.local_executions[0].typescript_launch
+    if evidence is not None:
+        assert evidence.status == "incomplete"
+        assert evidence.review_disposition == "review_required"
+        assert evidence.direct_silent_verification is False
 
 
 @pytest.mark.parametrize(
@@ -154,14 +166,30 @@ def test_parse_package_intent_keeps_non_read_only_typescript_execution_guarded(
     manager.chmod(0o755)
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert parse_package_intent(f"npx tsc {command_suffix}", workspace=tmp_path) is not None
+    intent = parse_package_intent(f"npx tsc {command_suffix}", workspace=tmp_path)
+    assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
+    assert len(intent.local_executions) == 1
+    evidence = intent.local_executions[0].typescript_launch
+    if evidence is not None:
+        assert evidence.status == "incomplete"
+        assert evidence.review_disposition == "review_required"
+        assert evidence.direct_silent_verification is False
 
 
 def test_parse_package_intent_keeps_uninstalled_typescript_execution_guarded(tmp_path: Path) -> None:
     _write_text(tmp_path / "package.json", '{"devDependencies":{"typescript":"^5.9.0"}}\n')
     _write_text(tmp_path / "package-lock.json", '{"packages":{"node_modules/typescript":{"version":"5.9.0"}}}\n')
 
-    assert parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path) is not None
+    intent = parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path)
+    assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
+    assert len(intent.local_executions) == 1
+    evidence = intent.local_executions[0].typescript_launch
+    if evidence is not None:
+        assert evidence.status == "incomplete"
+        assert evidence.review_disposition == "review_required"
+        assert evidence.direct_silent_verification is False
 
 
 def test_parse_package_intent_keeps_unlocked_typescript_execution_guarded(
@@ -178,7 +206,15 @@ def test_parse_package_intent_keeps_unlocked_typescript_execution_guarded(
     manager.chmod(0o755)
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path) is not None
+    intent = parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path)
+    assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
+    assert len(intent.local_executions) == 1
+    evidence = intent.local_executions[0].typescript_launch
+    if evidence is not None:
+        assert evidence.status == "incomplete"
+        assert evidence.review_disposition == "review_required"
+        assert evidence.direct_silent_verification is False
 
 
 def test_parse_package_intent_keeps_transitive_only_typescript_lock_guarded(
@@ -198,7 +234,15 @@ def test_parse_package_intent_keeps_transitive_only_typescript_lock_guarded(
     manager.chmod(0o755)
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path) is not None
+    intent = parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path)
+    assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
+    assert len(intent.local_executions) == 1
+    evidence = intent.local_executions[0].typescript_launch
+    if evidence is not None:
+        assert evidence.status == "incomplete"
+        assert evidence.review_disposition == "review_required"
+        assert evidence.direct_silent_verification is False
 
 
 def test_parse_package_intent_keeps_ambiguous_pnpm_typescript_lock_guarded(
@@ -215,7 +259,15 @@ def test_parse_package_intent_keeps_ambiguous_pnpm_typescript_lock_guarded(
     manager.chmod(0o755)
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path) is not None
+    intent = parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path)
+    assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
+    assert len(intent.local_executions) == 1
+    evidence = intent.local_executions[0].typescript_launch
+    if evidence is not None:
+        assert evidence.status == "incomplete"
+        assert evidence.review_disposition == "review_required"
+        assert evidence.direct_silent_verification is False
 
 
 def test_parse_package_intent_keeps_legacy_transitive_typescript_lock_guarded(
@@ -235,4 +287,12 @@ def test_parse_package_intent_keeps_legacy_transitive_typescript_lock_guarded(
     manager.chmod(0o755)
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path) is not None
+    intent = parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path)
+    assert intent is not None
+    assert "local-execution-requires-review" in intent.notes
+    assert len(intent.local_executions) == 1
+    evidence = intent.local_executions[0].typescript_launch
+    if evidence is not None:
+        assert evidence.status == "incomplete"
+        assert evidence.review_disposition == "review_required"
+        assert evidence.direct_silent_verification is False

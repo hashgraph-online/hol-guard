@@ -6,11 +6,15 @@ fn uvx_reviews_installed_distribution_and_extra_packages() {
         ("uvx --from evil-pkg http", vec!["evil-pkg"]),
         ("uvx --from=evil-pkg http", vec!["evil-pkg"]),
         ("uvx --with extra pkg", vec!["pkg", "extra"]),
+        ("uvx -w extra pkg", vec!["pkg", "extra"]),
+        ("uvx -w=extra pkg", vec!["pkg", "extra"]),
+        ("uvx -wextra pkg", vec!["pkg", "extra"]),
         (
             "uvx --with=extra --with second pkg",
             vec!["pkg", "extra", "second"],
         ),
         ("uvx pkg --with tool-argument", vec!["pkg"]),
+        ("uvx pkg -w tool-argument", vec!["pkg"]),
     ] {
         let intent = parse_package_intent(command, None, None, None, None)
             .expect("uvx must produce a package intent");
