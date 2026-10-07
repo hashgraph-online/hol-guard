@@ -31,7 +31,7 @@ fn challenge(key: u8) -> GoogleLoginChallenge {
         client_id: "approved-client".into(),
         hosted_domains: BTreeSet::from(["work.example".into(), "other.example".into()]),
         nonce: "synthetic-nonce".into(),
-        namespace_key: [key; 32],
+        identity_key: [key; 32],
         created_at: NOW - 1,
         expected_account_binding: None,
     }

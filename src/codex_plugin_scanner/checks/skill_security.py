@@ -211,6 +211,22 @@ def _relative_skill_path(plugin_dir: Path, skill_path: Path) -> str:
         return skill_path.as_posix()
 
 
+def _normalize_skill_instruction_content(content: str) -> str:
+    """Preserve shell comments and join only physical backslash continuations."""
+
+    normalized: list[str] = []
+    for line in content.splitlines(keepends=True):
+        if line.lstrip(" \t").startswith("#"):
+            normalized.append(line)
+        elif line.endswith("\\\r\n"):
+            normalized.append(line[:-3] + " ")
+        elif line.endswith("\\\n"):
+            normalized.append(line[:-2] + " ")
+        else:
+            normalized.append(line)
+    return "".join(normalized)
+
+
 def _local_skill_instruction_findings(plugin_dir: Path, skills_dir: Path) -> tuple[Finding, ...]:
     findings: list[Finding] = []
     for skill_path in iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md"):
@@ -220,11 +236,7 @@ def _local_skill_instruction_findings(plugin_dir: Path, skills_dir: Path) -> tup
             continue
         # A shell comment does not continue after its trailing backslash.
         # Preserve physical comment lines so they cannot absorb executable text.
-        content = re.sub(
-            r"(?m)^[ \t]*#[^\r\n]*|\\\r?\n",
-            lambda match: match.group() if match.group().lstrip().startswith("#") else " ",
-            content,
-        )
+        content = _normalize_skill_instruction_content(content)
         safe_curl_spans = read_only_curl_spans(content)
         relative_path = _relative_skill_path(plugin_dir, skill_path)
         for pattern, behavior in _RISKY_SKILL_PATTERNS:

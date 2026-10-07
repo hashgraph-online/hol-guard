@@ -131,6 +131,62 @@ pub struct SupplyChainEvalResultV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }
+// ---------------------------------------------------------------------------
+// ApplyStoredPackagePolicy — `_apply_stored_package_policy_override` resident
+// op. Carries the already-computed package_request evaluation plus the inputs
+// the override reads; `execution_context` stays None so the resident computes
+// it via `build_package_execution_context` parity.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyStoredPackagePolicyRequestV1 {
+    pub schema: String,
+    #[serde(default)]
+    pub request_id: String,
+    /// Absolute path to the guard store SQLite database (`guard.db`).
+    pub store_path: String,
+    /// Resolved guard home (`~/.hol`).
+    pub guard_home: String,
+    /// The already-evaluated `PackageRequestEvaluation.to_dict()` payload.
+    pub evaluation: Value,
+    /// The `GuardArtifact` dict (`{kind, metadata, files}`).
+    pub artifact: Value,
+    /// Content hash of the artifact under evaluation.
+    pub artifact_hash: String,
+    /// Workspace directory bound to the request.
+    pub workspace_dir: String,
+    /// ISO-8601 UTC timestamp.
+    pub now: String,
+    /// Ephemeral enforcement values; forwarded into the rebuilt artifact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_private_metadata: Option<Value>,
+    /// Caller-provided current action (else the evaluation's `policy_action`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_action: Option<Value>,
+    /// When false, the saved approval is reported but not claimed.
+    #[serde(default = "default_true")]
+    pub claim_saved_approval: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyStoredPackagePolicyResultV1 {
+    pub schema: String,
+    pub request_id: String,
+    pub request_sha256: String,
+    /// `ok` or `error`.
+    pub status: String,
+    /// `ok`, or `native_apply_stored_package_policy_failed`.
+    pub code: String,
+    /// Updated `PackageRequestEvaluation.to_dict()` on success.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<Value>,
+}
 
 // ---------------------------------------------------------------------------
 // PackageAuthorityDecide — compose parse → artifact → eval for the package
@@ -181,4 +237,16 @@ pub struct PackageAuthorityDecideResultV1 {
     /// `PackageRequestEvaluation.to_dict()` payload.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
+}
+
+/// Native cached-feed matching for a package policy context. The runtime reads
+/// the complete advisory cache; callers cannot provide preselected matches.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageAdvisoryIdsRequestV1 {
+    pub schema: String,
+    pub request_id: String,
+    pub store_path: String,
+    pub guard_home: String,
+    pub artifact: Value,
 }

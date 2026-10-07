@@ -552,10 +552,12 @@ pub fn observations_from_native_evidence(
                 matcher_evidence: project_evidence(&variant.matcher_evidence),
             });
         }
+        // Native uncertainty means the compatibility model could not attribute
+        // the command to an owner; disabled controls still block it.
         let uncertainty = if raw.uncertainty_reasons.is_empty() {
             Vec::new()
         } else {
-            vec![UncertaintyKind::MatcherFailure]
+            vec![UncertaintyKind::UnsupportedInput]
         };
         result.push(NativeCommandExtensionObservation {
             extension_id: extension.extension_id.clone(),

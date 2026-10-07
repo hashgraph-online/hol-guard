@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import PurePosixPath
+from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
-    _argument_key_names,
-    _resolve_local_schema_ref,
-    _schema_property_key_names,
     build_tool_call_artifact,
     build_tool_call_hash,
     evaluate_tool_call,
     tool_call_risk_categories,
-    tool_call_risk_signals,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.runtime.mcp_protection import (
@@ -26,6 +22,23 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import (
     mcp_server_identity_metadata,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("_native_mcp_identity_authority")
+
+
+@pytest.fixture
+def _native_mcp_identity_authority(native_context_digest: Path) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    home = native_context.context_digest_guard_home()
+    assert home is not None, "MCP identity controls require a bound guard home"
+    result = native_context.native_context_digest(
+        "canonical_sha256",
+        {"material": None, "prefix": None},
+        guard_home=home,
+        timeout_seconds=5.0,
+    )
+    assert result is not None and result["status"] == "ok"
 
 
 def test_mcp_server_identity_hashes_args_and_sorts_env_keys() -> None:
@@ -45,6 +58,43 @@ def test_mcp_server_identity_hashes_args_and_sorts_env_keys() -> None:
     assert identity.package_version == "1.2.3"
     assert len(identity.args_hash) == 64
     assert len(identity.env_values_hash) == 64
+
+
+def test_mcp_transport_normalization_preserves_approval_binding() -> None:
+    request = {
+        "config_path": ".mcp.json",
+        "command": "npx",
+        "args": ("demo@1.2.3",),
+        "env": {},
+    }
+    canonical = build_mcp_server_identity(**request, transport="stdio")
+    normalized = build_mcp_server_identity(**request, transport="\u001c StDiO \u001f")
+    different = build_mcp_server_identity(**request, transport="sse")
+
+    assert normalized == canonical
+    assert different.identity_hash != canonical.identity_hash
+
+
+@pytest.mark.parametrize(
+    ("bound", "expected_schema_hash"),
+    [
+        (2**80, "6ad1ad32535acfbb75383f3bb134512ab8d49ad776db7e3a77e559af2d509b29"),
+        (2**80 + 1, "5ec3119f60d71a3ed0fe0633d28316340874adce5ccb61e351bdc6d3d977e45a"),
+        (-(2**80 + 1), "bd3d83cab34afef27cc37cb034eeecd07f89ceab527c1907d11214841ce3e19d"),
+    ],
+)
+def test_mcp_schema_identity_preserves_large_integer_boundaries(
+    bound: int,
+    expected_schema_hash: str,
+) -> None:
+    identity = build_mcp_tool_identity(
+        server_hash="bound-server",
+        tool_name="read",
+        schema={"type": "integer", "maximum": bound},
+        description="Read",
+    )
+
+    assert identity.schema_hash == expected_schema_hash
 
 
 def test_mcp_server_identity_binds_configured_env_values_without_exposing_them() -> None:
@@ -313,6 +363,53 @@ def test_evaluate_tool_call_honors_strict_mcp_risk_action(tmp_path) -> None:
 
     assert decision.action == "block"
     assert decision.source == "policy"
+
+
+@pytest.mark.parametrize(
+    "projection",
+    [
+        None,
+        {"action": "future-action", "source": "policy", "summary_code": "risk", "risk_categories": []},
+        {"action": "allow", "source": "future-source", "summary_code": "no_risk", "risk_categories": []},
+        {
+            "action": "allow",
+            "source": "policy",
+            "summary_code": "risk",
+            "risk_categories": ["secret_access", "secret_access"],
+        },
+    ],
+)
+def test_evaluate_tool_call_rejects_unavailable_or_malformed_native_policy(
+    tmp_path,
+    monkeypatch,
+    projection,
+) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    native_digest = native_context.native_context_digest
+
+    def reject_policy(operation, *args, **kwargs):
+        if operation == "mcp_tool_policy":
+            return None if projection is None else {"status": "ok", "mcp_tool_policy": projection}
+        return native_digest(operation, *args, **kwargs)
+
+    monkeypatch.setattr(native_context, "native_context_digest", reject_policy)
+    with pytest.raises(ValueError, match="native_mcp_tool_policy_unavailable"):
+        evaluate_tool_call(
+            store=GuardStore(tmp_path / "guard-home"),
+            config=GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace"),
+            artifact=artifact,
+            artifact_hash="tool-hash",
+            arguments={},
+        )
 
 
 def test_evaluate_tool_call_honors_gentle_mcp_risk_action(tmp_path) -> None:
@@ -1144,21 +1241,36 @@ def test_mcp_server_identity_splits_pip_style_single_equals_versions() -> None:
     assert identity.package_version == "2.0.0"
 
 
-def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
-    first = build_mcp_tool_identity(
-        server_hash="server",
-        tool_name="summarize",
-        schema={"paths": {"beta", "alpha"}, "location": PurePosixPath("/tmp/workspace")},
-        description=None,
-    )
-    second = build_mcp_tool_identity(
-        server_hash="server",
-        tool_name="summarize",
-        schema={"paths": {"alpha", "beta"}, "location": PurePosixPath("/tmp/workspace")},
-        description=None,
-    )
+@pytest.mark.parametrize("kind", ["mcp_server_identity", "mcp_tool_identity"])
+def test_native_identity_failure_cannot_bind_mcp_approval(
+    kind: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_context
 
-    assert first.schema_hash == second.schema_hash
+    native_digest = native_context.native_context_digest
+
+    def fail_identity(operation: str, *args: object, **kwargs: object) -> object:
+        if operation == kind:
+            return None
+        return native_digest(operation, *args, **kwargs)
+
+    monkeypatch.setattr(native_context, "native_context_digest", fail_identity)
+    with pytest.raises(ValueError, match=f"native_{kind}_unavailable"):
+        if kind == "mcp_server_identity":
+            build_mcp_server_identity(
+                config_path=".mcp.json",
+                command="npx",
+                args=("demo@1.2.3",),
+                transport="stdio",
+            )
+        else:
+            build_mcp_tool_identity(
+                server_hash="server",
+                tool_name="inspect",
+                schema={"type": "object"},
+                description=None,
+            )
 
 
 def test_mcp_tool_schema_flags_file_command_and_url_arguments() -> None:
@@ -1377,35 +1489,27 @@ def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema() 
     )
 
     assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
-    assert "tool name understates dangerous schema capabilities" in tool_call_risk_signals(artifact, {})
 
 
-def test_resolve_local_schema_ref_handles_array_index_segment() -> None:
-    schema = {"$defs": {"ops": [{"properties": {"secret": {"type": "string"}}}]}}
-    resolved = _resolve_local_schema_ref(schema, "#/$defs/ops/0")
-    assert resolved == {"properties": {"secret": {"type": "string"}}}
-
-
-def test_resolve_local_schema_ref_returns_none_for_out_of_bounds_array_index() -> None:
-    schema = {"$defs": {"ops": [{"type": "string"}]}}
-    assert _resolve_local_schema_ref(schema, "#/$defs/ops/5") is None
-
-
-def test_resolve_local_schema_ref_returns_none_for_non_digit_on_list() -> None:
-    schema = {"$defs": {"ops": [{"type": "string"}]}}
-    assert _resolve_local_schema_ref(schema, "#/$defs/ops/missing") is None
-
-
-def test_argument_key_names_handles_cyclic_structure() -> None:
-    outer: dict[str, object] = {"path": "a"}
-    outer["nested"] = outer
-    names = _argument_key_names(outer)
-    assert "path" in names
-    assert "nested" in names
-
-
-def test_schema_property_key_names_handles_cyclic_mapping() -> None:
-    inner: dict[str, object] = {"properties": {"file": {"type": "string"}}}
-    inner["circular"] = inner
-    names = _schema_property_key_names(inner)
-    assert "file" in names
+@pytest.mark.parametrize(
+    ("index", "expected"),
+    [
+        ("0", ("command_execution", "tool_schema_mismatch")),
+        ("5", ()),
+        ("missing", ()),
+    ],
+)
+def test_tool_risk_resolves_only_existing_array_reference(index, expected) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "$defs": {"ops": [{"properties": {"command": {"type": "string"}}}]},
+            "$ref": f"#/$defs/ops/{index}",
+        },
+    )
+    assert tool_call_risk_categories(artifact, {}) == expected

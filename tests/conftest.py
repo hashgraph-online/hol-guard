@@ -38,18 +38,20 @@ os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 
 @pytest.fixture(autouse=True)
-def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep legacy unit fixtures off the production native default.
+def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use the compiled authority in native regression jobs.
 
-    Production default remains ``auto``. Native-authority tests monkeypatch
-    ``native_mode`` or delete this variable themselves. There is no Python
-    semantic evaluator; ``off`` exercises the fail-safe surface.
+    A caller's explicit mode is preserved, including deliberate unavailable
+    runtime tests. Regression CI supplies an exact native binary; defaulting
+    those jobs to ``off`` would disable the implementation they must test.
+    Ordinary isolated unit runs retain the explicit fail-safe surface.
     """
 
     monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
-        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
+        mode = "force" if os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" else "off"
+        monkeypatch.setenv("HOL_GUARD_NATIVE", mode)
 
 
 class _GuardCommandsProxy:
@@ -177,6 +179,52 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
                 os.environ["HOL_GUARD_NATIVE_BINARY"] = previous_binary
     yield guard_home
     close_native_residents(guard_home)
+
+
+@pytest.fixture
+def native_prompt_analysis(
+    native_hook_force: Path,
+    _native_context_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    from codex_plugin_scanner.guard import config
+
+    monkeypatch.setattr(config, "resolve_guard_home", lambda: _native_context_home)
+    return _native_context_home
+
+
+@pytest.fixture
+def native_mcp_probe(
+    native_hook_force: Path,
+    _native_context_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[Callable[[Path], None]]:
+    """Exercise MCP discovery through the real keyed native resident."""
+    from codex_plugin_scanner.guard import config
+
+    monkeypatch.setattr(config, "resolve_guard_home", lambda: _native_context_home)
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    homes: list[Path] = []
+
+    def provision_home(home: Path) -> None:
+        key_dir = home / "native-runtime"
+        key_dir.mkdir(mode=0o700, exist_ok=True)
+        key_dir.chmod(0o700)
+        # Provision the resident with this home's own GuardStore verifier
+        # key, not an unrelated constant.  Approvals and policy decisions in
+        # these tests are signed with the store's real key; keying the
+        # resident with anything else makes authentic approvals unverifiable.
+        provision_native_verifier_key_for_store(GuardStore(home))
+        homes.append(home)
+
+    yield provision_home
+    for home in homes:
+        close_native_residents(home)
 
 
 def _context_digest_runtime_binary() -> Path | None:

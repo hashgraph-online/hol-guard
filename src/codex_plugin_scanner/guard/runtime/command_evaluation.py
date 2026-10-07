@@ -260,7 +260,8 @@ def evaluate_command(
         minimum_action = _stronger_floor(minimum_action, "review")
     observation_uncertainties = extension_uncertainties(observations)
     if observation_uncertainties:
-        minimum_action = "block"
+        # Disabled controls still resolve to block through control_resolution below.
+        minimum_action = _stronger_floor(minimum_action, "review")
     evidence_batch = extension_evidence_batch(command, observations)
     effective_evidence_batch = type(evidence_batch)(
         tuple(

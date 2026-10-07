@@ -1950,11 +1950,8 @@ function TotpEnrollmentQrPanel({ enrollment }) {
   ] }) });
 }
 function resolveSettingsSaveProofKind(input) {
-  if (!input.wasConfigured && input.draftGateEnabled) {
+  if (input.draftGateEnabled && !input.savedGateEnabled) {
     return "setup-gate";
-  }
-  if (input.wasConfigured && input.draftGateEnabled && !input.savedGateEnabled) {
-    return "verify-save";
   }
   if (input.savedGateEnabled) {
     return "verify-save";

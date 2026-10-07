@@ -7,7 +7,8 @@ import sqlite3
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 
-from .native_policy_snapshot_codec import _digest_v3
+from .native_command_control_authority_io import hold_command_control_authority_lock
+from .native_policy_snapshot_codec import _strict_json_loads_v3
 from .native_policy_snapshot_constants import (
     _PUBLISH_RETRY_MAX_SECONDS,
     _REQUIRED_PUBLISH_FEATURES,
@@ -162,6 +163,7 @@ class NativePolicySnapshotPublicationMixin:
             identity, capabilities, master_key, config, command_extensions, client = context
             resident_fingerprint_before = publisher._current_input_fingerprint()[1]
             try:
+                business_source = publisher._compiled_business_source()
                 snapshot, resident_generation = _publisher_api()._publish_snapshot_v3(
                     publisher=publisher,
                     identity=identity,
@@ -171,6 +173,15 @@ class NativePolicySnapshotPublicationMixin:
                     master_key=master_key,
                     client=client,
                     renew_after_generation=renew_after_generation,
+                    **(
+                        {
+                            "business_policy": cast(
+                                Mapping[str, object], _strict_json_loads_v3(business_source.binding_bytes)
+                            )
+                        }
+                        if business_source is not None
+                        else {}
+                    ),
                 )
             finally:
                 # The master is only an ephemeral input to derivation/signing;
@@ -185,6 +196,10 @@ class NativePolicySnapshotPublicationMixin:
                 with publisher._condition:
                     publisher._acked = False
                 raise NativePolicySnapshotError("native_command_control_binding_changed")
+            if publisher._compiled_business_source() != business_source:
+                with publisher._condition:
+                    publisher._acked = False
+                raise NativePolicySnapshotError("native_business_source_binding_changed")
             if publisher._current_local_cli_revision() != local_cli_revision:
                 with publisher._condition:
                     publisher._acked = False
@@ -193,59 +208,66 @@ class NativePolicySnapshotPublicationMixin:
                 with publisher._condition:
                     publisher._acked = False
                 raise NativePolicySnapshotError("native_provider_catalog_changed")
-            with publisher._condition:
-                # A mutation may have invalidated the barrier while this
-                # request was in flight. Do not let an older ACK make that
-                # newer policy appear ready.
-                if publisher._closed or publisher._epoch != publish_epoch:
-                    return
-                # Bind the ACK to the resident observed before publication,
-                # after publication, and at the barrier commit point.
-                resident_fingerprint_confirmed = publisher._confirm_resident_fingerprint(
-                    resident_fingerprint_before,
-                    resident_fingerprint,
-                    resident_generation,
-                    resident_directory_fingerprint,
-                )
-                if (
-                    resident_fingerprint_confirmed is None
-                    and snapshot.get("mode") == "observe"
-                    and _publisher_api()._same_resident_paths(resident_fingerprint_before, resident_fingerprint)
-                    and publisher._resident_fingerprint_matches_generation(resident_fingerprint, resident_generation)
-                ):
-                    # Hook reviews touch resident generation files while this
-                    # publish is in flight. Watch still matches the resident
-                    # that acknowledged the snapshot; do not drop it and pause.
-                    resident_fingerprint_confirmed = resident_fingerprint
-                if resident_fingerprint_confirmed is None:
-                    publisher._acked = False
-                    raise NativePolicySnapshotError("native_policy_snapshot_resident_changed")
-                # The first client request may create the resident generation
-                # state files. Treat those files as the state of this ACK,
-                # otherwise the observer loop immediately mistakes its own
-                # startup for a resident restart and withdraws the barrier
-                # under a concurrent hook. Keep the policy-input half from
-                # before publication so a config change observed during the
-                # request still forces a republish on the next poll.
-                if publisher._input_fingerprint is not None:
-                    publisher._input_fingerprint = (publisher._input_fingerprint[0], resident_fingerprint_confirmed)
-                publisher._snapshot = snapshot
-                publisher._resident_startup_required = False
-                publisher._published_config_digest = cast(str, snapshot["config_digest"])
-                publisher._published_local_cli_revision = local_cli_revision
-                publisher._published_policy_fingerprint = (
-                    cast(str, snapshot["config_digest"]),
-                    cast(str, snapshot["mode"]),
-                    _digest_v3(command_extensions),
-                )
-                publisher._observed_policy_fingerprint = publisher._published_policy_fingerprint
-                publisher._acked = True
-                publisher._last_error = None
-                publisher._renewal_after_generation = None
-                publisher._failure_count = 0
-                publisher._retry_not_before_monotonic = None
-                publisher._schedule_renewal_locked(snapshot)
-                publisher._condition.notify_all()
+            with hold_command_control_authority_lock(publisher.guard_home, shared=True):
+                source_matches = publisher._compiled_business_source() == business_source
+                with publisher._condition:
+                    # A mutation may have invalidated the barrier while this
+                    # request was in flight. Do not let an older ACK make that
+                    # newer policy appear ready.
+                    if publisher._closed or publisher._epoch != publish_epoch:
+                        return
+                    if not source_matches:
+                        publisher._acked = False
+                        raise NativePolicySnapshotError("native_business_source_binding_changed")
+                    # Bind the ACK to the resident observed before publication,
+                    # after publication, and at the barrier commit point.
+                    resident_fingerprint_confirmed = publisher._confirm_resident_fingerprint(
+                        resident_fingerprint_before,
+                        resident_fingerprint,
+                        resident_generation,
+                        resident_directory_fingerprint,
+                    )
+                    if (
+                        resident_fingerprint_confirmed is None
+                        and snapshot.get("mode") == "observe"
+                        and _publisher_api()._same_resident_paths(resident_fingerprint_before, resident_fingerprint)
+                        and publisher._resident_fingerprint_matches_generation(
+                            resident_fingerprint, resident_generation
+                        )
+                    ):
+                        # Hook reviews touch resident generation files while this
+                        # publish is in flight. Watch still matches the resident
+                        # that acknowledged the snapshot; do not drop it and pause.
+                        resident_fingerprint_confirmed = resident_fingerprint
+                    if resident_fingerprint_confirmed is None:
+                        publisher._acked = False
+                        raise NativePolicySnapshotError("native_policy_snapshot_resident_changed")
+                    # The first client request may create the resident generation
+                    # state files. Treat those files as the state of this ACK,
+                    # otherwise the observer loop immediately mistakes its own
+                    # startup for a resident restart and withdraws the barrier
+                    # under a concurrent hook. Keep the policy-input half from
+                    # before publication so a config change observed during the
+                    # request still forces a republish on the next poll.
+                    if publisher._input_fingerprint is not None:
+                        publisher._input_fingerprint = (publisher._input_fingerprint[0], resident_fingerprint_confirmed)
+                    publisher._snapshot = snapshot
+                    publisher._resident_startup_required = False
+                    publisher._published_config_digest = cast(str, snapshot["config_digest"])
+                    publisher._published_local_cli_revision = local_cli_revision
+                    publisher._published_policy_fingerprint = (
+                        cast(str, snapshot["config_digest"]),
+                        cast(str, snapshot["mode"]),
+                        publisher._source_control_fingerprint(command_extensions, business_source),
+                    )
+                    publisher._observed_policy_fingerprint = publisher._published_policy_fingerprint
+                    publisher._acked = True
+                    publisher._last_error = None
+                    publisher._renewal_after_generation = None
+                    publisher._failure_count = 0
+                    publisher._retry_not_before_monotonic = None
+                    publisher._schedule_renewal_locked(snapshot)
+                    publisher._condition.notify_all()
         except NativePolicySnapshotError as error:
             publisher._record_error(str(error))
         except (OSError, RuntimeError, TypeError, ValueError, AttributeError, sqlite3.Error) as error:

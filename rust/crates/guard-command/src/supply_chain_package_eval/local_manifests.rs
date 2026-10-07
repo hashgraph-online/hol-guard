@@ -59,10 +59,19 @@ pub(super) fn local_package_manifest_result(
 ) -> Option<Map<String, Value>> {
     let manifest_path = local_package_manifest_path(target, workspace_dir)?;
     let manifest_text = std::fs::read_to_string(&manifest_path).ok()?;
-    let signals: Vec<Map<String, Value>> = deps
-        .risk
-        .detect_supply_chain_risk(&manifest_text, None)
-        .unwrap_or_default()
+    let detected = match deps.risk.detect_supply_chain_risk(&manifest_text, None) {
+        Ok(signals) => signals,
+        Err(_) => {
+            return Some(heuristic_package_result(
+                target,
+                "block",
+                "supply_chain_risk_evaluation_failed",
+                "Guard could not complete the package supply-chain risk evaluation.",
+                "high",
+            ));
+        }
+    };
+    let signals: Vec<Map<String, Value>> = detected
         .into_iter()
         .filter(|s| {
             let sid = optional_string(s.get("signal_id")).unwrap_or_default();
@@ -93,6 +102,7 @@ pub(super) fn local_package_manifest_result(
     }
     let strongest = signals
         .iter()
+        .rev()
         .max_by_key(|s| {
             severity_rank_value(
                 optional_string(s.get("severity"))
@@ -100,8 +110,7 @@ pub(super) fn local_package_manifest_result(
                     .unwrap_or("unknown"),
             )
         })
-        .cloned()
-        .unwrap_or_default();
+        .expect("nonempty lifecycle risk signals");
     Some(heuristic_package_result(
         &manifest_target,
         "block",

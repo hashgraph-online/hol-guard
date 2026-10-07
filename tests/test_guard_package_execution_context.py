@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.approval_scope_support import (
     package_request_portable_workspace_scope,
     package_request_runtime_workspace_scope,
@@ -16,6 +18,25 @@ from codex_plugin_scanner.guard.package_execution_context import (
     build_package_execution_context,
     changed_package_execution_context_components,
 )
+
+pytestmark = pytest.mark.usefixtures("_native_package_context_authority")
+
+
+@pytest.fixture
+def _native_package_context_authority(native_context_digest: Path) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    home = native_context.context_digest_guard_home()
+    assert home is not None, "package context controls require a bound guard home"
+    result = native_context.native_context_digest(
+        "canonical_sha256",
+        {"material": None, "prefix": None},
+        guard_home=home,
+        timeout_seconds=5.0,
+    )
+    from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+
+    assert result is not None and result["status"] == "ok", native_resident_client_failure_code()
 
 
 def _write_repository(root: Path, *, common_git_dir: Path | None = None) -> Path:
@@ -460,3 +481,24 @@ def test_package_project_scope_requires_future_bound_v2_proof(tmp_path: Path) ->
     }
     assert supported_request_scopes({**request, "scanner_evidence": [nonportable_evidence]}) == ("artifact",)
     assert supported_request_scopes({**request, "scanner_evidence": []}) == ("artifact",)
+
+
+def test_component_native_failure_cannot_produce_reusable_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path,
+) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    request = native_context.native_context_digest
+
+    def fail_canonical_hash(kind: str, fields: dict[str, object], **kwargs: object):
+        if kind == "canonical_sha256":
+            return None
+        return request(kind, fields, **kwargs)
+
+    monkeypatch.setattr(native_context, "native_context_digest", fail_canonical_hash)
+    with pytest.raises(ValueError, match="native_package_context_digest_unavailable"):
+        _context(workspace, _artifact(), environment)

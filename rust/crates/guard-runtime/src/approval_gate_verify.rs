@@ -546,7 +546,11 @@ pub(crate) fn verify_or_raise_locked(
     }
     let mut accepted_counter: Option<i64> = None;
     if totp_enabled(state) {
-        if gate_input.password.is_none() && gate_input.totp_code.is_none() {
+        if gate_input.totp_code.is_none() {
+            // Python `_verify_or_raise` (:1300-1308): with TOTP enabled and no
+            // code supplied, the gate requires a recent satisfied proof
+            // regardless of whether a password was sent — the password is not a
+            // substitute second factor.
             if recent_totp_satisfied_locked(guard_home, state, now_epoch) {
                 // Reuse the recent TOTP proof without re-entering a code.
                 accepted_counter = optional_int(state.get("totp_last_counter"));
@@ -557,7 +561,8 @@ pub(crate) fn verify_or_raise_locked(
                     403,
                 ));
             }
-        } else if let Some(code) = gate_input.totp_code.as_deref() {
+        } else {
+            let code = gate_input.totp_code.as_deref().unwrap();
             accepted_counter = Some(verify_totp_or_raise(
                 guard_home, state, code, now_epoch, true,
             )?);

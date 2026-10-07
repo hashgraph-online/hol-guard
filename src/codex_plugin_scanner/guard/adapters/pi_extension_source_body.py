@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
+from .pi_extension_prompt_response_source import PROMPT_RESPONSE_HELPER_SOURCE
+from .pi_extension_readiness_cache_source import WORKSPACE_READINESS_CACHE_SOURCE
 from .pi_extension_source_body_shared_v1 import build_source_body_shared_v1
 
 _STRUCTURED_BLOCKED_REASON_PRELUDE = (
@@ -76,8 +78,7 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  }\n"
         "  return null;\n"
         "}\n"
-        "\n"
-        "function fallbackGuardResponse(\n"
+        "\n" + PROMPT_RESPONSE_HELPER_SOURCE + "function fallbackGuardResponse(\n"
         "  reasonCode: string,\n"
         "  reason: string,\n"
         "): GuardResponse {\n"
@@ -196,7 +197,9 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
         "    try {\n"
         "      const parsed = JSON.parse(raw) as unknown;\n"
-        "      const normalized = normalizeGuardResponse(parsed);\n"
+        "      const normalized = normalizePromptGuardResponse(\n"
+        "        parsed, JSON.parse(serializedPayload).hook_event_name,\n"
+        "      );\n"
         "      if (normalized !== null) {\n"
         "        return { response: normalized, recoveryKind: null };\n"
         "      }\n"
@@ -360,6 +363,10 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  }\n"
         + build_source_body_shared_v1(
             display_name=display_name, blocked_reason_prelude=_STRUCTURED_BLOCKED_REASON_PRELUDE
+        ).replace(
+            "const normalized = normalizeGuardResponse(parsed);",
+            "const normalized = normalizePromptGuardResponse(parsed, payload.hook_event_name);",
+            1,
         )
         + "function reviewedToolResult(content: unknown, details: unknown, isError?: boolean, deadlineAt?: number) {\n"
         "  let body = '';\n"
@@ -394,46 +401,8 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "    invalidateToolApprovalContinuations();\n"
         "    invalidateInputApprovalResumes();\n"
         "  };\n"
-        "  let workspaceReadiness = null;\n"
-        "  const ensureGuardWorkspaceReady = (cwd, allowSetup = true) => {\n"
-        "    const workspace = typeof cwd === 'string' && cwd ? cwd : process.cwd();\n"
-        "    if (workspaceReadiness?.cwd === workspace) {\n"
-        "      const currentConnection = loadGuardDaemonConnection();\n"
-        "      if (workspaceReadiness.daemonStateId === null && !workspaceReadiness.settled) {\n"
-        "        return workspaceReadiness.result;\n"
-        "      }\n"
-        "      if (workspaceReadiness.daemonStateId !== null &&\n"
-        "        currentConnection?.stateId === workspaceReadiness.daemonStateId) {\n"
-        "        return workspaceReadiness.result;\n"
-        "      }\n"
-        "      if (!allowSetup) {\n"
-        '        return Promise.resolve({ ready: false, reasonCode: "daemon_restarted_requires_session_setup" });\n'
-        "      }\n"
-        "      workspaceReadiness = null;\n"
-        "    }\n"
-        "    if (!allowSetup) {\n"
-        '      return Promise.resolve({ ready: false, reasonCode: "native_workspace_setup_required" });\n'
-        "    }\n"
-        "    const daemonStateId = loadGuardDaemonConnection()?.stateId ?? null;\n"
-        "    const result = daemonWorkspaceReadiness(workspace);\n"
-        "    const readinessEntry = { cwd: workspace, result, daemonStateId, settled: false };\n"
-        "    workspaceReadiness = readinessEntry;\n"
-        "    void result.then((readiness) => {\n"
-        "      readinessEntry.settled = true;\n"
-        "      if (workspaceReadiness === readinessEntry && typeof readiness.daemonStateId === 'string') {\n"
-        "        readinessEntry.daemonStateId = readiness.daemonStateId;\n"
-        "      }\n"
-        "    }).catch(() => { readinessEntry.settled = true; });\n"
-        "    return result;\n"
-        "  };\n"
-        "  const prepareGuardWorkspaceForTurn = async (cwd) => {\n"
-        "    workspaceReadiness = null;\n"
-        "    return ensureGuardWorkspaceReady(cwd, true);\n"
-        "  };\n"
-        "  const readinessFailureReason = (readiness) =>\n"
-        "    `HOL Guard blocked this tool call because native workspace readiness was not confirmed "
-        '(${readiness.reasonCode ?? "native_workspace_not_ready"}).`;\n'
-        "  const approvalContinuationActivity = (): ApprovalContinuationActivity => {\n"
+        + WORKSPACE_READINESS_CACHE_SOURCE
+        + "  const approvalContinuationActivity = (): ApprovalContinuationActivity => {\n"
         "    const generation = approvalContinuationGeneration;\n"
         "    return () => generation === approvalContinuationGeneration;\n"
         "  };\n"

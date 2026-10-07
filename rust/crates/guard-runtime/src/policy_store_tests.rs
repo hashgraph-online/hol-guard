@@ -24,6 +24,10 @@ use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use super::normalize_scope_text;
 
+#[path = "policy_store_business_floor_tests.rs"]
+mod business_floor_tests;
+#[path = "policy_store_business_source_tests.rs"]
+mod business_source_tests;
 #[path = "policy_store_command_authority_tests.rs"]
 mod command_authority_tests;
 #[path = "policy_store_command_floor_tests.rs"]

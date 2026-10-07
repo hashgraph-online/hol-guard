@@ -38,6 +38,7 @@ READYNESS_REASONS = frozenset(
 )
 CONTRIBUTION_PREFIXES = (
     "contributions/extensions/",
+    "contributions/command-sources/",
     "contributions/mcp-servers/",
 )
 EXTENSION_ID_RE = re.compile(r"^(?:command|mcp)\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
@@ -438,6 +439,23 @@ def contribution_path(extension_id: str) -> str:
     raise ClaimNoticeError(f"unsupported extension ID: {extension_id}")
 
 
+def contribution_paths(extension_id: str) -> tuple[str, ...]:
+    """Every authored file that establishes a native contribution.
+
+    A command extension is contributed as its canonical source; the descriptor
+    under ``contributions/extensions/`` is generated on main after merge, so
+    either file proves the contribution exists at a revision.
+    """
+    paths = (contribution_path(extension_id),)
+    if extension_id.startswith("command."):
+        paths += (f"contributions/command-sources/{extension_id}.json",)
+    return paths
+
+
+def contribution_exists(client: GitHubApi, extension_id: str, ref: str) -> bool:
+    return any(client.file_exists(path, ref) for path in contribution_paths(extension_id))
+
+
 def build_comment(items: list[NoticeItem], studio_url: str) -> str:
     lines = [
         MARKER,
@@ -568,8 +586,9 @@ def current_unmapped_contributions(client: GitHubApi, pr_number: int, records: l
         raise ClaimNoticeError("canonical contribution revision is unavailable")
     current: list[str] = []
     for extension_id in missing:
-        native_path = contribution_path(extension_id)
-        if not client.file_exists(native_path, merge_sha) or not client.file_exists(native_path, default_branch):
+        if not contribution_exists(client, extension_id, merge_sha) or not contribution_exists(
+            client, extension_id, default_branch
+        ):
             continue
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
@@ -658,21 +677,20 @@ def _plan_notice_items(
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         current_listing = client.file_json(listing_path, merge_sha, missing_ok=True)
         if current_listing is None or not accepted_github_ids(current_listing, extension_id):
-            newly_added = extension_id in contribution_changes and not client.file_exists(
-                contribution_path(extension_id), before_sha
+            newly_added = extension_id in contribution_changes and not contribution_exists(
+                client, extension_id, before_sha
             )
             record(extension_id, "no_mapping", missing_mapping=newly_added)
             continue
         merge_ids = accepted_github_ids(current_listing, extension_id)
 
-        native_path = contribution_path(extension_id)
-        if not client.file_exists(native_path, merge_sha):
+        if not contribution_exists(client, extension_id, merge_sha):
             raise ClaimNoticeError(f"{extension_id}: authority sidecar exists without a canonical native contribution")
-        if not client.file_exists(native_path, default_branch):
+        if not contribution_exists(client, extension_id, default_branch):
             print(f"PR #{pr_number}: {extension_id}: native contribution is absent from canonical {default_branch}")
             record(extension_id, "source_not_current")
             continue
-        contribution_existed = client.file_exists(native_path, before_sha)
+        contribution_existed = contribution_exists(client, extension_id, before_sha)
 
         if not contribution_existed:
             notify_ids = merge_ids

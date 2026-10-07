@@ -25,6 +25,8 @@ def test_generated_pre_tool_payload_binds_sdk_session(tmp_path: Path, harness: s
     javascript = (
         """
 const GUARD_CONFIG_PATH = '/fixture/settings.json';
+const GUARD_TIMEOUT_MS = 4250, GUARD_DEADLINE_RESERVE_MS = 250;
+let approvalContinuationGeneration = 0;
 let handler;
 let captured;
 const pi = { on: (_, callback) => { handler = callback; } };
@@ -47,7 +49,7 @@ function handlerAbortSignal(ctx) { return ctx.signal; }
 function approvalContinuationActivity() { return undefined; }
 function continuationIsActive(activity) { return !activity || activity(); }
 function approvalContinuationFailureReason(_response, result) { return `continuation-${result}`; }
-async function ensureGuardWorkspaceReady() { return { ready: true }; }
+async function toolWorkspaceReadiness() { return { ready: true }; }
 function readinessFailureReason(readiness) { return `readiness-${readiness.reasonCode}`; }
 async function runGuard(payload) { captured = payload; return {}; }
 """

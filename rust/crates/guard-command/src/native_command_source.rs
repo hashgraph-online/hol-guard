@@ -2,6 +2,8 @@
 
 use super::*;
 
+const MAX_SOURCE_CATALOG_BYTES: usize = 8 * 1024 * 1024;
+
 #[path = "native_command_source_capabilities.rs"]
 mod capabilities;
 #[path = "native_command_source_catalog.rs"]
