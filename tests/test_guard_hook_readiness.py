@@ -159,7 +159,7 @@ def test_pi_source_prepares_workspace_before_timed_tool_review(tmp_path: Path) -
     session_start = source.index('pi.on("session_start", async (_event, ctx) => {')
     tool_call = source.index('pi.on("tool_call", async (event, ctx) => {')
     readiness_request = source.index("/v1/hooks/omp/readiness")
-    tool_readiness = source.index("ensureGuardWorkspaceReady(snapshot.cwd, false)", tool_call)
+    tool_readiness = source.index("toolWorkspaceReadiness(snapshot.cwd, hookDeadlineAt)", tool_call)
     semantic_review = source.index("const response = await runGuard(", tool_call)
 
     assert readiness_request < agent_start
@@ -269,7 +269,8 @@ console.log(JSON.stringify({
     assert output["afterRestartTool"]["ready"] is True
     assert output["contextChangedSetup"]["ready"] is True
     assert output["contextChangedTool"]["ready"] is True
-    assert output["inFlightTool"]["ready"] is True
+    assert output["inFlightTool"]["ready"] is False
+    assert output["inFlightTool"]["reasonCode"] == "daemon_changed_during_workspace_setup"
     assert output["readinessCalls"] == 5
 
 

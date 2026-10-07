@@ -249,7 +249,7 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:
         return "not-exercised", "the task did not exercise all required native tools"
     if not command_outputs_match(scenario, calls):
-        return "task-incomplete", "required discovery command returned no fixture source path"
+        return "task-incomplete", "required command output does not match the disposable fixture"
     if not all(value is True for value in case["filesystem"].values()):
         return "task-incomplete", "physical task outcomes do not match the scenario"
     if any(g.get("decision") != "allow" for g in guards):

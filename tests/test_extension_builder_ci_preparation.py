@@ -44,8 +44,7 @@ def checkout(tmp_path, monkeypatch):
             },
         )
     bindings_dir = tmp_path / "contracts/extensions/trust"
-    # Seed the committed aggregate as the exact projection of the bindings so the
-    # consistency gate starts clean.
+    # Seed a legacy aggregate copy; authored bindings remain the authority.
     write_json(
         tmp_path,
         "contracts/extensions/trust-class-map.v1.json",
@@ -107,6 +106,17 @@ def test_missing_command_and_mcp_ids_are_external_without_changing_reviewed_clas
     assert refresh.sync_trust_map() is False
 
 
+def test_legacy_descriptor_only_cannot_create_a_trust_binding(checkout):
+    root, bindings_dir = checkout
+    write_json(root, "contributions/extensions/command.orphan.json", {"id": "command.orphan"})
+    refresh.sync_trust_map()
+    assert not (bindings_dir / "command.orphan.v1.json").exists()
+    assert (
+        "command.orphan"
+        not in json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())["classes"]["external"]
+    )
+
+
 def test_trust_only_does_not_build_or_read_generated_catalogs(checkout, monkeypatch, capsys):
     root, bindings_dir = checkout
     add_source(root, "command.new-cli")
@@ -122,7 +132,7 @@ def test_trust_only_does_not_build_or_read_generated_catalogs(checkout, monkeypa
 
 
 def test_malformed_binding_is_not_silently_replaced(checkout):
-    _root, bindings_dir = checkout
+    _, bindings_dir = checkout
     bad = bindings_dir / "command.broken.v1.json"
     bad.write_text("invalid JSON", encoding="utf-8")
     with pytest.raises(ValueError):
@@ -130,16 +140,32 @@ def test_malformed_binding_is_not_silently_replaced(checkout):
     assert bad.read_text() == "invalid JSON"
 
 
-def test_stale_aggregate_is_replaced_from_authored_bindings(checkout):
+def test_hand_edited_aggregate_cannot_change_binding_policy(checkout):
     root, bindings_dir = checkout
     trust = root / "contracts/extensions/trust-class-map.v1.json"
     payload = json.loads(trust.read_bytes())
-    payload["classes"]["external"].append("command.hand-edited")
+    payload["classes"]["first-party"].append("command.hand-edited")
+    payload["classes"]["first-party"].append("command.existing")
+    payload["classes"]["external"].remove("command.existing")
     trust.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     assert refresh.main(["--trust-only"]) == 0
-    # Disposable output cannot author a trust classification.
+    # Projection values never create bindings or promote an external extension.
     assert not (bindings_dir / "command.hand-edited.v1.json").exists()
-    assert "command.hand-edited" not in json.loads(trust.read_bytes())["classes"]["external"]
+    classes = json.loads(trust.read_bytes())["classes"]
+    assert "command.hand-edited" not in classes["first-party"]
+    assert "command.existing" in classes["external"]
+
+
+def test_reviewed_binding_changes_regenerate_a_stale_legacy_map(checkout):
+    root, bindings_dir = checkout
+    binding = bindings_dir / "command.existing.v1.json"
+    payload = json.loads(binding.read_bytes())
+    payload["trustClass"] = "trusted-library"
+    binding.write_text(json.dumps(payload))
+    assert refresh.sync_trust_map()
+    classes = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())["classes"]
+    assert "command.existing" in classes["trusted-library"]
+    assert "command.existing" not in classes["external"]
 
 
 def test_absent_aggregate_is_generated_from_bindings(checkout):
