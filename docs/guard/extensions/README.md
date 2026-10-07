@@ -168,6 +168,7 @@ Protection model meanings:
 | `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
+| `command.routed` | Reviews host adapter changes, environment reconciliation, and updates through the Routed CLI. | 5 | External opt-in |
 | `command.skill-base` | Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version. | 1 | External opt-in |
 | `command.snoboard` | Reviews snoboard commands that write initiative.md or fetch from origin. validate, status, and next-number without --fetch only read and are not matched. fix --dry-run, --help, and --version exit without writing. Upstream CLI 0.1.0. | 3 | External opt-in |
 | `command.syngraphe` | Reviews shared repository context initialization, document creation, state archiving, and agent policy creation through syngraphe or syg. | 4 | External opt-in |
