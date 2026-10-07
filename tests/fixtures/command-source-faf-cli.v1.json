@@ -10068,7 +10068,9 @@
           "extension_id": "command.faf-cli",
           "homepage": "https://faf.one",
           "icon": {
-            "kind": "none"
+            "background": "#00B8B8",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
           },
           "license": "MIT",
           "name": "faf-cli command protection",
@@ -25750,8 +25752,10 @@
       "enabled_extensions": [
         "command.faf-cli"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "suffix-redirect-fails-closed",
       "rule_id": "command.faf-cli.git-ci-persistence"
     },

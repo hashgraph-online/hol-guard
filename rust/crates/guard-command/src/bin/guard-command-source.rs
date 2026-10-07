@@ -2,7 +2,7 @@
 
 use guard_command::native_command_program::source::{
     compare_programs, compile_build_request, descriptor_schema, evaluate_batch, run_fixtures,
-    source_schema,
+    source_schema, MAX_SOURCE_INPUT_BYTES,
 };
 use serde_json::{json, Value};
 use std::io::{Read, Write};
@@ -41,9 +41,12 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     }
     let mut bytes = Vec::new();
     std::io::stdin()
-        .take(4 * 1024 * 1024 + 1)
+        .take(MAX_SOURCE_INPUT_BYTES as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "command_source_input_read_failed")?;
+    if bytes.len() > MAX_SOURCE_INPUT_BYTES {
+        return Err("command_source_bytes_invalid");
+    }
     if operation == "test" {
         return run_fixtures(&bytes);
     }

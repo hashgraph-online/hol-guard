@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -67,31 +68,35 @@ def test_frozen_bounded_hook_command_bakes_current_hol_guard_shim(
     assert config["frozen_launcher"] is True
 
 
-def test_unfrozen_bounded_hook_command_keeps_python_interpreter(
+def test_unfrozen_bounded_hook_command_uses_isolated_python_script(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: sys.executable)
     versioned, shim = _versioned_core(tmp_path)
+    guard_home = tmp_path / "guard-home"
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
         python_executable=str(versioned),
         package_root=tmp_path,
-        guard_home=tmp_path / "guard-home",
+        guard_home=guard_home,
         cli_args=(
             "guard",
             "hook",
             "--guard-home",
-            str(tmp_path / "guard-home"),
+            str(guard_home),
             "--harness",
             "grok",
         ),
         harness="grok",
         timeout_seconds=25,
     )
-    assert command[0] == str(versioned)
+    assert command[0] == bounded_cli_hook_bridge.isolated_cursor_hook_python()
     assert command[1] == "-I"
-    assert command[2] == "-c"
-    config = json.loads(command[4])
-    assert config["python_executable"] == str(versioned)
-    assert config["frozen_launcher"] is False
+    assert Path(command[2]) == guard_home / "managed/bounded-hooks/grok.py"
+    script = Path(command[2]).read_text(encoding="utf-8")
+    assert 'HARNESS = "grok"' in script
+    assert "TIMEOUT_SECONDS = 25" in script
+    assert str(versioned) not in command
     assert str(shim) not in command
 
 

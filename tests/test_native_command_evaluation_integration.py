@@ -183,12 +183,12 @@ def test_native_unsupported_heredoc_remains_bound_blocking_unavailability(
     assert model["uncertainty_reason"] == "command_redirect_not_yet_supported"
     evidence = fixture.payload.get("command_extensions")
     assert isinstance(evidence, dict)
-    assert evidence["evaluation_error"] == "native_command_evaluation_failed"
+    assert evidence["evaluation_error"] is None
     assert evidence["observations"] == []
     binding = evidence["binding"]
     assert isinstance(binding, dict)
     assert binding["observation_count"] == 0
-    assert binding["uncertainty_count"] == 1
+    assert binding["uncertainty_count"] == 0
     assert fixture.payload["minimum_action"] == "block"
 
     monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)

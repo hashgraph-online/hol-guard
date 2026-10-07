@@ -128,6 +128,9 @@ def repository_fixture(tmp_path: Path) -> Path:
         shutil.copyfile(REPOSITORY / name, destination)
     for family in ("extensions", "mcp-servers"):
         shutil.copytree(REPOSITORY / "contributions" / family, root / "contributions" / family)
+    # Authored trust bindings are the source of truth for the builder's
+    # aggregate projection; a real checkout always has them.
+    shutil.copytree(REPOSITORY / "contracts/extensions/trust", root / "contracts/extensions/trust")
     return root
 
 

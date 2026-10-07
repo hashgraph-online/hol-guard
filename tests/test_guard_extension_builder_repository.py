@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import runpy
 import stat
 from dataclasses import replace
 from pathlib import Path
@@ -63,7 +64,8 @@ def test_apply_registers_external_packages_and_is_idempotent(tmp_path: Path, kin
     assert kit.discovery.metadata.catalog_id in trust["classes"]["external"]
     assert kit.discovery.metadata.catalog_id not in trust["classes"]["first-party"]
     assert contribution_path(kit.discovery.metadata) in (repository / PYPROJECT_PATH).read_text(encoding="utf-8")
-    assert contribution_path(kit.discovery.metadata) in (repository / STAGING_PATH).read_text(encoding="utf-8")
+    staging = runpy.run_path(str(repository / STAGING_PATH))
+    assert contribution_path(kit.discovery.metadata) in staging["_artifacts"](repository)
     before = file_snapshot(repository)
     repeated = apply_kit(kit, repository, write=True)
     assert all(item["action"] == "unchanged" for item in repeated["files"])
@@ -146,7 +148,7 @@ def test_removed_shared_registration_is_not_silently_restored(tmp_path: Path) ->
 @pytest.mark.parametrize(
     "path,original,replacement",
     [
-        (STAGING_PATH, "_ARTIFACTS = {", "_OTHER_ARTIFACTS = {"),
+        (STAGING_PATH, "_CONTRIBUTION_SOURCES = (", "_OTHER_SOURCES = ("),
         (PYPROJECT_PATH, "[tool.hatch.build.targets.wheel.force-include]", "[tool.hatch.build.targets.wheel.other]"),
     ],
 )

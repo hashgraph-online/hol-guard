@@ -49,7 +49,12 @@ pub(super) fn finalize_evaluation(
             reason_code = optional_string(restrictive_reason.get("code"));
         }
     }
-    let policy_action = decision_to_guard_action_variant(&normalize_bundle_action(&draft.decision));
+    let policy_action =
+        if draft.decision == "ask" && reason_code.as_deref() == Some("external_tarball_source") {
+            GuardAction::Review
+        } else {
+            decision_to_guard_action_variant(&normalize_bundle_action(&draft.decision))
+        };
     let source_risk_summaries: HashMap<&str, &str> = HashMap::from([
         (
             "dependency_confusion",

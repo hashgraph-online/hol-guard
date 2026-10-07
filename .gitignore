@@ -72,3 +72,9 @@ Thumbs.db
 /contracts/extensions/command-projection-build.v1.json
 /src/codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json
 /src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json
+
+# local gauntlet/build artifacts
+ci/pi-exact-continuation/node_modules/
+native-dist/
+source-build.json
+source-compiled.json

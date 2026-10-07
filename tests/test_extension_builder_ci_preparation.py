@@ -28,12 +28,33 @@ def write_json(root: Path, relative: str, value: object) -> Path:
 @pytest.fixture
 def checkout(tmp_path, monkeypatch):
     """Keep production inputs and the real detector isolated from the tests."""
-    trust = write_json(
+    bindings = {
+        "command.git": "first-party",
+        "command.cloud.aws": "trusted-library",
+        "command.existing": "external",
+    }
+    for extension_id, trust_class in bindings.items():
+        write_json(
+            tmp_path,
+            f"contracts/extensions/trust/{extension_id}.v1.json",
+            {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": extension_id,
+                "trustClass": trust_class,
+            },
+        )
+    bindings_dir = tmp_path / "contracts/extensions/trust"
+    # Seed the committed aggregate as the exact projection of the bindings so the
+    # consistency gate starts clean.
+    write_json(
         tmp_path,
         "contracts/extensions/trust-class-map.v1.json",
         {
             "schemaVersion": "guard.extension-trust-class-map.v1",
-            "publishers": {"hol": {"id": "hol"}},
+            "publishers": {
+                "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
+            },
             "classes": {
                 "first-party": ["command.git"],
                 "trusted-library": ["command.cloud.aws"],
@@ -41,11 +62,13 @@ def checkout(tmp_path, monkeypatch):
             },
         },
     )
+    trust = tmp_path / "contracts/extensions/trust-class-map.v1.json"
     monkeypatch.setattr(refresh, "ROOT", tmp_path)
     monkeypatch.setattr(refresh, "TRUST_MAP", trust)
+    monkeypatch.setattr(refresh, "TRUST_BINDINGS", bindings_dir)
     monkeypatch.setattr(detector, "ROOT", tmp_path)
     monkeypatch.setattr(refresh, "_detector", lambda: detector)
-    return tmp_path, trust
+    return tmp_path, bindings_dir
 
 
 def add_source(root: Path, identity: str) -> Path:
@@ -57,9 +80,12 @@ def add_source(root: Path, identity: str) -> Path:
     )
 
 
+def _read_binding(bindings_dir: Path, extension_id: str) -> dict:
+    return json.loads((bindings_dir / f"{extension_id}.v1.json").read_bytes())
+
+
 def test_missing_command_and_mcp_ids_are_external_without_changing_reviewed_classes(checkout):
-    root, trust = checkout
-    original = json.loads(trust.read_bytes())
+    root, bindings_dir = checkout
     sources = [
         add_source(root, "command.new-cli"),
         add_source(root, "command.git"),
@@ -68,20 +94,21 @@ def test_missing_command_and_mcp_ids_are_external_without_changing_reviewed_clas
     ]
     before = {path: path.read_bytes() for path in sources}
     assert refresh.sync_trust_map() is True
-    updated = json.loads(trust.read_bytes())
-    assert updated["publishers"] == original["publishers"]
-    assert updated["classes"] == {
-        **original["classes"],
-        "external": ["command.existing", "command.mcp-new-server", "command.new-cli"],
-    }
+    # Missing ids gain authored external bindings; reviewed bindings unchanged.
+    assert _read_binding(bindings_dir, "command.new-cli")["trustClass"] == "external"
+    assert _read_binding(bindings_dir, "command.mcp-new-server")["trustClass"] == "external"
+    assert _read_binding(bindings_dir, "command.git")["trustClass"] == "first-party"
+    assert _read_binding(bindings_dir, "command.cloud.aws")["trustClass"] == "trusted-library"
+    # The aggregate projection is regenerated from bindings for packaged runtimes.
+    aggregate = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())
+    assert "command.new-cli" in aggregate["classes"]["external"]
+    assert "command.mcp-new-server" in aggregate["classes"]["external"]
     assert all(path.read_bytes() == content for path, content in before.items())
-    first = trust.read_bytes()
     assert refresh.sync_trust_map() is False
-    assert trust.read_bytes() == first
 
 
 def test_trust_only_does_not_build_or_read_generated_catalogs(checkout, monkeypatch, capsys):
-    root, trust = checkout
+    root, bindings_dir = checkout
     add_source(root, "command.new-cli")
 
     def unexpected(*args, **kwargs):
@@ -91,19 +118,34 @@ def test_trust_only_does_not_build_or_read_generated_catalogs(checkout, monkeypa
         monkeypatch.setattr(refresh, name, unexpected)
     assert refresh.main(["--trust-only"]) == 0
     assert json.loads(capsys.readouterr().out) == {"ok": True, "trust_map_changed": True}
-    assert "command.new-cli" in json.loads(trust.read_bytes())["classes"]["external"]
+    assert _read_binding(bindings_dir, "command.new-cli")["trustClass"] == "external"
 
 
-def test_malformed_trust_map_is_not_silently_replaced(checkout):
-    _, trust = checkout
-    trust.write_text("invalid JSON", encoding="utf-8")
+def test_malformed_binding_is_not_silently_replaced(checkout):
+    root, bindings_dir = checkout
+    bad = bindings_dir / "command.broken.v1.json"
+    bad.write_text("invalid JSON", encoding="utf-8")
     with pytest.raises(ValueError):
         refresh.main(["--trust-only"])
-    assert trust.read_text() == "invalid JSON"
+    assert bad.read_text() == "invalid JSON"
+
+
+def test_hand_edited_aggregate_is_rejected_not_laundered(checkout):
+    root, bindings_dir = checkout
+    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    payload = json.loads(trust.read_bytes())
+    payload["classes"]["external"].append("command.hand-edited")
+    trust.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        refresh.main(["--trust-only"])
+    # The hand-edited id gains no authored binding and the committed map is left
+    # intact to surface the drift rather than rewriting it away.
+    assert not (bindings_dir / "command.hand-edited.v1.json").exists()
+    assert "command.hand-edited" in json.loads(trust.read_bytes())["classes"]["external"]
 
 
 def test_stale_contributor_branch_prepares_on_merge_without_rebase(checkout):
-    root, trust = checkout
+    root, bindings_dir = checkout
 
     def git(*arguments):
         return subprocess.check_output(["git", "-C", str(root), *arguments], text=True).strip()
@@ -136,13 +178,15 @@ def test_stale_contributor_branch_prepares_on_merge_without_rebase(checkout):
         timeout=30,
     )
     assert json.loads(completed.stdout)["ok"] is True
-    assert json.loads(trust.read_bytes())["classes"]["external"] == [
+    aggregate = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())
+    assert aggregate["classes"]["external"] == [
         "command.existing",
         "command.mcp-new-server",
         "command.unrelated-main",
     ]
     assert git("rev-parse", "contributor") == contributor_tip
-    assert git("diff", "--name-only") == "contracts/extensions/trust-class-map.v1.json"
+    assert _read_binding(bindings_dir, "command.mcp-new-server")["trustClass"] == "external"
+    assert _read_binding(bindings_dir, "command.unrelated-main")["trustClass"] == "external"
     assert json.loads(contribution.read_bytes()) == {"id": "mcp.new-server"}
 
 

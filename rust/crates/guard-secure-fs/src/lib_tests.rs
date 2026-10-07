@@ -28,6 +28,70 @@ fn bounded_read_hashes_regular_file() {
     let _ = fs::remove_dir_all(dir);
 }
 
+#[cfg(unix)]
+#[test]
+fn stable_context_read_accepts_mutable_files_and_explicit_executable_symlinks() {
+    let dir = fixture_root("stable-context");
+    let real = dir.join("real");
+    fs::create_dir_all(&real).unwrap();
+    let path = real.join("package.json");
+    fs::write(&path, b"{\"name\":\"fixture\"}\n").unwrap();
+    let ancestor = dir.join("workspace");
+    std::os::unix::fs::symlink(&real, &ancestor).unwrap();
+    let result = read_stable(&ancestor.join("package.json"), 256 * 1024, false).unwrap();
+    assert_eq!(result.bytes, b"{\"name\":\"fixture\"}\n");
+    assert_eq!(result.sha256, hex::encode(Sha256::digest(&result.bytes)));
+    let executable = dir.join("npm");
+    std::os::unix::fs::symlink(&path, &executable).unwrap();
+    assert!(matches!(
+        read_stable(&executable, 256 * 1024, false),
+        Err(SecureReadError::SymlinkInPath)
+    ));
+    assert_eq!(
+        read_stable(&executable, 256 * 1024, true).unwrap().bytes,
+        result.bytes
+    );
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn stable_context_read_enforces_caller_limit_and_single_link() {
+    let dir = fixture_root("stable-limits");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("lockfile");
+    fs::write(&path, b"1234").unwrap();
+    assert!(matches!(
+        read_stable(&path, 3, false),
+        Err(SecureReadError::TooLarge)
+    ));
+    assert_eq!(read_stable(&path, 4, false).unwrap().bytes, b"1234");
+    let alias = dir.join("alias");
+    fs::hard_link(&path, &alias).unwrap();
+    assert!(matches!(
+        read_stable(&path, 4, true),
+        Err(SecureReadError::HardLinkedFile)
+    ));
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn descriptor_open_does_not_wait_for_fifo_writer() {
+    let dir = fixture_root("nonblocking-fifo");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("fifo");
+    nix::unistd::mkfifo(&path, nix::sys::stat::Mode::S_IRUSR).unwrap();
+    assert!(matches!(
+        read_stable(&path, 4, false),
+        Err(SecureReadError::NotRegularFile)
+    ));
+    let file = secure_open(&path, &fs::canonicalize(&path).unwrap()).unwrap();
+    assert!(!file.metadata().unwrap().is_file());
+    drop(file);
+    fs::remove_dir_all(dir).unwrap();
+}
+
 #[cfg(windows)]
 #[test]
 fn bounded_read_fails_closed_on_windows_without_descriptor_path_walk() {

@@ -157,8 +157,22 @@ const mcpCatalog = normalizeExtensionCatalog({
   }],
 });
 assert.equal(mcpCatalog.extensions[0]?.surface, "mcp");
-assert.equal(mcpCatalog.extensions[0]?.mcp_launch?.package, "@modelcontextprotocol/server-filesystem");
+const packageLaunch = mcpCatalog.extensions[0]?.mcp_launch;
+assert.equal(packageLaunch?.kind, "package-launcher");
+if (packageLaunch?.kind === "package-launcher") {
+  assert.equal(packageLaunch.package, "@modelcontextprotocol/server-filesystem");
+}
 assert.equal(mcpCatalog.extensions[0]?.mcp_tools?.[1]?.state, "block");
+const directMcpCatalog = normalizeExtensionCatalog({
+  ...mcpCatalog,
+  extensions: [{ ...mcpCatalog.extensions[0], mcp_launch: { kind: "direct-command", command: "decided-mcp" } }],
+});
+assert.deepEqual(directMcpCatalog.extensions[0]?.mcp_launch, { kind: "direct-command", command: "decided-mcp" });
+for (const launch of [{ kind: "unknown", command: "decided-mcp" }, { kind: "direct-command", command: null }]) {
+  assert.throws(() => normalizeExtensionCatalog({
+    ...mcpCatalog, extensions: [{ ...mcpCatalog.extensions[0], mcp_launch: launch }],
+  }), /Invalid extension-control response/);
+}
 const remoteMcpCatalog = normalizeExtensionCatalog({
   ...catalog(),
   extensions: [{

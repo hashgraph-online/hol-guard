@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +24,7 @@ def canonical_bytes(value: object) -> bytes:
 
 
 def read_object(path: Path) -> dict:
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > 4 * 1024 * 1024:
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 8 * 1024 * 1024:
         raise ValueError(f"invalid source file: {path.relative_to(ROOT)}")
 
     def unique(pairs: list[tuple[str, object]]) -> dict:
@@ -49,7 +50,7 @@ def build_request() -> dict:
     ]
     mcp_paths = sorted((ROOT / "contributions/mcp-servers").glob("*.json"))
     paths = source_paths + mcp_paths
-    if len(paths) > 512 or sum(path.stat().st_size for path in paths) > 4 * 1024 * 1024:
+    if len(paths) > 512 or sum(path.stat().st_size for path in paths) > 8 * 1024 * 1024:
         raise ValueError("canonical source catalog exceeds native input budget")
     for path in source_paths:
         source = read_object(path)
@@ -62,8 +63,21 @@ def build_request() -> dict:
         "schema": "guard.command-extension-build.v1",
         "sources": sources,
         "mcp_sources": [read_object(path) for path in mcp_paths],
-        "trust": read_object(ROOT / "contracts/extensions/trust-class-map.v1.json"),
+        "trust": _trust_request_payload(),
     }
+
+
+def _trust_request_payload() -> dict:
+    """Assemble the trust block from authored per-extension bindings.
+
+    The committed aggregate map is a generated projection; building the native
+    request from the bindings guarantees the compiled program and catalog carry
+    binding truth even if the committed aggregate is stale or hand-edited.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
+    return trust_map_from_bindings(ROOT / "contracts" / "extensions" / "trust")
 
 
 def _implementation_files(directory: Path) -> set[Path]:
@@ -134,7 +148,7 @@ def main() -> int:
         ]
     )
     request = canonical_bytes(build_request())
-    if len(request) > 4 * 1024 * 1024:
+    if len(request) > 8 * 1024 * 1024:
         raise ValueError("source build envelope exceeds native input budget")
     completed = subprocess.run(command, input=request, stdout=subprocess.PIPE, cwd=ROOT, timeout=600, check=False)
     if completed.returncode:

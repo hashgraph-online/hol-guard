@@ -34,6 +34,9 @@ struct McpPublisher {
 #[derive(Deserialize, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum Launch {
+    DirectCommand {
+        command: String,
+    },
     PackageLauncher {
         command: String,
         package: String,
@@ -92,7 +95,13 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
     {
         return Err("command_source_mcp_contract_invalid");
     }
-    let (executables, example, remote) = match &input.launch {
+    let (executables, example, tightening_only) = match &input.launch {
+        Launch::DirectCommand { command } => {
+            if !super::super::admission::valid_direct_mcp_command(command) {
+                return Err("command_source_mcp_launcher_invalid");
+            }
+            (vec![command.clone()], command.clone(), true)
+        }
         Launch::PackageLauncher { command, package } => {
             if !matches!(
                 command.as_str(),
@@ -123,7 +132,7 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
                 tool.state.as_str(),
                 "inherit" | "allow" | "review" | "block"
             )
-            || (remote && tool.state == "allow")
+            || (tightening_only && tool.state == "allow")
             || !names.insert(crate::native_command_controls::normalized_tool(&tool.name))
         {
             return Err("command_source_mcp_tool_invalid");
@@ -231,6 +240,7 @@ fn canonical_endpoint(value: &str) -> Result<String, &'static str> {
 
 pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
     let mut packages = BTreeSet::new();
+    let mut commands = BTreeSet::new();
     let mut endpoints = BTreeSet::new();
     let mut aliases = BTreeSet::new();
     for extension in program["extensions"]
@@ -239,6 +249,14 @@ pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
     {
         let launch = &extension["mcp"]["mcp_launch"];
         match launch["kind"].as_str() {
+            Some("direct-command") => {
+                let command = launch["command"]
+                    .as_str()
+                    .ok_or("command_source_mcp_projection_invalid")?;
+                if !commands.insert(command.to_owned()) {
+                    return Err("command_source_mcp_command_duplicate");
+                }
+            }
             Some("package-launcher") => {
                 let package = launch["package"]
                     .as_str()

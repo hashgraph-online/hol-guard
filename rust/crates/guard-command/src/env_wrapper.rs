@@ -338,6 +338,10 @@ pub fn parse_env_wrapper(
                 split_expansions.push(expansion.clone());
                 replace_with_split = Some((consumed, expansion));
             }
+            // Python ends the option cluster after any operand-consuming flag
+            // with `short_index = len(token)`. Without this the loop re-reads
+            // the same flag until ENV_SPLIT_MAX_EXPANSIONS trips.
+            short_index = chars.len();
         }
         if let Some((consumed, expansion)) = replace_with_split {
             let repl = expansion.tokens.clone();
