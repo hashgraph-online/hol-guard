@@ -2949,7 +2949,7 @@ args = ["workspace-skill.js", "--changed"]
             guard_home=home_dir,
         )
         expected_session_start_argv = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
-        assert guard_pretool_entry["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        assert guard_pretool_entry["matcher"] == "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
         assert (
             _command_handler_argv(install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0])
             == expected_session_start_argv

@@ -63,6 +63,26 @@ def test_native_edge_floor_action_only_floors_post_tool_use() -> None:
     assert _native_edge_floor_action({"policy_action": "allow"}, "PostToolUse") == "allow"
 
 
+@pytest.mark.parametrize("action", ["block", "sandbox-required"])
+def test_pre_tool_native_terminal_action_cannot_be_relaxed_to_review(action: str) -> None:
+    assert _native_edge_floor_action(
+        {"decision": "deny", "policy_action": action}, "PreToolUse", artifact_default_action="warn"
+    ) == action
+    assert _native_edge_floor_action({"policy_action": "review"}, "PreToolUse") is None
+    assert _native_edge_floor_action({"policy_action": "allow"}, "PreToolUse") is None
+
+
+def test_package_evaluator_owns_command_control_failure_but_not_secret_deny() -> None:
+    failure = {"policy_action": "block", "reason_code": "native_command_extension_evaluation_failed"}
+    assert _native_edge_floor_action(failure, "PreToolUse", artifact_type="package_request") is None
+    assert _native_edge_floor_action(failure, "PreToolUse", artifact_type="command") == "block"
+    assert _native_edge_floor_action(
+        {"policy_action": "block", "reason_code": "native_secret_exfiltration"},
+        "PreToolUse",
+        artifact_type="package_request",
+    ) == "block"
+
+
 def test_digest_binding_sink_requires_manager_and_path_executable(tmp_path) -> None:
     context = SimpleNamespace()
     assert (

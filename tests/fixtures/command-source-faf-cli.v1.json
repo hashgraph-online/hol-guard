@@ -10068,7 +10068,9 @@
           "extension_id": "command.faf-cli",
           "homepage": "https://faf.one",
           "icon": {
-            "kind": "none"
+            "background": "#00B8B8",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
           },
           "license": "MIT",
           "name": "faf-cli command protection",

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.supply_chain_bundle import load_supply_chain_bundle_response
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
@@ -221,7 +222,7 @@ def test_resolved_target_version_uses_fake_pypi_registry_metadata_for_ranges(
         }
 
     monkeypatch.setattr(
-        supply_chain_package_eval_module, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry
+        package_services, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry
     )
     resolved = supply_chain_package_eval_module._resolved_target_version(
         target={

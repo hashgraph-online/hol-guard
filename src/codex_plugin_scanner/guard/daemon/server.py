@@ -284,7 +284,7 @@ from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_opti
 from .hook_process_runner import HookProcessRunner
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
-from .hook_worker_responses import prepare_native_hook_policy
+from .hook_worker_responses import _hook_harness_is_unmanaged, prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiService
@@ -5819,108 +5819,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_mcp_policy_decision(self, request_id: str, payload: dict[str, object]) -> None:
-        """Resolve an MCP policy creation request via human approval.
+        from .mcp_policy_decisions import handle_mcp_policy_decision
 
-        POST /v1/mcp-policy/requests/<id>/decision
-        Body: {"action": "approve" | "decline", ...approval_gate_input}
-
-        On approve: obtains the ApprovalGateGrant via require_high_risk
-        (purpose="policy_import"), then calls apply_pending_policy_request
-        with the grant.  On decline: calls decline_pending_policy_request.
-        """
-
-        from codex_plugin_scanner.guard.mcp.policy_errors import PolicyToolError
-        from codex_plugin_scanner.guard.mcp.policy_tools import (
-            apply_pending_policy_request,
-            decline_pending_policy_request,
-        )
-
-        action = payload.get("action")
-        if not isinstance(action, str) or action.strip() not in {"approve", "decline"}:
-            self._write_json(
-                {"resolved": False, "error": "missing_required_fields"},
-                status=400,
-            )
-            return
-        action = action.strip()
-        store = self.server.store  # type: ignore[attr-defined]
-        guard_home = store.guard_home
-
-        if action == "decline":
-            try:
-                decline_result = decline_pending_policy_request(store, request_id)
-            except PolicyToolError as error:
-                if error.code == "approval_already_resolved":
-                    # VPC047: a terminal/expired/declined request is stable.
-                    # Return the honest current state so the dashboard renders
-                    # disabled controls instead of an error.
-                    from codex_plugin_scanner.guard.mcp.policy_store import (
-                        MCPolicyRequestRepository,
-                    )
-
-                    repo = MCPolicyRequestRepository(store)
-                    current = repo.get_request(request_id)
-                    if current is not None:
-                        self._write_json(
-                            {
-                                "resolved": True,
-                                "requestId": current.request_id,
-                                "status": current.status,
-                                "resolvedAt": current.resolved_at,
-                            }
-                        )
-                        return
-                self._write_json(
-                    {"resolved": False, "error": error.code, "message": error.message},
-                    status=400,
-                )
-                return
-            self._write_json({"resolved": True, **decline_result})
-            return
-
-        # action == "approve" — obtain the grant and apply.
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="policy_import",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-
-        try:
-            apply_result = apply_pending_policy_request(
-                store,
-                request_id,
-                approval_gate_grant=approval_gate_grant,
-            )
-        except PolicyToolError as error:
-            if error.code == "approval_already_resolved":
-                # VPC047: re-approving a terminal request is stable; return
-                # the honest current state so controls render disabled.
-                from codex_plugin_scanner.guard.mcp.policy_store import (
-                    MCPolicyRequestRepository,
-                )
-
-                repo = MCPolicyRequestRepository(store)
-                current = repo.get_request(request_id)
-                if current is not None:
-                    self._write_json(
-                        {
-                            "resolved": True,
-                            "requestId": current.request_id,
-                            "status": current.status,
-                            "resolvedAt": current.resolved_at,
-                        }
-                    )
-                    return
-            self._write_json(
-                {"resolved": False, "error": error.code, "message": error.message},
-                status=400,
-            )
-            return
-        self._write_json({"resolved": True, **apply_result})
+        handle_mcp_policy_decision(self, request_id, payload)
 
     def _handle_initialize(self, payload: dict[str, object]) -> None:
         client_name = self._optional_string(payload.get("client_name")) or "guard-client"
@@ -6333,13 +6234,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         first tool call does not spend its short host deadline on cold startup.
         """
 
-        del default_harness
         params = parse_qs(query)
         workspace_candidate = self._normalized_hook_workspace_string(
             params.get("workspace", [None])[-1] or payload.get("workspace") or payload.get("cwd")
         )
         try:
             _ = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            if _hook_harness_is_unmanaged(self._daemon_server(), default_harness):
+                self._write_json(
+                    {"ready": True, "native_required": False, "workspace_acknowledged": False, "worker_ready": True},
+                    extra_headers={"Cache-Control": "no-store"},
+                )
+                return
             workspace = self._validated_hook_directory_string(
                 "workspace",
                 workspace_candidate,
@@ -6418,15 +6324,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         from .hook_request_parsing import (
             HookPayloadReferenceError,
             hook_payload_reference_size,
+            runtime_hook_event_name,
         )
 
+        grok_prompt = default_harness == "grok" and runtime_hook_event_name(payload) == "UserPromptSubmit"
+        admission_seconds = 10.0 if grok_prompt else _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
         transport_deadline = self._daemon_server().request_deadline(
             self.request,
-            _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS,
+            admission_seconds,
         )
         params = parse_qs(query)
+        hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
         remaining_hint = _runtime_hook_remaining_hint(payload)
-        hinted_deadline = RuntimeHookDeadline.from_remaining_hint(remaining_hint)
+        if grok_prompt and hint_missing:
+            remaining_hint = admission_seconds
+        hinted_deadline = (
+            RuntimeHookDeadline.from_remaining_hint(
+                remaining_hint,
+                monotonic=lambda: transport_deadline - admission_seconds,
+                maximum_budget_seconds=10.0,
+            )
+            if grok_prompt
+            else RuntimeHookDeadline.from_remaining_hint(remaining_hint)
+        )
         hook_deadline = RuntimeHookDeadline(expires_at=min(hinted_deadline.expires_at, transport_deadline))
         hook_env = _runtime_hook_env_overlay_from_payload(payload)
         payload = {key: value for key, value in payload.items() if key != "hook_env"}

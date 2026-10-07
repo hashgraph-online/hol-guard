@@ -294,7 +294,7 @@ def test_pi_pre_tool_use_blocks_kubectl_secret_printenv(tmp_path: Path, monkeypa
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0  # canonical: pi "PreToolUse" deny
     assert output["decision"] == "deny"
     assert "kubernetes secret read command" in output["reason"].lower()
 
@@ -329,7 +329,7 @@ def test_pi_pre_tool_use_blocks_argv_wrapped_kubectl_secret_dump(tmp_path: Path,
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0  # canonical: pi "PreToolUse" deny
     assert output["decision"] == "deny"
     assert "kubernetes secret read command" in output["reason"].lower()
 
@@ -466,7 +466,7 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 1  # canonical: pi "PostToolUse" deny
     assert output["decision"] == "deny"
     assert "kubernetes secret read command" in output["reason"].lower()
 

@@ -2,7 +2,7 @@
   "schema": "guard.command-extension-source.v1",
   "extension": {
     "action_classes": [
-      "Google Workspace consequential command"
+      "Google Workspace gws consequential command"
     ],
     "aliases": [],
     "conflicts": [],
@@ -25,7 +25,7 @@
     "permissions": [
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "baseline_floor": "review",
         "configurable": true,
@@ -51,7 +51,7 @@
       },
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "baseline_floor": "review",
         "configurable": true,
@@ -77,7 +77,7 @@
       },
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "baseline_floor": "review",
         "configurable": true,
@@ -103,7 +103,7 @@
       },
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "baseline_floor": "review",
         "configurable": true,
@@ -129,7 +129,7 @@
       },
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "baseline_floor": "review",
         "configurable": true,
@@ -167,7 +167,7 @@
     "rules": [
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "default_mode": "review",
         "description": "Reviews gmail delivery through the pinned gws CLI route families.",
@@ -1820,7 +1820,7 @@
       },
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "default_mode": "review",
         "description": "Reviews workspace destructive operation through the pinned gws CLI route families.",
@@ -4030,7 +4030,7 @@
       },
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "default_mode": "review",
         "description": "Reviews drive sharing change through the pinned gws CLI route families.",
@@ -4885,7 +4885,7 @@
       },
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "default_mode": "review",
         "description": "Reviews calendar event change through the pinned gws CLI route families.",
@@ -6544,7 +6544,7 @@
       },
       {
         "action_classes": [
-          "Google Workspace consequential command"
+          "Google Workspace gws consequential command"
         ],
         "default_mode": "review",
         "description": "Reviews authentication and credential export through the pinned gws CLI route families.",

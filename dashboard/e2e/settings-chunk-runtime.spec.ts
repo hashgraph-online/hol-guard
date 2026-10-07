@@ -138,6 +138,40 @@ test("production Settings password proof submits with Enter without React bridge
   await expect(runtimeErrors).toEqual([]);
 });
 
+test("re-enabling a retained authenticator gate submits confirmed password setup", async ({ page }) => {
+  const retainedSettings = {
+    ...gatedSettingsPayload,
+    settings: {
+      ...gatedSettingsPayload.settings,
+      approval_gate: {
+        ...gatedSettingsPayload.settings.approval_gate,
+        enabled: false,
+        totp_enabled: true,
+      },
+    },
+  };
+  const { settingsUpdates } = await mountSettingsFixture(page, retainedSettings, true);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
+  await page.getByRole("checkbox", { name: "Ask for proof on allow decisions" }).check();
+  await page.getByRole("button", { name: "Save settings", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Set your approval password" });
+  await expect(dialog.getByLabel("Authenticator code")).toHaveCount(0);
+  await dialog.getByLabel("Password", { exact: true }).fill("synthetic-new-password");
+  await expect(dialog.getByRole("button", { name: "Save settings", exact: true })).toBeDisabled();
+  await dialog.getByLabel("Confirm password", { exact: true }).fill("synthetic-new-password");
+  await dialog.getByRole("button", { name: "Save settings", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(settingsUpdates).toHaveLength(1);
+  expect(settingsUpdates[0].settings).toMatchObject({ approval_gate: {
+    enabled: true,
+    totp_enabled: true,
+    new_password: "synthetic-new-password",
+    confirm_password: "synthetic-new-password",
+  } });
+  await page.reload();
+  await expect(page.getByRole("checkbox", { name: "Ask for proof on allow decisions" })).toBeChecked();
+});
+
 test("first-time approval password setup is discoverable beside the gate", async ({ page }) => {
   const fixture = await mountSettingsFixture(page, unconfiguredSettingsPayload);
   await page.goto(`/settings?${DAEMON}&section=approval`);

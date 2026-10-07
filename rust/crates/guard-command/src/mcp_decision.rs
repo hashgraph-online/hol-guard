@@ -12,6 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
 use crate::action_lattice::most_restrictive_guard_action;
 use crate::approval_reuse::{
@@ -67,11 +68,7 @@ fn canonical_material_bytes(material: &Value) -> Vec<u8> {
     out
 }
 
-/// `context_sha256_digest(material, strict=False)` (native_context.py
-/// :394-428). The Python resident delegates to the native canonical_sha256 op
-/// — sha256 over canonical JSON — and the `strict=False` degrade is that same
-/// byte-identical local hash (see `_stable_digest`). In-process Rust is the
-/// worker, so this computes the local digest directly.
+/// Native canonical JSON SHA-256 used by MCP identity construction.
 fn context_sha256_digest_local(material: &Value, prefix: Option<&str>) -> String {
     let bytes = canonical_material_bytes(material);
     format!("{}{}", prefix.unwrap_or(""), sha256_hex(&bytes))
@@ -135,6 +132,7 @@ pub fn build_mcp_server_identity(
 ) -> McpServerIdentity {
     let (package_name, package_version) = package_identity(command, args);
     let package_source = package_source_token(command, args);
+    let transport = python_strip(transport).to_lowercase();
     let mut env_key_set: std::collections::BTreeSet<String> = env_keys
         .iter()
         .map(|key| python_strip(key).to_owned())
@@ -174,7 +172,7 @@ pub fn build_mcp_server_identity(
         package_name,
         package_version,
         package_source,
-        transport: transport.to_owned(),
+        transport,
         env_keys,
         env_values_hash,
         identity_hash,
@@ -189,7 +187,7 @@ pub fn build_mcp_tool_identity(
     schema: Option<&Value>,
     description: Option<&str>,
 ) -> McpToolIdentity {
-    let schema_hash = stable_digest(&normalize_json_value(schema.cloned()));
+    let schema_hash = stable_digest(schema.unwrap_or(&Value::Null));
     let description_hash = stable_digest(&Value::String(
         python_strip(description.unwrap_or("")).to_owned(),
     ));
@@ -257,6 +255,148 @@ pub fn mcp_tool_identity_metadata(identity: &McpToolIdentity) -> Map<String, Val
     );
     out.insert("identity_hash".to_owned(), json!(identity.identity_hash));
     out
+}
+
+pub fn portal_mcp_server_descriptor(
+    request: &guard_contracts::McpServerDescriptorRequestV1,
+) -> Map<String, Value> {
+    let identity = &request.identity;
+    let publisher_source = request
+        .publisher
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            request
+                .install_source
+                .as_deref()
+                .filter(|value| !value.is_empty())
+        })
+        .or(identity.package_name.as_deref());
+    let publisher = publisher_source
+        .map(|value| python_strip(value).to_lowercase())
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("publisher:{}", stable_digest(&json!(value))));
+    let dependency = identity
+        .package_name
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(|name| {
+            stable_digest(&json!({
+                "ecosystem": null,
+                "packageName": python_strip(name),
+                "version": identity.package_version.as_deref().map(python_strip)
+                    .filter(|value| !value.is_empty()),
+            }))
+        });
+    let transport = python_strip(&identity.transport).to_lowercase();
+    let transport = if transport.is_empty() {
+        "unknown"
+    } else {
+        &transport
+    };
+    let mut result = Map::new();
+    result.insert("argsHash".to_owned(), json!(identity.args_hash));
+    result.insert("command".to_owned(), json!(identity.command));
+    result.insert(
+        "commandHash".to_owned(),
+        json!(stable_digest(&json!({
+            "args": request.args,
+            "command": command_name(&identity.command),
+        }))),
+    );
+    result.insert("configPath".to_owned(), json!(request.config_path));
+    result.insert("dependencyHash".to_owned(), json!(dependency));
+    result.insert("envKeys".to_owned(), json!(identity.env_keys));
+    result.insert("envValuesHash".to_owned(), json!(identity.env_values_hash));
+    result.insert("identityHash".to_owned(), json!(identity.identity_hash));
+    result.insert("packageName".to_owned(), json!(identity.package_name));
+    result.insert("packageSource".to_owned(), json!(identity.package_source));
+    result.insert("packageVersion".to_owned(), json!(identity.package_version));
+    result.insert("publisherStableId".to_owned(), json!(publisher));
+    result.insert("transport".to_owned(), json!(identity.transport));
+    result.insert(
+        "transportHash".to_owned(),
+        json!(stable_digest(&json!(transport))),
+    );
+    result
+}
+
+pub fn portal_mcp_tool_descriptor(
+    request: &guard_contracts::McpToolDescriptorRequestV1,
+) -> Map<String, Value> {
+    let identity = &request.identity;
+    let full = request.schema.is_some()
+        || request
+            .description
+            .as_deref()
+            .is_some_and(|value| !python_strip(value).is_empty());
+    let mut result = Map::new();
+    result.insert(
+        "descriptionHash".to_owned(),
+        json!((!identity.description_hash.is_empty()).then_some(&identity.description_hash)),
+    );
+    result.insert(
+        "descriptorHash".to_owned(),
+        json!((!identity.description_hash.is_empty()).then_some(&identity.description_hash)),
+    );
+    result.insert(
+        "hashScope".to_owned(),
+        json!(if full { "full" } else { "manifest" }),
+    );
+    result.insert("identityHash".to_owned(), json!(identity.identity_hash));
+    result.insert(
+        "schemaHash".to_owned(),
+        json!((!identity.schema_hash.is_empty()).then_some(&identity.schema_hash)),
+    );
+    result.insert("serverHash".to_owned(), json!(identity.server_hash));
+    result.insert("toolName".to_owned(), json!(identity.tool_name));
+    result
+}
+
+fn persisted_mcp_digest(material: &Value) -> Result<String, &'static str> {
+    let mut bytes = Vec::new();
+    guard_contracts::write_python_default_json(material, &mut bytes)?;
+    Ok(format!("{:x}", Sha256::digest(&bytes)))
+}
+
+pub fn mcp_tool_content_digest(
+    request: &guard_contracts::McpToolContentDigestRequestV1,
+) -> Result<String, &'static str> {
+    persisted_mcp_digest(&json!({
+        "arguments": request.arguments,
+        "artifact_id": request.artifact_id,
+        "config_path": request.config_path,
+    }))
+}
+
+pub fn mcp_tool_approval_digest(
+    request: &guard_contracts::McpToolApprovalDigestRequestV1,
+) -> Result<String, &'static str> {
+    let mut material = Map::new();
+    material.insert("arguments".to_owned(), json!(request.content.arguments));
+    material.insert("artifact_id".to_owned(), json!(request.content.artifact_id));
+    material.insert("config_path".to_owned(), json!(request.content.config_path));
+    material.insert(
+        "server_fingerprint".to_owned(),
+        json!(request.server_fingerprint),
+    );
+    material.insert("server_identity".to_owned(), json!(request.server_identity));
+    material.insert("tool_identity".to_owned(), json!(request.tool_identity));
+    material.insert("transport".to_owned(), json!(request.transport));
+    if let Some(value) = &request.authority_hash {
+        if !value.is_null() {
+            material.insert("tool_authority_hash".to_owned(), value.clone());
+        }
+    }
+    if let Some(value) = &request.provider_hash {
+        if !value.is_null() {
+            material.insert("provider_catalog_hash".to_owned(), value.clone());
+        }
+    }
+    if let Some(workspace) = &request.workspace {
+        material.insert("workspace".to_owned(), json!(workspace));
+    }
+    persisted_mcp_digest(&Value::Object(material))
 }
 
 /// `package_launcher_name` (:154-160) — canonical package-launcher basename,
@@ -398,7 +538,7 @@ fn package_identity(command: &str, args: &[String]) -> (Option<String>, Option<S
 }
 
 /// `_package_token` (:244-296).
-fn package_token(command_name: &str, args: &[String]) -> Option<String> {
+pub fn package_token(command_name: &str, args: &[String]) -> Option<String> {
     let mut index = 0usize;
     let mut positional_index = 0usize;
     let package_selector_flags = package_selector_flags(command_name);
@@ -768,35 +908,9 @@ fn looks_like_runtime_path(value: &str) -> bool {
     normalized.contains('/') && !normalized.starts_with('@')
 }
 
-/// `_stable_digest` (:502-512) — canonical-JSON SHA-256, byte-identical to
-/// the baseline local `hashlib` digest (`strict=False` degrade).
+/// Canonical JSON SHA-256 for native MCP identity and descriptor material.
 fn stable_digest(value: &Value) -> String {
-    context_sha256_digest_local(&normalize_json_value(Some(value.clone())), None)
-}
-
-/// `_normalize_json_value` (:513-536) — normalize arbitrary values into
-/// canonical JSON material. `serde_json::Value` inputs are already
-/// JSON-shaped: scalars pass through, arrays/objects recurse. Non-JSON Python
-/// inputs (sets, Paths, arbitrary objects → `sorted`/`repr`) cannot arise
-/// through the `Value` boundary.
-fn normalize_json_value(value: Option<Value>) -> Value {
-    match value {
-        None | Some(Value::Null) => Value::Null,
-        Some(Value::Array(items)) => Value::Array(
-            items
-                .into_iter()
-                .map(|item| normalize_json_value(Some(item)))
-                .collect(),
-        ),
-        Some(Value::Object(map)) => {
-            let mut out = Map::new();
-            for (key, item) in map {
-                out.insert(key, normalize_json_value(Some(item)));
-            }
-            Value::Object(out)
-        }
-        Some(other) => other,
-    }
+    context_sha256_digest_local(value, None)
 }
 
 /// `build_configured_environment_hash` (runtime/approval_context.py
