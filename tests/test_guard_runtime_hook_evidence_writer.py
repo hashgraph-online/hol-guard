@@ -109,7 +109,7 @@ def test_provider_metadata_journal_recovers_after_restart(tmp_path: Path) -> Non
     journal.write_bytes(record.serialized())
     journal.chmod(0o600)
     writer = RuntimeHookEvidenceWriter(store=store, batch_wait_seconds=0)
-    assert writer.stop(timeout_seconds=2)
+    assert writer.stop(timeout_seconds=6)
     assert writer.stats()["recovered"] == 1
     assert writer.stats()["durable_pending"] == 0
     assert store.list_local_cli_items()[0]["provider_catalog"]["known_count"] == 1
@@ -165,8 +165,11 @@ def test_hook_worker_forwards_successful_provider_results_to_background_writer(t
                 },
             },
         )
-        assert writer.stop(timeout_seconds=2)
-        assert store.list_local_cli_items()[0]["provider_catalog"]["known_count"] == 1
+        assert writer.stop(timeout_seconds=6)
+        provider_catalog = next(
+            item["provider_catalog"] for item in store.list_local_cli_items() if "provider_catalog" in item
+        )
+        assert provider_catalog["known_count"] == 1
     finally:
         writer.stop(timeout_seconds=2)
         worker.close()

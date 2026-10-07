@@ -89,7 +89,10 @@ class _McpDiscoveryRecord:
         if source is None or source.harness != harness:
             return None
         try:
-            if datetime.fromisoformat(occurred_at).tzinfo is None:
+            # Python 3.10 does not yet accept RFC 3339's ``Z`` UTC suffix.
+            normalized_occurred_at = occurred_at[:-1] + "+00:00" if occurred_at.endswith("Z") else occurred_at
+            parsed_occurred_at = datetime.fromisoformat(normalized_occurred_at)
+            if parsed_occurred_at.tzinfo is None:
                 return None
         except ValueError:
             return None

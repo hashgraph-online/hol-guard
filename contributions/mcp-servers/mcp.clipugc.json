@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.clipugc",
+  "version": "1.0.0",
+  "name": "ClipUGC MCP",
+  "description": "Reviews ClipUGC hosted MCP tools that spend the user's credits, permanently delete influencers, looks, clips or videos, or publish an influencer to the shared public cast. Read-only and free tools keep Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.clipugc",
+    "displayName": "ClipUGC",
+    "url": "https://clipugc.com"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#F06C00" },
+  "homepage": "https://clipugc.com/mcp",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://clipugc.com/mcp",
+    "serverNames": ["clipugc", "clipugc-mcp"]
+  },
+  "riskClasses": ["external-credit-spend", "external-content-deletion", "external-public-publishing"],
+  "tools": [
+    { "name": "create_character", "state": "review" },
+    { "name": "generate_image", "state": "review" },
+    { "name": "create_clip", "state": "review" },
+    { "name": "create_clips", "state": "review" },
+    { "name": "create_motion_clip", "state": "review" },
+    { "name": "retry_image", "state": "review" },
+    { "name": "retry_clip", "state": "review" },
+    { "name": "approve_episode", "state": "review" },
+    { "name": "run_content_plan", "state": "review" },
+    { "name": "update_character", "state": "review" },
+    { "name": "delete_character", "state": "review" },
+    { "name": "delete_image", "state": "review" },
+    { "name": "delete_clip", "state": "review" },
+    { "name": "delete_video", "state": "review" },
+    { "name": "first_videos", "state": "inherit" },
+    { "name": "make_video", "state": "inherit" },
+    { "name": "make_videos", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://clipugc.com/mcp",
+    "https://github.com/clipugc/ClipUGC-CLI",
+    "https://registry.modelcontextprotocol.io/?search=clipugc"
+  ],
+  "saferAlternatives": [
+    "Call get_credits or get_workspace first; they are read-only and return the live price of every credit-spending tool.",
+    "Keep create_* and retry_* on Review so an agent cannot loop generation calls and drain credits unattended.",
+    "Keep delete_* on Review; deletes are permanent and a deleted influencer takes its looks, clips and videos with it.",
+    "update_character can make an influencer public, which lets anyone use her looks and clips; keep it on Review."
+  ]
+}

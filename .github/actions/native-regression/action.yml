@@ -26,14 +26,24 @@ runs:
       with:
         version: "0.9.26"
         enable-cache: true
-        save-cache: false
+        save-cache: ${{ inputs.shard-index == '0' }}
+        cache-suffix: native-ci-v1
+        cache-dependency-glob: |
+          pyproject.toml
+          uv.lock
+        prune-cache: false
     - name: Retry uv setup after a transient download failure
       if: steps.setup-uv-primary.outcome == 'failure'
       uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
       with:
         version: "0.9.26"
         enable-cache: true
-        save-cache: false
+        save-cache: ${{ inputs.shard-index == '0' }}
+        cache-suffix: native-ci-v1
+        cache-dependency-glob: |
+          pyproject.toml
+          uv.lock
+        prune-cache: false
     - name: Install locked test dependencies without the source package
       shell: bash
       run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from . import native_policy_snapshot_storage_windows as _windows_storage
-from .native_command_control_binding import native_command_control_floor_mac
+from .native_policy_snapshot_authority import _authority_snapshot_v3
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _strict_json_loads_v3,
@@ -60,52 +60,6 @@ def _private_guard_home(guard_home: Path) -> None:
 
 def _snapshot_cache_path_v3(guard_home: Path) -> Path:
     return _runtime_state_directory(guard_home) / NATIVE_POLICY_SNAPSHOT_CACHE_NAME
-
-
-def _authority_snapshot_v3(
-    value: Mapping[str, object],
-    payload: bytes,
-    verifier_key: bytes,
-) -> dict[str, object]:
-    """Return the nested snapshot from a rust-accepted authority record."""
-
-    api = _snapshot_api()
-    generation_floor = value.get("generation_floor")
-    policy_digest = value.get("policy_digest")
-    floor_mac = value.get("floor_mac")
-    snapshot = value.get("snapshot")
-    fields = {"schema", "generation_floor", "policy_digest", "snapshot", "floor_mac"}
-    if "command_control_floor" in value:
-        if value["command_control_floor"] is None:
-            raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
-        fields.add("command_control_floor")
-    if (
-        set(value) != fields
-        or _canonical_json_bytes_v3(value) != payload
-        or isinstance(generation_floor, bool)
-        or not isinstance(generation_floor, int)
-        or not 1 <= generation_floor <= _MAX_GENERATION
-        or not _valid_digest_v3(policy_digest)
-        or not _valid_digest_v3(floor_mac)
-        or not isinstance(snapshot, dict)
-        or snapshot.get("generation") != generation_floor
-        or snapshot.get("policy_digest") != policy_digest
-        or not hmac.compare_digest(
-            cast(str, floor_mac),
-            native_command_control_floor_mac(
-                generation_floor, cast(str, policy_digest), value.get("command_control_floor"), verifier_key
-            ),
-        )
-    ):
-        raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
-    api._validate_snapshot_v3(snapshot)
-    integrity = snapshot.get("integrity")
-    if not isinstance(integrity, Mapping) or not hmac.compare_digest(
-        cast(str, integrity.get("mac")),
-        api._snapshot_integrity_mac_v3(snapshot, verifier_key),
-    ):
-        raise NativePolicySnapshotError("native_policy_snapshot_cache_integrity_invalid")
-    return cast(dict[str, object], snapshot)
 
 
 def _read_v3_snapshot_file(

@@ -400,6 +400,8 @@ def _workspace_from_harness_detection(
     *,
     cwd: Path,
     guard_home: Path,
+    home_dir: Path | None = None,
+    home_override_explicit: bool = False,
 ) -> Path | None:
     try:
         adapter = get_adapter(harness)
@@ -407,9 +409,10 @@ def _workspace_from_harness_detection(
         return None
     detection = adapter.detect(
         HarnessContext(
-            home_dir=Path.home().resolve(),
+            home_dir=(home_dir or Path.home()).resolve(),
             workspace_dir=cwd,
             guard_home=guard_home,
+            home_override_explicit=home_override_explicit,
         )
     )
     for config_path in detection.config_paths:
@@ -425,6 +428,8 @@ def _resolve_default_install_workspace(
     args: argparse.Namespace,
     *,
     guard_home: Path,
+    home_dir: Path | None = None,
+    home_override_explicit: bool = False,
 ) -> Path | None:
     """Pick a project workspace for install/uninstall when --workspace is omitted."""
 
@@ -445,7 +450,13 @@ def _resolve_default_install_workspace(
         return git_root
 
     if harness is not None:
-        detected = _workspace_from_harness_detection(harness, cwd=cwd, guard_home=guard_home)
+        detected = _workspace_from_harness_detection(
+            harness,
+            cwd=cwd,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            home_override_explicit=home_override_explicit,
+        )
         if detected is not None:
             return detected
     return None
@@ -454,23 +465,47 @@ def _resolve_guard_workspace(
     args: argparse.Namespace,
     *,
     guard_home: Path,
+    home_dir: Path | None = None,
+    home_override_explicit: bool = False,
 ) -> Path | None:
     explicit_workspace = getattr(args, "workspace", None)
     if explicit_workspace:
         return _normalize_explicit_workspace_path(str(explicit_workspace))
     guard_command = getattr(args, "guard_command", None)
     if guard_command in _INSTALL_WORKSPACE_COMMANDS:
-        return _resolve_default_install_workspace(args, guard_home=guard_home)
+        return _resolve_default_install_workspace(
+            args,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            home_override_explicit=home_override_explicit,
+        )
     if guard_command == "sync":
         return Path.cwd().resolve()
     if guard_command != "apps":
+        return None
+    if getattr(args, "apps_command", None) == "repair" and (
+        bool(getattr(args, "restore_authority", False)) or getattr(args, "authority_request", None)
+        or getattr(args, "authority_request_sha256", None)
+        or getattr(args, "authority_deadline_epoch", None) is not None
+        or getattr(args, "authority_verification_workspace", None) is not None
+    ):
+        # Missing-authority repair derives its global target from authenticated
+        # retained bytes. Autodetection requires the absent live manifest and
+        # must not precede that read-only preparation. Explicit workspace
+        # overrides were already normalized above and remain in the plan.
         return None
     if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
         return None
     harness = str(getattr(args, "harness", "")).strip()
     if not harness:
         return None
-    return _workspace_from_harness_detection(harness, cwd=Path.cwd().resolve(), guard_home=guard_home)
+    return _workspace_from_harness_detection(
+        harness,
+        cwd=Path.cwd().resolve(),
+        guard_home=guard_home,
+        home_dir=home_dir,
+        home_override_explicit=home_override_explicit,
+    )
 
 __all__ = [
     "_INSTALL_WORKSPACE_COMMANDS",

@@ -145,27 +145,25 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 id="custom-extensions-heading" className="text-xl font-semibold tracking-tight text-brand-dark">Custom extensions</h2>
-          <p className="mt-1 text-sm text-slate-500">Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
+          <p className="mt-1 max-w-xl text-sm text-slate-500">Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {searchable ? (
-            <div className="relative min-w-0 flex-1 sm:flex-none">
-              <label className="relative block">
-                <span className="sr-only">Search custom extensions</span>
-                <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55" aria-hidden="true" />
-                <input type="search" value={search}
-                  onChange={handleSearchChange}
-                  placeholder="Search connectors"
-                  className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-normal text-brand-dark sm:w-64" />
-              </label>
-            </div>
-          ) : null}
-          <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-blue">
-            <HiMiniPlus className="size-4" aria-hidden="true" />
-            Add custom extension
-          </button>
-        </div>
+        <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end">
+          <HiMiniPlus className="size-4" aria-hidden="true" />
+          Add custom extension
+        </button>
       </div>
+      {searchable ? (
+        <div className="mt-4">
+          <label className="relative block w-full max-w-sm">
+            <span className="sr-only">Search custom extensions</span>
+            <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55" aria-hidden="true" />
+            <input type="search" value={search}
+              onChange={handleSearchChange}
+              placeholder="Search connectors"
+              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-normal text-brand-dark" />
+          </label>
+        </div>
+      ) : null}
       {added.length === 0 ? (
         <CustomExtensionEmptyState
           search={search}

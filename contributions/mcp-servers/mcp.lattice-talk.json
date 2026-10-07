@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.lattice-talk",
+  "version": "1.0.0",
+  "name": "Lattice Talk MCP",
+  "description": "Cross-harness agent message bus over Redis — shared sessions, rooms, direct messages, and memory for AI coding agents. Messaging, session and room membership changes, cursor updates, and memory writes default to review; read-only discovery tools inherit. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "d4rkninja",
+    "displayName": "d4rkNinja",
+    "url": "https://github.com/d4rkNinja/lattice-talk"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniBolt", "background": "#7AA2F7" },
+  "homepage": "https://github.com/d4rkNinja/lattice-talk",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "lattice-talk"
+  },
+  "riskClasses": ["external-agent-messaging", "external-shared-state-write"],
+  "tools": [
+    { "name": "tell_agent", "state": "review" },
+    { "name": "tell_room", "state": "review" },
+    { "name": "create_room", "state": "review" },
+    { "name": "memory_set", "state": "review" },
+    { "name": "memory_note", "state": "review" },
+    { "name": "join_session", "state": "review" },
+    { "name": "join_room", "state": "review" },
+    { "name": "leave_session", "state": "review" },
+    { "name": "pull_messages", "state": "review" },
+    { "name": "list_peers", "state": "inherit" },
+    { "name": "session_info", "state": "inherit" },
+    { "name": "memory_get", "state": "inherit" },
+    { "name": "memory_list", "state": "inherit" },
+    { "name": "memory_notes", "state": "inherit" },
+    { "name": "trace_context", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/d4rkNinja/lattice-talk",
+    "https://www.npmjs.com/package/lattice-talk"
+  ],
+  "saferAlternatives": [
+    "Keep messaging, membership changes, message cursor updates, and memory writes on review unless agents on this device need those shared-state mutations without confirmation.",
+    "Configure npx with the reviewed lattice-talk@0.1.18 release. The current catalog matches package names, not versions; unknown tools require review."
+  ]
+}

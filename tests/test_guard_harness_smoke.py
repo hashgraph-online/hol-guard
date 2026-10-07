@@ -22,6 +22,8 @@ from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, SafeDecodeDetector, SecretPathDetector
 from codex_plugin_scanner.guard.runtime.runner import extract_prompt_requests
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 FIXTURES = Path(__file__).parent / "fixtures" / "guard-red-team"
 CANARY_SCRIPT = FIXTURES / "canary-exfil.py"
 CANARY_ENCODED_SCRIPT = FIXTURES / "canary-exfil-encoded.py"

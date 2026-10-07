@@ -38,6 +38,11 @@ const CAPABILITIES: &[(&str, &str, &str)] = &[
     ),
     (
         "command.git",
+        "command.git.worktree",
+        "command.git.permission.worktree",
+    ),
+    (
+        "command.git",
         "command.git.pull",
         "command.git.permission.pull",
     ),

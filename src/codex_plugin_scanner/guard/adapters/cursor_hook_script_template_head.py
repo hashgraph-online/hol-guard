@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
+from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
+
 HOOK_SCRIPT_TEMPLATE_HEAD = '''#!/usr/bin/env python3
 """Managed by HOL Guard. Re-run `hol-guard install cursor` after moving Guard home."""
 from __future__ import annotations
+
+import time
+_HOOK_STARTED_MONOTONIC = time.monotonic()
 
 import hashlib
 import hmac
@@ -15,7 +21,6 @@ import signal
 import subprocess
 import sys
 import threading
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -33,12 +38,17 @@ GUARD_RECOVERY_COMMAND = __GUARD_RECOVERY_COMMAND__
 GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
 GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
+_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + GUARD_HOOK_TIMEOUT_SECONDS
 GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _FALLBACK_LOCK = threading.Lock()
 
 
 def _remaining_seconds(deadline_monotonic: float) -> float:
     return max(deadline_monotonic - time.monotonic(), 0.0)
+
+
+__HOOK_INPUT_READER__
+__HOOK_HTTP_DEADLINE__
 
 
 def _request_timeout(deadline_monotonic: float, preferred_seconds: float) -> float | None:
@@ -54,7 +64,11 @@ def _run_contained_cli(
     input_text: str,
     env: Mapping[str, str],
     timeout_seconds: float,
+    deadline_monotonic: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    deadline = time.monotonic() + max(timeout_seconds, 0.0) if deadline_monotonic is None else deadline_monotonic
+    if _remaining_seconds(deadline) <= 0:
+        raise subprocess.TimeoutExpired(argv, timeout_seconds)
     popen_kwargs: dict[str, object] = {
         "cwd": GUARD_HOME,
         "env": dict(env),
@@ -67,7 +81,7 @@ def _run_contained_cli(
         popen_kwargs["start_new_session"] = True
     proc = subprocess.Popen(argv, **popen_kwargs)
     try:
-        out, err = proc.communicate(input=input_text, timeout=timeout_seconds)
+        out, err = proc.communicate(input=input_text, timeout=_remaining_seconds(deadline))
     except subprocess.TimeoutExpired:
         if os.name != "nt":
             try:
@@ -77,9 +91,12 @@ def _run_contained_cli(
         else:
             proc.kill()
         try:
-            proc.communicate()
+            proc.communicate(timeout=0)
         except Exception:
             pass
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
+            if stream is not None:
+                stream.close()
         raise
     return subprocess.CompletedProcess(
         argv,
@@ -148,11 +165,17 @@ def _daemon_hook_result(
     workspace: str | None,
     hook_env_overlay: Mapping[str, str] | None = None,
 ) -> tuple[tuple[int, str, str] | None, str | None]:
+    if _remaining_seconds(deadline_monotonic) <= 0:
+        return (None, "timeout")
     state_path = Path(GUARD_HOME) / "daemon-state.json"
     token_path = Path(GUARD_HOME) / "daemon-auth-token"
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
+        if _remaining_seconds(deadline_monotonic) <= 0:
+            return (None, "timeout")
         auth_token = token_path.read_text(encoding="utf-8").strip()
+        if _remaining_seconds(deadline_monotonic) <= 0:
+            return (None, "timeout")
     except (OSError, ValueError):
         return (None, None)
     if not isinstance(state, dict):
@@ -173,16 +196,27 @@ def _daemon_hook_result(
     # Ensures the listener is actually the Guard daemon, not a spoofed process.
     # Validate the response body — not just HTTP 200 — so an attacker listener
     # that returns 200 but doesn't know the daemon's compatibility version is rejected.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         timeout = _request_timeout(deadline_monotonic, 2)
         if timeout is None:
-            return (None, "transport-failure")
+            return (None, "timeout")
         health_req = urllib.request.Request(f"http://127.0.0.1:{port}/healthz", method="GET")
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _deadline_http_handler(min(deadline_monotonic, time.monotonic() + timeout)),
+        )
         with opener.open(health_req, timeout=timeout) as health_response:
             if health_response.status != 200:
                 return (None, None)
-            health_body = health_response.read().decode("utf-8", errors="replace")
+            health_bytes = health_response.read(1_000_001)
+            if len(health_bytes) > 1_000_000:
+                return (None, "authenticated-control-plane-failure")
+            health_body = health_bytes.decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        error.close()
+        return (None, "transport-failure")
+    except TimeoutError:
+        return (None, "timeout")
     except (OSError, urllib.error.URLError):
         return (None, "transport-failure")
     try:
@@ -205,15 +239,22 @@ def _daemon_hook_result(
     try:
         timeout = _request_timeout(deadline_monotonic, 2)
         if timeout is None:
-            return (None, "transport-failure")
+            return (None, "timeout")
         verify_req = urllib.request.Request(
             f"http://127.0.0.1:{port}/v1/healthz/verify",
             data=json.dumps({"nonce": nonce}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _deadline_http_handler(min(deadline_monotonic, time.monotonic() + timeout)),
+        )
         with opener.open(verify_req, timeout=timeout) as verify_response:
-            verify_body = verify_response.read().decode("utf-8", errors="replace")
+            verify_bytes = verify_response.read(1_000_001)
+            if len(verify_bytes) > 1_000_000:
+                return (None, "authenticated-control-plane-failure")
+            verify_body = verify_bytes.decode("utf-8", errors="replace")
             try:
                 verify_json = json.loads(verify_body)
             except ValueError:
@@ -227,8 +268,11 @@ def _daemon_hook_result(
             ).hexdigest()
             if not hmac.compare_digest(verify_json["proof"], expected_proof):
                 return (None, None)
-    except urllib.error.HTTPError:
+    except urllib.error.HTTPError as error:
+        error.close()
         return (None, "authenticated-control-plane-failure")
+    except TimeoutError:
+        return (None, "timeout")
     except (OSError, urllib.error.URLError):
         return (None, "transport-failure")
     params = [("guard-home", GUARD_HOME)]
@@ -258,19 +302,31 @@ def _daemon_hook_result(
     try:
         timeout = _request_timeout(deadline_monotonic, GUARD_HOOK_TIMEOUT_SECONDS)
         if timeout is None:
-            return (None, "transport-failure")
+            return (None, "timeout")
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _deadline_http_handler(min(deadline_monotonic, time.monotonic() + timeout)),
+        )
         with opener.open(request, timeout=timeout) as response:
-            body = response.read().decode("utf-8", errors="replace")
+            body_bytes = response.read(1_000_001)
+            if len(body_bytes) > 1_000_000:
+                return (None, "authenticated-control-plane-failure")
+            body = body_bytes.decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         try:
-            detail = error.read().decode("utf-8", errors="replace").lower()
+            detail_bytes = error.read(1_000_001)
+            detail = detail_bytes.decode("utf-8", errors="replace").lower() if len(detail_bytes) <= 1_000_000 else ""
         except OSError:
             detail = ""
+        finally:
+            error.close()
         if error.code in {429, 503} or any(
             marker in detail for marker in ("capacity", "overload", "too_many", "too many", "busy")
         ):
             return (None, "overload")
         return (None, "authenticated-control-plane-failure")
+    except TimeoutError:
+        return (None, "timeout")
     except (OSError, urllib.error.URLError):
         return (None, "transport-failure")
     # Reject empty or non-dict responses — they default policy_action to "allow".
@@ -302,27 +358,32 @@ def _run_guard_fallback(
     if not _FALLBACK_LOCK.acquire(blocking=False):
         raise RuntimeError("HOL Guard fallback review is already in progress")
     try:
+        if _remaining_seconds(deadline_monotonic) <= 0:
+            raise subprocess.TimeoutExpired([*GUARD_CLI, *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
+        command = [*_resolved_guard_cli(), *guard_argv]
         remaining = _remaining_seconds(deadline_monotonic)
         if remaining <= 0:
-            raise subprocess.TimeoutExpired([*_resolved_guard_cli(), *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
+            raise subprocess.TimeoutExpired(command, GUARD_HOOK_TIMEOUT_SECONDS)
         if run_isolated_hook_process is None:
             return _run_contained_cli(
-                [*_resolved_guard_cli(), *guard_argv],
+                command,
                 input_text=payload_json,
                 env=guard_env,
                 timeout_seconds=remaining,
+                deadline_monotonic=deadline_monotonic,
             )
         result = run_isolated_hook_process(
-            [*_resolved_guard_cli(), *guard_argv],
+            command,
             cwd=GUARD_HOME,
             environment=dict(guard_env),
             input_text=payload_json,
             timeout_seconds=remaining,
+            deadline_monotonic=deadline_monotonic,
         )
         if result.timed_out:
-            raise subprocess.TimeoutExpired([*_resolved_guard_cli(), *guard_argv], remaining)
+            raise subprocess.TimeoutExpired(command, remaining)
         return subprocess.CompletedProcess(
-            [*_resolved_guard_cli(), *guard_argv],
+            command,
             result.returncode if result.returncode is not None else 1,
             stdout=result.stdout,
             stderr="",
@@ -340,7 +401,8 @@ def _run_guard_recovery(
     if failure_kind == "overload" or not _FALLBACK_LOCK.acquire(blocking=False):
         return
     try:
-        remaining = min(_remaining_seconds(deadline_monotonic), 5.0)
+        recovery_deadline = min(deadline_monotonic, time.monotonic() + 5.0)
+        remaining = _remaining_seconds(recovery_deadline)
         if remaining <= 0:
             return
         if run_isolated_hook_process is None:
@@ -350,6 +412,7 @@ def _run_guard_recovery(
                     input_text="",
                     env=guard_env,
                     timeout_seconds=remaining,
+                    deadline_monotonic=recovery_deadline,
                 )
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 return
@@ -360,6 +423,7 @@ def _run_guard_recovery(
             environment=dict(guard_env),
             input_text="",
             timeout_seconds=remaining,
+            deadline_monotonic=recovery_deadline,
             allow_windows_breakaway=True,
         )
     except (OSError, ValueError):
@@ -517,4 +581,6 @@ def _cursor_read_file_permission(permission: str) -> str:
         return "deny"
     return "allow"
 
-'''
+'''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE).replace(
+    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE
+)

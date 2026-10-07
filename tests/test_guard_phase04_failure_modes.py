@@ -12,6 +12,8 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _parse_guard_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()

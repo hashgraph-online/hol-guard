@@ -32,7 +32,8 @@ BASELINES: Final[dict[str, MutationBaseline]] = {
         target="command-model",
         source_path=TARGETS["command-model"].source_path,
         minimum_score=64.0,
-        expected_total=610,
+        # The wrapper-normalization refactor removed 22 generated mutants.
+        expected_total=588,
     ),
 }
 

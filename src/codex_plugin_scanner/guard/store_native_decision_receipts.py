@@ -158,31 +158,36 @@ class StoreNativeDecisionReceiptsMixin:
                 ).fetchone()
         if row is None:
             return None
-        result = dict(row)
-        result.pop("recorded_at")
-        raw_binding = result.pop("command_extensions_json")
-        if raw_binding is not None:
-            if not isinstance(raw_binding, str) or len(raw_binding) > _MAX_COMMAND_BINDING_CHARACTERS:
-                return None
-            try:
-                result["command_extensions"] = json.loads(raw_binding)
-            except (ValueError, RecursionError):
-                return None
-        raw_risks = result.pop("prompt_risk_classes_json", None)
-        if raw_risks is not None:
-            if not isinstance(raw_risks, str) or len(raw_risks) > _MAX_PROMPT_RISK_CHARACTERS:
-                return None
-            try:
-                classes = json.loads(raw_risks)
-            except (ValueError, RecursionError):
-                return None
-            if classes:
-                result["prompt_risk_classes"] = classes
-        for field in ("workspace_bound", "source_ref_external_allowed", "observe_mode"):
-            if result[field] not in (0, 1):
-                return None
-            result[field] = bool(result[field])
-        return validate_native_decision_receipt(result)
+        return validate_stored_native_decision_receipt(dict(row))
+
+
+def validate_stored_native_decision_receipt(row: Mapping[str, object]) -> dict[str, object] | None:
+    """Validate one complete stored row, including its content-bound decision ID."""
+    result = dict(row)
+    result.pop("recorded_at", None)
+    raw_binding = result.pop("command_extensions_json", None)
+    if raw_binding is not None:
+        if not isinstance(raw_binding, str) or len(raw_binding) > _MAX_COMMAND_BINDING_CHARACTERS:
+            return None
+        try:
+            result["command_extensions"] = json.loads(raw_binding)
+        except (ValueError, RecursionError):
+            return None
+    raw_risks = result.pop("prompt_risk_classes_json", None)
+    if raw_risks is not None:
+        if not isinstance(raw_risks, str) or len(raw_risks) > _MAX_PROMPT_RISK_CHARACTERS:
+            return None
+        try:
+            classes = json.loads(raw_risks)
+        except (ValueError, RecursionError):
+            return None
+        if classes:
+            result["prompt_risk_classes"] = classes
+    for field in ("workspace_bound", "source_ref_external_allowed", "observe_mode"):
+        if result.get(field) not in (0, 1):
+            return None
+        result[field] = bool(result[field])
+    return validate_native_decision_receipt(result)
 
 
 def _record_native_decision_receipts(

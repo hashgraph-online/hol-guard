@@ -55,16 +55,19 @@ def trusted_hook_launch(
     fallback_command: Sequence[str],
     start_command: Sequence[str],
     config_json: str,
+    deadline_monotonic: float | None = None,
 ) -> TrustedHookLaunch:
+    from .codex_hook_file_integrity import hook_validation_deadline
     from .codex_hook_runtime_trust import validate_codex_hook_launch
 
-    return validate_codex_hook_launch(
-        manifest_path=manifest_path,
-        state_path=state_path,
-        fallback_command=fallback_command,
-        start_command=start_command,
-        config_json=config_json,
-    )
+    with hook_validation_deadline(deadline_monotonic):
+        return validate_codex_hook_launch(
+            manifest_path=manifest_path,
+            state_path=state_path,
+            fallback_command=fallback_command,
+            start_command=start_command,
+            config_json=config_json,
+        )
 
 
 def bridge_config_from_argv(argv: Sequence[str], *, timeout_grace_seconds: int) -> BridgeConfig:

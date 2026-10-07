@@ -35,6 +35,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --python 3.12 --extra dev --frozen
+      - uses: ./.github/actions/stage-command-projections
       - run: uv run --python 3.12 --no-sync python scripts/mdm/run-local-lab.py --json --output mdm-local-conformance.json ${{ matrix.suites }}
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

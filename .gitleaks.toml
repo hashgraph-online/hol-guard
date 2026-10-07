@@ -1,0 +1,244 @@
+# Audited synthetic test vectors and immutable source-file digests only.
+# Every exception requires both the exact file and exact fixture source bytes.
+# Default detection rules, entropy thresholds and scan scope remain unchanged.
+title = "HOL Guard audited test vectors"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "aws-access-token"
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/staged_scanner\.rs$''']
+regexes = [
+  '''^[\t\r\n ]*std::fs::write\(dir\.join\("\.env"\), "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY\\n"\)\.unwrap\(\);[\t\r\n ]*$''',
+]
+
+[[rules]]
+id = "curl-auth-header"
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/guard\-red\-team/benign\-docs\-fake\-token\.py$''']
+regexes = [
+  '''^[\t\r\n ]*curl \-H "Authorization: Bearer hol\-fake\-docs\-token\-example\-0000" \\\\[\t\r\n ]*$''',
+]
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Canonical source digest, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)contributions/command\-sources/migration\-manifest\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"command\.api\-gateway\.json": "c435d78e882f941c989aa097e875b0c61dafbd13523f515b03f1d967636031aa",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"command\.kubernetes\-secrets\.json": "cfd8b77be9464f35df79497d0db382b55288620d1c5decfadb9b83e45da0d92f",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Canonical source digest, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)docs/guard/security/sonar\-audit\-origin\-review\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"src/codex_plugin_scanner/guard/cli/oauth_client\.py": "aa157f091e3998e2060c506bd8d2fca8b6ea3d5b51e02bc61f28367d35288345",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/src/totp\.rs$''']
+regexes = [
+  '''^[\t\r\n ]*assert!\(uri\.contains\("secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"\)\);[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/policy_integrity_resolver_oracle\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"raw_key_b64": "3dDMflCo\-ZbB3lHuLxPojUpzQrJ6kLNJXxY9x6xQKuw="[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/secret_store_oracle\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"fernet_token": "gAAAAABqv8q2iXoMI5lCLkF9Sa\-SZ8JfJ6TbLdV2vSeZDTOjVQ_3Ww4SW73lRvy2J64w5\-2P6YEgiIG7sTLqYzZ\-IEtaHN4DPxv7CQ0pVgHU7WDp1zHZhgo=",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"fernet_token2": "gAAAAABqv8q2dSOoeT\-KpzZ7sLB3lRAA_T56JmoUka5SRcrQex_qoCIs\-55us_M3z1XtDIWAgD2d05pAS4Hhbnbx3_UV_d\-EFP\-0ndebXhd40TLt4tyBXFM=",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"key_b64": "FEJSGkdIF2JCa7U0C_EFPBicr\-fkcTFZ7Yk4kng9tMc=",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"raw_key_b64": "FEJSGkdIF2JCa7U0C_EFPBicr\-fkcTFZ7Yk4kng9tMc=",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/repository_scanner\.rs$''']
+regexes = [
+  '''^[\t\r\n ]*const SECRET_LINE: \&str = "GH_TOKEN = gh\x70_AbCdEfGhIjKlMnOpQrStUvWxYz012345";[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/secret_detection\.rs$''']
+regexes = [
+  '''^[\t\r\n ]*"GH_TOKEN = gh\x70_AbCdEfGhIjKlMnOpQrStUvWxYz012345",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"secret = xK9mQ2vL8nP4wR7tY1uI6oP3aS5dFgHj",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"secret=xK9mQ2vL8nP4wR7tY1uI6oP3aS5dFgHj",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"token = 9digitsLeadingSecret99",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*r\#"api_key = "xK9mQ2vL8nP4wR7tY1uI6oP3aS5dFgHj""\#,[\t\r\n ]*$''',
+  '''^[\t\r\n ]*assert!\(!obvious_sample\("", "key = xK9mQ2vL8nP4wR7", ""\)\);[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/staged_scanner\.rs$''']
+regexes = [
+  '''^[\t\r\n ]*const SECRET_LINE: \&str = "GH_TOKEN = gh\x70_AbCdEfGhIjKlMnOpQrStUvWxYz012345";[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/bad\-plugin/secrets\.js$''']
+regexes = [
+  '''^[\t\r\n ]*const API_KEY = "sk\-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";[\t\r\n ]*$''',
+  '''^[\t\r\n ]*const token = "gh\x70_1234567890abcdefghijklmnopqrstuvwxyz123456";[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_guard_headless_daemon_api\.py$''']
+regexes = [
+  '''^[\t\r\n ]*dashboard_session_token="gld1\.abcdefghijklmnop\.qrstuvwxyz123456",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*token="gld1\.abcdefghijklmnop\.qrstuvwxyz123456",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_guard_hook_worker\.py$''']
+regexes = [
+  '''^[\t\r\n ]*"tool_response": "token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_guard_redaction\.py$''']
+regexes = [
+  '''^[\t\r\n ]*result = redact_sensitive_text\("key=sk\-abcdef1234567890"\)[\t\r\n ]*$''',
+  '''^[\t\r\n ]*result = redact_text\("OPENAI_API_KEY=sk\-abcdefgh12345678"\)[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_guard_runtime\.py$''']
+regexes = [
+  '''^[\t\r\n ]*"stdout": "src/config\.ts:1:export const token = 'gh\x70_123456789012345678901234567890123456';\\n"[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_guard_runtime_actions\.py$''']
+regexes = [
+  '''^[\t\r\n ]*"accessToken": "abc123456789",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"note": "NPM_TOKEN=abc123456789",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"prompt": "NPM_TOKEN=abc123456789\\nPlease summarize this setup\.",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_hook_source_skill_read\.py$''']
+regexes = [
+  '''^[\t\r\n ]*output="token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*content = "token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz\\n"[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_kimi_ecosystem\.py$''']
+regexes = [
+  '''^[\t\r\n ]*'api_key = "sk\-proj\-abcdefghijklmnopqrstuvwxyz123456"\\n',[\t\r\n ]*$''',
+  '''^[\t\r\n ]*'const apiKey = "sk\-proj\-abcdefghijklmnopqrstuvwxyz123456"; eval\(apiKey\);\\n',[\t\r\n ]*$''',
+  '''^[\t\r\n ]*unrelated\.write_text\('api_key = "sk\-proj\-abcdefghijklmnopqrstuvwxyz123456"\\n', encoding="utf\-8"\)[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_pi_adapter\.py$''']
+regexes = [
+  '''^[\t\r\n ]*secret_line = "//registry\.npmjs\.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz012345\\n"[\t\r\n ]*$''',
+]
+
+[[rules]]
+id = "github-pat"
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/bad\-plugin/secrets\.js$''']
+regexes = [
+  '''^[\t\r\n ]*const token = "gh\x70_1234567890abcdefghijklmnopqrstuvwxyz123456";[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_guard_hook_worker\.py$''']
+regexes = [
+  '''^[\t\r\n ]*"tool_response": "token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_guard_runtime\.py$''']
+regexes = [
+  '''^[\t\r\n ]*"stdout": "src/config\.ts:1:export const token = 'gh\x70_123456789012345678901234567890123456';\\n"[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Audited synthetic scanner or cryptographic interoperability test vector"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_hook_source_skill_read\.py$''']
+regexes = [
+  '''^[\t\r\n ]*output="token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*content = "token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz\\n"[\t\r\n ]*$''',
+]

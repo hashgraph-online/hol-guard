@@ -131,7 +131,7 @@ function terminalCommands(value: unknown): ExtensionControlTerminalCommands | un
   };
 }
 
-function stringList(value: unknown, label: string, max = EXTENSION_CLIENT_LIMITS.relationshipIds): string[] {
+function stringList(value: unknown, label: string, max: number = EXTENSION_CLIENT_LIMITS.relationshipIds): string[] {
   return array(value, label, max).map((item, index) => string(item, `${label}[${index}]`));
 }
 
@@ -211,7 +211,10 @@ function permission(value: unknown, extensionId: string, label: string): Extensi
 
 function mcpLaunch(value: unknown, label: string): McpLaunch {
   const item = record(value, label);
-  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "remote-http"] as const);
+  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "direct-command", "remote-http"] as const);
+  if (kind === "direct-command") {
+    return { kind, command: string(item.command, `${label}.command`) };
+  }
   if (kind === "package-launcher") {
     return {
       kind,

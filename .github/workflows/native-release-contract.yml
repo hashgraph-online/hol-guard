@@ -35,6 +35,7 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+      - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --extra dev --python 3.12
       - run: uv run --no-sync python -m ruff format --check scripts/verify_native_runtime_release.py ci/native_runtime/test_native_runtime_release.py
       - run: uv run --no-sync python -m ruff check scripts/verify_native_runtime_release.py ci/native_runtime/test_native_runtime_release.py

@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import importlib
 import re
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..models import GuardArtifact
+from ..native_context import context_mcp_descriptor, context_sha256_digest, is_unbound_context_digest
 from .approval_context import build_configured_environment_hash
 from .mcp_protection import (
     McpServerIdentity,
     McpToolIdentity,
-    _command_name,
-    _stable_digest,
     build_mcp_server_identity,
     build_mcp_tool_identity,
 )
@@ -37,31 +36,18 @@ _SENSITIVE_CLASS_PATTERN = re.compile(
 )
 
 
+def _descriptor_digest(material: object) -> str:
+    digest = context_sha256_digest(material, unbound_label="mcp-descriptor")
+    if is_unbound_context_digest(digest):
+        raise ValueError("native_mcp_descriptor_digest_unavailable")
+    return digest
+
+
 def _publisher_stable_id(source: str | None) -> str | None:
     normalized = (source or "").strip().lower()
     if not normalized:
         return None
-    return f"publisher:{_stable_digest(normalized)}"
-
-
-def _dependency_hash(package_name: str | None, package_version: str | None) -> str | None:
-    if not package_name:
-        return None
-    return _stable_digest(
-        {
-            "ecosystem": None,
-            "packageName": package_name.strip(),
-            "version": (package_version or "").strip() or None,
-        }
-    )
-
-
-def _command_hash(command: str, args: tuple[str, ...]) -> str:
-    return _stable_digest({"args": list(args), "command": _command_name(command)})
-
-
-def _transport_hash(transport: str) -> str:
-    return _stable_digest(transport.strip().lower() or "unknown")
+    return f"publisher:{_descriptor_digest(normalized)}"
 
 
 def portal_mcp_server_identity(
@@ -72,23 +58,16 @@ def portal_mcp_server_identity(
     publisher: str | None = None,
     install_source: str | None = None,
 ) -> dict[str, object]:
-    publisher_source = publisher or install_source or identity.package_name
-    return {
-        "argsHash": identity.args_hash,
-        "command": identity.command,
-        "commandHash": _command_hash(identity.command, args),
-        "configPath": config_path,
-        "dependencyHash": _dependency_hash(identity.package_name, identity.package_version),
-        "envKeys": list(identity.env_keys),
-        "envValuesHash": identity.env_values_hash,
-        "identityHash": identity.identity_hash,
-        "packageName": identity.package_name,
-        "packageSource": identity.package_source,
-        "packageVersion": identity.package_version,
-        "publisherStableId": _publisher_stable_id(publisher_source),
-        "transport": identity.transport,
-        "transportHash": _transport_hash(identity.transport),
-    }
+    return context_mcp_descriptor(
+        "mcp_server_descriptor",
+        {
+            "identity": asdict(identity),
+            "config_path": config_path,
+            "args": list(args),
+            "publisher": publisher,
+            "install_source": install_source,
+        },
+    )
 
 
 def _portal_mcp_server_identity_from_parts(
@@ -123,20 +102,14 @@ def portal_mcp_tool_identity(
     schema: object | None = None,
     description: str | None = None,
 ) -> dict[str, object]:
-    has_schema = schema is not None
-    has_description = isinstance(description, str) and bool(description.strip())
-    hash_scope = "full" if has_schema or has_description else "manifest"
-    description_hash = identity.description_hash if identity.description_hash else None
-    schema_hash = identity.schema_hash if identity.schema_hash else None
-    return {
-        "descriptionHash": description_hash,
-        "descriptorHash": description_hash,
-        "hashScope": hash_scope,
-        "identityHash": identity.identity_hash,
-        "schemaHash": schema_hash,
-        "serverHash": identity.server_hash,
-        "toolName": identity.tool_name,
-    }
+    return context_mcp_descriptor(
+        "mcp_tool_descriptor",
+        {
+            "identity": asdict(identity),
+            "schema": schema,
+            "description": description,
+        },
+    )
 
 
 def skill_identity_metadata(
@@ -144,7 +117,7 @@ def skill_identity_metadata(
     *,
     publisher: str | None = None,
 ) -> dict[str, object]:
-    descriptor_hash = _stable_digest(
+    descriptor_hash = _descriptor_digest(
         {
             "reference_hashes": list(identity.reference_hashes),
             "script_hashes": list(identity.script_hashes),
