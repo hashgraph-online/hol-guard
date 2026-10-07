@@ -8,6 +8,8 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-fixtures")
         .join(format!("fixture-{}", std::process::id()));
+    // A restored target cache can hold a fixture from a run with the same PID.
+    let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("project")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let project = root.join("project");
@@ -121,6 +123,8 @@ fn cwd_compound_extension_deny_overrides_safe_neighbor() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-control-fixtures")
         .join(format!("fixture-{}", std::process::id()));
+    // A restored target cache can hold a fixture from a run with the same PID.
+    let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("project")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let project = root.join("project");
