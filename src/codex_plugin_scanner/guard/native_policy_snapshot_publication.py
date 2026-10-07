@@ -146,6 +146,9 @@ class NativePolicySnapshotPublicationMixin:
             for _ in range(2):
                 with publisher._condition:
                     publish_epoch = publisher._epoch
+                    # Overlays are compiled after this capture, and paths are
+                    # only added, so the ACK covers at least these workspaces.
+                    compiled_workspaces = frozenset(publisher._workspace_paths)
                 local_cli_revision = publisher._current_local_cli_revision()
                 provider_reader = getattr(publisher.store, "read_mcp_provider_authority_hash", None)
                 provider_authority_hash = provider_reader() if callable(provider_reader) else None
@@ -267,6 +270,7 @@ class NativePolicySnapshotPublicationMixin:
                     publisher._failure_count = 0
                     publisher._retry_not_before_monotonic = None
                     publisher._schedule_renewal_locked(snapshot)
+                    publisher._commit_workspace_readiness_locked(compiled_workspaces)
                     publisher._condition.notify_all()
         except NativePolicySnapshotError as error:
             publisher._record_error(str(error))

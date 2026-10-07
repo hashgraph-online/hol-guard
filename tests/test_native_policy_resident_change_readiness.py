@@ -24,6 +24,8 @@ def waiting_worker(
     monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
     worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
     publisher._snapshot = {"generation": 1, "policy_digest": "old", "runtime_identity": "runtime", "mode": "enforce"}
+    # The prior ACK compiled this workspace; only the resident changed.
+    publisher._pending_workspace_paths.clear()
     publisher._record_error("native_policy_snapshot_resident_changed")
     assert publisher.current_snapshot_binding() is None
     return worker, publisher
