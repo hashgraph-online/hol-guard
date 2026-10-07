@@ -9,6 +9,7 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 ## Unreleased
 
 ### Bug Fixes
+* **packages:** review the distribution selected by `uvx --from` and dependencies selected by `--with`, without treating tool arguments as package options; forward the selected Guard home when normalizing action envelopes.
 * **packages:** `uvx --with-requirements` and `--with-editable` now consume their dependency operands without replacing the executable package target, including `--option=value` forms.
 * **packages:** strip URL authority credentials from non-HTTP package commands, including SSH sources and registry environment assignments, while preserving flag names and host/path context.
 * **packages:** honor the selected Guard home through hook normalization, request extraction, MCP requests, contained execution and package shims; remove duplicate resident parser retries.

@@ -488,6 +488,36 @@ fn parse_exec_intent(
     } else {
         js_target(&package_token_value)
     };
+    let mut targets = vec![target];
+    if command == "uvx" {
+        let mut index = 1;
+        while index < tokens.len() {
+            let token = &tokens[index];
+            if token == "--" {
+                break;
+            }
+            if token == "--with" && index + 1 < tokens.len() {
+                targets.push(python_target(&tokens[index + 1], false, None, Vec::new()));
+                index += 2;
+                continue;
+            }
+            if let Some(spec) = token.strip_prefix("--with=") {
+                targets.push(python_target(spec, false, None, Vec::new()));
+            }
+            if matches!(
+                token.as_str(),
+                "--from" | "--python" | "--with-requirements" | "--with-editable"
+            ) && index + 1 < tokens.len()
+            {
+                index += 2;
+                continue;
+            }
+            if !token.starts_with('-') {
+                break;
+            }
+            index += 1;
+        }
+    }
     let is_local = LOCAL_EXECUTION_COMMANDS.contains(command.as_str());
     let manifest_candidates: &[&str] = if is_local { &["package.json"] } else { &[] };
     let lockfile_candidates: &[&str] = if is_local { JS_LOCKFILE_NAMES } else { &[] };
@@ -500,7 +530,7 @@ fn parse_exec_intent(
         &command,
         "execute",
         tokens,
-        vec![target],
+        targets,
         if execution_context_complete {
             intent_workspace
         } else {
@@ -600,16 +630,18 @@ fn exec_package_spec(tokens: &[String]) -> Option<String> {
         return first_positional(&tokens[1..], &["--bun"]);
     }
     if command == "uvx" {
-        return first_positional(
-            &tokens[1..],
-            &[
-                "--from",
-                "--python",
-                "--with",
-                "--with-requirements",
-                "--with-editable",
-            ],
-        );
+        return option_value(tokens, "--from").or_else(|| {
+            first_positional(
+                &tokens[1..],
+                &[
+                    "--from",
+                    "--python",
+                    "--with",
+                    "--with-requirements",
+                    "--with-editable",
+                ],
+            )
+        });
     }
     None
 }
@@ -2884,6 +2916,25 @@ fn default_path() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn uvx_reviews_installed_distribution_and_extra_packages() {
+        for (command, expected) in [
+            ("uvx --from evil-pkg http", vec!["evil-pkg"]),
+            ("uvx --from=evil-pkg http", vec!["evil-pkg"]),
+            ("uvx --with extra pkg", vec!["pkg", "extra"]),
+            ("uvx --with=extra --with second pkg", vec!["pkg", "extra", "second"]),
+            ("uvx pkg --with tool-argument", vec!["pkg"]),
+        ] {
+            let intent = parse_package_intent(command, None, None, None, None)
+                .expect("uvx must produce a package intent");
+            assert!(intent.targets.iter().all(|target| target.ecosystem == "pypi"));
+            let names: Vec<_> = intent.targets.iter()
+                .map(|target| target.package_name.as_deref().unwrap())
+                .collect();
+            assert_eq!(names, expected, "{command}");
+        }
+    }
 
     #[test]
     fn cargo_git_ssh_source_userinfo_redacted_from_command() {
