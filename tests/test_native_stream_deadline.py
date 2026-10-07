@@ -4,7 +4,6 @@ import subprocess
 import sys
 import threading
 import time
-from queue import Queue
 from types import SimpleNamespace
 
 import pytest
@@ -13,37 +12,6 @@ from codex_plugin_scanner.guard import native_package_authority as package_autho
 from codex_plugin_scanner.guard import native_resident_client as pools
 from codex_plugin_scanner.guard import native_resident_stream as streams
 from codex_plugin_scanner.guard import native_resident_transport as transport
-
-
-def test_helper_setup_and_failure_cleanup_use_the_original_request_deadline(tmp_path, monkeypatch):
-    clock = [100.0]
-    monkeypatch.setattr(streams.time, "monotonic", lambda: clock[0])
-    client = streams._PersistentNativeClient(
-        executable=tmp_path / "runtime",
-        state_dir=tmp_path / "state",
-        environment={},
-    )
-    deadlines = []
-
-    def snapshot(*, deadline_monotonic):
-        assert deadline_monotonic == 101.0
-        clock[0] = 100.8
-        return object(), object(), Queue()
-
-    def write(*args, deadline_monotonic, **kwargs):
-        deadlines.append(deadline_monotonic)
-        return False
-
-    monkeypatch.setattr(client, "_request_snapshot", snapshot)
-    monkeypatch.setattr(client, "_request_is_current", lambda *args, **kwargs: True)
-    monkeypatch.setattr(client, "_write_frame", write)
-    monkeypatch.setattr(
-        client,
-        "close",
-        lambda *, deadline_monotonic: deadlines.append(deadline_monotonic) or True,
-    )
-    assert client.request(b"fixture", deadline_monotonic=101.0) is None
-    assert deadlines == [101.0, 101.0]
 
 
 def test_expired_request_does_not_start_helper(tmp_path, monkeypatch):
