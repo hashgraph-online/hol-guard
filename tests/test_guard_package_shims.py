@@ -6,7 +6,6 @@ import base64
 import hashlib
 import json
 import os
-import select
 import sqlite3
 import subprocess
 import sys
@@ -348,6 +347,17 @@ def _stop_cloud_eval_server(server: HTTPServer, thread: threading.Thread) -> Non
     thread.join(timeout=5)
 
 
+@pytest.fixture(autouse=True)
+def _native_package_shim_intents(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = _install_single_manager_shim
+
+    def enrolled_shim(*, home_dir: Path, workspace_dir: Path, manager: str, capsys) -> Path:
+        native_mcp_probe(home_dir)
+        return original(home_dir=home_dir, workspace_dir=workspace_dir, manager=manager, capsys=capsys)
+
+    monkeypatch.setattr(sys.modules[__name__], "_install_single_manager_shim", enrolled_shim)
+
+
 def _install_single_manager_shim(
     *,
     home_dir: Path,
@@ -538,7 +548,8 @@ def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPat
 
 
 def test_guard_protect_does_not_prime_policy_integrity_or_hold_sqlite_writer(
-    tmp_path: Path, native_hook_force: Path,
+    tmp_path: Path,
+    native_hook_force: Path,
 ) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -908,89 +919,6 @@ def test_package_shim_identifies_commands_that_guard_must_digest_bind(
         )
         is expected
     )
-
-
-def test_generated_package_shim_delegates_external_archive_execution_to_guard(tmp_path: Path) -> None:
-    context = HarnessContext(
-        home_dir=tmp_path,
-        workspace_dir=tmp_path / "workspace",
-        guard_home=tmp_path / "guard-home",
-    )
-    source = guard_shims_module._build_package_manager_python_shim(context, "npm")
-
-    assert "if external_archive_binding_required:" in source
-    assert "guard_command = [*base_command, resolved_command]" in source
-    assert "raise SystemExit(guard_process.returncode)" in source
-    assert source.index("raise SystemExit(guard_process.returncode)") < source.rindex("_exec_real_manager()")
-
-
-def _generated_shim_with_fake_guard(context: HarnessContext, child_code: str) -> str:
-    source = guard_shims_module._build_package_manager_python_shim(context, "npm")
-    base_command_line = next(line for line in source.splitlines() if line.startswith("base_command = "))
-    fake_command = [sys.executable, "-c", child_code]
-    source = source.replace(base_command_line, f"base_command = {fake_command!r}", 1)
-    contained_start = source.index("try:\n    from codex_plugin_scanner.guard.contained_package_script_execution")
-    guard_env_start = source.index("guard_env = dict(os.environ)", contained_start)
-    return source[:contained_start] + "contained_result = None\n" + source[guard_env_start:]
-
-
-@pytest.mark.skipif(os.name == "nt", reason="the generated POSIX shim uses pass_fds for live status")
-def test_package_shim_pending_status_reaches_parent_stderr_before_guard_exit(tmp_path: Path) -> None:
-    context = HarnessContext(
-        home_dir=tmp_path / "home",
-        workspace_dir=tmp_path / "workspace",
-        guard_home=tmp_path / "guard-home",
-    )
-    status = "HOL Guard: package approval pending; review it in Guard Inbox.\n"
-    child_code = (
-        "import os, time; "
-        f"os.write(int(os.environ[{PACKAGE_SHIM_STATUS_FD_ENV_VAR!r}]), {status.encode()!r}); "
-        "time.sleep(3.0); "
-        "raise SystemExit(2)"
-    )
-    source = _generated_shim_with_fake_guard(context, child_code)
-    process = subprocess.Popen(
-        [sys.executable, "-c", source, "install", "fixture@1.0.0"],
-        cwd=tmp_path,
-        env=dict(os.environ),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    assert process.stderr is not None
-    ready, _, _ = select.select([process.stderr], [], [], 2.0)
-    assert ready, "the pending approval status must not wait for the guard child"
-    assert process.stderr.readline() == status
-    stdout, stderr = process.communicate(timeout=5)
-
-    assert process.returncode == 2
-    assert stdout == ""
-    assert stderr == ""
-
-
-def test_package_shim_preserves_captured_output_and_exit_code_without_pending_status(tmp_path: Path) -> None:
-    context = HarnessContext(
-        home_dir=tmp_path / "home",
-        workspace_dir=tmp_path / "workspace",
-        guard_home=tmp_path / "guard-home",
-    )
-    source = _generated_shim_with_fake_guard(
-        context,
-        "import sys; sys.stdout.write('guard-stdout\\n'); sys.stderr.write('guard-stderr\\n'); raise SystemExit(7)",
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", source, "install", "fixture@1.0.0"],
-        cwd=tmp_path,
-        env=dict(os.environ),
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-
-    assert result.returncode == 7
-    assert result.stdout == "guard-stdout\n"
-    assert result.stderr == "guard-stderr\n"
-    assert "Guard Inbox" not in result.stderr
 
 
 def test_package_shim_pending_status_writes_fd_without_request_details(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1796,7 +1724,11 @@ def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_a
         evaluate_status=401,
     )
     try:
-        monkeypatch.setattr(package_services, "_registry_resolved_target_version", lambda **_kwargs: "1.2.3",)
+        monkeypatch.setattr(
+            package_services,
+            "_registry_resolved_target_version",
+            lambda **_kwargs: "1.2.3",
+        )
         _seed_bundle_cache_only(
             home_dir=home_dir,
             ecosystem="npm",

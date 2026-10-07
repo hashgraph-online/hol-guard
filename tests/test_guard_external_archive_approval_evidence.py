@@ -24,6 +24,8 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
+
 
 def _hook_inputs(
     tmp_path: Path,
@@ -191,15 +193,19 @@ def test_retained_archive_is_cleaned_if_evidence_persistence_raises(
         final_url=source_url,
     )
 
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: (
-        {
-            "decision": "ask",
-            "code": "external_tarball_source",
-            "message": "External tarball source requires review.",
-            "severity": "medium",
-        },
-        download,
-    ),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda *_args, **_kwargs: (
+            {
+                "decision": "ask",
+                "code": "external_tarball_source",
+                "message": "External tarball source requires review.",
+                "severity": "medium",
+            },
+            download,
+        ),
+    )
 
     def persistence_failure(**_kwargs: object) -> None:
         raise RuntimeError("controlled evidence failure")
@@ -239,7 +245,6 @@ def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_pat
 
 def test_external_archive_credentials_stay_private_across_artifact_and_receipt_surfaces(
     tmp_path: Path,
-    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.manifest_dependency_targets import unsynced_manifest_dependency_targets
 from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
@@ -15,6 +17,8 @@ from codex_plugin_scanner.guard.runtime.workspace_path_guard import (
     resolve_path_within_workspace,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
 
 
 def test_resolve_path_within_workspace_rejects_parent_traversal(tmp_path: Path) -> None:

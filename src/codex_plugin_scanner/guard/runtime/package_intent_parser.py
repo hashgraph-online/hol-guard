@@ -125,9 +125,7 @@ def extract_package_intent_request(
     normalized_tool_name = _normalize_tool_name(tool_name)
     if normalized_tool_name in _SHELL_TOOL_NAMES:
         for command_text in _candidate_command_texts(arguments):
-            intent = parse_package_intent(
-                command_text, workspace=workspace, home_dir=home_dir, guard_home=guard_home
-            )
+            intent = parse_package_intent(command_text, workspace=workspace, home_dir=home_dir, guard_home=guard_home)
             if intent is not None:
                 return intent
     if action_envelope_command:

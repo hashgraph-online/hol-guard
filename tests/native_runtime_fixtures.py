@@ -114,7 +114,11 @@ def native_mcp_probe(
     """Exercise MCP discovery through the real keyed native resident."""
     from codex_plugin_scanner.guard import config
 
-    monkeypatch.setattr(config, "resolve_guard_home", lambda: _native_context_home)
+    monkeypatch.setattr(
+        config,
+        "resolve_guard_home",
+        lambda override=None: Path(override).expanduser() if override else _native_context_home,
+    )
     from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
         provision_native_verifier_key_for_store,
     )
@@ -125,7 +129,7 @@ def native_mcp_probe(
 
     def provision_home(home: Path) -> None:
         key_dir = home / "native-runtime"
-        key_dir.mkdir(mode=0o700, exist_ok=True)
+        key_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         key_dir.chmod(0o700)
         # Provision the resident with this home's own GuardStore verifier
         # key, not an unrelated constant.  Approvals and policy decisions in
@@ -298,8 +302,44 @@ def package_intent_native(
     binary = _resolve_native_hook_runtime()
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary.resolve()))
-    monkeypatch.setattr(config, "resolve_guard_home", lambda *a, **k: _native_context_home)
+    monkeypatch.setattr(
+        config,
+        "resolve_guard_home",
+        lambda override=None: Path(override).expanduser() if override else _native_context_home,
+    )
     return _native_context_home
+
+
+@pytest.fixture
+def archive_package_intent_native(
+    package_intent_native: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[Path]:
+    """Use the archive test's actual enrolled home for native authority."""
+    from codex_plugin_scanner.guard import config, native_context
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+    from codex_plugin_scanner.guard.runtime import approval_context
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    del package_intent_native
+    home = tmp_path / "guard-home"
+    home.mkdir(mode=0o700, exist_ok=True)
+    provision_native_verifier_key_for_store(GuardStore(home))
+    monkeypatch.setattr(
+        config, "resolve_guard_home", lambda override=None: Path(override).expanduser() if override else home
+    )
+    monkeypatch.setattr(native_context, "context_digest_guard_home", lambda: home)
+    monkeypatch.setattr(
+        approval_context, "_context_digest_guard_home", lambda selected: Path(selected) if selected else home
+    )
+    try:
+        yield home
+    finally:
+        close_native_residents(home)
 
 
 @pytest.fixture
@@ -352,4 +392,3 @@ def _close_native_policy_publishers_before_monkeypatch_restore(
             live_publishers.append(f"{publisher.guard_home}:{thread.name}")
     if live_publishers:
         raise AssertionError("native policy publisher thread(s) survived test teardown: " + ", ".join(live_publishers))
-

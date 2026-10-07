@@ -66,10 +66,11 @@ def test_parse_package_intent_records_guard_shimmed_bunx_test_runner(
     PATH. A fresh guard home is provisioned so a new resident is spawned
     under the patched ``HOME`` rather than reusing the session pool.
     """
-    from codex_plugin_scanner.guard.native_policy_snapshot import (
-        provision_native_policy_verifier_key,
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
     )
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+    from codex_plugin_scanner.guard.store import GuardStore
 
     _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
     _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')
@@ -85,7 +86,7 @@ def test_parse_package_intent_records_guard_shimmed_bunx_test_runner(
 
     guard_home = tmp_path / "shim-guard-home"
     (guard_home / "native-runtime").mkdir(mode=0o700, parents=True)
-    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    provision_native_verifier_key_for_store(GuardStore(guard_home))
     try:
         environment = {"PATH": str(shim_dir)}
         intent = parse_package_intent(
@@ -140,9 +141,7 @@ def test_parse_package_intent_keeps_unverified_or_remote_test_runner_execution_g
     )
     (tmp_path / "bun.lock").unlink()
 
-    _assert_execution_requires_review(
-        parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path)
-    )
+    _assert_execution_requires_review(parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path))
 
 
 def test_parse_package_intent_keeps_local_runner_guarded_without_lockfile_record(tmp_path: Path) -> None:
@@ -152,9 +151,7 @@ def test_parse_package_intent_keeps_local_runner_guarded_without_lockfile_record
     _write_text(runner, "#!/bin/sh\n")
     runner.chmod(0o755)
 
-    _assert_execution_requires_review(
-        parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path)
-    )
+    _assert_execution_requires_review(parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path))
 
 
 @pytest.mark.parametrize(
@@ -177,9 +174,7 @@ def test_parse_package_intent_keeps_runner_guarded_without_exact_text_lockfile_r
     _write_text(runner, "#!/bin/sh\n")
     runner.chmod(0o755)
 
-    _assert_execution_requires_review(
-        parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path)
-    )
+    _assert_execution_requires_review(parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path))
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Windows supports .cmd local launchers")

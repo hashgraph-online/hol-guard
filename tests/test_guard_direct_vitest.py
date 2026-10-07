@@ -18,6 +18,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 
 
 @pytest.fixture(autouse=True)
+def _native_vitest_intents(package_intent_native, native_mcp_probe, tmp_path: Path) -> None:
+    native_mcp_probe(tmp_path / "home" / ".guard")
+
+
+@pytest.fixture(autouse=True)
 def _exclude_workspace_virtualenv_from_path(  # pyright: ignore[reportUnusedFunction]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

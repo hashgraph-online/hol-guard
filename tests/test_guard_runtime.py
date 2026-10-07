@@ -101,6 +101,7 @@ pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mar
 pytestmark = [
     *(pytestmark if isinstance(pytestmark, list) else [pytestmark]),
     pytest.mark.usefixtures("native_prompt_runtime"),
+    pytest.mark.usefixtures("package_intent_native"),
 ]
 
 
@@ -143,6 +144,19 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "access_token": token,
         "dpop_key_material": None,
     }
+
+
+@pytest.fixture(autouse=True)
+def _native_runtime_package_context(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = guard_commands_module._hook_runtime_artifact
+
+    def enrolled_artifact(*args, **kwargs):
+        home = kwargs.get("guard_home")
+        if home is not None:
+            native_mcp_probe(Path(home))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(guard_commands_module, "_hook_runtime_artifact", enrolled_artifact)
 
 
 @pytest.fixture(autouse=True)

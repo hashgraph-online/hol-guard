@@ -186,6 +186,7 @@ def test_deeply_nested_npm_aliases_fail_without_recursion() -> None:
     assert parsed.reason == "npm_source_alias_depth_exceeded"
 
 
+@pytest.mark.usefixtures("package_intent_native")
 def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit() -> None:
     first = _artifact_for_source(f"github:Hashgraph-Online/hol-guard.git#{COMMIT}")
     equivalent = _artifact_for_source(

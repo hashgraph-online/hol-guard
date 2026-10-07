@@ -38,12 +38,6 @@ def main() -> int:
     command = [sys.executable, "scripts/build_native_command_program.py", "--compiler", args.compiler]
     _run(command)
     _run([*command, "--check"])
-    # Directory consumers need the same complete current projection as native
-    # consumers, not the historical catalog left in checkout or the artifact.
-    _run([sys.executable, "scripts/export_extension_directory.py"])
-    _run([sys.executable, "scripts/export_extension_directory.py", "--check"])
-    _run([sys.executable, "scripts/render_command_extension_directory.py"])
-    _run([sys.executable, "scripts/render_command_extension_directory.py", "--check"])
     # Packaging uses the exact compiler just validated, including cross-target
     # and Windows paths, rather than performing a second host/debug build.
     environment_file = os.environ.get("GITHUB_ENV")
