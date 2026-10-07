@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 import select
+import sqlite3
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 from ci.native_runtime import probe_installed_pi_output as probe
-
 
 RUNNER = r"""
 import {pathToFileURL} from 'node:url';
@@ -109,6 +109,10 @@ def main() -> int:
         assert sum(item["route"].endswith("/readiness") for item in result["requests"]) == 2
         assert all(item["status"] == 200 for item in result["requests"] if item["route"].endswith("/readiness"))
         result["native_reason"] = status.reason
+        result["native_routes"] = probe._wait_for_native_route_metrics(daemon, 3)
+        with sqlite3.connect(f"file:{guard_home / 'guard.db'}?mode=ro", uri=True) as database:
+            result["approval_count"] = database.execute("SELECT COUNT(*) FROM approval_requests").fetchone()[0]
+        assert result["approval_count"] == 0
         Path(sys.argv[1]).write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps({key: result[key] for key in ["ordinary_allowed", "secret_blocked", "tool_bytes_unchanged"]}))
         return 0
