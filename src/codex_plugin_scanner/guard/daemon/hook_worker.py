@@ -89,6 +89,7 @@ _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
         "native_policy_snapshot_resident_changed",
         "native_resident_restart_budget_busy",
         "native_command_control_mutation_in_progress",
+        "native_business_source_mutation_in_progress",
     }
 )
 

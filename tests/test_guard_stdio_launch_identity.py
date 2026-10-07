@@ -6,6 +6,7 @@ import io
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -53,26 +54,6 @@ class _FakeProcess:
         return self.returncode or 0
 
 
-def _intercept_server_spawn(command: list[str], wrapped: Any) -> Any:
-    """Patch only the MCP server spawn.
-
-    The stdio proxy and the native resident share the process-wide subprocess
-    module. A blanket Popen patch consumes the resident startup, so the call
-    under test never reaches the server.
-    """
-
-    real_popen = subprocess.Popen
-    expected = list(command)
-
-    def runner(*args: Any, **kwargs: Any) -> Any:
-        launched = args[0] if args else kwargs.get("args")
-        if isinstance(launched, (list, tuple)) and list(launched) == expected:
-            return wrapped(*args, **kwargs)
-        return real_popen(*args, **kwargs)
-
-    return runner
-
-
 def _replace_file(path: Path, content: bytes, *, executable: bool = False) -> None:
     replacement = path.with_name(f"{path.name}.replacement")
     replacement.parent.mkdir(parents=True, exist_ok=True)
@@ -80,6 +61,15 @@ def _replace_file(path: Path, content: bytes, *, executable: bool = False) -> No
     if executable:
         replacement.chmod(0o755)
     replacement.replace(path)
+
+
+def _patch_server_spawn(monkeypatch: pytest.MonkeyPatch, spawn: Any) -> None:
+    # Native digest clients may restart during a shard. Keep their real spawn
+    # path independent from the server mutation/failure under test.
+    server_subprocess = ModuleType(subprocess.__name__)
+    server_subprocess.__dict__.update(vars(subprocess))
+    server_subprocess.Popen = spawn
+    monkeypatch.setattr(stdio_module, "subprocess", server_subprocess)
 
 
 def _sensitive_artifact(workspace: Path) -> GuardArtifact:
@@ -191,11 +181,7 @@ def test_stdio_launch_identity_change_during_spawn_is_quarantined_and_fails_clos
         _replace_file(script, b"print('after-spawn')\n")
         return spawned
 
-    monkeypatch.setattr(
-        stdio_module.subprocess,
-        "Popen",
-        _intercept_server_spawn([str(launcher), "server.py"], mutate_during_spawn),
-    )
+    _patch_server_spawn(monkeypatch, mutate_during_spawn)
     with pytest.raises(ProxyLaunchIdentityChangedError, match="launch identity changed"):
         proxy._start_process()
     assert spawned.terminated is True
@@ -228,11 +214,7 @@ def test_stdio_launches_canonical_executable_and_rejects_symlink_swap(
         observed["process"] = process
         return process
 
-    monkeypatch.setattr(
-        stdio_module.subprocess,
-        "Popen",
-        _intercept_server_spawn([str(launcher)], swap_then_spawn),
-    )
+    _patch_server_spawn(monkeypatch, swap_then_spawn)
     with pytest.raises(ProxyLaunchIdentityChangedError, match="launch identity changed"):
         proxy._start_process()
 
@@ -261,11 +243,7 @@ def test_stdio_rejects_real_interpreted_entrypoint_swap_before_traffic(
         observed["process"] = process
         return process
 
-    monkeypatch.setattr(
-        stdio_module.subprocess,
-        "Popen",
-        _intercept_server_spawn([sys.executable, str(script)], mutate_then_spawn),
-    )
+    _patch_server_spawn(monkeypatch, mutate_then_spawn)
     with pytest.raises(ProxyLaunchIdentityChangedError, match="launch identity changed"):
         proxy._start_process()
 
@@ -289,33 +267,10 @@ def test_stdio_launch_identity_is_cleared_on_spawn_failure(
     def fail_spawn(*_args: object, **_kwargs: object) -> _FakeProcess:
         raise OSError("spawn failed")
 
-    monkeypatch.setattr(
-        stdio_module.subprocess,
-        "Popen",
-        _intercept_server_spawn([str(launcher), "server.py"], fail_spawn),
-    )
+    _patch_server_spawn(monkeypatch, fail_spawn)
     with pytest.raises(OSError, match="spawn failed"):
         failing_proxy._start_process()
     assert failing_proxy._active_launch_identity is None
     assert failing_proxy._active_env_values_hash is None
 
 
-def test_server_spawn_patch_does_not_consume_resident_startup(monkeypatch: pytest.MonkeyPatch) -> None:
-    resident_commands: list[object] = []
-    server_commands: list[object] = []
-
-    def record_resident(*args: object, **_kwargs: object) -> _FakeProcess:
-        resident_commands.append(args[0] if args else None)
-        return _FakeProcess()
-
-    def record_server(*args: object, **_kwargs: object) -> _FakeProcess:
-        server_commands.append(args[0] if args else None)
-        return _FakeProcess()
-
-    monkeypatch.setattr(subprocess, "Popen", record_resident)
-    runner = _intercept_server_spawn(["/tmp/mcp-server"], record_server)
-    resident = ("/usr/lib/hol-guard-runtime", "resident-client-stream", "--stdin", "/tmp/state")
-    runner(resident)
-    runner(["/tmp/mcp-server"])
-    assert resident_commands == [resident]
-    assert server_commands == [["/tmp/mcp-server"]]

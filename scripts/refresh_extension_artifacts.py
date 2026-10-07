@@ -119,7 +119,7 @@ def _projected_aggregate() -> dict:
 
 
 def check_trust_consistency() -> None:
-    """Fail if the committed aggregate map drifts from the authored bindings."""
+    """Fail if a staged aggregate map drifts from the authored bindings."""
     if TRUST_MAP.is_file() and _read(TRUST_MAP) != _projected_aggregate():
         raise SystemExit(
             "trust-class-map.v1.json is out of sync with contracts/extensions/trust/; "
@@ -133,17 +133,20 @@ def _sync_aggregate_map() -> bool:
     The aggregate still ships to packaged/frozen runtimes and release staging;
     it is generated, never edited by hand.
     """
-    return _write_json(TRUST_MAP, _projected_aggregate(), sort_keys=False)
+    content = _canonical_bytes(_projected_aggregate())
+    if TRUST_MAP.is_file() and TRUST_MAP.read_bytes() == content:
+        return False
+    TRUST_MAP.parent.mkdir(parents=True, exist_ok=True)
+    TRUST_MAP.write_bytes(content)
+    return True
 
 
 def sync_trust_map() -> bool:
     """Add contribution ids missing a trust binding as ``external`` files.
 
-    Gate on committed-aggregate consistency first: if the generated map was
-    hand-edited or is stale, fail instead of silently rewriting it to match the
-    bindings. Only after a clean baseline do we add missing bindings and regen.
+    The aggregate is disposable build output. Refresh it from the reviewed
+    bindings even when a previous build left a stale copy behind.
     """
-    check_trust_consistency()
     missing = sorted(set(contribution_ids()) - _read_binding_ids())
     changed = False
     for extension_id in missing:

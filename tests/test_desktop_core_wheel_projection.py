@@ -11,6 +11,8 @@ from zipfile import ZipFile
 import pytest
 import yaml
 
+from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -24,12 +26,16 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
         ROOT / "contributions/command-sources/command.blitcp.json",
         source_root / "contributions/command-sources/command.blitcp.json",
     )
-    shutil.copyfile(
-        ROOT / "contracts/extensions/trust-class-map.v1.json",
-        source_root / "contracts/extensions/trust-class-map.v1.json",
+    shutil.copytree(
+        ROOT / "contracts/extensions/trust",
+        source_root / "contracts/extensions/trust",
     )
+    trust = trust_map_from_bindings(source_root / "contracts/extensions/trust")
     for source_name in stage["_STATIC_ARTIFACTS"]:
-        if source_name == "contracts/extensions/native-command-program.v1.json":
+        if source_name in {
+            "contracts/extensions/native-command-program.v1.json",
+            "contracts/extensions/trust-class-map.v1.json",
+        }:
             continue
         source = ROOT / source_name
         destination = source_root / source_name
@@ -74,7 +80,7 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
         "import json\n"
         "import sys\n"
         "sys.stdin.read()\n"
-        f"payload = {compiled!r}\n"
+        f"payload = {trust!r} if sys.argv[1] == 'export-trust' else {compiled!r}\n"
         "print(json.dumps(payload, sort_keys=True, separators=(',', ':')))\n",
         encoding="utf-8",
     )
@@ -105,6 +111,9 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
     staged = staged_root / "extensions/native-command-program.v1.json"
     assert json.loads(generated.read_text(encoding="utf-8"))["program_digest"] == "p" * 64
     assert staged.read_bytes() == generated.read_bytes()
+    staged_trust = staged_root / "extensions/trust-class-map.v1.json"
+    assert json.loads(staged_trust.read_bytes()) == trust
+    assert staged_trust.read_bytes() == (source_root / "contracts/extensions/trust-class-map.v1.json").read_bytes()
     assert (staged_root / "extensions/contributions/command.blitcp.json").is_file()
 
 
