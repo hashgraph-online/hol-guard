@@ -6734,17 +6734,24 @@ const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
   developerRelationshipCap: 1024
 });
 const COMMAND_PATTERN_DISPLAY_LIMIT = 24;
-function patternSearchText(extension, permission) {
+const IDENTITY_MATCH = 0;
+const EXAMPLE_MATCH = 1;
+const CONTEXT_MATCH = 2;
+const RISK_TIER_SEVERITY = { critical: 3, high: 2, medium: 1, low: 0 };
+function catalogOriginRank(extension) {
+  return extension.source === "local-admin" ? 1 : 0;
+}
+function patternSearchBands(extension, permission) {
   return [
-    permission.label,
-    permission.description,
-    permission.example_command ?? "",
-    permission.family ?? "",
-    permission.permission_id,
-    extension.name,
-    extension.extension_id,
-    ...extension.executables
-  ].join(" ").toLowerCase();
+    [permission.label, extension.name, extension.extension_id, ...extension.executables].join(" ").toLowerCase(),
+    [permission.example_command ?? "", permission.permission_id].join(" ").toLowerCase(),
+    [permission.description, permission.family ?? ""].join(" ").toLowerCase()
+  ];
+}
+function termBand(term, bands) {
+  if (bands[IDENTITY_MATCH].includes(term)) return IDENTITY_MATCH;
+  if (bands[EXAMPLE_MATCH].includes(term)) return EXAMPLE_MATCH;
+  return CONTEXT_MATCH;
 }
 function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DISPLAY_LIMIT) {
   const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
@@ -6753,14 +6760,15 @@ function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DIS
   const matches = [];
   for (const extension of extensions) {
     for (const permission of extension.permissions) {
-      const text = patternSearchText(extension, permission);
-      if (terms.every((term) => text.includes(term))) {
-        matches.push({ extension, permission, score: terms.length });
-      }
+      const bands = patternSearchBands(extension, permission);
+      const text = bands.join(" ");
+      if (!terms.every((term) => text.includes(term))) continue;
+      const score = Math.max(...terms.map((term) => termBand(term, bands)));
+      matches.push({ extension, permission, score });
     }
   }
   return matches.sort(
-    (left, right) => right.permission.risk_tier.localeCompare(left.permission.risk_tier) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
+    (left, right) => left.score - right.score || catalogOriginRank(left.extension) - catalogOriginRank(right.extension) || (RISK_TIER_SEVERITY[right.permission.risk_tier] ?? 0) - (RISK_TIER_SEVERITY[left.permission.risk_tier] ?? 0) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
   ).slice(0, limit);
 }
 function CatalogSearchRow(props) {

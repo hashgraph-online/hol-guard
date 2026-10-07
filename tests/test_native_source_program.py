@@ -204,10 +204,15 @@ def test_native_input_above_legacy_budget_is_accepted(compiler: Path, build: dic
 
 
 def test_native_input_byte_budget(compiler: Path, example: dict) -> None:
-    result = subprocess.run(
-        [str(compiler), "compile"], input=canonical(example) + b" " * (8 * 1024 * 1024), capture_output=True, timeout=60
+    expanded = subprocess.run(
+        [str(compiler), "compile"], input=canonical(example) + b" " * (4 * 1024 * 1024), capture_output=True, timeout=60
     )
-    assert result.returncode != 0
+    assert expanded.returncode == 0
+    for padding_mib in (8, 9):
+        result = subprocess.run(
+            [str(compiler), "compile"], input=canonical(example) + b" " * (padding_mib * 1024 * 1024), capture_output=True, timeout=60
+        )
+        assert result.returncode != 0
 
 
 def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:

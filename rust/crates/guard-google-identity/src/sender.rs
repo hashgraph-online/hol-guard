@@ -21,7 +21,7 @@ impl VerifiedSender {
     }
 }
 
-fn supported_mailbox(email: &str) -> bool {
+pub(super) fn supported_mailbox(email: &str) -> bool {
     if email.len() > 254 || !email.is_ascii() {
         return false;
     }
