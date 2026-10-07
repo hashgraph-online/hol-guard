@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.agentbridge",
+  "version": "1.0.0",
+  "name": "AgentBridge",
+  "description": "Reviews AgentBridge CLI commands that can overwrite generated plugin files or execute with an attached app tool registry.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.agentbridge",
+    "displayName": "Community",
+    "url": "https://github.com/0sparsh2/AgentBridge"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0F172A" },
+  "homepage": "https://agentbridge.readthedocs.io/en/latest/",
+  "license": "MIT",
+  "executables": ["agentbridge"],
+  "ecosystemIds": ["agentbridge"],
+  "riskClasses": ["destructive_shell", "execution"],
+  "actionClasses": [
+    "AgentBridge forced plugin scaffold command",
+    "AgentBridge run with tool registry command"
+  ],
+  "referenceUrls": ["https://agentbridge.readthedocs.io/en/latest/"],
+  "saferAlternatives": [
+    "Inspect or validate AgentBridge specs before side-effectful runs.",
+    "Avoid --force unless the target scaffold files have been reviewed."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_agentbridge_extensions"
+  }
+}

@@ -18,6 +18,7 @@ from types import TracebackType
 from typing import BinaryIO, cast
 
 from ..strict_json_pairs import unique_json_object
+from .bounded_json_depth import check_json_depth
 
 _MAX_MESSAGE_BYTES = 1_048_576
 _MAX_JSON_DEPTH = 64
@@ -32,25 +33,7 @@ def _reject_json_constant(_value: str) -> None:
 
 
 def _check_json_depth(message: bytes) -> None:
-    depth = 0
-    quoted = False
-    escaped = False
-    for character in message:
-        if quoted:
-            if escaped:
-                escaped = False
-            elif character == 92:
-                escaped = True
-            elif character == 34:
-                quoted = False
-        elif character == 34:
-            quoted = True
-        elif character in (91, 123):
-            depth += 1
-            if depth > _MAX_JSON_DEPTH:
-                raise ValueError("codex_config_rpc_invalid")
-        elif character in (93, 125):
-            depth -= 1
+    check_json_depth(message, maximum=_MAX_JSON_DEPTH, error_code="codex_config_rpc_invalid")
 
 
 class CodexConfigRpc:

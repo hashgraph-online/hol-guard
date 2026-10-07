@@ -15,12 +15,25 @@ on:
 permissions: {}
 
 concurrency:
-  group: gitar-managed-state-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}
+  group: >-
+    gitar-managed-state-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}-${{
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.state == 'open' ||
+      github.event.issue.state == 'open'
+    }}
   cancel-in-progress: true
 
 jobs:
   reconcile:
-    if: ${{ github.event_name != 'issue_comment' || github.event.issue.pull_request != null }}
+    if: >-
+      (
+        github.event_name == 'pull_request_target' &&
+        github.event.pull_request.state == 'open'
+      ) || (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        github.event.issue.state == 'open'
+      ) || github.event_name == 'workflow_dispatch'
     permissions:
       issues: write
       pull-requests: write
@@ -125,6 +138,25 @@ jobs:
           if [[ "$directive" == "off" ]]; then
             remove_managed
             exit 0
+          fi
+
+          # Auto-apply stays scoped to declarative extension contributions:
+          # every changed file must be an authored contribution input or a
+          # deterministic projection of one (descriptors, native program,
+          # catalogs, trust map, packaged contract data). A pull request with
+          # any file outside that surface loses or never receives
+          # gitar-managed. An explicit `gitar auto-apply:on` directive from the
+          # author or a maintainer is still honored below.
+          if [[ "$directive" != "on" ]]; then
+            pr_files="$(
+              gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
+                | jq -r '.[] | .filename, (.previous_filename // empty)'
+            )"
+            outside="$(grep -Ev '^(contributions/|tests/fixtures/command-source-[^/]+\.v1\.json$|contracts/extensions/|docs/guard/extensions/catalog\.v[12]\.json$|src/codex_plugin_scanner/guard/contracts/data/extensions/)' <<<"$pr_files" || [[ $? -eq 1 ]])"
+            if [[ -n "$outside" ]] || [[ -z "$pr_files" ]]; then
+              remove_managed
+              exit 0
+            fi
           fi
 
           if ! has_label "gitar-managed"; then

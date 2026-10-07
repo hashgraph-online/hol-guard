@@ -247,7 +247,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
         assert start_payload["connect_required"] is True
 
         for _ in range(50):
-            if store.get_cloud_sync_profile() is not None:
+            if store.get_cloud_sync_profile() is not None and session.closed:
                 break
             time.sleep(0.05)
         assert store.get_cloud_sync_profile() is not None, "Timed out waiting for dashboard connect to persist OAuth"
@@ -270,7 +270,11 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
     assert store.get_cloud_sync_profile() is not None
     assert status_code == 200
-    assert connect_status["connect_required"] is False and connect_status["connect_flow"] is None and str(connect_status.get("dashboard_url") or "").endswith("/guard")
+    assert (
+        connect_status["connect_required"] is False
+        and connect_status["connect_flow"] is None
+        and str(connect_status.get("dashboard_url") or "").endswith("/guard")
+    )
     assert runtime_status == 200
     assert runtime["sync_configured"] is True
     assert runtime["cloud_state"] in {"paired_active", "paired_waiting"}

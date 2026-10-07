@@ -32,6 +32,7 @@ for (const [error, guidance] of [
   ["mcp_transport_failed", "executable, dependencies, and server logs"],
   ["mcp_initialize_failed", "starts in the host app and uses stdio MCP"],
   ["mcp_protocol_unsupported", "protocol version Guard does not support"],
+  ["mcp_capability_rejected", "rejected Guard's discovery capabilities"],
 ]) {
   await assert.rejects(waitForMcpDiscoveryJob("local-cli.fixture", {
     job_id: "a".repeat(32), cli_id: "local-cli.fixture", state: "failed", error,

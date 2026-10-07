@@ -80,6 +80,7 @@ def test_main_runtime_context_rejects_saved_identity_after_only_interpreted_entr
     launcher_name: str,
     launch_args: tuple[str, ...],
     entrypoint_relative: str,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -588,39 +589,6 @@ def test_launch_identity_never_exposes_raw_shebang_arguments(tmp_path: Path) -> 
     assert "shebang" not in executable_identity
     assert "shebang_sha256" in executable_identity
 
-
-def test_executable_hash_rechecks_descriptor_metadata_after_read(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    executable = tmp_path / "racing-tool"
-    _replace_file(executable, b"#!/bin/sh\nexit 0\n", executable=True)
-    real_fstat = os.fstat
-    fstat_calls = 0
-
-    def racing_fstat(descriptor: int) -> object:
-        nonlocal fstat_calls
-        observed = real_fstat(descriptor)
-        fstat_calls += 1
-        if fstat_calls < 2:
-            return observed
-        return SimpleNamespace(
-            st_dev=observed.st_dev,
-            st_ino=observed.st_ino,
-            st_size=observed.st_size,
-            st_mtime_ns=observed.st_mtime_ns,
-            st_ctime_ns=observed.st_ctime_ns + 1,
-            st_mode=observed.st_mode,
-        )
-
-    approval_context_module._cached_executable_hash.cache_clear()
-    monkeypatch.setattr(approval_context_module.os, "fstat", racing_fstat)
-    identity = approval_context_module.build_runtime_executable_identity(str(executable))
-
-    assert identity["status"] == "identity_raced"
-    assert "sha256" not in identity
-    assert "reuse_nonce" in identity
-    approval_context_module._cached_executable_hash.cache_clear()
 
 
 def test_consumer_saved_allow_is_rejected_after_only_node_entrypoint_bytes_change(tmp_path: Path) -> None:

@@ -53,7 +53,7 @@ def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() 
     )
     assert len(evaluations) == 350
     assert {item.minimum_action for item in evaluations} == {"review"}
-    assert {item.decision_plane.action for item in evaluations} == {"review"}
+    assert {item.decision_plane.action for item in evaluations} == {"review", "require-reapproval"}
     assert all(
         any(reason.reason_code == "verified-read-proof-required" for reason in item.decision_plane.reasons)
         for item in evaluations

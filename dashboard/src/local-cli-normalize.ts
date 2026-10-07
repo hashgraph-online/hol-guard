@@ -1,4 +1,5 @@
 import type { LocalCliContinuity } from "./custom-extension-continuity-api";
+import { normalizeCodexHostInventory } from "./codex-host-inventory";
 import type { LocalCliCommand, LocalCliItem, LocalCliListResponse, LocalCliSurface, LocalMcpCatalog, McpClassification } from "./local-cli-api";
 import { SHA256_PATTERN, isLocalCliId, isRecord, optionalString, requiredInt, requiredString } from "./local-cli-fields";
 
@@ -206,6 +207,7 @@ export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
   const revision = requiredInt(value.revision, "revision");
   const publication = value.native_publication;
   const discoveryIssue = value.discovery_issue;
+  const hostInventory = normalizeCodexHostInventory(value.host_inventory);
   let nativePublication: LocalCliListResponse["native_publication"];
   if (isRecord(publication) && publication.revision === revision && (
     publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable"
@@ -223,6 +225,7 @@ export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
       || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "package_catalog_refresh_failed")
       ? { discovery_issue: discoveryIssue } : {}),
     ...(nativePublication ? { native_publication: nativePublication } : {}),
+    ...(hostInventory ? { host_inventory: hostInventory } : {}),
     items,
     cloud: {
       sync_local_only: cloud.sync_local_only !== false,

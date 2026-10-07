@@ -1,10 +1,10 @@
 use std::ffi::OsStr;
 use std::io;
 use std::os::windows::io::AsRawHandle;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path, PathBuf, Prefix, PrefixComponent};
 
 use winapi::shared::minwindef::{DWORD, FALSE};
-use winapi::um::fileapi::CreateDirectoryW;
+use winapi::um::fileapi::{CreateDirectoryW, GetLongPathNameW};
 use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
 use winapi::um::winnt::{FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE};
 use windows_permissions::SecurityDescriptor;
@@ -14,6 +14,7 @@ use super::private_files::{
     open_directory_bound, open_inspect_private_file, open_raw, open_raw_directory_bound,
     open_rename_directory, rename_into_directory, validate_handle, verify_private_file,
 };
+use super::MAX_PATH;
 
 const ERROR_ALREADY_EXISTS: i32 = 183;
 
@@ -194,6 +195,7 @@ where
     let mut handles = Vec::new();
     let mut created_indices = Vec::new();
     let mut created_final = false;
+    let mut bound_path = path.clone();
     for (index, component) in path.components().enumerate() {
         match component {
             Component::Prefix(prefix) => current.push(prefix.as_os_str()),
@@ -204,49 +206,61 @@ where
                 current.push(name);
                 let is_target = index == final_component;
                 let is_private = path_has_prefix(&current, &private_root);
+                let mut reopen_path = current.clone();
                 let (mut handle, created) = match open_directory_bound(&current, false, is_target) {
                     Ok(handle) => (handle, false),
                     Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                        let Some(descriptor) = security_descriptor else {
-                            cleanup_created_components(&handles, &created_indices, None);
-                            return Err(io::Error::new(
-                                io::ErrorKind::NotFound,
-                                if is_private {
-                                    "private directory ancestry is missing"
-                                } else {
-                                    "trusted directory ancestry is missing"
-                                },
-                            ));
-                        };
-                        if !is_private {
-                            cleanup_created_components(&handles, &created_indices, None);
-                            return Err(io::Error::new(
-                                io::ErrorKind::NotFound,
-                                "trusted directory ancestry is missing",
-                            ));
-                        }
-                        let (handle, created) =
-                            match create_private_directory_handle(&current, descriptor) {
-                                Ok(result) => result,
-                                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                                    match open_directory_bound(&current, false, is_target) {
-                                        Ok(handle) => (handle, false),
-                                        Err(error) => {
-                                            cleanup_created_components(
-                                                &handles,
-                                                &created_indices,
-                                                None,
-                                            );
-                                            return Err(error);
+                        if let Some((handle, opened)) =
+                            open_equivalent_directory(&current, is_target)
+                        {
+                            reopen_path = opened;
+                            (handle, false)
+                        } else {
+                            let Some(descriptor) = security_descriptor else {
+                                cleanup_created_components(&handles, &created_indices, None);
+                                return Err(io::Error::new(
+                                    io::ErrorKind::NotFound,
+                                    if is_private {
+                                        "private directory ancestry is missing"
+                                    } else {
+                                        "trusted directory ancestry is missing"
+                                    },
+                                ));
+                            };
+                            if !is_private {
+                                cleanup_created_components(&handles, &created_indices, None);
+                                return Err(io::Error::new(
+                                    io::ErrorKind::NotFound,
+                                    "trusted directory ancestry is missing",
+                                ));
+                            }
+                            let (handle, created) =
+                                match create_private_directory_handle(&current, descriptor) {
+                                    Ok(result) => result,
+                                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                                        match open_directory_bound(&current, false, is_target) {
+                                            Ok(handle) => (handle, false),
+                                            Err(error) => {
+                                                cleanup_created_components(
+                                                    &handles,
+                                                    &created_indices,
+                                                    None,
+                                                );
+                                                return Err(error);
+                                            }
                                         }
                                     }
-                                }
-                                Err(error) => {
-                                    cleanup_created_components(&handles, &created_indices, None);
-                                    return Err(error);
-                                }
-                            };
-                        (handle, created)
+                                    Err(error) => {
+                                        cleanup_created_components(
+                                            &handles,
+                                            &created_indices,
+                                            None,
+                                        );
+                                        return Err(error);
+                                    }
+                                };
+                            (handle, created)
+                        }
                     }
                     Err(error) => {
                         cleanup_created_components(&handles, &created_indices, None);
@@ -260,7 +274,7 @@ where
                     if is_private && !created {
                         drop(handle);
                         match durable_private_directory_handle(
-                            &current,
+                            &reopen_path,
                             is_target,
                             is_private,
                             &mut verify,
@@ -283,12 +297,15 @@ where
                 if created {
                     created_indices.push(handles.len());
                 }
+                if is_target {
+                    bound_path = reopen_path;
+                }
                 handles.push(handle);
             }
         }
     }
     Ok(PrivateDirectoryBinding {
-        path,
+        path: bound_path,
         handles,
         created_final,
     })
@@ -375,8 +392,17 @@ fn canonicalize_existing_prefix(path: &Path) -> io::Result<PathBuf> {
 
     let canonical_existing = loop {
         match existing.canonicalize() {
-            Ok(canonical) => break canonical,
+            Ok(canonical) => {
+                break long_path_if_same_shape(&win32_path(&canonical)).unwrap_or(canonical);
+            }
             Err(error) => {
+                // `\\?\` disables 8.3 expansion, so canonicalize returns
+                // NotFound for an existing short name. GetLongPathNameW on
+                // the Win32 form still resolves it when the component count
+                // is unchanged. A junction that changes depth still fails.
+                if let Some(long) = long_path_if_same_shape(&win32_path(&existing)) {
+                    break long;
+                }
                 let Some(name) = existing.file_name() else {
                     return Err(error);
                 };
@@ -392,11 +418,143 @@ fn canonicalize_existing_prefix(path: &Path) -> io::Result<PathBuf> {
         }
     };
 
-    let mut canonical = canonical_existing;
+    let verbatim = canonical_existing
+        .as_os_str()
+        .to_string_lossy()
+        .starts_with(r"\\?\");
+    let mut canonical = if missing_tail.is_empty() {
+        canonical_existing
+    } else {
+        win32_path(&canonical_existing)
+    };
     for component in missing_tail.iter().rev() {
-        canonical.push(component);
+        canonical.push(existing_alias_or_name(&canonical, component));
     }
-    Ok(canonical)
+    if verbatim && !missing_tail.is_empty() {
+        // A successful canonicalize restores the verbatim form. If it fails,
+        // keep the Win32 spelling: re-adding `\\?\` disables 8.3 expansion
+        // and makes an existing short-name tail look missing.
+        if let Ok(resolved) = std::fs::canonicalize(&canonical) {
+            canonical = resolved;
+        }
+    }
+    if let Some(long) = long_path_if_same_shape(&win32_path(&canonical)) {
+        canonical = long;
+    }
+    Ok(extended_path_if_long(&canonical))
+}
+
+fn existing_alias_or_name(parent: &Path, name: &OsStr) -> std::ffi::OsString {
+    let candidate = win32_path(parent).join(name);
+    let Some(long) = long_path_if_same_shape(&candidate) else {
+        return name.to_owned();
+    };
+    let Some(long_name) = long.file_name() else {
+        return name.to_owned();
+    };
+    let Some(long_parent) = long.parent() else {
+        return name.to_owned();
+    };
+    if path_has_prefix(long_parent, &win32_path(parent))
+        && path_has_prefix(&win32_path(parent), long_parent)
+    {
+        long_name.to_owned()
+    } else {
+        name.to_owned()
+    }
+}
+
+fn win32_path(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest);
+    }
+    path.to_owned()
+}
+
+fn long_path_if_same_shape(path: &Path) -> Option<PathBuf> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    if wide.contains(&0) {
+        return None;
+    }
+    wide.push(0);
+    let mut buffer = vec![0u16; 512];
+    let mut length =
+        unsafe { GetLongPathNameW(wide.as_ptr(), buffer.as_mut_ptr(), buffer.len() as u32) };
+    if length as usize > buffer.len() {
+        buffer.resize(length as usize, 0);
+        length =
+            unsafe { GetLongPathNameW(wide.as_ptr(), buffer.as_mut_ptr(), buffer.len() as u32) };
+    }
+    if length == 0 || length as usize > buffer.len() {
+        return None;
+    }
+    buffer.truncate(length as usize);
+    let long = PathBuf::from(std::ffi::OsString::from_wide(&buffer));
+    if !long.is_absolute() || long.components().count() != path.components().count() {
+        return None;
+    }
+    Some(long)
+}
+
+fn extended_path_if_long(path: &Path) -> PathBuf {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+    let path = win32_path(path);
+    let wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    if wide.len() < MAX_PATH {
+        return path;
+    }
+    let mut extended = Vec::with_capacity(wide.len() + 8);
+    if wide.starts_with(&[92, 92]) {
+        extended.extend_from_slice(&[92, 92, 63, 92, 85, 78, 67, 92]);
+        extended.extend_from_slice(&wide[2..]);
+    } else {
+        extended.extend_from_slice(&[92, 92, 63, 92]);
+        extended.extend_from_slice(&wide);
+    }
+    PathBuf::from(std::ffi::OsString::from_wide(&extended))
+}
+
+/// Open the same directory under a spelling CreateFileW can resolve.
+///
+/// `\\?\` disables 8.3 expansion, so an existing short name returns
+/// NotFound. The Win32 form and a same-shape long path are the only
+/// retries. A junction that changes depth is rejected by the long-path check.
+fn open_equivalent_directory(
+    path: &Path,
+    allow_add_file: bool,
+) -> Option<(std::fs::File, PathBuf)> {
+    let win32 = win32_path(path);
+    if win32 != path {
+        if let Ok(handle) = open_directory_bound(&win32, false, allow_add_file) {
+            return Some((handle, win32));
+        }
+    }
+    let long = long_path_if_same_shape(&win32)?;
+    if long == path || long == win32 {
+        return None;
+    }
+    open_directory_bound(&long, false, allow_add_file)
+        .ok()
+        .map(|handle| (handle, long))
+}
+/// True when `path` is `root` or a descendant. `\\?\` and Win32 spellings name
+/// the same directory. A long-path lookup is accepted only when it keeps the
+/// same component count, so a junction to another depth still fails.
+pub fn path_is_within(path: &Path, root: &Path) -> bool {
+    if path_has_prefix(path, root) {
+        return true;
+    }
+    let Some(long_path) = long_path_if_same_shape(&win32_path(path)) else {
+        return false;
+    };
+    path_has_prefix(&long_path, root) || path_has_prefix(&long_path, &win32_path(root))
 }
 
 fn validate_boundary(path: &Path, trusted_base: &Path, private_root: &Path) -> io::Result<()> {
@@ -434,16 +592,75 @@ fn validate_boundary(path: &Path, trusted_base: &Path, private_root: &Path) -> i
 }
 
 fn path_has_prefix(path: &Path, prefix: &Path) -> bool {
-    let mut path_components = path.components();
-    for expected in prefix.components() {
-        let Some(actual) = path_components.next() else {
-            return false;
-        };
-        if actual.as_os_str() != expected.as_os_str() {
-            return false;
-        }
+    let path_components = boundary_components(path);
+    let prefix_components = boundary_components(prefix);
+    if prefix_components.len() > path_components.len() {
+        return false;
     }
-    true
+    path_components
+        .iter()
+        .zip(prefix_components.iter())
+        .all(|(actual, expected)| boundary_component_eq(actual, expected))
+}
+
+fn boundary_components(path: &Path) -> Vec<Component<'_>> {
+    path.components()
+        .filter(|component| !matches!(component, Component::CurDir))
+        .collect()
+}
+
+/// Win32 canonical forms name the same directory with different prefixes
+/// (`C:\` vs `\\?\C:\`, `\\server\share` vs `\\?\UNC\server\share`) and with
+/// filesystem case. Guard homes are created by this process; a case variant is
+/// the same NTFS directory, not a sibling escape. `..` is rejected earlier.
+fn os_eq_ignore_ascii_case(left: &OsStr, right: &OsStr) -> bool {
+    left.to_string_lossy()
+        .eq_ignore_ascii_case(&right.to_string_lossy())
+}
+
+fn boundary_component_eq(actual: &Component<'_>, expected: &Component<'_>) -> bool {
+    match (actual, expected) {
+        (Component::Prefix(left), Component::Prefix(right)) => windows_prefix_eq(left, right),
+        (Component::RootDir, Component::RootDir) => true,
+        (Component::Normal(left), Component::Normal(right)) => os_eq_ignore_ascii_case(left, right),
+        _ => false,
+    }
+}
+
+fn windows_prefix_eq(left: &PrefixComponent<'_>, right: &PrefixComponent<'_>) -> bool {
+    if windows_prefix_kind_eq(left.kind(), right.kind()) {
+        return true;
+    }
+    os_eq_ignore_ascii_case(left.as_os_str(), right.as_os_str())
+}
+
+fn windows_prefix_kind_eq(left: Prefix<'_>, right: Prefix<'_>) -> bool {
+    let left_disk = match left {
+        Prefix::Disk(letter) | Prefix::VerbatimDisk(letter) => Some(letter),
+        _ => None,
+    };
+    let right_disk = match right {
+        Prefix::Disk(letter) | Prefix::VerbatimDisk(letter) => Some(letter),
+        _ => None,
+    };
+    if let (Some(left_letter), Some(right_letter)) = (left_disk, right_disk) {
+        return left_letter.eq_ignore_ascii_case(&right_letter);
+    }
+    let left_unc = match left {
+        Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => Some((server, share)),
+        _ => None,
+    };
+    let right_unc = match right {
+        Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => Some((server, share)),
+        _ => None,
+    };
+    if let (Some((left_server, left_share)), Some((right_server, right_share))) =
+        (left_unc, right_unc)
+    {
+        return os_eq_ignore_ascii_case(left_server, right_server)
+            && os_eq_ignore_ascii_case(left_share, right_share);
+    }
+    false
 }
 
 /// Create one owner-private directory with its security descriptor applied at
@@ -489,4 +706,60 @@ fn create_private_directory_handle(
         return Err(io::Error::new(io::ErrorKind::AlreadyExists, error));
     }
     Err(error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verbatim_disk_prefix_matches_drive_prefix() {
+        let path = Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\home\native-runtime");
+        let prefix = Path::new(r"C:\Users\runneradmin\AppData\Local\Temp\home");
+        assert!(path_has_prefix(path, prefix));
+        assert!(path_has_prefix(
+            prefix,
+            Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\home")
+        ));
+    }
+
+    #[test]
+    fn windows_prefix_compare_is_case_insensitive_and_rejects_siblings() {
+        let path = Path::new(r"\\?\C:\Users\RUNNERADMIN\AppData\Local\Temp\Home");
+        let prefix = Path::new(r"c:\users\runneradmin\appdata\local\temp\home");
+        assert!(path_has_prefix(path, prefix));
+        assert!(!path_has_prefix(
+            Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\other"),
+            Path::new(r"C:\Users\runneradmin\AppData\Local\Temp\home")
+        ));
+    }
+
+    #[test]
+    fn verbatim_unc_prefix_matches_unc_prefix() {
+        let path = Path::new(r"\\?\UNC\server\share\home\native-runtime");
+        let prefix = Path::new(r"\\server\share\home");
+        assert!(path_has_prefix(path, prefix));
+        assert!(!path_has_prefix(path, Path::new(r"\\other\share\home")));
+    }
+    #[test]
+    fn win32_child_is_within_verbatim_root() {
+        let root = Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\home");
+        let child = Path::new(r"C:\Users\runneradmin\AppData\Local\Temp\home\native-runtime");
+        assert!(path_is_within(child, root));
+        assert!(!path_is_within(
+            Path::new(r"C:\Users\runneradmin\AppData\Local\Temp\other"),
+            root
+        ));
+    }
+
+    #[test]
+    fn verbatim_existing_directory_binds() {
+        let directory = std::env::temp_dir().join(format!("hg-bind-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let display = directory.display().to_string();
+        let verbatim = PathBuf::from(format!(r"\\?\{display}"));
+        let binding = bind_directory(&verbatim, &directory, &directory, |_, _, _, _| Ok(()));
+        let _ = std::fs::remove_dir_all(&directory);
+        binding.expect("verbatim spelling of an existing directory opens");
+    }
 }

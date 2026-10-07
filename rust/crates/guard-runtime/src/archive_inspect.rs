@@ -6,9 +6,15 @@
 //! then hands the digest-bound blob to `guard_archive`. Every inspection
 //! outcome is a typed result on stdout with exit code 0; transport-level
 //! failures exit nonzero so the caller fails closed.
+//!
+//! Admission, limits, sandbox application, and capability probes live in
+//! `archive_inspect_containment`; this module owns request handling,
+//! lifecycle supervision, and result binding.
 
 #[cfg(unix)]
 use std::path::Path;
+#[cfg(unix)]
+use std::sync::atomic::Ordering;
 #[cfg(unix)]
 use std::time::Duration;
 use std::time::Instant;
@@ -23,16 +29,47 @@ use guard_contracts::{
 };
 use sha2::{Digest, Sha256};
 
+use crate::archive_inspect_containment::sandbox_unavailable;
+#[cfg(target_os = "macos")]
+use crate::archive_inspect_containment::warm_allocator_regions;
+#[cfg(unix)]
+use crate::archive_inspect_containment::{
+    acquire_archive_lease, apply_capability_deny, apply_child_limits, network_capability_denied,
+    spawn_capability_denied, write_capability_denied,
+};
+
 const MAX_ARCHIVE_PATH_BYTES: usize = 16 * 1024;
+
+/// Arm parent-death termination and capture the spawning process identity.
+/// On Linux the kernel delivers SIGKILL when the parent thread dies — even
+/// for a parent that exits while this worker is mid-parse. Darwin has no
+/// equivalent, so `run_inspection` also watches the inherited liveness pipe
+/// and polls `getppid` for a reparent onto init.
+#[cfg(unix)]
+fn arm_parent_death_guard() -> i32 {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = nix::sys::prctl::set_pdeathsig(Some(nix::sys::signal::Signal::SIGKILL));
+    }
+    nix::unistd::getppid().as_raw()
+}
 
 pub(crate) fn evaluate_archive_inspection_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let started = Instant::now();
+    #[cfg(unix)]
+    let original_parent = arm_parent_death_guard();
+    #[cfg(not(unix))]
+    let original_parent = 0i32;
     let value = crate::strict_json_value(bytes)?;
     let request: ArchiveInspectionRequestV1 = serde_json::from_value(value)
         .map_err(|_| "archive_inspection_request_invalid".to_owned())?;
     let request_sha256 = hex::encode(Sha256::digest(bytes));
+    // Self-hash up front, inside the caller's budget: hashing the runtime
+    // binary after inspection could push the result write past the kill, and
+    // a contender that loses the lease should not wait on it either.
+    let runtime_sha256 = crate::resident_state::runtime_digest()?;
     let outcome = match validated_caps(&request) {
-        Some(caps) => run_inspection(&request, caps),
+        Some(caps) => run_inspection(&request, caps, original_parent, started),
         None => ArchiveOutcome::incomplete(
             "external_archive_inspection_policy_invalid",
             "External archive inspection policy is invalid.",
@@ -53,6 +90,7 @@ pub(crate) fn evaluate_archive_inspection_bytes(bytes: &[u8]) -> Result<Vec<u8>,
         message: outcome.message.to_owned(),
         severity: outcome.severity.to_owned(),
         sha256: outcome.sha256,
+        runtime_sha256,
         counters: ArchiveInspectionCountersV1 {
             members: outcome.members_seen,
             expanded_bytes: outcome.expanded_bytes,
@@ -76,6 +114,8 @@ fn validated_caps(request: &ArchiveInspectionRequestV1) -> Option<ArchiveCaps> {
         && !request.archive_path.is_empty()
         && request.archive_path.len() <= MAX_ARCHIVE_PATH_BYTES
         && is_lower_hex(&request.expected_sha256, 64)
+        && !request.state_dir.is_empty()
+        && request.state_dir.len() <= MAX_ARCHIVE_PATH_BYTES
         && request.timeout_ms > 0
         && request.timeout_ms <= ARCHIVE_CAP_TIMEOUT_MS
         && caps.max_archive_bytes > 0
@@ -111,35 +151,98 @@ fn validated_caps(request: &ArchiveInspectionRequestV1) -> Option<ArchiveCaps> {
     })
 }
 
-fn sandbox_unavailable() -> ArchiveOutcome {
-    ArchiveOutcome::incomplete(
-        "external_archive_sandbox_unavailable",
-        "External archive resource sandbox is unavailable on this platform.",
-        None,
-    )
-}
-
 #[cfg(not(unix))]
-fn run_inspection(_request: &ArchiveInspectionRequestV1, _caps: ArchiveCaps) -> ArchiveOutcome {
+fn run_inspection(
+    _request: &ArchiveInspectionRequestV1,
+    _caps: ArchiveCaps,
+    _original_parent: i32,
+    _started: Instant,
+) -> ArchiveOutcome {
     sandbox_unavailable()
 }
 
 #[cfg(unix)]
-fn run_inspection(request: &ArchiveInspectionRequestV1, caps: ArchiveCaps) -> ArchiveOutcome {
+fn run_inspection(
+    request: &ArchiveInspectionRequestV1,
+    caps: ArchiveCaps,
+    original_parent: i32,
+    started: Instant,
+) -> ArchiveOutcome {
+    // Warm the allocator before measuring address space: Darwin's malloc
+    // creates size-class zones lazily and each zone reserves hundreds of MB
+    // of VM. Measuring first would set RLIMIT_AS below those reservations
+    // and turn ordinary post-limit allocations into sporadic aborts.
+    #[cfg(target_os = "macos")]
+    warm_allocator_regions();
+    // Arm the inherited liveness channel before containment: the watcher
+    // thread it spawns would itself be denied by the clone/exec deny rules.
+    // When the supervising caller dies the pipe write-end closes and the
+    // flag flips — including a death that landed before this worker started.
+    let parent_alive = match crate::resident_transport_service::resident_parent_liveness() {
+        Ok(flag) => flag,
+        Err(_) => {
+            return ArchiveOutcome::incomplete(
+                "external_archive_inspection_orphaned",
+                "External archive inspection lost its supervising process.",
+                None,
+            );
+        }
+    };
+    let has_liveness_channel = std::env::var_os(crate::PARENT_LIVENESS_FD_ENV).is_some();
+    // Lease next: it needs a writable open, so it must happen before the
+    // capability deny turns off file-write*. Holding the `File` keeps the
+    // kernel lock until this process exits, covering crash paths.
+    let lease = match acquire_archive_lease(&request.state_dir) {
+        Ok(Some(lease)) => lease,
+        Ok(None) => {
+            return ArchiveOutcome::incomplete(
+                "external_archive_inspection_overloaded",
+                "External archive inspection capacity is currently saturated.",
+                None,
+            );
+        }
+        Err(outcome) => return outcome,
+    };
+    let (_lease_file, lease_path) = lease;
     if !apply_child_limits(request.timeout_ms, request.caps.max_memory_bytes) {
         return sandbox_unavailable();
     }
     if !apply_capability_deny() {
         return sandbox_unavailable();
     }
-    if !network_capability_denied() {
+    // Containment is proven, not assumed: network egress, file writes, and
+    // child creation must all observably fail before untrusted bytes are
+    // parsed. Any surviving capability means no sandbox is active.
+    if !network_capability_denied()
+        || !write_capability_denied(&lease_path)
+        || !spawn_capability_denied()
+    {
         return sandbox_unavailable();
     }
-    let deadline = Instant::now() + Duration::from_millis(request.timeout_ms);
+    // Orphaned workers have no caller left to answer. A closed liveness pipe
+    // is authoritative; a ppid that changed since capture means init adopted
+    // us. When no channel was supplied, a PID-1 parent cannot be proven
+    // alive, so it is refused — adapters always pass the channel.
+    if !parent_alive.load(Ordering::Acquire)
+        || nix::unistd::getppid().as_raw() != original_parent
+        || (!has_liveness_channel && original_parent <= 1)
+    {
+        return ArchiveOutcome::incomplete(
+            "external_archive_inspection_orphaned",
+            "External archive inspection lost its supervising process.",
+            None,
+        );
+    }
+    // The granted timeout covers this worker's whole in-process run —
+    // request parsing, the runtime self-hash, lease acquisition, and
+    // containment all happened since `started`, so the deadline anchors
+    // there rather than restarting the budget at the inspection loop.
+    let deadline = started + Duration::from_millis(request.timeout_ms);
     // If the spawning parent disappears the inspection is orphaned: stop
     // rather than burn the budget unattributed.
-    let original_parent = nix::unistd::getppid();
-    let halt = move || nix::unistd::getppid() != original_parent;
+    let halt = move || {
+        !parent_alive.load(Ordering::Acquire) || nix::unistd::getppid().as_raw() != original_parent
+    };
     guard_archive::inspect_path(
         Path::new(&request.archive_path),
         &request.expected_sha256,
@@ -147,291 +250,4 @@ fn run_inspection(request: &ArchiveInspectionRequestV1, caps: ArchiveCaps) -> Ar
         deadline,
         &halt,
     )
-}
-
-/// `_child_limits` port: CPU, file-descriptor, and address-space bounds that
-/// must all be established before parsing untrusted bytes. Returns false when
-/// any required limit cannot be applied — the caller fails closed.
-#[cfg(unix)]
-fn apply_child_limits(timeout_ms: u64, max_memory_bytes: u64) -> bool {
-    use nix::sys::resource::{getrlimit, setrlimit, Resource};
-
-    let cpu_seconds = timeout_ms.div_ceil(1000).max(1);
-    let cpu_ok = match getrlimit(Resource::RLIMIT_CPU) {
-        Ok((_soft, hard)) => {
-            let limit = if hard == u64::MAX {
-                cpu_seconds
-            } else {
-                cpu_seconds.min(hard)
-            };
-            limit > 0
-                && setrlimit(
-                    Resource::RLIMIT_CPU,
-                    limit,
-                    if hard == u64::MAX { u64::MAX } else { hard },
-                )
-                .is_ok()
-        }
-        Err(_) => false,
-    };
-    let files_ok = match getrlimit(Resource::RLIMIT_NOFILE) {
-        Ok((_soft, hard)) => {
-            let limit = if hard == u64::MAX {
-                32
-            } else {
-                32u64.min(hard)
-            };
-            limit >= 8 && setrlimit(Resource::RLIMIT_NOFILE, limit, hard).is_ok()
-        }
-        Err(_) => false,
-    };
-    let memory_ok = apply_address_space_limit(max_memory_bytes);
-    cpu_ok && files_ok && memory_ok
-}
-
-#[cfg(unix)]
-fn apply_address_space_limit(max_memory_bytes: u64) -> bool {
-    use nix::sys::resource::{getrlimit, setrlimit, Resource};
-
-    let current_virtual = current_virtual_size_bytes().unwrap_or(0);
-    let memory_limit = current_virtual.saturating_add(max_memory_bytes);
-    match getrlimit(Resource::RLIMIT_AS) {
-        Ok((_soft, hard)) => {
-            let applied = if hard == u64::MAX {
-                memory_limit
-            } else {
-                memory_limit.min(hard)
-            };
-            if applied <= current_virtual {
-                return false;
-            }
-            if setrlimit(Resource::RLIMIT_AS, applied, applied).is_err() {
-                return false;
-            }
-            match getrlimit(Resource::RLIMIT_AS) {
-                Ok((soft, hard)) => current_virtual < soft && soft <= applied && hard == soft,
-                Err(_) => false,
-            }
-        }
-        Err(_) => false,
-    }
-}
-
-/// The process's current address-space footprint. On Darwin the shared cache
-/// is mapped into every task, so the AS limit must be incremental over the
-/// current mapping (mirroring `_darwin_virtual_size_bytes`). On Linux the
-/// incremental component is zero — the budget is absolute.
-#[cfg(target_os = "macos")]
-fn current_virtual_size_bytes() -> Option<u64> {
-    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
-
-    let pid = Pid::from_u32(std::process::id());
-    let mut system = System::new_with_specifics(
-        RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_memory()),
-    );
-    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-    system
-        .process(pid)
-        .map(|process| process.virtual_memory())
-        .filter(|size| *size > 0)
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn current_virtual_size_bytes() -> Option<u64> {
-    Some(0)
-}
-
-/// Capability denial: on Linux a seccomp deny-list removes the socket and
-/// process families outright; on macOS the caller wraps this binary in
-/// `sandbox-exec` and the probe below verifies the denial landed. Other Unix
-/// targets have no containment layer to verify, so inspection is unavailable.
-#[cfg(unix)]
-fn apply_capability_deny() -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        apply_seccomp_deny_list().is_ok()
-    }
-    #[cfg(target_os = "macos")]
-    {
-        // The sandbox-exec wrapper established by the caller carries the
-        // denial; the probe verifies it. No in-process mechanism exists.
-        true
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        false
-    }
-}
-
-/// Probe that outbound network is actually denied before parsing untrusted
-/// bytes. Under seccomp the socket call itself fails; under seatbelt the
-/// socket is created but connect is denied. Anything else means the worker
-/// has unmediated network and must refuse to inspect.
-#[cfg(unix)]
-fn network_capability_denied() -> bool {
-    use nix::sys::socket::{connect, socket, AddressFamily, SockFlag, SockType, SockaddrIn};
-    use std::os::fd::AsRawFd;
-
-    let descriptor = match socket(
-        AddressFamily::Inet,
-        SockType::Stream,
-        SockFlag::empty(),
-        None,
-    ) {
-        Ok(descriptor) => descriptor,
-        Err(_) => return true,
-    };
-    let loopback = SockaddrIn::new(127, 0, 0, 1, 9);
-    matches!(
-        connect(descriptor.as_raw_fd(), &loopback),
-        Err(nix::errno::Errno::EPERM) | Err(nix::errno::Errno::EACCES)
-    )
-}
-
-/// Linux deny-list: network creation, process creation/exec, io_uring, and
-/// filesystem-mutation syscalls return EPERM. The inspection code never uses
-/// them, so the list is a kernel enforcement of the worker's documented
-/// behavior — matching the retired Python audit hook's deny set.
-#[cfg(target_os = "linux")]
-fn apply_seccomp_deny_list() -> Result<(), ()> {
-    use seccompiler::{
-        apply_filter, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter, SeccompRule,
-        TargetArch,
-    };
-    use std::collections::BTreeMap;
-
-    fn deny(syscall: i64) -> (i64, Vec<SeccompRule>) {
-        (syscall, Vec::new())
-    }
-    fn deny_flagged(syscall: i64, arg_index: u8, flag: u64) -> (i64, Vec<SeccompRule>) {
-        let condition = SeccompCondition::new(
-            arg_index,
-            SeccompCmpArgLen::Qword,
-            SeccompCmpOp::MaskedEq(flag),
-            flag,
-        )
-        .expect("static seccomp condition");
-        (
-            syscall,
-            vec![SeccompRule::new(vec![condition]).expect("non-empty rule")],
-        )
-    }
-
-    let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
-    for syscall in [
-        libc::SYS_socket,
-        libc::SYS_socketpair,
-        libc::SYS_clone,
-        libc::SYS_clone3,
-        libc::SYS_execve,
-        libc::SYS_execveat,
-        libc::SYS_ptrace,
-        libc::SYS_bpf,
-        libc::SYS_perf_event_open,
-        libc::SYS_kexec_load,
-        libc::SYS_kexec_file_load,
-        libc::SYS_init_module,
-        libc::SYS_finit_module,
-        libc::SYS_delete_module,
-        libc::SYS_mount,
-        libc::SYS_umount2,
-        libc::SYS_pivot_root,
-        libc::SYS_chroot,
-        libc::SYS_unshare,
-        libc::SYS_setns,
-        libc::SYS_io_uring_setup,
-        libc::SYS_io_uring_enter,
-        libc::SYS_io_uring_register,
-        libc::SYS_mkdirat,
-        libc::SYS_unlinkat,
-        libc::SYS_renameat,
-        libc::SYS_renameat2,
-        libc::SYS_linkat,
-        libc::SYS_symlinkat,
-        libc::SYS_mknodat,
-        libc::SYS_fchmod,
-        libc::SYS_fchmodat,
-        libc::SYS_fchown,
-        libc::SYS_fchownat,
-        libc::SYS_truncate,
-        libc::SYS_ftruncate,
-        libc::SYS_fallocate,
-        libc::SYS_utimensat,
-        libc::SYS_setxattr,
-        libc::SYS_lsetxattr,
-        libc::SYS_fsetxattr,
-        libc::SYS_removexattr,
-        libc::SYS_lremovexattr,
-        libc::SYS_fremovexattr,
-        // openat2 flags live in a user-space struct the filter cannot
-        // inspect, and open_by_handle_at bypasses the path walk; both must
-        // be denied unconditionally to keep the write denial complete.
-        libc::SYS_openat2,
-        libc::SYS_open_by_handle_at,
-        libc::SYS_open_tree,
-        libc::SYS_move_mount,
-        libc::SYS_fsopen,
-        libc::SYS_fsmount,
-        libc::SYS_fsconfig,
-        libc::SYS_fspick,
-        libc::SYS_mount_setattr,
-    ] {
-        rules.insert(syscall, deny(syscall).1);
-    }
-    // Legacy single-argument syscalls absent on aarch64/riscv64 (the *at
-    // variants above already cover their semantics there).
-    #[cfg(target_arch = "x86_64")]
-    for syscall in [
-        libc::SYS_fork,
-        libc::SYS_vfork,
-        libc::SYS_creat,
-        libc::SYS_mkdir,
-        libc::SYS_rmdir,
-        libc::SYS_unlink,
-        libc::SYS_rename,
-        libc::SYS_link,
-        libc::SYS_symlink,
-        libc::SYS_mknod,
-        libc::SYS_chmod,
-        libc::SYS_chown,
-        libc::SYS_lchown,
-        libc::SYS_utime,
-        libc::SYS_utimes,
-        libc::SYS_futimesat,
-    ] {
-        rules.insert(syscall, deny(syscall).1);
-    }
-    // Open-with-write family: any access-mode or destructive flag bit set.
-    // open() carries flags in arg1, openat(dirfd, path, flags, mode) in arg2;
-    // libc/glibc issue openat exclusively, so the arg2 rule is the one that
-    // actually gates writes.
-    for flag in [
-        libc::O_WRONLY as u64,
-        libc::O_RDWR as u64,
-        libc::O_CREAT as u64,
-        libc::O_TRUNC as u64,
-        libc::O_APPEND as u64,
-        libc::O_TMPFILE as u64,
-    ] {
-        #[cfg(target_arch = "x86_64")]
-        rules
-            .entry(libc::SYS_open)
-            .or_default()
-            .extend(deny_flagged(libc::SYS_open, 1, flag).1);
-        rules
-            .entry(libc::SYS_openat)
-            .or_default()
-            .extend(deny_flagged(libc::SYS_openat, 2, flag).1);
-    }
-    let filter = SeccompFilter::new(
-        rules,
-        seccompiler::SeccompAction::Allow,
-        seccompiler::SeccompAction::Errno(libc::EPERM as u32),
-        // Unknown architectures must not silently receive x86_64's filter;
-        // seccompiler kills the process on arch mismatch, so fail closed.
-        TargetArch::try_from(std::env::consts::ARCH).map_err(|_| ())?,
-    )
-    .map_err(|_| ())?;
-    let program: seccompiler::BpfProgram = filter.try_into().map_err(|_| ())?;
-    apply_filter(&program).map_err(|_| ())
 }

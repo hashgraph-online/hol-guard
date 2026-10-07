@@ -128,9 +128,7 @@ def _build(
         wheel = _write_source_wheel(
             tmp_path,
             extra_entries={
-                _NATIVE_PROGRAM_PATH: json.dumps(
-                    {"program_digest": _RULE_DIGEST}, separators=(",", ":")
-                ).encode()
+                _NATIVE_PROGRAM_PATH: json.dumps({"program_digest": _RULE_DIGEST}, separators=(",", ":")).encode()
             },
         )
     return build_native_wheel(

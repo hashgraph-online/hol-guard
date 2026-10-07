@@ -28,6 +28,7 @@ _PUBLIC_FAILURE_CODES = frozenset(
         "mcp_transport_failed",
         "mcp_initialize_failed",
         "mcp_protocol_unsupported",
+        "mcp_capability_rejected",
     }
 )
 

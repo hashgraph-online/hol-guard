@@ -1,0 +1,31 @@
+name: Prepare native command projections
+description: Generate and verify ignored package resources before Python imports or package builds.
+inputs:
+  compiler:
+    description: Optional compiler already built from this checkout.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-rust
+      if: inputs.compiler == ''
+    - name: Generate and verify package resources
+      shell: bash
+      env:
+        PROJECTION_COMPILER: ${{ inputs.compiler }}
+      run: |
+        args=(--projections-only)
+        if [[ -n "$PROJECTION_COMPILER" ]]; then
+          args+=(--compiler "$PROJECTION_COMPILER")
+        fi
+        python scripts/build_native_command_program.py "${args[@]}"
+        python scripts/build_native_command_program.py "${args[@]}" --check
+        python - <<'PY'
+        import os
+        from pathlib import Path
+
+        suffix = ".exe" if os.name == "nt" else ""
+        compiler = Path(os.environ["PROJECTION_COMPILER"] or f"rust/target/debug/guard-command-source{suffix}")
+        with Path(os.environ["GITHUB_ENV"]).open("a") as handle:
+            handle.write(f"HOL_GUARD_BUILD_SOURCE_COMPILER={compiler.resolve(strict=True)}\n")
+        PY

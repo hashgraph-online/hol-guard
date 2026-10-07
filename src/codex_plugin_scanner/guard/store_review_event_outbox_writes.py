@@ -15,6 +15,171 @@ from .store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION, revie
 
 # pyright: reportAny=false, reportUnusedCallResult=false
 
+_REQUEST_SNAPSHOT_JSON_FIELDS = (
+    "action_envelope_json",
+    "browser_intent_json",
+    "continuation_snapshot_json",
+    "changed_fields_json",
+    "decision_v2_json",
+    "risk_signals_json",
+    "scanner_evidence_json",
+)
+
+_MAX_SAFE_STREAM_SEQUENCE = (1 << 53) - 1
+_MAX_SNAPSHOT_SEQUENCE_COLLISIONS = 256
+_REVIEW_BINDING_COLUMNS = (
+    "oauth_subject_hash",
+    "workspace_id",
+    "machine_id",
+    "machine_installation_id",
+)
+
+
+def recover_review_snapshot_sequences(
+    connection: sqlite3.Connection,
+    *,
+    source: str,
+    collisions: dict[int, str],
+    acknowledged_through: int,
+    binding: tuple[str, str, str, str],
+) -> dict[int, int]:
+    """Rebase authenticated snapshot events after a Cloud sequence collision."""
+
+    if (
+        type(collisions) is not dict
+        or not collisions
+        or len(collisions) > _MAX_SNAPSHOT_SEQUENCE_COLLISIONS
+        or type(acknowledged_through) is not int
+        or not 0 <= acknowledged_through <= _MAX_SAFE_STREAM_SEQUENCE
+        or len(binding) != 4
+        or not all(isinstance(value, str) and value and value.strip() == value for value in binding)
+    ):
+        return {}
+    normalized: dict[int, str] = {}
+    for old_sequence, event_id in collisions.items():
+        if (
+            type(old_sequence) is not int
+            or not 0 < old_sequence <= _MAX_SAFE_STREAM_SEQUENCE
+            or not isinstance(event_id, str)
+            or not event_id
+            or event_id.strip() != event_id
+        ):
+            return {}
+        normalized[old_sequence] = event_id
+    if len(set(normalized.values())) != len(normalized):
+        return {}
+
+    connection.execute("begin immediate")
+
+    def _abort() -> dict[int, int]:
+        connection.rollback()
+        return {}
+
+    current = load_review_oauth_binding(connection, source)
+    if current is None or tuple(current[key] for key in _REVIEW_BINDING_COLUMNS) != binding:
+        return _abort()
+
+    sequences = sorted(normalized)
+    sequence_placeholders = ", ".join("?" for _ in sequences)
+    rows = connection.execute(
+        "select * from guard_review_outbox_events where stream_sequence in (" + sequence_placeholders + ")",
+        sequences,
+    ).fetchall()
+    rows_by_sequence = {int(row["stream_sequence"]): row for row in rows}
+    if len(rows_by_sequence) != len(normalized):
+        return _abort()
+
+    from .runtime.review_event_delivery import StoredReviewEventError, decode_stored_review_event
+
+    collided_ids = tuple(normalized.values())
+    collided_id_placeholders = ", ".join("?" for _ in collided_ids)
+    for old_sequence in sequences:
+        row = rows_by_sequence[old_sequence]
+        later = connection.execute(
+            "select 1 from guard_review_outbox_events "
+            "where local_request_id = ? and request_sequence > ? "
+            "and acknowledged_at is null and oauth_source = ? "
+            "and event_id not in (" + collided_id_placeholders + ") limit 1",
+            (row["local_request_id"], row["request_sequence"], source, *collided_ids),
+        ).fetchone()
+        if later is not None:
+            return _abort()
+        if (
+            row["event_id"] != normalized[old_sequence]
+            or row["oauth_source"] != source
+            or tuple(row[key] for key in _REVIEW_BINDING_COLUMNS) != binding
+            or row["binding_status"] != "ready"
+            or row["acknowledged_at"] is not None
+            or row["event_type"] != "review.request.snapshot_requeued"
+        ):
+            return _abort()
+        try:
+            stored_event = decode_stored_review_event(dict(row))
+        except (StoredReviewEventError, TypeError, ValueError):
+            return _abort()
+        if (
+            stored_event.stream_sequence != old_sequence
+            or stored_event.event_id != normalized[old_sequence]
+            or stored_event.event_type != "review.request.snapshot_requeued"
+        ):
+            return _abort()
+
+    local_cursor_row = connection.execute(
+        """
+        select acknowledged_stream_sequence
+        from guard_review_outbox_cursors
+        where oauth_source = ? and oauth_subject_hash = ? and workspace_id = ?
+          and machine_id = ? and machine_installation_id = ?
+        """,
+        (source, *binding),
+    ).fetchone()
+    local_cursor = int(local_cursor_row["acknowledged_stream_sequence"]) if local_cursor_row is not None else 0
+    local_max_row = connection.execute(
+        "select coalesce(max(stream_sequence), 0) as maximum from guard_review_outbox_events"
+    ).fetchone()
+    local_max = int(local_max_row["maximum"]) if local_max_row is not None else 0
+    sqlite_sequence_row = connection.execute(
+        "select seq from sqlite_sequence where name = 'guard_review_outbox_events'"
+    ).fetchone()
+    sqlite_sequence = int(sqlite_sequence_row["seq"]) if sqlite_sequence_row is not None else 0
+    base = max(acknowledged_through, local_cursor, local_max, sqlite_sequence)
+    if base > _MAX_SAFE_STREAM_SEQUENCE - len(sequences):
+        return _abort()
+    replacements = {old_sequence: base + index for index, old_sequence in enumerate(sequences, start=1)}
+
+    for old_sequence in sequences:
+        cursor = connection.execute(
+            """
+            update guard_review_outbox_events
+            set stream_sequence = ?
+            where stream_sequence = ? and event_id = ? and oauth_source = ?
+              and oauth_subject_hash = ? and workspace_id = ?
+              and machine_id = ? and machine_installation_id = ?
+              and binding_status = 'ready' and acknowledged_at is null
+            """,
+            (
+                replacements[old_sequence],
+                old_sequence,
+                normalized[old_sequence],
+                source,
+                *binding,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise sqlite3.IntegrityError("Review snapshot sequence recovery lost its validated row.")
+
+    final_sequence = replacements[sequences[-1]]
+    sequence_update = connection.execute(
+        "update sqlite_sequence set seq = max(seq, ?) where name = 'guard_review_outbox_events'",
+        (final_sequence,),
+    )
+    if sequence_update.rowcount == 0:
+        connection.execute(
+            "insert into sqlite_sequence (name, seq) values ('guard_review_outbox_events', ?)",
+            (final_sequence,),
+        )
+    return replacements
+
 
 def _binding_for_append(
     connection: sqlite3.Connection,
@@ -65,15 +230,27 @@ def append_request_snapshot_event(
     event_type: str,
     occurred_at: str,
     continuation_result: Mapping[str, object] | None = None,
+    request_snapshot: Mapping[str, object] | None = None,
+    native_replay: bool = False,
 ) -> int:
     """Append a request snapshot without replacing any unacknowledged event."""
 
-    request = connection.execute(
-        "select * from approval_requests where request_id = ?",
-        (request_id,),
-    ).fetchone()
-    if request is None:
-        return 0
+    if request_snapshot is None:
+        request_row = connection.execute(
+            "select * from approval_requests where request_id = ?",
+            (request_id,),
+        ).fetchone()
+        if request_row is None:
+            return 0
+        request = dict(request_row)
+    else:
+        request = dict(request_snapshot)
+        if request.get("request_id") != request_id:
+            return 0
+        for field in _REQUEST_SNAPSHOT_JSON_FIELDS:
+            value = request.get(field)
+            if isinstance(value, (dict, list)):
+                request[field] = json.dumps(value, sort_keys=True, separators=(",", ":"))
     values, binding_status, quarantine_reason = _binding_for_append(
         connection,
         request_id=request_id,
@@ -84,6 +261,7 @@ def append_request_snapshot_event(
         event_type=event_type,
         occurred_at=occurred_at,
         continuation_result=continuation_result,
+        native_replay=native_replay,
     )
     connection.execute(
         """
@@ -167,6 +345,9 @@ def requeue_pending_request_events(
     require_binding: bool = False,
     snapshot_repair_sequences: dict[str, int] | None = None,
     only_retry_identity_drift: bool = False,
+    request_ids: set[str] | None = None,
+    request_snapshots: Mapping[str, Mapping[str, object]] | None = None,
+    native_replay: bool = False,
 ) -> int:
     connection.execute("begin immediate")
     current_binding = load_review_oauth_binding(connection, source)
@@ -193,6 +374,11 @@ def requeue_pending_request_events(
     if snapshot_repair_sequences is not None:
         request_query += " and request_id in (" + ", ".join("?" for _ in snapshot_repair_sequences) + ")"
         request_parameters.extend(snapshot_repair_sequences)
+    if request_ids is not None:
+        if not request_ids:
+            return 0
+        request_query += " and request_id in (" + ", ".join("?" for _ in request_ids) + ")"
+        request_parameters.extend(sorted(request_ids))
     rows = connection.execute(
         request_query + " order by coalesce(last_seen_at, created_at), request_id", request_parameters
     ).fetchall()
@@ -272,5 +458,7 @@ def requeue_pending_request_events(
             source=source,
             event_type="review.request.snapshot_requeued",
             occurred_at=changed_at,
+            request_snapshot=(request_snapshots or {}).get(request_id),
+            native_replay=native_replay,
         )
     return appended

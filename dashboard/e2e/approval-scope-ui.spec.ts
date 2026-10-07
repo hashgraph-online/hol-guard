@@ -59,6 +59,7 @@ async function mountApprovalFixture(
   approvalRequest: GuardApprovalRequest = request,
   options: {
     settingsReady?: Promise<void>;
+    decisionReady?: Promise<void>;
     settingsPayload?: unknown;
     requests?: GuardApprovalRequest[];
   } = {},
@@ -82,6 +83,7 @@ async function mountApprovalFixture(
       path.endsWith(`/requests/${approvalRequest.request_id}/block`)
     ) {
       resolutionBodies.push(routeRequest.postDataJSON() as Record<string, unknown>);
+      await options.decisionReady;
       body = {
         resolved: true,
         item: null,
@@ -231,6 +233,60 @@ for (const totpEnabled of [false, true]) {
     expect(bodies[0].request_ids).toHaveLength(2);
     await expect(page.getByRole("button", { name: "Done", exact: true })).toBeVisible();
     expect(pageErrors).toEqual([]);
+  });
+}
+
+for (const totpEnabled of [false, true]) {
+  test(`single decision preserves cancel and single-submit Enter with ${totpEnabled ? "Authenticator" : "password"} proof`, async ({ page }) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    let releaseDecision!: () => void;
+    const decisionReady = new Promise<void>((resolve) => { releaseDecision = resolve; });
+    await mountApprovalFixture(page, bodies, request, {
+      decisionReady,
+      settingsPayload: {
+        ...defaultSettingsPayload,
+        settings: {
+          ...defaultSettingsPayload.settings,
+          approval_gate: {
+            enabled: true, configured: true, cooldown_seconds: 0,
+            cooldown_active: false, cooldown_expires_at: null, locked_until: null,
+            fail_closed: true, strict_all_decisions: true, totp_enabled: totpEnabled,
+          },
+        },
+      },
+    });
+    await page.goto(`/requests/scope-e2e?${DAEMON}`);
+    const openDialog = async () => {
+      await page.getByRole("button", { name: "Allow just this once", exact: true }).click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+    };
+    try {
+      await openDialog();
+      const proof = page.getByLabel(totpEnabled ? "Authenticator code" : "Approval password", { exact: true });
+      await proof.fill(totpEnabled ? "123456" : "test-password");
+      const cancel = page.getByRole("button", { name: "Go back", exact: true });
+      await cancel.focus();
+      await cancel.press("Enter");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      expect(bodies).toHaveLength(0);
+
+      await openDialog();
+      await proof.fill("");
+      await proof.press("Enter");
+      expect(bodies).toHaveLength(0);
+      await proof.fill(totpEnabled ? "123456" : "test-password");
+      await proof.press("Enter");
+      await expect.poll(() => bodies.length).toBe(1);
+      await expect(cancel).toBeDisabled();
+      await expect(page.getByRole("dialog").getByRole("button", { name: "Allow just this once", exact: true })).toBeDisabled();
+      await proof.press("Enter");
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]).toMatchObject(totpEnabled
+        ? { approval_totp_code: "123456" }
+        : { approval_password: "test-password" });
+    } finally {
+      releaseDecision();
+    }
   });
 }
 

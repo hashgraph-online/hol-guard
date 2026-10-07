@@ -417,6 +417,7 @@ export function ProtectionCenterWorkspace(props: {
           catalogExtensions={catalogExtensions}
           effective={state.effective}
           localCliItems={localClis.data?.items ?? []}
+          hostInventory={localClis.data?.host_inventory}
           localCliError={localClis.error}
           localCliNotice={localClis.discoveryNotice}
           mutationError={mutationError && !pending ? mutationError : null}

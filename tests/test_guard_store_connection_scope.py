@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import store_review_event_outbox_schema
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -16,17 +17,25 @@ def fixture_store(tmp_path: Path) -> GuardStore:
     return store
 
 
-def test_scope_reuses_connection_only_within_one_operation(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("unrelated_connections", [0, 4])
+def test_scope_reuses_connection_only_within_one_operation(
+    tmp_path: Path, monkeypatch, unrelated_connections: int
+) -> None:
     store = fixture_store(tmp_path)
     opened = []
     original_connect = sqlite3.connect
 
-    def connect(*args, **kwargs):
-        connection = original_connect(*args, **kwargs)
-        opened.append(connection)
+    def connect(database, *args, **kwargs):
+        connection = original_connect(database, *args, **kwargs)
+        if database in (store.path, str(store.path)):
+            opened.append(connection)
         return connection
 
     monkeypatch.setattr(sqlite3, "connect", connect)
+    for _ in range(unrelated_connections):
+        with sqlite3.connect(tmp_path / "unrelated.db") as unrelated:
+            unrelated.execute("select 1").fetchone()
+        unrelated.close()
     for _ in range(2):
         with store.connection_scope():
             with store._connect() as first:
@@ -60,6 +69,40 @@ def test_failed_transaction_rolls_back_before_next_method(tmp_path: Path) -> Non
         with store._connect() as connection:
             assert connection.in_transaction is False
             assert connection.execute("select count(*) from scope_fixture").fetchone()[0] == 0
+
+
+def test_commit_failure_rolls_back_discards_notification_and_records_contention(
+    tmp_path: Path, monkeypatch
+) -> None:
+    store = fixture_store(tmp_path)
+    before = store.sqlite_profile()
+    original_commit = store_review_event_outbox_schema.commit_review_event_transaction
+    fail_commit = [True]
+    published: list[dict[str, object]] = []
+
+    def commit_review_event_transaction(connection, initial_changes, record_commit):
+        if fail_commit:
+            fail_commit.pop()
+            raise sqlite3.OperationalError("database is locked")
+        return original_commit(connection, initial_changes, record_commit)
+
+    monkeypatch.setattr(
+        store_review_event_outbox_schema,
+        "commit_review_event_transaction",
+        commit_review_event_transaction,
+    )
+    monkeypatch.setattr(store, "_publish_policy_integrity_state_notification", published.append)
+
+    with store.connection_scope():
+        with pytest.raises(sqlite3.OperationalError, match="locked"), store._connect() as connection:
+            connection.execute("insert into scope_fixture values (2)")
+            store._queue_policy_integrity_state_notification(connection, {"state": "test"})
+        with store._connect() as connection:
+            assert connection.in_transaction is False
+            assert connection.execute("select count(*) from scope_fixture").fetchone()[0] == 0
+
+    assert published == []
+    assert store.sqlite_profile()["busy_locked"] == before["busy_locked"] + 1
 
 
 def test_nested_method_cannot_commit_its_callers_pending_writes(tmp_path: Path) -> None:
@@ -186,7 +229,8 @@ def test_scope_records_pragma_contention_and_closes_failed_connection(tmp_path: 
             return super().execute(statement, *args, **kwargs)
 
     def connect(*args, **kwargs):
-        connection = original_connect(*args, factory=PragmaConnection, **kwargs)
+        kwargs["factory"] = PragmaConnection
+        connection = original_connect(*args, **kwargs)
         opened.append(connection)
         return connection
 

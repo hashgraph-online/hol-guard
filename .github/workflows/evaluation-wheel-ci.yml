@@ -40,7 +40,12 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Install locked dependencies without the source project
         run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
+      - uses: ./.github/actions/setup-rust
+      - name: Build source compiler
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
       - name: Build and install the wheel
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
         run: |
           uv build --wheel --out-dir evaluation-dist
           uv pip install --python .venv/bin/python --no-deps evaluation-dist/*.whl

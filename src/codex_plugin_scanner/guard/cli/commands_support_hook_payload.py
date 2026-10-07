@@ -7,10 +7,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
+import sqlite3
 import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
+
+from .native_hook_exit_code import native_hook_verdict_exit_code
 
 
 def _coalesce_string(*values: object | None) -> str:
@@ -251,6 +255,13 @@ def _apply_native_edge_envelope_fields(
         response_payload["native_edge_decision"] = edge_decision
         if project_decision:
             response_payload["decision"] = "block" if edge_decision == "deny" else "allow"
+    structured_content_mediation = native_edge_result.get("structured_content_mediation")
+    if isinstance(structured_content_mediation, Mapping):
+        # The worker already produced the validated mediation contract. Keep
+        # it as an opaque adapter projection so the receiver can validate its
+        # exact schema, action, and fail-closed fields without inventing
+        # native authority here.
+        response_payload["structured_content_mediation"] = dict(structured_content_mediation)
     for source_key, target_key in (
         ("reason", "native_edge_reason"),
         ("reason_code", "native_edge_reason_code"),
@@ -365,9 +376,6 @@ def _native_hook_json_document(
     content_flagged: bool = False,
     command_surface: bool = False,
     verified_benign: bool = False,
-    replayed_decision: bool = False,
-    envelope_keyed: bool = False,
-    fail_closed_native_floor: bool = False,
 ) -> tuple[dict[str, object] | None, int] | None:
     """Build the --json protocol document for native harnesses.
 
@@ -380,6 +388,9 @@ def _native_hook_json_document(
     if not getattr(args, "json", False) or event_name == "PostToolUse":
         return None
     canonical = _canonical_harness_name(args.harness)
+    if canonical not in {"copilot", "claude-code", "codex"}:
+        return None
+    exit_code = native_hook_verdict_exit_code(canonical, policy_action, event_name)
     blocking = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     terminal = policy_action in {"block", "sandbox-required"}
     base = dict(envelope) if isinstance(envelope, Mapping) else {}
@@ -424,28 +435,26 @@ def _native_hook_json_document(
                 and not content_flagged
                 and (policy_action == "allow" or not has_extra_evidence)
             ):
-                return {"permissionDecision": "allow"}, 0
+                return {"permissionDecision": "allow"}, exit_code
             base["continue"] = True
             base["hookSpecificOutput"] = {
                 "hookEventName": event_name,
                 "permissionDecision": "allow",
             }
-            return base, 0
+            return base, exit_code
         base["continue"] = True
         base["hookSpecificOutput"] = {
             "hookEventName": event_name,
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         }
-        return base, 1
+        return base, exit_code
 
-    if canonical not in {"claude-code", "codex"}:
-        return None
 
     if event_name == "UserPromptSubmit":
         if not blocking:
             base["hookSpecificOutput"] = {"hookEventName": event_name}
-            return base, 0
+            return base, exit_code
         if canonical == "codex":
             # Codex prompt payloads must never echo the submitted prompt back;
             # emit the protocol document only, carrying the composed action and
@@ -466,15 +475,18 @@ def _native_hook_json_document(
                 doc["reason_code"] = edge_reason_code
             if isinstance(system_message, str) and system_message.strip():
                 doc["systemMessage"] = system_message.strip()
-            return doc, 0
+            return doc, exit_code
         base["decision"] = "block"
         base["reason"] = reason
         base["continue"] = True
-        if terminal and not generic_path:
-            if isinstance(system_message, str) and system_message.strip():
-                base["systemMessage"] = system_message.strip()
-            return base, 0
-        return base, 1
+        if (
+            terminal
+            and not generic_path
+            and isinstance(system_message, str)
+            and system_message.strip()
+        ):
+            base["systemMessage"] = system_message.strip()
+        return base, exit_code
 
     if (
         canonical == "codex"
@@ -486,7 +498,7 @@ def _native_hook_json_document(
         and (policy_action == "allow" or has_benign_evidence or verified_benign)
         and _native_hook_permission_decision(policy_action, harness=args.harness) is None
     ):
-        return None, 0
+        return None, exit_code
 
     base["continue"] = True
     if isinstance(system_message, str) and system_message.strip():
@@ -504,9 +516,9 @@ def _native_hook_json_document(
                 "choose allow only if you trust the exact tool action."
             )
         else:
-            return None, 0
+            return None, exit_code
         base["hookSpecificOutput"] = hook_specific_output
-        return base, 0
+        return base, exit_code
     if blocking:
         base["decision"] = "block"
         base["reason"] = reason
@@ -527,31 +539,7 @@ def _native_hook_json_document(
         ):
             hook_specific_output["permissionDecisionReason"] = reason
     base["hookSpecificOutput"] = hook_specific_output
-    # Codex reads its decision from the hookSpecificOutput document, so
-    # reviews and denials exit cleanly; nonzero is reserved for cases where
-    # the decision must travel the machine envelope instead: sandbox
-    # escalations, fail-closed native floors where the command evaluator
-    # could not prove the request, legacy `event`-keyed payloads that never
-    # normalized to the native protocol, and blocking decisions a package
-    # evaluation contributed to (queued approvals and advisory context live
-    # in the envelope, not the protocol decision). Claude Code keeps the
-    # envelope contract for every blocking action: the merged document
-    # carries the approval and evaluation fields its --json callers read.
-    if canonical == "codex":
-        policy_composition = base.get("policy_composition")
-        package_evaluated = (
-            isinstance(policy_composition, Mapping)
-            and policy_composition.get("package_action") is not None
-        )
-        envelope_rc = (
-            policy_action == "sandbox-required"
-            or fail_closed_native_floor
-            or (envelope_keyed and not native_protocol_payload)
-            or package_evaluated
-        )
-    else:
-        envelope_rc = True
-    return base, 1 if blocking and envelope_rc and not replayed_decision else 0
+    return base, exit_code
 
 
 def _emit_native_hook_json_document(
@@ -623,6 +611,14 @@ def _mapping_list(value: object | None) -> list[Mapping[str, object]]:
         return []
     return [item for item in value if isinstance(item, Mapping)]
 
+
+def _daemon_failure_reason(error: RuntimeError) -> str:
+    """Preserve the daemon-failure category and, when present, its message."""
+    message = str(error)
+    if message:
+        return f"{type(error).__name__}: {message}"
+    return type(error).__name__
+
 def _headless_approval_resolver(
     *,
     args: argparse.Namespace,
@@ -665,14 +661,26 @@ def _headless_approval_resolver(
             return wait_result
 
         def resolve_from_local_queue():
-            queued = queue_blocked_approvals(
-                redaction_level=config.receipt_redaction_level,
-                detection=detection,
-                evaluation=payload,
-                store=store,
-                approval_center_url=approval_center_url,
-                now=_now(),
-            )
+            try:
+                queued = queue_blocked_approvals(
+                    redaction_level=config.receipt_redaction_level,
+                    detection=detection,
+                    evaluation=payload,
+                    store=store,
+                    approval_center_url=approval_center_url,
+                    now=_now(),
+                )
+            except (sqlite3.Error, OSError) as queue_error:
+                # A fatal store/IO error (e.g. a quarantined SQLite store) must
+                # not abort the deny path: still emit an explicit, empty approval
+                # queue so callers always find the key and the action stays
+                # blocked pending manual resolution. Programming errors
+                # (TypeError/ValueError/AttributeError) still propagate.
+                logging.getLogger(__name__).warning(
+                    "Guard approval queue unavailable: %s", queue_error, exc_info=True
+                )
+                queued = []
+                payload["approval_queue_unavailable"] = type(queue_error).__name__
             payload["approval_requests"] = queued
             _attach_primary_approval_link(
                 payload,
@@ -706,7 +714,11 @@ def _headless_approval_resolver(
 
         try:
             daemon_client = load_guard_surface_daemon_client(context.guard_home)
-        except RuntimeError:
+        except RuntimeError as daemon_load_error:
+            # Preserve the daemon-failure category and message through the
+            # local-queue fallback so the unresolved launch-validation reason
+            # is evidence, not a silently absorbed error.
+            payload["daemon_queue_unavailable"] = _daemon_failure_reason(daemon_load_error)
             return resolve_from_local_queue()
         try:
             session = daemon_client.start_session(
@@ -733,7 +745,8 @@ def _headless_approval_resolver(
                 open_key=None,
                 redaction_level=config.receipt_redaction_level,
             )
-        except RuntimeError:
+        except RuntimeError as daemon_operation_error:
+            payload["daemon_queue_unavailable"] = _daemon_failure_reason(daemon_operation_error)
             return resolve_from_local_queue()
         operation = blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
         queued = (
