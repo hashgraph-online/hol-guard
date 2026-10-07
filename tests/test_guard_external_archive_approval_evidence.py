@@ -255,7 +255,9 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     password = "VERY_SECRET_PASSWORD"
     source_url = f"https://user:{password}@packages.example.com/demo.tgz?token={secret}"
     command = ["npm", "install", f"demo@{source_url}"]
-    intent = parse_package_intent(shlex.join(command), workspace=workspace)
+    intent = parse_package_intent(
+        shlex.join(command), workspace=workspace, guard_home=native_context_digest
+    )
     assert intent is not None
     artifact = build_package_request_artifact(
         "guard-cli",
