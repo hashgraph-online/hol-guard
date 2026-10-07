@@ -391,7 +391,7 @@ def test_interrupted_run_reaps_its_owned_host_process(tmp_path, monkeypatch):
     import sys
     import time
 
-    from ci.gauntlet import runner
+    from ci.gauntlet import host_process
 
     if os.name != "posix":
         pytest.skip("Gauntlet process containment is POSIX-only")
@@ -412,10 +412,10 @@ def test_interrupted_run_reaps_its_owned_host_process(tmp_path, monkeypatch):
             raise KeyboardInterrupt
         original_sleep(seconds)
 
-    monkeypatch.setattr(runner.subprocess, "Popen", capture_child)
-    monkeypatch.setattr(runner.time, "sleep", interrupt_once)
+    monkeypatch.setattr(host_process.subprocess, "Popen", capture_child)
+    monkeypatch.setattr(host_process.time, "sleep", interrupt_once)
     with pytest.raises(KeyboardInterrupt):
-        runner.run_process(
+        host_process.run_process(
             [sys.executable, "-c", "import time; time.sleep(60)"],
             cwd=tmp_path,
             env=dict(os.environ),
@@ -433,7 +433,7 @@ def test_completed_leader_does_not_leave_a_term_ignoring_descendant(tmp_path):
     import subprocess
     import sys
 
-    from ci.gauntlet.runner import run_process
+    from ci.gauntlet.host_process import run_process
 
     if os.name != "posix":
         pytest.skip("Gauntlet process containment is POSIX-only")
@@ -467,7 +467,7 @@ def test_interrupt_during_termination_still_kills_and_reaps(tmp_path, monkeypatc
     import subprocess
     import sys
 
-    from ci.gauntlet import runner
+    from ci.gauntlet import host_process
 
     if os.name != "posix":
         pytest.skip("Gauntlet process containment is POSIX-only")
@@ -490,9 +490,9 @@ def test_interrupt_during_termination_still_kills_and_reaps(tmp_path, monkeypatc
         children.append(process)
         return process
 
-    monkeypatch.setattr(runner.subprocess, "Popen", interrupt_wait)
+    monkeypatch.setattr(host_process.subprocess, "Popen", interrupt_wait)
     with pytest.raises(KeyboardInterrupt):
-        runner.run_process(
+        host_process.run_process(
             [sys.executable, "-c", "pass"],
             cwd=tmp_path,
             env=dict(os.environ),

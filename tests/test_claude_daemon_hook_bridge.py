@@ -599,3 +599,42 @@ def test_loopback_redirect_handler_rejects_remote_redirect() -> None:
             {},
             "http://evil.example/allow",
         )
+
+
+@pytest.mark.parametrize("event", ["PermissionRequest", "PermissionRequestV2"])
+def test_explicit_permission_passthrough_defers_to_claude_dialog(event):
+    output = json.dumps(
+        {
+            "guard_permission_passthrough": True,
+            "systemMessage": "HOL Guard context",
+            "hookSpecificOutput": {"hookEventName": event, "additionalContext": "context"},
+        }
+    )
+    response = bridge._valid_hook_json_or_degraded(
+        output,
+        reason="invalid permission response",
+        data=json.dumps({"hook_event_name": event}),
+    )
+    assert response == output
+    assert "decision" not in json.loads(response)["hookSpecificOutput"]
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"guard_permission_passthrough": "true", "hookSpecificOutput": {"hookEventName": "PermissionRequest"}},
+        {"guard_permission_passthrough": True, "hookSpecificOutput": {"hookEventName": "PreToolUse"}},
+        {"guard_permission_passthrough": True},
+        {
+            "guard_permission_passthrough": True,
+            "hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "maybe"}},
+        },
+    ],
+)
+def test_malformed_permission_passthrough_is_denied(output):
+    response = bridge._valid_hook_json_or_degraded(
+        json.dumps(output),
+        reason="invalid permission response",
+        data=json.dumps({"hook_event_name": "PermissionRequest"}),
+    )
+    assert json.loads(response)["hookSpecificOutput"]["decision"]["behavior"] == "deny"

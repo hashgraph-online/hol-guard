@@ -207,7 +207,7 @@ def review_native_artifact_hook(
     if (
         not observe_mode
         and not asks_for_approval(config)
-        and (policy_action in {"review", "require-reapproval"} or cursor_native_queue)
+        and (policy_action in {"review", "require-reapproval", "block"} or cursor_native_queue)
     ):
         from .commands_hook_native_silent_review import apply_unprompted_native_review
 

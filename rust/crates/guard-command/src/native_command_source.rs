@@ -37,6 +37,8 @@ pub use evaluation_batch::evaluate_batch;
 pub use fixtures::run_fixtures;
 pub use parity::compare_programs;
 
+pub const MAX_SOURCE_INPUT_BYTES: usize = json::MAX_SOURCE_BYTES;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BuildRequest {

@@ -735,7 +735,9 @@ clearer UX and an implementation plan with technical references.
         assert requests == []
 
     def test_prompt_requests_to_artifacts_generates_session_prompt_artifacts(
-        self, tmp_path, native_prompt_analysis,
+        self,
+        tmp_path,
+        native_prompt_analysis,
     ) -> None:
         context = HarnessContext(
             home_dir=tmp_path / "home",
@@ -794,7 +796,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert output["policy_composition"]["untrusted_hook_payload_hint"] == "allow"
         assert "rm dangerous-marker.json" in output["launch_summary"]
@@ -847,7 +849,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = capsys.readouterr().out.strip()
 
-        assert rc == 1
+        assert rc == 0
         assert '"permissionDecision":"deny"' in output
         assert "destructive shell command" in output
         assert "Approve it in HOL Guard, then retry." in output
@@ -1151,7 +1153,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["continue"] is True
         assert output["approval_reuse"]["action"] == "block"
 
@@ -1189,7 +1191,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
@@ -1227,7 +1229,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
@@ -1265,7 +1267,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
@@ -1303,7 +1305,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
@@ -1341,7 +1343,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
@@ -1384,7 +1386,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
@@ -1428,7 +1430,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert output["approval_requests"] == []
 
@@ -1466,7 +1468,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
         assert output["approval_requests"] == []
@@ -1506,7 +1508,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["continue"] is True
         assert output["approval_reuse"]["action"] == "block"
 
@@ -5050,7 +5052,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "require-reapproval"
         assert output["path_summary"] == str(home_dir / ".env")
 
@@ -5085,7 +5087,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "require-reapproval"
         assert output["path_summary"] == str(home_dir / ".env")
 
@@ -5135,7 +5137,7 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 1
+        assert rc == 0
         assert output["policy_action"] == "require-reapproval"
 
 
@@ -5168,7 +5170,7 @@ def test_guard_hook_emits_copilot_native_ask_response(tmp_path, capsys, monkeypa
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "approve" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -5206,7 +5208,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_destructive_shell_comm
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5245,7 +5247,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_destructive_shell_redi
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5284,7 +5286,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_base64_decode_and_exec
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5323,7 +5325,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_bsd_base64_decode_and_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5362,7 +5364,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_path_qualified_base64_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5401,7 +5403,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_clustered_base64_decod
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5440,7 +5442,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_base64_decode_and_dash
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5479,7 +5481,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_base64_decode_and_env_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5518,7 +5520,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_base64_decode_and_env_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5559,7 +5561,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_base64_decode_and_path
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5600,7 +5602,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_base64_decode_and_env_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5641,7 +5643,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_base64_decode_and_env_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5680,7 +5682,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_base64_decode_when_fla
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5728,7 +5730,7 @@ echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["approval_reuse"]["action"] == "block"
 
 
@@ -5888,7 +5890,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_bash_c_destructive_com
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5927,7 +5929,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_bash_c_command_substit
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -5966,7 +5968,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_bash_norc_c_destructiv
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6005,7 +6007,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_encrypted_decrypt_and_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6053,7 +6055,7 @@ echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6101,7 +6103,7 @@ echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6149,7 +6151,7 @@ echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6197,7 +6199,7 @@ echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6236,7 +6238,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_delete_byp
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6277,7 +6279,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_newline_followed_node_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6318,7 +6320,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_delete_wit
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6359,7 +6361,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_stdbuf_value_wrapped_n
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6398,7 +6400,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_combined_p
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6437,7 +6439,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_print_flag
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6478,7 +6480,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_title_option_befo
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6517,7 +6519,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_uppercase_node_eval_de
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6556,7 +6558,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_unlink_delete_bypass(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6595,7 +6597,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_bracket_de
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6634,7 +6636,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_parenthesi
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6673,7 +6675,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_optional_c
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6714,7 +6716,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_call_delet
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6755,7 +6757,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_apply_dele
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6796,19 +6798,9 @@ def test_guard_hook_blocks_node_inline_optional_chain_apply_delete_bypass_for_co
     )
     output = json.loads(capsys.readouterr().out)
 
-    # Parser availability can select direct denial or approval review. Both
-    # routes must prevent execution; exit zero alone does not mean allow.
-    assert rc in {0, 1}
-    decision = output["hookSpecificOutput"]["permissionDecision"]
-    assert decision in {"deny", "ask"}
-    reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert "hol guard" in reason
-    if rc == 0:
-        assert decision == "deny"
-        assert output["policy_action"] == "block"
-        assert "approve it in hol guard, then retry." not in reason
-    else:
-        assert "approve it in hol guard, then retry." in reason
+    assert rc == 0
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert output["policy_action"] in {"block", "review", "require-reapproval", "sandbox-required"}
 
 
 def test_guard_hook_emits_copilot_native_ask_response_for_env_split_string_find_delete(
@@ -6844,7 +6836,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_env_split_string_find_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6885,7 +6877,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_env_split_string_node_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6924,7 +6916,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_clustered_env_short_op
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -6963,7 +6955,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_clustered_env_split_st
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -7004,7 +6996,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inspect_port_befo
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -7049,7 +7041,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_redirect_warnings
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -7090,7 +7082,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_pipe_and_stderr_follow
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -7131,7 +7123,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_commented_newline_foll
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -7202,7 +7194,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_quoted_dev_null_redi
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["approval_reuse"]["action"] == "block"
 
 
@@ -7236,7 +7228,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_uppercase_dev_null_r
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["approval_reuse"]["action"] == "block"
 
 
@@ -7270,7 +7262,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_noclobber_dev_null_r
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["approval_reuse"]["action"] == "block"
 
 
@@ -7387,7 +7379,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_python_heredo
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["approval_reuse"]["action"] == "block"
 
 
@@ -7424,7 +7416,7 @@ def test_guard_hook_preserves_copilot_block_for_unmodeled_pretooluse_request(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
 
 
@@ -7531,7 +7523,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_print_followed_by
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -7567,7 +7559,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_exec_del
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["approval_reuse"]["action"] == "block"
 
 
@@ -7603,7 +7595,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_wrapped_command_spli
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["approval_reuse"]["action"] == "block"
 
 
@@ -7640,7 +7632,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_script_argument_n
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -7680,7 +7672,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_later_destructive_node
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -7718,7 +7710,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_env_wrapped_find_delet
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -7756,7 +7748,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_env_ignore_environment
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -7796,7 +7788,7 @@ def test_guard_hook_emits_copilot_native_ask_response_for_stdbuf_wrapped_node_ev
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -7865,7 +7857,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_ok_delet
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["approval_reuse"]["action"] == "block"
 
 
@@ -7945,7 +7937,7 @@ def test_guard_hook_emits_copilot_native_deny_for_unsupported_coauthored_commit_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
 
 
@@ -7982,7 +7974,7 @@ def test_guard_hook_emits_copilot_native_deny_for_node_inline_delete_bypass(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -8020,7 +8012,7 @@ def test_guard_hook_emits_copilot_native_deny_for_git_rm_delete(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -8058,7 +8050,7 @@ def test_guard_hook_emits_copilot_native_deny_for_find_exec_rm_bypass(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -8100,7 +8092,7 @@ def test_guard_hook_emits_copilot_native_deny_for_git_c_rm_delete(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -8142,7 +8134,7 @@ def test_guard_hook_emits_copilot_native_deny_for_node_template_interpolation_by
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -8184,7 +8176,7 @@ def test_guard_hook_emits_copilot_native_deny_for_node_template_interpolation_re
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -8256,7 +8248,7 @@ def test_guard_hook_emits_copilot_native_deny_for_quoted_space_redirection_targe
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
@@ -8767,7 +8759,7 @@ def test_guard_hook_emits_copilot_native_deny_response_for_sandbox_required_requ
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
 
 
@@ -8840,7 +8832,7 @@ def test_guard_hook_emits_claude_native_pretooluse_notice_on_stderr(tmp_path, ca
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert captured_notice
     assert "HOL Guard intercepted Claude's attempt to use Read." in captured_notice[0]
@@ -9559,7 +9551,7 @@ def test_guard_hook_claude_ask_user_question_spoofed_prompt_does_not_persist_app
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert permission_rc == 0
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert question_rc == 0
+    assert question_rc == 1
     assert question_payload["decision"] == "block"
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
@@ -9662,7 +9654,7 @@ def test_guard_hook_claude_ask_user_question_multiple_questions_does_not_persist
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert permission_rc == 0
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert question_rc == 0
+    assert question_rc == 1
     assert question_payload["decision"] == "block"
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
@@ -10957,7 +10949,7 @@ def test_guard_hook_emits_claude_native_ask_response_for_claude_alias(tmp_path, 
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert "systemMessage" in output
     assert "HOL Guard intercepted Claude's attempt to use Read" in output["systemMessage"]
     assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
@@ -11031,7 +11023,7 @@ def test_guard_hook_uses_deny_specific_copy_for_blocked_claude_secret_reads(
     output = json.loads(capsys.readouterr().out)
     reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "hol guard blocked claude's attempt to use read" in reason
     assert "choose yes" not in reason
@@ -11217,7 +11209,7 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert output["continue"] is True
     assert output["policy_action"] == "require-reapproval"
     assert output["artifact_id"].startswith("claude-code:session:prompt")
@@ -11457,7 +11449,7 @@ def test_guard_hook_honors_explicit_policy_for_generic_user_prompt_submit(
     )
     receipts = GuardStore(home_dir).list_receipts()
 
-    assert rc == 1
+    assert rc == 0
     assert output["continue"] is True
     assert output["policy_action"] == policy_action
     assert len(receipts) == 1
@@ -11531,7 +11523,7 @@ def test_guard_hook_copilot_user_prompt_submitted_normalizes_to_prompt_request(
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["artifact_id"].startswith("copilot:session:prompt")
 
@@ -11591,7 +11583,7 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
     )
     notification_capture = capsys.readouterr()
 
-    assert pre_tool_rc == 1
+    assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     notification_payload = json.loads(notification_capture.out)
 
@@ -11944,7 +11936,7 @@ def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
         f"Open HOL Guard to approve or keep this blocked: {review_url}. After you choose, retry the same Codex action."
     )
 
-    assert rc == 1
+    assert rc == 0
     assert review_url.startswith("http://127.0.0.1:4455/requests/")
     assert review_url in output["review_hint"]
     assert output["decision_v2_json"]["retry_instruction"] == retry_instruction
@@ -12029,7 +12021,7 @@ def test_guard_hook_localizes_package_review_copy_with_daemon_client_approval_ur
         f"Open HOL Guard to approve or keep this blocked: {review_url}. After you choose, retry the same Codex action."
     )
 
-    assert rc == 1
+    assert rc == 0
     assert review_url == "http://127.0.0.1:4455/requests/request-1"
     assert review_url in output["review_hint"]
     assert output["decision_v2_json"]["retry_instruction"] == retry_instruction
@@ -12133,7 +12125,7 @@ def test_guard_hook_explains_ignored_remembered_rule_when_local_trust_is_degrade
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["trust_status"]["remembered_rules"] == "disabled_degraded"
     assert output["remembered_rule_rejection"]["integrity_status"] == "degraded_mode"
@@ -12225,7 +12217,7 @@ def test_guard_hook_cloud_allow_does_not_lower_current_package_reapproval(
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["trust_status"]["remembered_rules"] == "disabled_degraded"
     assert output["remembered_rule_rejection"]["integrity_status"] == "degraded_mode"
@@ -12372,7 +12364,7 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_retained_while
                 "claude-code",
             ]
         )
-        assert rc == 1
+        assert rc == 0
         capsys.readouterr()
 
     read_notification = {
@@ -12474,7 +12466,7 @@ def test_guard_hook_claude_notification_stale_notice_falls_back_to_generic_conte
         as_json=True,
     )
 
-    assert pre_tool_rc == 1
+    assert pre_tool_rc == 0
     assert notification_rc == 0
     assert "approval code:" not in notification_output["hookSpecificOutput"]["additionalContext"].lower()
     assert (
@@ -12534,7 +12526,7 @@ def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_miss
         as_json=True,
     )
 
-    assert pre_tool_rc == 1
+    assert pre_tool_rc == 0
     assert notification_rc == 0
     assert "HOL Guard approval question" in notification_output["systemMessage"]
     assert "keep blocked" in notification_output["systemMessage"].lower()
@@ -12593,7 +12585,7 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
         as_json=True,
     )
 
-    assert pre_tool_rc == 1
+    assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
     assert notification_output["systemMessage"] == (
@@ -15272,7 +15264,7 @@ def test_runtime_hook_package_without_workspace_rejects_legacy_exact_allow(
     output = json.loads(capsys.readouterr().out)
     receipt = GuardStore(home_dir).list_receipts(limit=1)[0]
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "review"
     assert output["approval_reuse"]["status"] == "rejected"
     assert output["approval_reuse"]["reason_code"] == "approval_reuse_content_changed"
@@ -15368,14 +15360,14 @@ def test_runtime_hook_package_without_workspace_invalidates_allow_after_lockfile
     changed_rc, changed_output = run_without_workspace()
     changed_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
 
-    assert first_rc == 1
+    assert first_rc == 0
     assert first_output["policy_action"] == "review"
     assert first_token.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
     assert unchanged_rc == 0
     assert unchanged_output["policy_action"] == "allow"
     assert unchanged_output["supply_chain_evaluation"]["policy_action"] == "allow"
     assert unchanged_output["approval_reuse"]["status"] == "accepted"
-    assert changed_rc == 1
+    assert changed_rc == 0
     assert changed_output["policy_action"] == "review"
     assert changed_output["supply_chain_evaluation"]["policy_action"] == "review"
     assert changed_output["approval_reuse"]["status"] == "rejected"
@@ -15479,17 +15471,17 @@ def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_
     )
     third_output = json.loads(capsys.readouterr().out)
 
-    assert first_rc == 1
+    assert first_rc == 0
     assert first_output["policy_action"] == "require-reapproval"
     assert "sensitive local file" in first_output["risk_summary"].lower()
     assert approval_request["recommended_scope"] == "workspace"
     assert approval_request["artifact_hash"].startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
     assert approval_request["artifact_hash"] == first_receipt["artifact_hash"]
     assert approval_rc == 0
-    assert second_rc == 1
+    assert second_rc == 0
     assert second_output["policy_action"] == "require-reapproval"
     assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_reapproval_required"
-    assert third_rc == 1
+    assert third_rc == 0
     assert third_output["policy_action"] == "require-reapproval"
 
 
@@ -15559,7 +15551,7 @@ def test_guard_hook_exact_v1_allow_cannot_hide_matching_legacy_block(tmp_path, c
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "block"
     assert output["approval_reuse"]["reason_code"] == "approval_reuse_saved_block"
     assert GuardStore(home_dir).list_receipts(limit=1)[0]["policy_decision"] == "block"
@@ -15652,16 +15644,16 @@ def test_guard_hook_saved_artifact_approval_never_lowers_current_payload_block(t
     )
     third_output = json.loads(capsys.readouterr().out)
 
-    assert first_rc == 1
+    assert first_rc == 0
     assert first_output["policy_action"] == "block"
     assert first_output["approval_requests"] == []
     assert first_output["terminal"] is True
     assert "recovery may require version control or a backup" in first_output["risk_summary"].lower()
-    assert second_rc == 1
+    assert second_rc == 0
     assert second_output["policy_action"] == "block"
     assert second_output["approval_reuse"]["status"] == "rejected"
     assert second_output["approval_reuse"]["reason_code"] == "approval_reuse_current_block"
-    assert third_rc == 1
+    assert third_rc == 0
     assert third_output["policy_action"] == "block"
     assert third_output["approval_requests"] == []
 
@@ -16253,7 +16245,7 @@ def test_guard_hook_claude_native_block_does_not_queue_approval_center_request(t
     output = json.loads(capsys.readouterr().out)
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert pending == []
@@ -17227,7 +17219,7 @@ def test_guard_hook_reviews_github_repository_update(tmp_path, capsys, monkeypat
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
     assert "GitHub remote mutation command" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
@@ -17816,7 +17808,7 @@ def test_guard_hook_codex_requires_sandbox_for_simple_pytest_command(tmp_path, c
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert output["continue"] is True
     assert output["policy_action"] == "sandbox-required"
     assert output["terminal"] is True
@@ -17871,7 +17863,7 @@ def test_guard_hook_codex_requires_sandbox_for_pytest_exit_code_echo(tmp_path, c
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert output["continue"] is True
     assert output["policy_action"] == "sandbox-required"
     assert output["terminal"] is True
@@ -20376,7 +20368,7 @@ def test_guard_hook_explains_data_flow_exfiltration_path(tmp_path, capsys, monke
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert isinstance(output, dict)
     assert output["policy_action"] == "block"
     assert "sends local secret to network host" in output["risk_summary"].lower()
@@ -20415,7 +20407,7 @@ def test_guard_hook_issues_one_combined_decision_for_package_and_data_flow_risks
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert isinstance(output, dict)
     assert output["policy_action"] == "block"
     assert output["approval_requests"] == []
@@ -20460,7 +20452,7 @@ def test_guard_hook_strict_profile_blocks_data_flow_exfiltration_path(tmp_path, 
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert isinstance(output, dict)
     assert output["policy_action"] == "block"
     assert output["decision_v2_json"]["action"] == "block"
@@ -20494,7 +20486,7 @@ def test_guard_hook_flags_shell_variable_data_flow_without_legacy_runtime_artifa
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert isinstance(output, dict)
     assert output["policy_action"] == "block"
     assert output["approval_requests"] == []
@@ -20529,7 +20521,7 @@ def test_guard_hook_data_flow_policy_overrides_weaker_requested_action(tmp_path,
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 0
     assert isinstance(output, dict)
     assert output["policy_action"] == "block"
     assert output["decision_v2_json"]["action"] == "block"

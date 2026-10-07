@@ -143,6 +143,37 @@ def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str,
         assert cargo_arguments[cargo_arguments.index("--target") + 1] == target
 
 
+def test_native_wheel_prs_only_fan_out_for_native_build_inputs() -> None:
+    workflow = _workflow("native-wheel-ci.yml")
+    trigger = workflow[True]["pull_request"]
+    assert trigger["branches"] == ["main", "release/3.2"]
+    assert set(trigger["paths"]) == {
+        "rust/**",
+        "ci/native_runtime/**",
+        "contracts/extensions/**",
+        "contributions/**",
+        "src/codex_plugin_scanner/guard/*native*.py",
+        "src/codex_plugin_scanner/guard/runtime_transition*.py",
+        "src/codex_plugin_scanner/guard/adapters/*native*.py",
+        "scripts/ci/**",
+        "scripts/build_command_projection_hook.py",
+        "scripts/build_native_command_program.py",
+        "scripts/build_native_hol_guard_wheel.py",
+        "scripts/bench_guard_native_installed_slo.py",
+        "scripts/stress_guard_daemon.py",
+        "scripts/sync_repo_version.py",
+        ".github/workflows/native-wheel-ci.yml",
+        ".github/actions/native-regression/**",
+        ".github/actions/setup-rust/**",
+        ".github/actions/stage-command-projections/**",
+        "pyproject.toml",
+        "requirements.txt",
+        "uv.lock",
+    }
+    assert "src/**" not in trigger["paths"]
+    assert "tests/**" not in trigger["paths"]
+
+
 def test_bounded_stress_never_claims_full_soak_qualification() -> None:
     workflow = _workflow("native-wheel-ci.yml")
     assert workflow[True]["schedule"]
