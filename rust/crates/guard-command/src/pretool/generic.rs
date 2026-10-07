@@ -2,12 +2,15 @@
 mod evaluate;
 use evaluate::evaluate_signals;
 
+#[path = "generic_command_rewrite.rs"]
+mod command_rewrite;
 #[path = "generic_extract.rs"]
 mod extract;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
 mod result;
+use command_rewrite::payload_with_command;
 
 use crate::native_command_controls::CompiledNativeCommandControls;
 use crate::CommandModelRequestV1;
@@ -131,55 +134,6 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
         execution_environment,
         true,
     )
-}
-
-const PROJECTED_COMMAND_KEYS: [&str; 7] = [
-    "command",
-    "cmd",
-    "command_line",
-    "commandLine",
-    "shell_command",
-    "shellCommand",
-    "commands",
-];
-
-/// Rewrite every command string the generic extractor reads, in every map.
-///
-/// Harnesses such as ZCode send the same tool input under both `tool_input`
-/// and `toolInput`; projecting only one copy made extraction see two
-/// different commands and block the call as ambiguous. Only values equal to
-/// the extracted command are replaced, so unrelated strings and non-string
-/// command shapes stay untouched and keep failing closed.
-fn payload_with_command(payload: &Value, original: &str, command: &str) -> Value {
-    let mut projected = payload.clone();
-    rewrite_command_values(&mut projected, original, command, 0);
-    projected
-}
-
-fn rewrite_command_values(value: &mut Value, original: &str, command: &str, depth: usize) {
-    if depth > extract::MAX_PRE_TOOL_DEPTH {
-        return;
-    }
-    match value {
-        Value::Object(record) => {
-            for key in PROJECTED_COMMAND_KEYS {
-                if let Some(slot @ Value::String(_)) = record.get_mut(key) {
-                    if slot.as_str().map(str::trim) == Some(original) {
-                        *slot = command.into();
-                    }
-                }
-            }
-            for child in record.values_mut() {
-                rewrite_command_values(child, original, command, depth.saturating_add(1));
-            }
-        }
-        Value::Array(items) => {
-            for child in items {
-                rewrite_command_values(child, original, command, depth.saturating_add(1));
-            }
-        }
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
