@@ -106,6 +106,17 @@ def test_missing_command_and_mcp_ids_are_external_without_changing_reviewed_clas
     assert refresh.sync_trust_map() is False
 
 
+def test_legacy_descriptor_only_cannot_create_a_trust_binding(checkout):
+    root, bindings_dir = checkout
+    write_json(root, "contributions/extensions/command.orphan.json", {"id": "command.orphan"})
+    refresh.sync_trust_map()
+    assert not (bindings_dir / "command.orphan.v1.json").exists()
+    assert (
+        "command.orphan"
+        not in json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())["classes"]["external"]
+    )
+
+
 def test_trust_only_does_not_build_or_read_generated_catalogs(checkout, monkeypatch, capsys):
     root, bindings_dir = checkout
     add_source(root, "command.new-cli")

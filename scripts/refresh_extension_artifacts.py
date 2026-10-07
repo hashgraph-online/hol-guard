@@ -66,7 +66,7 @@ def _detector():
 
 def contribution_ids() -> list[str]:
     """Extension ids declared by in-tree contribution sources."""
-    return sorted(_detector().contribution_ids())
+    return sorted(_detector().contribution_ids(include_legacy=False))
 
 
 def catalog_ids() -> set[str]:
