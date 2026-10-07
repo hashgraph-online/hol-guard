@@ -38,6 +38,7 @@ class NativePolicySnapshotPublisherInputs:
     _condition: Condition  # pyright: ignore[reportUninitializedInstanceVariable]
     _acked: bool  # pyright: ignore[reportUninitializedInstanceVariable]
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _pending_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     _observed_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
 
@@ -205,14 +206,28 @@ class NativePolicySnapshotPublisherInputs:
             paths.extend(workspace / filename for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"))
         return tuple(paths)
 
-    def _compiled_effective_policy(self) -> dict[str, object]:
-        """Build the native snapshot input off the synchronous hook path."""
+    def _pending_workspace_policy_paths(self) -> set[str]:
+        with self._condition:
+            pending = tuple(self._pending_workspace_paths)
+        return {
+            str(workspace / filename)
+            for workspace in pending
+            for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
+        }
+
+    def _compiled_effective_policy(self, *, settled_only: bool = False) -> dict[str, object]:
+        """Build the native snapshot input off the synchronous hook path.
+
+        ``settled_only`` omits workspaces still awaiting their first ACK so
+        observation compares like with the published snapshot.
+        """
 
         from .config import load_guard_config
         from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
-            workspaces = tuple(sorted(self._workspace_paths, key=str))
+            selected = self._workspace_paths - self._pending_workspace_paths if settled_only else self._workspace_paths
+            workspaces = tuple(sorted(selected, key=str))
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in workspaces)
         policy = _merge_effective_native_policies(
@@ -299,6 +314,12 @@ class NativePolicySnapshotPublisherInputs:
 
         force_republish = False
         if changed_paths:
+            # A pending workspace already has a publish queued that reads its
+            # overlay. Treating its files as an effective-input change would
+            # withdraw the ACK home-wide and bump the epoch, which is how a
+            # stream of new workspaces starves readiness for every hook.
+            changed_paths = changed_paths - self._pending_workspace_policy_paths()
+        if changed_paths:
             database_paths = {
                 str(self.guard_home / name) for name in ("guard.db", "guard.db-wal", "guard.db-shm", "guard.db-journal")
             }
@@ -319,7 +340,7 @@ class NativePolicySnapshotPublisherInputs:
                     self._condition.notify_all()
         source = None
         try:
-            effective_policy = self._compiled_effective_policy()
+            effective_policy = self._compiled_effective_policy(settled_only=True)
             # ``_compiled_effective_policy`` carries the raw mode beside the
             # bounded policy so snapshot generation can derive enforce versus
             # observe. ``config_digest`` deliberately covers only the

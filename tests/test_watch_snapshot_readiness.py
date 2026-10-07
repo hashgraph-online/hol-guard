@@ -47,7 +47,7 @@ def test_watch_command_control_churn_keeps_the_acknowledged_snapshot(
     publisher._observed_policy_fingerprint = publisher._published_policy_fingerprint
     publisher._snapshot = _ready_snapshot(clock, "observe")
     publisher._acked = True
-    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda: policy)
+    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda **_: policy)
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {"revision": 2})
     try:
         assert publisher.is_ready()
@@ -76,7 +76,7 @@ def test_protected_command_control_churn_still_withdraws_readiness(
     publisher._observed_policy_fingerprint = publisher._published_policy_fingerprint
     publisher._snapshot = _ready_snapshot(clock, "enforce")
     publisher._acked = True
-    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda: policy)
+    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda **_: policy)
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {"revision": 2})
     try:
         assert publisher._policy_input_changed({str(publisher.guard_home / "guard.db-wal")})
@@ -247,7 +247,7 @@ def test_resident_mtime_churn_withdraws_watch_when_policy_moves_to_enforce(
     monkeypatch.setattr(
         publisher,
         "_compiled_effective_policy",
-        lambda: {"mode": "enforce", "blocked_capabilities": ["network"]},
+        lambda **_: {"mode": "enforce", "blocked_capabilities": ["network"]},
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {"revision": 1})
     try:

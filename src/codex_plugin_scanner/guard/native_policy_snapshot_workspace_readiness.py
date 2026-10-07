@@ -59,6 +59,10 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
             publisher._renewal_after_generation = generation
         publisher._retry_not_before_monotonic = publisher._monotonic_clock()
         publisher._failure_count = 0
+        # The queued publish supersedes an earlier attempt's error. Hooks for
+        # the pending workspace wait for it instead of failing on stale state;
+        # admission still requires an ACK that compiled the workspace.
+        publisher._last_error = None
 
     def _commit_workspace_readiness_locked(self, compiled_workspaces: frozenset[Path]) -> None:
         """Release workspaces compiled into the ACK; requeue later arrivals."""

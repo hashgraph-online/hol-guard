@@ -127,3 +127,102 @@ def test_hook_worker_admits_existing_workspace_and_holds_new_one(
         assert worker.prepare_workspace_policy(new, deadline=time.monotonic() + 0.5) is not None
     finally:
         publisher.close()
+
+
+def test_stricter_pending_overlay_does_not_withdraw_ack_in_background_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publisher, resident, existing = _published(tmp_path, monkeypatch)
+    first, stricter = tmp_path / "first", tmp_path / "stricter"
+    first.mkdir()
+    stricter.mkdir()
+    (stricter / ".hol-guard.toml").write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+    publisher.start()
+    try:
+        assert publisher.wait_until_ready(time.monotonic() + 5.0, workspace=existing)
+        republished: list[None] = []
+        original_request_publish = publisher.request_publish
+
+        def spy_request_publish() -> None:
+            republished.append(None)
+            original_request_publish()
+
+        monkeypatch.setattr(publisher, "request_publish", spy_request_publish)
+        epoch = publisher._epoch
+        resident.hold = True
+        assert publisher.register_workspace(first)
+        assert resident.entered.wait(2.0)
+        # Arrives while a publish is in flight, so it is still pending when
+        # the loop reconciles effective inputs right after that ACK commits.
+        assert publisher.register_workspace(stricter)
+        with publisher._condition:
+            publisher._reconcile_due_monotonic = 0.0
+        resident.hold = False
+        resident.release.set()
+
+        assert publisher.wait_until_ready(time.monotonic() + 5.0, workspace=stricter)
+        assert publisher.wait_until_ready(time.monotonic() + 0.05, workspace=existing)
+        assert republished == [], "A pending overlay must not withdraw the ACK home-wide"
+        assert publisher._epoch == epoch
+    finally:
+        resident.release.set()
+        publisher.close()
+
+
+def test_pending_overlay_paths_are_not_effective_input_changes_but_compiled_ones_are(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publisher, _resident, existing = _published(tmp_path, monkeypatch)
+    try:
+        new = tmp_path / "new"
+        new.mkdir()
+        overlay = new / ".hol-guard.toml"
+        overlay.write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+        assert publisher.register_workspace(new)
+
+        assert not publisher._policy_input_changed({str(overlay)})
+        assert not publisher._policy_input_changed()
+        assert publisher.wait_until_ready(time.monotonic() + 0.05, workspace=existing)
+
+        existing_overlay = existing / ".hol-guard.toml"
+        existing_overlay.write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+        assert publisher._policy_input_changed({str(existing_overlay)})
+        assert not publisher.wait_until_ready(time.monotonic() + 0.05, workspace=existing)
+    finally:
+        publisher.close()
+
+
+def test_new_workspace_waits_for_its_publish_despite_a_stale_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publisher, _resident, _existing = _published(tmp_path, monkeypatch)
+    monkeypatch.setattr(publisher, "start", lambda: None)
+    monkeypatch.setattr(worker_module, "native_mode", lambda: "auto")
+    monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
+    worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
+    publisher._record_error("native_policy_snapshot_runtime_unavailable")
+    new = tmp_path / "new"
+    new.mkdir()
+    waiting = threading.Event()
+    original_wait = publisher.wait_until_ready
+
+    def wait(deadline: float, *, workspace: Path | None = None) -> bool:
+        waiting.set()
+        return original_wait(deadline, workspace=workspace)
+
+    monkeypatch.setattr(publisher, "wait_until_ready", wait)
+
+    def publish_when_waiting() -> None:
+        if waiting.wait(2.0):
+            publisher._publish_once()
+
+    publish = threading.Thread(target=publish_when_waiting)
+    publish.start()
+    try:
+        binding = worker.prepare_workspace_policy(new, deadline=time.monotonic() + 2.0)
+        assert binding is not None, "The queued workspace publish supersedes the earlier error"
+        assert not publisher.workspace_policy_pending(new)
+    finally:
+        waiting.set()
+        publish.join(timeout=2.0)
+        publisher.close()
