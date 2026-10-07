@@ -10,7 +10,6 @@ import {
   buildApprovalProofCredentials,
   isApprovalProofSubmitDisabled,
 } from "../approval-proof-inline";
-import { useFocusTrap } from "../use-focus-trap";
 import { ConnectGuardCloudButton } from "../connect-guard-cloud-button";
 
 export function cloudReviewProofIncomplete(
@@ -37,6 +36,11 @@ export function cloudReviewConfirmationError(message: string): string {
 }
 
 export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string {
+  const recovery = status.cloud_review_recovery;
+  if (recovery && !recovery.cloudReview && status.cloud_review_recovery_repair.status !== "completed") {
+    if (!recovery.localCli) return "Cloud Review recovery is incomplete. Repair this device's local data before reconnecting.";
+    return `${recovery.summary} Restoring the connection does not authorize cloud decisions.`;
+  }
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
@@ -47,7 +51,7 @@ export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
 }
 
-export function CloudReviewSettings() {
+export function CloudReviewSettings({ onOpenDataAndRepair }: { onOpenDataAndRepair: () => void }) {
   const [status, setStatus] = useState<CloudReviewSettingsStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,9 +60,18 @@ export function CloudReviewSettings() {
   const [includeHeld, setIncludeHeld] = useState(false);
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
-  const dialog = useRef<HTMLFormElement>(null);
+  const proofForm = useRef<HTMLFormElement>(null);
+  const confirmationTrigger = useRef<HTMLButtonElement | null>(null);
   const revision = useRef(0);
-  useFocusTrap(action !== null, dialog);
+  useEffect(() => {
+    if (action === null) {
+      confirmationTrigger.current?.focus();
+      return;
+    }
+    proofForm.current?.scrollIntoView({ block: "nearest" });
+    const firstInput = proofForm.current?.querySelector<HTMLInputElement>("input:not([type='checkbox'])");
+    (firstInput ?? proofForm.current)?.focus();
+  }, [action]);
 
   const refresh = useCallback(async (showLoading = true) => {
     const current = ++revision.current;
@@ -94,7 +107,8 @@ export function CloudReviewSettings() {
     };
   }, [refresh, action]);
 
-  function openConfirmation(nextAction: "enable" | "disable") {
+  function openConfirmation(nextAction: "enable" | "disable", trigger: HTMLButtonElement) {
+    confirmationTrigger.current = trigger;
     revision.current += 1;
     setAction(nextAction);
     setError(null);
@@ -149,6 +163,11 @@ export function CloudReviewSettings() {
   if (loading) statusCopy = "Checking device authorization...";
   const deliveredAt = status?.last_synced_at && Number.isFinite(Date.parse(status.last_synced_at))
     ? new Date(status.last_synced_at) : null;
+  const cloudRecoveryIncomplete = status?.cloud_review_recovery?.cloudReview === false
+    && status.cloud_review_recovery_repair.status !== "completed";
+  const connectionRepairNeeded = cloudRecoveryIncomplete
+    && status?.cloud_review_recovery_repair.status === "authentication_required";
+  const localDataRecoveryIncomplete = status?.cloud_review_recovery?.localCli === false;
   return (
     <section aria-labelledby="cloud-review-heading" className="border-t border-slate-200 pt-4">
       <div className="flex items-start justify-between gap-3">
@@ -172,7 +191,7 @@ export function CloudReviewSettings() {
         <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud connection</dt>
-            <dd className="mt-1 font-medium text-brand-dark">{status.connected ? "Connected" : "Not connected"}</dd>
+            <dd className="mt-1 font-medium text-brand-dark">{connectionRepairNeeded ? "Device sign-in needed" : cloudRecoveryIncomplete ? "Recovery incomplete" : status.connected ? "Connected" : "Not connected"}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud decisions</dt>
@@ -188,34 +207,46 @@ export function CloudReviewSettings() {
           </div>
         </dl>
       ) : null}
+      {localDataRecoveryIncomplete ? (
+        <div role="status" className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-brand-dark">
+          <p className="font-semibold">Local data recovery incomplete</p>
+          <p className="mt-1">Earlier local reviews could not be fully restored. Missing history does not authorize an action.</p>
+          <button type="button" onClick={onOpenDataAndRepair}
+            className="mt-2 min-h-10 rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-white">
+            Open Data &amp; repair
+          </button>
+        </div>
+      ) : null}
       {status?.connected ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {!status.enabled || needsRecovery ? (
-            <button type="button" disabled={loading || pending} onClick={() => openConfirmation("enable")}
+          {(!status.enabled || needsRecovery) && !cloudRecoveryIncomplete ? (
+            <button type="button" disabled={loading || pending} onClick={(event) => openConfirmation("enable", event.currentTarget)}
               className="min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
               {status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"}
             </button>
           ) : null}
           {status.enabled ? (
-            <button type="button" disabled={loading || pending} onClick={() => openConfirmation("disable")}
+            <button type="button" disabled={loading || pending} onClick={(event) => openConfirmation("disable", event.currentTarget)}
               className="min-h-10 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-50">
               Turn off Cloud Review
             </button>
           ) : null}
         </div>
       ) : null}
-      {status && !status.connected ? <ConnectGuardCloudButton className="mt-3" /> : null}
+      {status && !(cloudRecoveryIncomplete && localDataRecoveryIncomplete) && (!status.connected || connectionRepairNeeded) ? (
+        <ConnectGuardCloudButton className="mt-3"
+          label={connectionRepairNeeded ? "Restore this device's Cloud connection" : "Connect Guard Cloud"} />
+      ) : null}
       {action && status ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4"
-          onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
-          <form ref={dialog} role="dialog" aria-modal="true" aria-labelledby="cloud-review-confirm-title" noValidate
+          <form ref={proofForm} aria-labelledby="cloud-review-confirm-title" noValidate tabIndex={-1}
+            onKeyDown={(event) => { if (event.key === "Escape") close(); }}
             onSubmit={(event) => { event.preventDefault(); void confirm(); }}
-            className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
+            className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-start justify-between gap-3">
-              <h2 id="cloud-review-confirm-title" className="text-base font-semibold text-brand-dark">
+              <h4 id="cloud-review-confirm-title" className="text-base font-semibold text-brand-dark">
                 {action === "enable" ? "Authorize Cloud Review" : "Turn off Cloud Review?"}
-              </h2>
-              <button type="button" onClick={close} disabled={pending} aria-label="Close Cloud Review dialog"
+              </h4>
+              <button type="button" onClick={close} disabled={pending} aria-label="Cancel Cloud Review confirmation"
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-slate-100">
                 <HiMiniXMark aria-hidden="true" className="h-5 w-5" />
               </button>
@@ -250,7 +281,6 @@ export function CloudReviewSettings() {
               </button>
             </div>
           </form>
-        </div>
       ) : null}
     </section>
   );

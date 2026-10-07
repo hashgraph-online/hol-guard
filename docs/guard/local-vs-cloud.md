@@ -131,6 +131,27 @@ and expire. State-changing jobs remain paused for one-job local approval. Use
 without disconnecting Cloud sync. See the full
 [Cloud command capability contract](./cloud-command-capability.md).
 
+### Cloud Review recovery in the local dashboard
+
+Settings → Cloud Review reports persisted local-data and Cloud recovery
+independently. The read-only `/v1/cloud-review` response includes
+`cloud_review_recovery` (`cloudReview`, `localCli`, `reason`, `repair`, `summary`)
+and `cloud_review_recovery_repair` (`status`, `reason`). A missing recovery
+record is `null`; it is not evidence of a completed recovery.
+
+If local recovery failed, **Open Data & repair** opens the maintenance settings.
+If local protection recovered but Cloud recovery failed, the dashboard offers
+**Restore this device's Cloud connection** when authenticated device binding is
+required. It does not claim both layers recovered or offer Cloud Review
+authorization while Cloud recovery remains incomplete.
+
+Restoring a connection does not grant Cloud Review consent. Enabling or restoring
+that consent requires a separate local password/TOTP confirmation, displayed
+inline in Cloud Review settings. Cancel or Escape clears the confirmation form
+and returns focus to its trigger without changing consent. Confirmation input
+is not saved in the URL or browser storage.
+
+
 ## Guard Cloud for teams
 
 Team plans add shared ownership, managed Control Sets, routing, RBAC, billing,

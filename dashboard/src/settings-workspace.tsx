@@ -1587,7 +1587,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                   checked={draft.sync}
                   onChange={handleSyncToggle}
                 />
-                <CloudReviewSettings />
+                <CloudReviewSettings onOpenDataAndRepair={() => handleTabChange("maintenance")} />
                 <SettingsSelectRow
                   label="Cloud receipt privacy"
                   description="Choose how much command detail Guard includes when syncing receipts. Secrets are always removed."

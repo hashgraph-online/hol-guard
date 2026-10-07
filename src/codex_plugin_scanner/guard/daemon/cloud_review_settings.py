@@ -13,6 +13,10 @@ from ..runtime.exact_cloud_review import (
     enable_exact_cloud_review,
     exact_cloud_review_status,
 )
+from ..sqlite_cloud_review_recovery import (
+    read_cloud_review_recovery_health,
+    read_cloud_review_recovery_repair,
+)
 from ..store import GuardStore
 
 _RECOVERY_KEY = "guard_cloud_review_settings_recovery"
@@ -40,6 +44,8 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     sync = sync if isinstance(sync, dict) else {}
     recovery = store.get_sync_payload(_RECOVERY_KEY)
     recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
+    recovery_health = read_cloud_review_recovery_health(store)
+    recovery_repair = read_cloud_review_recovery_repair(store)
     return {
         "enabled": status.get("enabled") is True,
         "connected": profile is not None and binding is not None,
@@ -57,6 +63,11 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
             else None
         ),
         "delivery_state": sync.get("state", "idle"),
+        "cloud_review_recovery": recovery_health,
+        "cloud_review_recovery_repair": {
+            "status": recovery_repair.get("status"),
+            "reason": recovery_repair.get("reason"),
+        },
         "approval_gate": public_config(store.guard_home).to_dict(),
     }
 

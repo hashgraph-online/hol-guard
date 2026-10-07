@@ -17,7 +17,11 @@ from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
     cloud_review_settings_status,
 )
 from codex_plugin_scanner.guard.review_contracts import build_local_review_request_claim
-from codex_plugin_scanner.guard.runtime.exact_cloud_review import _oauth_metadata
+from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
+    EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
+    _oauth_metadata,
+)
+from codex_plugin_scanner.guard.sqlite_cloud_review_recovery import persist_cloud_review_recovery_health
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
 
@@ -222,5 +226,43 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
         assert send(headers)["enabled"] is False
         assert send(headers, _payload(approval_password="test-pass"))["enabled"] is True
         assert send(headers)["enabled"] is True
+    finally:
+        daemon.stop()
+
+
+@pytest.mark.parametrize(
+    ("cloud_review", "local_cli", "reason", "repair_state"),
+    [
+        (False, True, "cloud_review_salvage_failed", "authentication_required"),
+        (False, False, "recovery_incomplete", "recovery_incomplete"),
+        (True, False, "cloud_review_restored", "not_required"),
+    ],
+)
+def test_reopened_dashboard_preserves_independent_recovery_without_consent(
+    tmp_path: Path, cloud_review: bool, local_cli: bool, reason: str, repair_state: str,
+) -> None:
+    store = GuardStore(tmp_path / ".hol-guard")
+    add_review_request(store, review_request("pending-after-recovery"))
+    before = store.get_approval_request("pending-after-recovery")
+    persist_cloud_review_recovery_health(
+        store, cloud_review=cloud_review, local_cli=local_cli, now="2026-10-07T14:00:00Z",
+    )
+    reopened = GuardStore(store.guard_home)
+    daemon = GuardDaemonServer(reopened, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/cloud-review",
+            headers={"X-Guard-Token": daemon._server.auth_token},
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            status = json.load(response)
+        assert status["cloud_review_recovery"]["cloudReview"] is cloud_review
+        assert status["cloud_review_recovery"]["localCli"] is local_cli
+        assert status["cloud_review_recovery"]["reason"] == reason
+        assert status["cloud_review_recovery_repair"]["status"] == repair_state
+        assert status["enabled"] is False
+        assert reopened.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY) is None
+        assert reopened.get_approval_request("pending-after-recovery") == before
     finally:
         daemon.stop()
