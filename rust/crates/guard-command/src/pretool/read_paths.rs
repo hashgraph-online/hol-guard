@@ -360,6 +360,9 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     {
         return None;
     }
+    // Later operand proofs expect the cwd spelling the harness reports.
+    #[cfg(windows)]
+    let canonical = std::path::PathBuf::from(supplied.to_str()?.replace('/', "\\"));
     canonical.to_str().map(str::to_owned)
 }
 
@@ -382,7 +385,21 @@ fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::p
         alias_canonical == std::path::Path::new("/private/tmp")
             && canonical == alias_canonical.join(relative)
     }
-    #[cfg(not(target_os = "macos"))]
+    // Windows canonical paths carry the verbatim prefix. Accept only the
+    // exact drive-absolute spelling of the canonical path, so case, short
+    // names, junctions and dot components remain rejected.
+    #[cfg(windows)]
+    {
+        let Some(text) = supplied.to_str() else {
+            return false;
+        };
+        let bytes = text.as_bytes();
+        bytes.len() >= 3
+            && bytes[1] == b':'
+            && matches!(bytes[2], b'/' | b'\\')
+            && canonical.as_os_str() == format!(r"\\?\{}", text.replace('/', "\\")).as_str()
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (supplied, canonical);
         false

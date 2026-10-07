@@ -256,6 +256,13 @@ fn safe_gh_arguments(arguments: &[String]) -> bool {
 }
 
 pub(crate) fn safe_directory_target(target: &str) -> bool {
+    // Windows spells an absolute directory with backslash separators. Check
+    // a drive-absolute target in its forward-slash form; a backslash anywhere
+    // else may be a shell escape and stays rejected.
+    #[cfg(windows)]
+    if let Some(target) = windows_drive_target(target) {
+        return safe_directory_target(&target);
+    }
     let tilde_head = target
         .strip_prefix('~')
         .map(|rest| rest.split('/').next().unwrap_or(""));
@@ -270,6 +277,14 @@ pub(crate) fn safe_directory_target(target: &str) -> bool {
         && !normalized_haystack(target)
             .split('/')
             .any(|component| matches!(component, ".ssh" | ".aws" | ".kube" | ".gnupg" | ".docker"))
+}
+
+/// The forward-slash form of a backslash-separated drive-absolute path.
+#[cfg(windows)]
+pub(crate) fn windows_drive_target(target: &str) -> Option<String> {
+    let bytes = target.as_bytes();
+    (bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\')
+        .then(|| target.replace('\\', "/"))
 }
 
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
