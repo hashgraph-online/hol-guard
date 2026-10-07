@@ -242,6 +242,7 @@ fn array_and_json_encoded_command_copies_project_consistently() {
             "tool_input": "{\"command\":[\"ls > /dev/null\"]}",
             "toolInput": {"command": "ls > /dev/null"}
         }),
+        serde_json::json!({"parameters": "[\"ls > /dev/null\"]"}),
     ] {
         let mut payload = tool_input;
         payload["tool_name"] = "Bash".into();

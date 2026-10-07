@@ -99,7 +99,7 @@ def test_publish_command_control_race_follows_posture(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {"revision": 1}, lambda **_kwargs: b"unused"),
+        lambda **_: (None, None, b"key", {}, {"revision": 1}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {"revision": 2})
     monkeypatch.setattr(
@@ -135,7 +135,7 @@ def test_watch_publish_survives_resident_file_churn_for_the_acknowledged_generat
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
+        lambda **_: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
     monkeypatch.setattr(
@@ -169,7 +169,7 @@ def test_protected_publish_still_rejects_resident_file_churn(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
+        lambda **_: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
     monkeypatch.setattr(

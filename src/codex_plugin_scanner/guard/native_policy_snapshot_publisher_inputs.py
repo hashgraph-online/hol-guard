@@ -215,21 +215,26 @@ class NativePolicySnapshotPublisherInputs:
             for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
         }
 
-    def _compiled_effective_policy(self, *, settled_only: bool = False) -> dict[str, object]:
+    def _compiled_effective_policy(
+        self, *, settled_only: bool = False, workspaces: frozenset[Path] | None = None
+    ) -> dict[str, object]:
         """Build the native snapshot input off the synchronous hook path.
 
         ``settled_only`` omits workspaces still awaiting their first ACK so
-        observation compares like with the published snapshot.
+        observation compares like with the published snapshot. ``workspaces``
+        pins publication to the set its ACK will release.
         """
 
         from .config import load_guard_config
         from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
-            selected = self._workspace_paths - self._pending_workspace_paths if settled_only else self._workspace_paths
-            workspaces = tuple(sorted(selected, key=str))
+            selected = self._workspace_paths if workspaces is None else self._workspace_paths & workspaces
+            if settled_only:
+                selected = selected - self._pending_workspace_paths
+            selected_workspaces = tuple(sorted(selected, key=str))
         configs = [load_guard_config(self.guard_home)]
-        configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in workspaces)
+        configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
         policy = _merge_effective_native_policies(
             tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
         )

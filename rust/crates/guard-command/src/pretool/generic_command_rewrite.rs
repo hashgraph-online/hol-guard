@@ -37,7 +37,17 @@ fn rewrite_maps(value: &mut Value, original: &str, command: &str, depth: usize) 
                     rewrite_command_value(slot, original, command, next);
                 }
             }
-            for key in EMBEDDED_ARGUMENT_KEYS {
+            // Extraction also reads an encoded `parameters` string as a
+            // command value, so a JSON array there may carry the command.
+            if let Some(slot @ Value::String(_)) = record.get_mut("parameters") {
+                rewrite_encoded(slot, |parsed| {
+                    rewrite_command_value(parsed, original, command, next);
+                });
+            }
+            for key in EMBEDDED_ARGUMENT_KEYS
+                .into_iter()
+                .filter(|key| *key != "parameters")
+            {
                 if let Some(slot @ Value::String(_)) = record.get_mut(key) {
                     rewrite_encoded(slot, |parsed| rewrite_maps(parsed, original, command, next));
                 }
@@ -123,6 +133,17 @@ mod tests {
         assert_eq!(projected["toolInput"], "{\"command\":\"ls\"}");
         assert_eq!(projected["arguments"], "{\"cmd\":\"[\\\"ls\\\"]\"}");
         assert_eq!(projected["commands"], "ls > /dev/null && rm -rf /");
+    }
+
+    #[test]
+    fn rewrites_json_array_parameters_command() {
+        let payload = json!({
+            "parameters": "[\"ls > /dev/null\"]",
+            "arguments": "[\"ls > /dev/null\"]",
+        });
+        let projected = payload_with_command(&payload, "ls > /dev/null", "ls");
+        assert_eq!(projected["parameters"], "[\"ls\"]");
+        assert_eq!(projected["arguments"], "[\"ls > /dev/null\"]");
     }
 
     #[test]

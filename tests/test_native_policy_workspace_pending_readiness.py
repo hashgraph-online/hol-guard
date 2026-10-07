@@ -226,3 +226,34 @@ def test_new_workspace_waits_for_its_publish_despite_a_stale_error(
         waiting.set()
         publish.join(timeout=2.0)
         publisher.close()
+
+
+def test_workspace_registered_after_capture_is_not_compiled_into_the_ack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publisher, _resident, existing = _published(tmp_path, monkeypatch)
+    late = tmp_path / "late"
+    late.mkdir()
+    (late / ".hol-guard.toml").write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+    original_context = publisher._publication_context
+
+    def register_during_publication(**kwargs: object) -> object:
+        # Arrives after the publish captured its workspace set but before
+        # the policy is compiled.
+        assert publisher.register_workspace(late)
+        return original_context(**kwargs)
+
+    monkeypatch.setattr(publisher, "_publication_context", register_during_publication)
+    publisher.request_publish()
+    try:
+        publisher._publish_once()
+        assert publisher.workspace_policy_pending(late)
+        assert not publisher._policy_input_changed(), "The ACK must match the settled-only reconcile"
+        assert publisher.wait_until_ready(time.monotonic() + 0.05, workspace=existing)
+
+        monkeypatch.setattr(publisher, "_publication_context", original_context)
+        publisher._publish_once()
+        assert not publisher.workspace_policy_pending(late)
+        assert not publisher._policy_input_changed()
+    finally:
+        publisher.close()
