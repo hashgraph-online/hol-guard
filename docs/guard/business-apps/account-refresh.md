@@ -1,7 +1,7 @@
 # Registered worker account refresh
 
 The worker account retains the original registered client ID/secret, approved
-hosted domains and private namespace key beside its refresh credential. These
+hosted domains and private identity binding key beside its refresh credential. These
 fields come from the authenticated worker's original authorization configuration;
 no browser/tool payload can supply refresh configuration or a token endpoint.
 Per-input credentials contain none of this renewal material.

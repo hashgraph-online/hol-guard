@@ -7,7 +7,7 @@ const USERINFO_URL: &str = "https://openidconnect.googleapis.com/v1/userinfo";
 pub(super) struct Registration {
     client_id: String,
     client_secret: Zeroizing<String>,
-    namespace_key: Zeroizing<[u8; 32]>,
+    identity_key: Zeroizing<[u8; 32]>,
     hosted_domains: BTreeSet<String>,
     pub(super) observed_at: u64,
 }
@@ -17,7 +17,7 @@ impl Registration {
         Self {
             client_id: session.client_id.as_str().to_owned(),
             client_secret: Zeroizing::new(session.client_secret.as_str().to_owned()),
-            namespace_key: Zeroizing::new(session.challenge.namespace_key),
+            identity_key: Zeroizing::new(session.challenge.identity_key),
             hosted_domains: session.challenge.hosted_domains.clone(),
             observed_at: session.challenge.created_at,
         }
@@ -26,7 +26,7 @@ impl Registration {
         Self {
             client_id: self.client_id.clone(),
             client_secret: Zeroizing::new(self.client_secret.as_str().to_owned()),
-            namespace_key: Zeroizing::new(*self.namespace_key),
+            identity_key: Zeroizing::new(*self.identity_key),
             hosted_domains: self.hosted_domains.clone(),
             observed_at,
         }
@@ -192,12 +192,12 @@ impl GoogleSendCredential {
         }
         let observed = clock()?;
         let account_binding = crate::binding(
-            &registration.namespace_key,
+            &registration.identity_key,
             b"hol-guard.google-account.v1\0",
             &[crate::ISSUER, &registration.client_id, &info.hd, &info.sub],
         );
         let tenant_binding = crate::binding(
-            &registration.namespace_key,
+            &registration.identity_key,
             b"hol-guard.google-tenant.v1\0",
             &[crate::ISSUER, &info.hd],
         );

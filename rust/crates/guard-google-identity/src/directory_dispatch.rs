@@ -37,12 +37,12 @@ impl PreparedGoogleBusinessRequest {
             .account_binding
             .as_deref()
             .ok_or(GoogleDispatchError::InputChanged)?;
-        let namespace = &self.resolved.directory.namespace_key;
+        let identity_key = &self.resolved.directory.identity_key;
         let input = self.resolved.input.into_input();
         match send(input, owned.primary_bytes())? {
             RawSendAttempt::Accepted(ack) => Ok(GoogleSendAttempt::ApiAccepted {
                 message_binding: crate::binding(
-                    namespace,
+                    identity_key,
                     b"hol-guard.google-send-acknowledgement.v1\0",
                     &[account, ack.id.as_str(), ack.thread_id.as_str()],
                 ),
