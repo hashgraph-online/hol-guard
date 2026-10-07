@@ -1,41 +1,45 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import time
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
-from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
-from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
-from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
-from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
 from codex_plugin_scanner.guard.runtime.hook_review_types import (
     HookReviewRequest,
     HookReviewResponse,
     HookSourceFileRef,
 )
-from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
-from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 pytestmark = pytest.mark.skipif(not _NATIVE_BINARY, reason="compiled native runtime is required")
 
+_EXPECTATIONS_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "tests"
+    / "fixtures"
+    / "native-hook-parity"
+    / "differential-expectations.v1.json"
+)
+_EXPECTATIONS = json.loads(_EXPECTATIONS_PATH.read_text(encoding="utf-8"))["suites"]["differential"]
 
-def _secret_token() -> str:
-    return "".join(("gh", "p_")) + "d" * 30
 
-
-def _engine(store: GuardStore) -> HookReviewEngine:
-    return HookReviewEngine(
-        store=store,
-        scanner=ContentScanner(),
-        cache=HookDecisionCache(store),
-        config_loader=lambda guard_home, workspace: load_guard_config(guard_home, workspace=workspace),
-    )
+def _expectation(case_id: str) -> dict[str, object]:
+    try:
+        return _EXPECTATIONS[case_id]
+    except KeyError:
+        raise AssertionError(f"missing oracle expectation for case {case_id}") from None
 
 
 def _inline_request(
@@ -83,7 +87,7 @@ def _source_request(
     source_ref = HookSourceFileRef(
         version=1,
         path=reference_path,
-        output_sha256=sha256_text(text),
+        output_sha256=_sha256_text(text),
         output_chars=len(text),
         tool_input_path=reference_path,
     )
@@ -115,22 +119,20 @@ def _source_request(
     )
 
 
-def _assert_parity(request: HookReviewRequest) -> None:
-    store = GuardStore(request.guard_home)
-    python_response = _engine(store).review(request)
+def _assert_parity(request: HookReviewRequest, case_id: str) -> None:
     with native_policy_snapshot(request.guard_home) as snapshot:
         native_response = review_post_tool_native(request, observe_mode=False, policy_snapshot=snapshot)
     assert native_response is not None
-    _assert_native_security_floor(native_response, python_response)
+    _assert_native_security_floor(native_response, _expectation(case_id))
 
 
 def _assert_native_security_floor(
     native_response: HookReviewResponse,
-    python_response: HookReviewResponse,
+    expected: dict[str, object],
 ) -> None:
     """Allow native policy floors to add metadata without weakening the oracle."""
 
-    if python_response.decision == "deny":
+    if expected["decision"] == "deny":
         assert native_response.decision == "deny"
         assert native_response.model_output_action == "block"
         return
@@ -139,9 +141,8 @@ def _assert_native_security_floor(
         return
     assert native_response.decision == "allow"
     native_signature = parity_signature(native_response)
-    python_signature = parity_signature(python_response)
-    assert native_signature[1] == python_signature[1]
-    assert native_signature[6:] == python_signature[6:]
+    assert native_signature[1] == expected["model_output_action"]
+    assert native_signature[6:] == (expected["reviewed_output_sha256"], expected["excerpt_sha256"])
 
 
 @pytest.mark.parametrize(
@@ -169,9 +170,9 @@ def _assert_native_security_floor(
 )
 def test_compiled_native_inline_allow_parity(tmp_path: Path, name: str, payload: dict[str, object]) -> None:
     try:
-        _assert_parity(_inline_request(tmp_path=tmp_path, payload=payload, request_id=name))
+        _assert_parity(_inline_request(tmp_path=tmp_path, payload=payload, request_id=name), name)
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_inline_secret_parity(tmp_path: Path) -> None:
@@ -181,10 +182,15 @@ def test_compiled_native_inline_secret_parity(tmp_path: Path) -> None:
                 tmp_path=tmp_path,
                 payload={"stdout": "ok", "stderr": _secret_token()},
                 request_id="inline-secret",
-            )
+            ),
+            "inline-secret",
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
+
+
+def _secret_token() -> str:
+    return "".join(("gh", "p_")) + "d" * 30
 
 
 def test_compiled_native_clean_source_read_parity(tmp_path: Path) -> None:
@@ -195,10 +201,11 @@ def test_compiled_native_clean_source_read_parity(tmp_path: Path) -> None:
                 reference_path="src/example.ts",
                 text="export const value = 1;\n",
                 request_id="source-clean",
-            )
+            ),
+            "source-clean",
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_secret_source_read_parity(tmp_path: Path) -> None:
@@ -209,10 +216,11 @@ def test_compiled_native_secret_source_read_parity(tmp_path: Path) -> None:
                 reference_path="src/private.ts",
                 text=f"export const value = '{_secret_token()}';\n",
                 request_id="source-secret",
-            )
+            ),
+            "source-secret",
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 @pytest.mark.parametrize(
@@ -228,17 +236,19 @@ def test_compiled_native_rejected_workspace_source_path_parity(
     relative_path: str,
     text: str,
 ) -> None:
+    case_id = f"source-rejected-{relative_path.replace('/', '-')}"
     try:
         _assert_parity(
             _source_request(
                 workspace=tmp_path,
                 reference_path=relative_path,
                 text=text,
-                request_id=f"source-rejected-{relative_path.replace('/', '-')}",
-            )
+                request_id=case_id,
+            ),
+            case_id,
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 @pytest.mark.parametrize(
@@ -254,17 +264,19 @@ def test_compiled_native_allowed_workspace_source_path_parity(
     relative_path: str,
     text: str,
 ) -> None:
+    case_id = f"source-allowed-{relative_path.replace('/', '-')}"
     try:
         _assert_parity(
             _source_request(
                 workspace=tmp_path,
                 reference_path=relative_path,
                 text=text,
-                request_id=f"source-allowed-{relative_path.replace('/', '-')}",
-            )
+                request_id=case_id,
+            ),
+            case_id,
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlink source fixture is POSIX-only")
@@ -284,10 +296,11 @@ def test_compiled_native_source_symlink_rejection_parity(tmp_path: Path) -> None
                 text=text,
                 write_file=False,
                 request_id="source-symlink",
-            )
+            ),
+            "source-symlink",
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_external_sibling_checkout_source_parity(tmp_path: Path) -> None:
@@ -312,10 +325,11 @@ def test_compiled_native_external_sibling_checkout_source_parity(tmp_path: Path)
                 write_file=False,
                 external_allowed=True,
                 request_id="source-external-sibling",
-            )
+            ),
+            "source-external-sibling",
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_known_skill_source_parity(tmp_path: Path) -> None:
@@ -337,7 +351,8 @@ def test_compiled_native_known_skill_source_parity(tmp_path: Path) -> None:
                 guard_home=home / "guard-home",
                 write_file=False,
                 request_id="source-known-skill",
-            )
+            ),
+            "source-known-skill",
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()

@@ -11,68 +11,104 @@ The stable contribution ID is the public identity. `command.blitcp` uses
 `mcp.filesystem` keeps that identity even though its runtime catalog entry is
 `command.mcp-filesystem`.
 
-Publisher verification checks the numeric GitHub account that authored the merged
-pull request introducing that specific file. A profile link, username, repository
-membership, or authorship of an unrelated change is not sufficient. The contribution
-must still exist on canonical `main`. Ambiguous history, renames, direct pushes,
-and disputed attribution require maintainer review. An ordinary later edit does
-not replace the original contributor's claim.
+Publisher verification uses numeric GitHub account IDs recorded in accepted
+publisher metadata. Pull-request authorship is attribution evidence only; it never
+creates publisher authority by itself. A profile link, username, repository
+membership, authorship of the contribution, commit email, or authorship of an
+unrelated change is not sufficient. The contribution and the authority-bearing
+metadata must still exist on canonical `main`. Ambiguous history, renames, direct
+pushes, and disputed attribution require maintainer review rather than an automatic
+grant.
+
+The first accepted claimant set is established through normal protected repository
+review of `maintainerGithubIds`. Adding or removing one of those IDs is an
+authority-bearing metadata change and must be reviewed as such. An empty claimant
+set deliberately leaves the extension unclaimable until maintainers accept an
+explicit mapping; consumers must not fall back to PR authorship.
 
 First-party and trusted-library coverage is project-maintained. It is not claimable
 by the last person who edited its source.
 
 ## Optional presentation file
 
-Existing contributors do not need a sidecar merely to establish the introducing-PR
-relationship. Optional presentation data belongs in:
+Publisher presentation and claim authority belong in:
 
 ```text
 contributions/extension-listings/<contribution-id>.json
 ```
 
-Example for `command.blitcp`:
+A sidecar is optional for public presentation, but an external extension cannot be
+automatically claimed until an accepted sidecar names at least one authorized
+numeric GitHub ID.
+
+New sidecars use v2. v1 sidecars remain readable so existing accepted mappings
+keep their exact semantics. Example for `command.blitcp`:
 
 ```json
 {
-  "schemaVersion": "guard.extension-listing.v1",
+  "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "command.blitcp",
   "tagline": "Reviewed file-transfer operation coverage for blitcp.",
+  "summary": "Reviews destructive file-transfer operations through a bounded native command contract.",
   "category": "delivery-remote",
   "limitations": [
     "Coverage is limited to the reviewed operations and the surrounding Guard policy."
   ],
   "documentationUrl": "https://github.com/hashgraph-online/hol-guard",
-  "tags": ["file-transfer"]
+  "tags": ["file-transfer"],
+  "contributors": [
+    {"githubId": "12345678", "githubLogin": "example-author", "roles": ["author"]}
+  ],
+  "originalContributions": [
+    {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3020"}
+  ],
+  "upstream": {"name": "Blitcp", "url": "https://github.com/example/blitcp"},
+  "maintainerGithubIds": ["12345678"]
 }
 ```
 
-The [`JSON Schema`](../../../contracts/extensions/listing.v1.schema.json) checks
+The [`v2 JSON Schema`](../../../contracts/extensions/listing.v2.schema.json) checks
 field shapes, bounds, enumerated values, and duplicate array members. The Python
 listing validator additionally checks plain text, public URL policy, symlinked
 paths, and filename identity. The exporter checks that each sidecar belongs to a
 native contribution. These filesystem and source checks are not JSON Schema
 capabilities. URLs are references only; validation never fetches them.
 
-Use a public HTTPS hostname without credentials, a nonstandard port, or a literal
-IP address. Do not include policy, executable code, activation state, trust classes,
-private email addresses, secrets, or commands. Native contribution contracts remain
-the only source of runtime behavior.
+Use a public HTTPS hostname without credentials. Nonstandard ports and literal IP
+addresses are not accepted. Do not include policy, executable code, activation
+state, trust classes, private email addresses, secrets, or commands. Native
+contribution contracts remain the only source of runtime behavior.
 
-### Reviewed delegation
+### Public credit and upstream references
+
+`contributors` is a bounded public credit list with stable numeric GitHub IDs,
+display logins, and attribution roles. `originalContributions` records public
+pull-request, issue, commit, or discussion URLs. `upstream` is an optional
+public project reference. These fields help a publisher profile prefill public
+attribution, but they are never claim authority, runtime behavior, or a reason
+to infer GitHub access. A credit can be present while `maintainerGithubIds` is
+empty; that extension stays unclaimable until maintainers review an explicit
+mapping.
+
+### Reviewed claim authority
 
 `maintainerGithubIds` may contain up to eight numeric GitHub IDs as decimal strings.
-Omit it unless maintainers have reviewed that delegation. It can establish another
-eligible profile claimant, not runtime trust or upstream ownership. Once claimed,
-additional roles and transfers require an explicit invitation and the named
-account's acceptance. Renaming a GitHub account must not change ownership.
+Each ID is an explicit, reviewed authorization to manage the extension's publisher
+profile. It never changes runtime trust, code ownership, or upstream ownership.
+GitHub login names remain display data and can change without changing identity.
 
-Omitting `maintainerGithubIds` and providing an empty array both mean there are
-no additional delegates. Neither removes the introducing-PR author's eligibility.
-The directory always emits an array; consumers use `claimPolicy: provenance` to
-verify the introducing author independently and treat the array as supplemental.
+Omitting `maintainerGithubIds` and providing an empty array both mean there is no
+automatic publisher claimant. Pull-request authorship remains useful context for a
+maintainer review, but it cannot substitute for an accepted numeric-ID mapping.
+The directory always emits an array. For `claimPolicy: provenance`, Cloud must grant
+or transfer elevated publisher authority only to IDs present in that accepted array.
 `claimPolicy: project` never grants a third-party claim through this field.
-Contribution IDs retain the native 256-character contract; mapped MCP runtime IDs
-and source paths allow the additional prefix and filename characters.
+
+Once claimed, profile editors may be invited explicitly without gaining source
+maintainer authority. Primary or maintainer roles must remain bound to the current
+accepted claimant set and must be revalidated before a transfer or other elevated
+action. Contribution IDs retain the native 256-character contract; mapped MCP
+runtime IDs and source paths allow the additional prefix and filename characters.
 
 ## Generate a separate listing template
 
@@ -97,11 +133,17 @@ uv run python scripts/export_extension_directory.py --check
 uv run python scripts/render_command_extension_directory.py --check
 ```
 
-The compact generated [`catalog.v1.json`](catalog.v1.json) follows
-[`directory.v1.schema.json`](../../../contracts/extensions/directory.v1.schema.json).
-It carries contribution IDs and digests, runtime IDs, coverage counts, MCP
-inheritance, native trust classes, and presentation fields. It carries no activation
-decisions, installation counts, ratings, certification claims, or secrets.
+The compact generated [`catalog.v1.json`](catalog.v1.json) retains the existing
+claim-source binding. [`catalog.v2.json`](catalog.v2.json) follows
+[`directory.v2.schema.json`](../../../contracts/extensions/directory.v2.schema.json)
+and adds v2 listing credit, upstream, listing-byte provenance, and command
+authoring source evidence. `sourcePath` and `contributionDigest` in both
+directories remain the exact generated descriptor bytes used by current claim
+verification. The v2 `authoringSource.byteDigest` is the raw canonical source
+file digest; `authoringSource.nativeDigest` is the Rust typed-source digest.
+They are intentionally distinct. Catalog default floors describe the shipped rule baseline
+(`allow`, `warn`, `review`, `require-reapproval`, `sandbox-required`, `block`); they are
+not workspace activation, installation counts, ratings, certification claims, or secrets.
 
 The exporter reads each contribution once through the bounded regular-file reader,
 validates that payload, and hashes the same bytes. Catalog writes stage a complete
@@ -109,12 +151,32 @@ file and check output paths before replacement instead of truncating through a
 symlink. Contribution files use LF checkout semantics so digests match canonical
 Git blobs on Windows, macOS, and Linux. Consumers pin an immutable source commit
 and verify provenance independently. A source merge does not prove release
-availability or enabled protection on a device.
+availability, publisher authority, or enabled protection on a device.
 
 ## Cloud availability
 
-The directory and metadata contract can be used independently of Guard Cloud.
-Extension Studio is a separate rollout. This helper deliberately includes no
-sign-in instruction or claim notification. The Cloud entry point must be deployed
-and verified before contributor invitations are enabled. A maintainer profile is
-not a security certification or an upstream endorsement.
+Extension Studio is available at `https://hol.org/guard/extension-studio`. A deep
+link may select an extension with `?extension=<contribution-id>`. Signing in or
+opening that link never grants authority by itself; Cloud re-reads canonical source
+and verifies the current numeric GitHub ID before accepting a claim.
+
+The post-merge `Extension Claim Notice` workflow runs only after a pull request is
+merged into the repository's default branch and only for native contribution or
+publisher-listing changes. It compares the merged source with the pull request's
+recorded pre-merge base revision, verifies both ancestry and canonical-branch
+membership, reads the accepted sidecar at the merged source SHA, and notifies only
+newly accepted `maintainerGithubIds`. For a newly introduced native contribution,
+all accepted IDs in its merged sidecar are eligible for the notice. Pull-request
+authorship is never substituted for missing authority.
+
+Rename-affected contributions and publisher listings are never invited
+automatically. After maintainers review the renamed identity and claimant mapping,
+they can use the manual backfill with `allow_renames` enabled. This keeps rename
+handling behind an explicit maintainer decision instead of treating a new filename
+as a new source of authority.
+
+Notices are idempotent on each merged PR and can be backfilled with the workflow's
+manual `pr_number` input. A removed, non-canonical, malformed, or authority-free
+listing produces no claim invitation. The notice is only an onboarding link; the
+publisher profile remains separate from runtime trust, activation, security
+certification, and upstream ownership.

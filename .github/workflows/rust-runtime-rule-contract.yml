@@ -6,12 +6,14 @@ on:
       - "rust/**"
       - "ci/native_runtime/test_native_rule_contract.py"
       - ".github/workflows/rust-runtime-rule-contract.yml"
+      - ".github/actions/setup-rust/**"
   push:
     branches: [main]
     paths:
       - "rust/**"
       - "ci/native_runtime/test_native_rule_contract.py"
       - ".github/workflows/rust-runtime-rule-contract.yml"
+      - ".github/actions/setup-rust/**"
   workflow_dispatch:
 
 permissions:
@@ -37,11 +39,14 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
+      # CI/native-workspace owns the required Linux proof on main PRs and pushes.
       - name: Validate locked Rust workspace
+        if: >-
+          !((github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps > /dev/null
           rustfmt --edition 2021 --check rust/crates/guard-rule-contract/src/lib.rs rust/crates/guard-runtime/src/main.rs
@@ -58,9 +63,12 @@ jobs:
         run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           rust/target/release/hol-guard-runtime self-test --json
           rust/target/release/hol-guard-runtime rule-contract --json
+      - name: Stage current native projections
+        run: |
+          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
       - name: Prove runtime digest binds exact component source bytes
         env:
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime

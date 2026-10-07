@@ -2,11 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniChevronDown,
-  HiMiniExclamationCircle,
   HiMiniWrenchScrewdriver,
 } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
-import { harnessDisplayName } from "./approval-center-utils";
 import {
   safeCloudConnectUrl,
   startOrRecoverCloudConnect,
@@ -15,18 +13,36 @@ import {
 } from "./guard-cloud-connect-flow";
 import { openPackageFirewallAuthorizeFallback } from "./package-firewall-connect-browser";
 import type {
-  GuardProtectionCheck,
   GuardProtectionHealth,
 } from "./guard-types";
 import { defaultConnectHarness } from "./apps/app-catalog";
-import { remainingProtectionRepairParts } from "./protection-health";
-import { recoverySummary, repairButtonLabel } from "./fleet-protection-recovery-copy";
-import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
+import {
+  hasRepairableProtectionGap,
+  isUnsupportedPlatformCheck,
+  remainingProtectionRepairParts,
+} from "./protection-health";
+import {
+  recoverySummary,
+  repairButtonLabel,
+} from "./fleet-protection-recovery-copy";
+import {
+  actionForCheck,
+  ProtectionGapItem,
+  StalledRepairPanel,
+  TargetedRepairButton,
+} from "./fleet-protection-recovery-parts";
+import {
+  activeFailedHarnesses,
+  nextProtectionRepairOutcome,
+  protectionGapSignature,
+  ProtectionRepairFlowError,
+  RECHECK_UNAVAILABLE_SIGNATURE,
+  repairOutcomeIsStalled,
+  resetRepairOutcomeTracker,
+} from "./protection-repair-flow";
+import type { ProtectionRepairOutcomeTracker } from "./protection-repair-flow";
 
-type GapAction = {
-  label: string;
-  detail: string;
-};
+export { hasRepairableProtectionGap, isUnsupportedPlatformCheck } from "./protection-health";
 
 type RepairState = {
   status: "working" | "success" | "error";
@@ -56,50 +72,6 @@ type CloudConnectState = {
   status: "working" | "pending" | "success" | "error";
 };
 
-const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
-  harness_hooks: {
-    label: "App hooks",
-    detail: "One or more app hooks need setup or repair.",
-  },
-  daemon: {
-    label: "Local runtime",
-    detail:
-      "The local Guard runtime needs attention before protection can finish.",
-  },
-  policy_engine: {
-    label: "Local policy engine",
-    detail: "Guard could not confirm the local policy engine is ready.",
-  },
-  rule_packs: {
-    label: "Local rule packs",
-    detail: "Guard cannot confirm the active local rule-pack proof yet.",
-  },
-  decision_plane_compatibility: {
-    label: "Decision plane",
-    detail:
-      "Guard reruns the decision-plane compatibility probe during repair. Retry here if it remains unproven.",
-  },
-  containment_compatibility: {
-    label: "Containment",
-    detail:
-      "Guard reruns the containment compatibility probe during repair. Retry here if it remains unproven.",
-  },
-  sandbox: {
-    label: "Sandbox",
-    detail:
-      "Guard reruns the sandbox enforcement probe during repair. Retry here if it remains unproven.",
-  },
-  decision_stream: {
-    label: "Command evidence",
-    detail:
-      "Guard attempts evidence-store recovery during repair. Run a protected command only if fresh proof is still needed.",
-  },
-  tamper_checks: {
-    label: "Local integrity checks",
-    detail: "Managed Guard files or hooks did not pass integrity checks.",
-  },
-};
-
 export function cloudPolicyRecoveryHint(input: CloudPolicyRecoveryInput): CloudPolicyRecoveryHint | null {
   const cloudFailed = input.cloudSyncState === "failed" || Boolean(input.cloudPolicySyncError);
   if (input.cloudState !== "local_only" && (!cloudFailed || !input.dashboardUrl)) return null;
@@ -111,68 +83,6 @@ export function cloudPolicyRecoveryHint(input: CloudPolicyRecoveryInput): CloudP
     startsOAuth: input.cloudState === "local_only",
     title: "Guard Cloud policy proof",
   };
-}
-
-function actionForCheck(
-  check: GuardProtectionCheck,
-  repairHarness?: string,
-): GapAction {
-  if (check.check_id === "harness_hooks" && repairHarness) {
-    return {
-      label: "App hooks",
-      detail: `${harnessDisplayName(repairHarness)} hooks need setup or repair.`,
-    };
-  }
-  const action = PROTECTION_CHECK_ACTIONS[check.check_id];
-  return action
-    ? action
-    : {
-        label: check.check_id.replace(/_/g, " "),
-        detail: "Guard could not confirm this protection proof.",
-      };
-}
-
-function ProtectionGapItem({
-  action,
-  check,
-}: {
-  action: GapAction;
-  check: GuardProtectionCheck;
-}) {
-  return (
-    <li className="flex items-start gap-2 border-t border-brand-attention/10 py-3 first:border-t-0">
-      <div className="flex items-start gap-2 text-xs text-slate-600">
-        <HiMiniExclamationCircle
-          className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${check.status === "fail" ? "text-brand-attention" : "text-slate-400"}`}
-          aria-hidden="true"
-        />
-        <span>
-          <strong className="font-semibold text-brand-dark">
-            {action.label}
-          </strong>
-          <span className="ml-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-            {check.status === "fail" ? "Failed" : "Unproven"}
-          </span>
-          <span className="mt-0.5 block">{action.detail}</span>
-        </span>
-      </div>
-    </li>
-  );
-}
-
-function TargetedRepairButton({
-  harness,
-  onRepair,
-}: {
-  harness: string;
-  onRepair: (harness: string) => void;
-}) {
-  const handleRepair = useCallback(() => onRepair(harness), [harness, onRepair]);
-  return (
-    <ActionButton onClick={handleRepair} variant="outline">
-      Open {harnessDisplayName(harness)} repair
-    </ActionButton>
-  );
 }
 
 type FleetProtectionRecoveryProps = {
@@ -208,11 +118,19 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const [repairState, setRepairState] = useState<RepairState | null>(null);
   const [cloudConnectState, setCloudConnectState] = useState<CloudConnectState | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [repairOutcomeTracker, setRepairOutcomeTracker] = useState<ProtectionRepairOutcomeTracker | null>(null);
   const cloudConnectControllerRef = useRef<AbortController | null>(null);
   const gaps = props.health.checks.filter((check) => check.status !== "pass");
-  const failCount = gaps.filter((check) => check.status === "fail").length;
-  const unknownCount = gaps.length - failCount;
+  const hasRepairableGaps = hasRepairableProtectionGap(gaps);
+  const unsupportedGaps = gaps.filter(isUnsupportedPlatformCheck);
+  const hasUnsupportedGaps = unsupportedGaps.length > 0;
+  const unsupportedOnly = gaps.length > 0 && !hasRepairableGaps;
+  const repairableGaps = gaps.filter((check) => !isUnsupportedPlatformCheck(check));
+  const failCount = repairableGaps.filter((check) => check.status === "fail").length;
+  const unknownCount = repairableGaps.length - failCount;
   const needsConnectedApp = remainingProtectionRepairParts(props.health).needsConnectedApp;
+  const currentGapSignature = protectionGapSignature(props.health.checks);
+  const repairStalled = repairOutcomeIsStalled(repairOutcomeTracker, currentGapSignature);
   const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
   const repairHarnessKey = props.repairHarnesses.join("\u0000");
   const repairHarnessList = useMemo(
@@ -226,19 +144,34 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   );
 
   const handleRepair = useCallback(async () => {
+    if (!hasRepairableGaps) return;
     setRepairState({
       status: "working",
-      message: "Repairing app hooks, local runtime, local rule packs, and local integrity…",
+      message: hasUnsupportedGaps
+        ? "Repairing supported local protection. Containment remains unavailable on this platform…"
+        : "Repairing app hooks, local runtime, local rule packs, and local integrity…",
     });
     try {
       const message = await props.onRepairProtection(props.repairHarnesses);
       setRepairState({ status: "success", message });
+      setRepairOutcomeTracker(null);
       setDetailsOpen(true);
     } catch (error: unknown) {
       const message =
         error instanceof Error
           ? error.message
           : "Repair paused before every protection step completed. Retry to continue safely.";
+      const outcomeSignature =
+        error instanceof ProtectionRepairFlowError && error.signature
+          ? error.signature
+          : protectionGapSignature(props.health.checks);
+      const outcomeHealthSignature =
+        outcomeSignature === RECHECK_UNAVAILABLE_SIGNATURE
+          ? protectionGapSignature(props.health.checks)
+          : outcomeSignature;
+      setRepairOutcomeTracker((tracker) =>
+        nextProtectionRepairOutcome(tracker, outcomeSignature, outcomeHealthSignature),
+      );
       setRepairState({
         status: "error",
         message,
@@ -247,7 +180,13 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
       });
       setDetailsOpen(true);
     }
-  }, [props.onRepairProtection, props.repairHarnesses]);
+  }, [
+    hasRepairableGaps,
+    hasUnsupportedGaps,
+    props.health.checks,
+    props.onRepairProtection,
+    props.repairHarnesses,
+  ]);
   const connectHarness = props.connectHarness ?? defaultConnectHarness(props.repairHarness, props.repairHarnesses);
   const handleRepairClick = useCallback(() => {
     if (needsConnectedApp && props.onRepairHarness) {
@@ -348,6 +287,10 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
     });
   }, [repairHarnessList]);
 
+  useEffect(() => {
+    setRepairOutcomeTracker((tracker) => resetRepairOutcomeTracker(tracker, currentGapSignature));
+  }, [currentGapSignature]);
+
   if (gaps.length === 0) return null;
   const working = repairState?.status === "working";
   const cloudConnectDisabled = ["working", "success"].includes(
@@ -355,6 +298,24 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   );
   const cloudConnectMessageClassName =
     cloudConnectState?.status === "error" ? "text-sm text-red-600" : "text-sm text-slate-600";
+  let targetedRepairHarnesses: string[] = [];
+  if (repairState?.status === "error") {
+    targetedRepairHarnesses = repairState.failedHarnesses ?? [];
+  } else if (hasRepairableGaps) {
+    targetedRepairHarnesses = repairHarnessList;
+  }
+  const showTargetedRepairActions =
+    !repairStalled
+    && hasRepairableGaps
+    && targetedRepairHarnesses.length > 0
+    && Boolean(props.onRepairHarness);
+  const onRepairHarness = props.onRepairHarness;
+  let recoveryHeading = "Restore local protection";
+  if (unsupportedOnly) {
+    recoveryHeading = "Containment unavailable on this platform";
+  } else if (hasUnsupportedGaps) {
+    recoveryHeading = "Repair supported protection";
+  }
 
   return (
     <section
@@ -369,23 +330,28 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
               aria-hidden="true"
             />
             <h2 className="text-sm font-semibold text-brand-dark">
-              Restore local protection
+              {recoveryHeading}
             </h2>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            {recoverySummary(
-              failCount,
-              unknownCount,
-              needsConnectedApp,
-              gaps
-                .filter((check) => check.status === "fail")
-                .map((check) => actionForCheck(check, props.repairHarness).label),
-            )}
+            {unsupportedOnly
+              ? "Containment controls are unavailable on this platform. Guard remains fail-closed; no repair is available."
+              : recoverySummary(
+                  failCount,
+                  unknownCount,
+                  needsConnectedApp,
+                  repairableGaps
+                    .filter((check) => check.status === "fail")
+                    .map((check) => actionForCheck(check, props.repairHarness).label),
+                  unsupportedGaps.length,
+                )}
           </p>
         </div>
-        <ActionButton onClick={handleRepairClick} disabled={working}>
-          {repairButtonLabel(repairState, needsConnectedApp)}
-        </ActionButton>
+        {hasRepairableGaps && !repairStalled ? (
+          <ActionButton onClick={handleRepairClick} disabled={working}>
+            {repairButtonLabel(repairState, needsConnectedApp, hasUnsupportedGaps)}
+          </ActionButton>
+        ) : null}
       </div>
       {cloudPolicyHint ? (
         <div className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
@@ -418,7 +384,14 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           )}
         </div>
       ) : null}
-      {repairState ? (
+      {repairStalled ? (
+        <StalledRepairPanel
+          tracker={repairOutcomeTracker}
+          repairableGaps={repairableGaps}
+          repairHarness={props.repairHarness}
+        />
+      ) : null}
+      {!repairStalled && repairState && hasRepairableGaps ? (
         <p
           className={`mt-3 flex items-start gap-2 text-sm ${repairState.status === "error" ? "text-red-600" : "text-slate-600"}`}
           aria-live="polite"
@@ -432,13 +405,13 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           {repairState.message}
         </p>
       ) : null}
-      {repairState?.status === "error" && repairState.failedHarnesses?.length && props.onRepairHarness ? (
+      {showTargetedRepairActions && onRepairHarness ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {Array.from(new Set(repairState.failedHarnesses)).map((harness) => (
+          {Array.from(new Set(targetedRepairHarnesses)).map((harness) => (
             <TargetedRepairButton
               key={harness}
               harness={harness}
-              onRepair={props.onRepairHarness}
+              onRepair={onRepairHarness}
             />
           ))}
         </div>
@@ -449,7 +422,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
         aria-expanded={detailsOpen}
         className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
       >
-        View repair details
+        {hasRepairableGaps ? "View repair details" : "View protection details"}
         <HiMiniChevronDown
           className={`h-4 w-4 transition-transform ${detailsOpen ? "rotate-180" : ""}`}
           aria-hidden="true"

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher, executable_names, safe_flag_variant, safe_option_variant
 from .command_extension_specs import CommandExtensionSpec
-from .command_rules import AnyMatcher, CommandSafetyRule
+from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant, ExecutableMatcher
 
 _AWS_OPTIONS = frozenset(
     {
@@ -63,6 +63,12 @@ _GCLOUD_FLAGS = frozenset(
 )
 _AZURE_OPTIONS = frozenset({"--output", "-o", "--query", "--subscription"})
 _AZURE_FLAGS = frozenset({"--debug", "--only-show-errors", "--verbose"})
+AWS_CLI_GLOBAL_OPTIONS = _AWS_OPTIONS
+AWS_CLI_GLOBAL_FLAGS = _AWS_FLAGS
+GCLOUD_CLI_GLOBAL_OPTIONS = _GCLOUD_OPTIONS
+GCLOUD_CLI_GLOBAL_FLAGS = _GCLOUD_FLAGS
+AZURE_CLI_GLOBAL_OPTIONS = _AZURE_OPTIONS
+AZURE_CLI_GLOBAL_FLAGS = _AZURE_FLAGS
 _LDCLI_OPTIONS = frozenset(
     {
         "--access-token",
@@ -87,9 +93,11 @@ _STRIPE_OPTIONS = frozenset(
     }
 )
 _STRIPE_FLAGS = frozenset({"--live", "--latest", "--skip-verify"})
+_AWS_EXECUTABLES = executable_names("aws")
+_AWS_SKELETON_VALUES = frozenset({"input", "output", "yaml-input"})
 
 
-def _aws(*subcommands: str):
+def _aws(*subcommands: str) -> ExecutableMatcher:
     return executable_matcher(
         "aws",
         *subcommands,
@@ -97,6 +105,21 @@ def _aws(*subcommands: str):
         global_flags=_AWS_FLAGS,
         fail_secure_unknown_options=True,
     )
+
+
+def _aws_ops(service: str, *operations: str) -> tuple[ExecutableMatcher, ...]:
+    return tuple(_aws(service, operation) for operation in operations)
+
+
+def _aws_only(matcher: AnyMatcher) -> AnyMatcher | None:
+    children = tuple(
+        child
+        for child in matcher.matchers
+        if isinstance(child, ExecutableMatcher) and child.executables & _AWS_EXECUTABLES
+    )
+    if not children:
+        return None
+    return AnyMatcher(matchers=children)
 
 
 def _gcloud(*subcommands: str, tracks: tuple[str, ...] = ("", "alpha", "beta")):
@@ -123,16 +146,14 @@ def _azure(*subcommands: str):
     )
 
 
-_DNS_DELETE = AnyMatcher(
-    matchers=(
-        _aws("route53", "delete-hosted-zone"),
-        *_gcloud("dns", "managed-zones", "delete"),
-        _azure("network", "dns", "zone", "delete"),
-    )
-)
 _CDN_DELETE = AnyMatcher(
     matchers=(
-        _aws("cloudfront", "delete-distribution"),
+        *_aws_ops(
+            "cloudfront",
+            "delete-distribution",
+            "delete-key-value-store",
+            "delete-vpc-origin",
+        ),
         _azure("cdn", "profile", "delete"),
         _azure("cdn", "endpoint", "delete"),
     )
@@ -148,14 +169,29 @@ _API_GATEWAY_DELETE = AnyMatcher(
 )
 _LOAD_BALANCER_DELETE = AnyMatcher(
     matchers=(
-        _aws("elbv2", "delete-load-balancer"),
+        _aws("elb", "delete-load-balancer"),
+        *_aws_ops(
+            "elbv2",
+            "delete-load-balancer",
+            "delete-listener",
+            "delete-rule",
+            "delete-target-group",
+            "delete-trust-store",
+        ),
         *_gcloud("compute", "forwarding-rules", "delete", tracks=("", "alpha", "beta", "preview")),
         _azure("network", "lb", "delete"),
     )
 )
 _MONITORING_DELETE = AnyMatcher(
     matchers=(
-        _aws("cloudwatch", "delete-alarms"),
+        *_aws_ops(
+            "cloudwatch",
+            "delete-alarms",
+            "delete-anomaly-detector",
+            "delete-dashboards",
+            "delete-insight-rules",
+            "delete-metric-stream",
+        ),
         *_gcloud("monitoring", "policies", "delete"),
         _azure("monitor", "metrics", "alert", "delete"),
         _azure("monitor", "activity-log", "alert", "delete"),
@@ -163,9 +199,15 @@ _MONITORING_DELETE = AnyMatcher(
 )
 _EMAIL_DELETE = AnyMatcher(
     matchers=(
-        _aws("ses", "delete-identity"),
-        _aws("sesv2", "delete-email-identity"),
-        _aws("sesv2", "delete-contact-list"),
+        *_aws_ops("ses", "delete-configuration-set", "delete-identity", "delete-template"),
+        *_aws_ops(
+            "sesv2",
+            "delete-configuration-set",
+            "delete-contact-list",
+            "delete-email-identity",
+            "delete-email-template",
+            "delete-suppressed-destination",
+        ),
     )
 )
 _FEATURE_FLAG_DELETE = AnyMatcher(
@@ -201,6 +243,20 @@ def _rule(
     action_class: str,
     safer_alternative: str,
 ) -> CommandSafetyRule:
+    variants: list[CommandSafeVariant] = [
+        safe_flag_variant(matcher, variant_id="help", title="Command help", flag="--help"),
+    ]
+    aws_matcher = _aws_only(matcher)
+    if aws_matcher is not None:
+        variants.append(
+            safe_option_variant(
+                aws_matcher,
+                variant_id="generate-cli-skeleton",
+                title="AWS request skeleton",
+                option="--generate-cli-skeleton",
+                allowed_values=_AWS_SKELETON_VALUES,
+            )
+        )
     return CommandSafetyRule(
         rule_id=f"{extension_id}.delete",
         title=title,
@@ -210,18 +266,11 @@ def _rule(
         action_classes=(action_class,),
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
-        safe_variants=(safe_flag_variant(matcher, variant_id="help", title="Command help", flag="--help"),),
+        safe_variants=tuple(variants),
     )
 
 
 MANAGED_SERVICE_COMMAND_RULES = (
-    _rule(
-        extension_id="command.dns",
-        title="DNS zone deletion",
-        matcher=_DNS_DELETE,
-        action_class="DNS destructive command",
-        safer_alternative="Export zone records and verify delegation before deleting the zone.",
-    ),
     _rule(
         extension_id="command.cdn",
         title="CDN resource deletion",
@@ -296,21 +345,12 @@ def _spec(
 
 MANAGED_SERVICE_COMMAND_EXTENSION_SPECS = (
     _spec(
-        extension_id="command.dns",
-        name="DNS command protection",
-        description="Reviews hosted-zone deletion through supported cloud CLIs.",
-        action_class="DNS destructive command",
-        safer_alternative="Export zone records and verify delegation before deletion.",
-        reference_urls=(
-            "https://docs.aws.amazon.com/cli/latest/reference/route53/delete-hosted-zone.html",
-            "https://cloud.google.com/sdk/gcloud/reference/dns/managed-zones/delete",
-            "https://learn.microsoft.com/cli/azure/network/dns/zone#az-network-dns-zone-delete",
-        ),
-    ),
-    _spec(
         extension_id="command.cdn",
         name="CDN command protection",
-        description="Reviews distribution, profile, and endpoint deletion through supported cloud CLIs.",
+        description=(
+            "Reviews distribution, VPC origin, key-value-store, profile, and endpoint deletion "
+            "through supported cloud CLIs."
+        ),
         action_class="CDN destructive command",
         safer_alternative="Inspect active domains, origins, and traffic before deletion.",
         reference_urls=(
@@ -335,7 +375,9 @@ MANAGED_SERVICE_COMMAND_EXTENSION_SPECS = (
     _spec(
         extension_id="command.load-balancer",
         name="Load balancer command protection",
-        description="Reviews load-balancer and forwarding-rule deletion through supported cloud CLIs.",
+        description=(
+            "Reviews load-balancer, target-group, listener, and forwarding-rule deletion through supported cloud CLIs."
+        ),
         action_class="Load balancer destructive command",
         safer_alternative="Inspect listeners, targets, DNS, and active traffic before deletion.",
         reference_urls=(
@@ -347,7 +389,7 @@ MANAGED_SERVICE_COMMAND_EXTENSION_SPECS = (
     _spec(
         extension_id="command.monitoring",
         name="Monitoring command protection",
-        description="Reviews alarm and alert deletion through supported cloud CLIs.",
+        description="Reviews alarm, dashboard, metric-stream, and alert deletion through supported cloud CLIs.",
         action_class="Monitoring destructive command",
         safer_alternative="Export alert configuration and verify notification coverage before deletion.",
         reference_urls=(
@@ -360,7 +402,7 @@ MANAGED_SERVICE_COMMAND_EXTENSION_SPECS = (
     _spec(
         extension_id="command.email",
         name="Email service command protection",
-        description="Reviews email identity and contact-list deletion through AWS CLI.",
+        description="Reviews email identity, template, configuration-set, and contact-list deletion through AWS CLI.",
         action_class="Email destructive command",
         safer_alternative="Verify sending dependencies and export configuration before deletion.",
         reference_urls=(

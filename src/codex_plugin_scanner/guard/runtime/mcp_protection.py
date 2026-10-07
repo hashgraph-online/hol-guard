@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
+import os
+import shutil
 from dataclasses import dataclass
-from hashlib import sha256
-from pathlib import PurePath
+from pathlib import Path, PurePath
 
-from .approval_context import build_configured_environment_hash
+from ..native_context import context_mcp_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +19,7 @@ class McpServerIdentity:
     args_hash: str
     package_name: str | None
     package_version: str | None
+    package_source: str
     transport: str
     env_keys: tuple[str, ...]
     env_values_hash: str
@@ -45,39 +46,31 @@ def build_mcp_server_identity(
     env: dict[str, str] | None = None,
     env_keys: tuple[str, ...] = (),
 ) -> McpServerIdentity:
-    """Build a stable server identity with secret-safe configured env binding."""
-
-    package_name, package_version = _package_identity(command, args)
-    env_key_set = {key.strip() for key in env_keys if key.strip()}
-    if env is not None:
-        env_key_set.update(key.strip() for key in env if key.strip())
-    env_keys = tuple(sorted(env_key_set))
-    env_values_hash = build_configured_environment_hash(env, configured_keys=env_keys)
-    args_hash = _stable_digest(list(args))
-    payload = {
-        "command": _command_name(command),
-        # The display-oriented command name is intentionally lossy (for a URL
-        # it is only the final path segment).  Bind the complete configured
-        # command separately so host, scheme, path, and executable-path drift
-        # cannot inherit a saved server/tool approval.
-        "command_hash": _stable_digest(command),
-        "args_hash": args_hash,
-        "package_name": package_name,
-        "package_version": package_version,
-        "transport": transport,
-        "env_keys": list(env_keys),
-        "env_values_hash": env_values_hash,
-    }
+    """Project the native server identity; native failure cannot bind approval."""
+    identity = context_mcp_identity(
+        "mcp_server_identity",
+        {
+            "config_path": config_path,
+            "command": command,
+            "args": list(args),
+            "transport": transport,
+            "environment": list(env.items()) if env is not None else None,
+            "env_keys": list(env_keys),
+        },
+    )
+    if identity is None:
+        raise ValueError("native_mcp_server_identity_unavailable")
     return McpServerIdentity(
-        config_path=config_path,
-        command=command,
-        args_hash=args_hash,
-        package_name=package_name,
-        package_version=package_version,
-        transport=transport,
-        env_keys=env_keys,
-        env_values_hash=env_values_hash,
-        identity_hash=_stable_digest(payload),
+        config_path=identity["config_path"],
+        command=identity["command"],
+        args_hash=identity["args_hash"],
+        package_name=identity["package_name"],
+        package_version=identity["package_version"],
+        package_source=identity["package_source"],
+        transport=identity["transport"],
+        env_values_hash=identity["env_values_hash"],
+        identity_hash=identity["identity_hash"],
+        env_keys=tuple(identity["env_keys"]),
     )
 
 
@@ -90,21 +83,26 @@ def build_mcp_tool_identity(
 ) -> McpToolIdentity:
     """Build a stable identity for one MCP tool definition."""
 
-    schema_hash = _stable_digest(_normalize_json_value(schema))
-    description_hash = _stable_digest((description or "").strip())
-    payload = {
-        "server_hash": server_hash,
-        "tool_name": tool_name,
-        "schema_hash": schema_hash,
-        "description_hash": description_hash,
-    }
-    return McpToolIdentity(
-        server_hash=server_hash,
-        tool_name=tool_name,
-        schema_hash=schema_hash,
-        description_hash=description_hash,
-        identity_hash=_stable_digest(payload),
+    identity = context_mcp_identity(
+        "mcp_tool_identity",
+        {
+            "server_hash": server_hash,
+            "tool_name": tool_name,
+            "schema": schema,
+            "description": description,
+        },
     )
+    if identity is None:
+        raise ValueError("native_mcp_tool_identity_unavailable")
+    return McpToolIdentity(**identity)
+
+
+def _non_secret_mcp_server_command(command: str) -> str:
+    """Return a serialization-safe MCP command without URL credentials."""
+
+    if "://" not in command:
+        return command
+    return _sanitize_package_url(command)
 
 
 def mcp_server_identity_metadata(identity: McpServerIdentity) -> dict[str, object]:
@@ -112,10 +110,11 @@ def mcp_server_identity_metadata(identity: McpServerIdentity) -> dict[str, objec
 
     return {
         "config_path": identity.config_path,
-        "command": identity.command,
+        "command": _non_secret_mcp_server_command(identity.command),
         "args_hash": identity.args_hash,
         "package_name": identity.package_name,
         "package_version": identity.package_version,
+        "package_source": identity.package_source,
         "transport": identity.transport,
         "env_keys": list(identity.env_keys),
         "env_values_hash": identity.env_values_hash,
@@ -135,67 +134,87 @@ def mcp_tool_identity_metadata(identity: McpToolIdentity) -> dict[str, object]:
     }
 
 
-def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, str | None]:
+_PACKAGE_LAUNCHERS = frozenset({"bunx", "npm", "npx", "pnpm", "uvx", "yarn", "pipx"})
+
+
+def package_launcher_name(command: str) -> str | None:
+    """Return the canonical package-launcher basename, if this command is one."""
+
     command_name = _command_name(command)
-    if command_name not in {"bunx", "npm", "npx", "pnpm", "uvx", "yarn", "pipx"}:
-        return None, None
-    package_token = _package_token(command_name=command_name, args=args)
-    if package_token is None:
-        return None, None
-    return _split_package_token(package_token)
+    return command_name if command_name in _PACKAGE_LAUNCHERS else None
 
 
-def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
+def resolved_package_launcher_executable(command: str) -> Path | None:
+    """Resolve a package launcher to a real executable, or None if unknown."""
+
+    launcher = package_launcher_name(command)
+    if launcher is None:
+        return None
+    candidate = Path(command).expanduser()
+    if candidate.is_absolute():
+        try:
+            resolved = candidate.resolve(strict=True)
+        except OSError:
+            return None
+    else:
+        found = _which_package_launcher(command) or _which_package_launcher(launcher)
+        if found is None:
+            return None
+        try:
+            resolved = Path(found).resolve(strict=True)
+        except OSError:
+            return None
+    if not resolved.is_file():
+        return None
+    return resolved
+
+
+def _which_package_launcher(launcher: str) -> str | None:
+    """Resolve a launcher on PATH, skipping Guard package shims."""
+
+    path_value = os.environ.get("PATH", "")
+    parts = [part for part in path_value.split(os.pathsep) if part and not _is_guard_package_shim_dir(part)]
+    if not parts:
+        return None
+    return shutil.which(launcher, path=os.pathsep.join(parts))
+
+
+def _is_guard_package_shim_dir(part: str) -> bool:
+    posix = Path(part).expanduser().as_posix().rstrip("/")
+    return posix.endswith("/package-shims/bin") or "/.hol-guard/package-shims/" in posix
+
+
+_PACKAGE_SOURCE_FLAGS = (
+    "--registry",
+    "--index-url",
+    "--extra-index-url",
+    "--index",
+)
+
+
+def package_source_token(command: str, args: tuple[str, ...]) -> str:
+    """Return a canonical package-source token, or 'default' when none is set."""
+
+    sources: list[str] = []
     index = 0
-    positional_index = 0
-    package_selector_flags = _package_selector_flags(command_name)
-    selected_package: str | None = None
     while index < len(args):
         value = args[index].strip()
-        if not value:
+        matched = False
+        for flag in _PACKAGE_SOURCE_FLAGS:
+            equals = f"{flag}="
+            if value == flag and index + 1 < len(args):
+                sources.append(f"{flag}={args[index + 1].strip()}")
+                index += 2
+                matched = True
+                break
+            if value.startswith(equals):
+                sources.append(f"{flag}={value.partition('=')[2].strip()}")
+                index += 1
+                matched = True
+                break
+        if not matched:
             index += 1
-            continue
-        if positional_index == 0 and value in _launcher_non_package_subcommands(command_name):
-            return None
-        if positional_index == 0 and value in _launcher_subcommands(command_name):
-            index += 1
-            positional_index += 1
-            continue
-        if value in package_selector_flags and index + 1 < len(args):
-            selected_package = args[index + 1].strip() or selected_package
-            index += 2
-            continue
-        if "--package" in package_selector_flags and value.startswith("--package="):
-            package = value.partition("=")[2].strip()
-            selected_package = package or selected_package
-            index += 1
-            continue
-        if value in {"--spec", "--from"} and index + 1 < len(args):
-            package = args[index + 1].strip()
-            selected_package = package or selected_package
-            index += 2
-            continue
-        if value.startswith("--spec=") or value.startswith("--from="):
-            package = value.partition("=")[2].strip()
-            selected_package = package or selected_package
-            index += 1
-            continue
-        if _option_takes_value(command_name=command_name, option=value):
-            index += 2
-            continue
-        if value.startswith("-"):
-            index += 1
-            continue
-        if _looks_like_runtime_path(value):
-            index += 1
-            positional_index += 1
-            continue
-        if selected_package is not None:
-            index += 1
-            positional_index += 1
-            continue
-        return value
-    return selected_package
+    return "|".join(sources) if sources else "default"
 
 
 def _split_package_token(value: str) -> tuple[str | None, str | None]:
@@ -283,149 +302,6 @@ def _url_authority_bounds(value: str) -> tuple[int, int] | None:
         if delimiter_index >= 0:
             authority_end = min(authority_end, delimiter_index)
     return authority_start, authority_end
-
-
-def _option_takes_value(*, command_name: str, option: str) -> bool:
-    option_name = option.strip()
-    if not option_name.startswith("-"):
-        return False
-    if option_name.startswith("--") and "=" in option_name:
-        return False
-    return option_name in _value_options_for_command(command_name)
-
-
-def _launcher_subcommands(command_name: str) -> set[str]:
-    command_specific: dict[str, set[str]] = {
-        "npm": {"exec", "x"},
-        "pipx": {"run"},
-        "pnpm": {"dlx"},
-        "yarn": {"dlx"},
-    }
-    return command_specific.get(command_name, set())
-
-
-def _launcher_non_package_subcommands(command_name: str) -> set[str]:
-    command_specific: dict[str, set[str]] = {
-        "npm": {"ci", "install", "run", "start", "stop", "restart", "test"},
-        "pnpm": {"exec", "run"},
-        "yarn": {"exec", "run"},
-    }
-    return command_specific.get(command_name, set())
-
-
-def _package_selector_flags(command_name: str) -> set[str]:
-    command_specific: dict[str, set[str]] = {
-        "bunx": {"--package", "-p"},
-        "npm": {"--package"},
-        "npx": {"--package", "-p"},
-        "pnpm": {"--package"},
-    }
-    return command_specific.get(command_name, set())
-
-
-def _value_options_for_command(command_name: str) -> set[str]:
-    common = {
-        "--cache",
-        "--cache-dir",
-        "--call",
-        "--cwd",
-        "--prefix",
-        "--python",
-        "--registry",
-        "--userconfig",
-    }
-    command_specific: dict[str, set[str]] = {
-        "bunx": {"-c", "--config", "--package"},
-        "npm": {"-c", "-w", "--workspace"},
-        "npx": {"-c", "-w", "--workspace"},
-        "pipx": {"-i", "--index-url", "--pip-args", "--suffix", "--with"},
-        "pnpm": {"-C", "--allow-build", "--dir", "--filter", "--reporter"},
-        "uvx": {
-            "-P",
-            "-b",
-            "-C",
-            "-c",
-            "-f",
-            "-i",
-            "-p",
-            "-w",
-            "--allow-insecure-host",
-            "--cache-dir",
-            "--color",
-            "--config-file",
-            "--config-setting",
-            "--config-settings-package",
-            "--default-index",
-            "--build-constraints",
-            "--constraints",
-            "--directory",
-            "--env-file",
-            "--extra-index-url",
-            "--exclude-newer",
-            "--exclude-newer-package",
-            "--find-links",
-            "--fork-strategy",
-            "--from",
-            "--index",
-            "--index-url",
-            "--index-strategy",
-            "--keyring-provider",
-            "--link-mode",
-            "--no-binary-package",
-            "--no-build-isolation-package",
-            "--no-build-package",
-            "--no-sources-package",
-            "--overrides",
-            "--prerelease",
-            "--project",
-            "--python-platform",
-            "--refresh-package",
-            "--reinstall-package",
-            "--resolution",
-            "--torch-backend",
-            "--upgrade-package",
-            "--with",
-            "--with-editable",
-            "--with-requirements",
-        },
-        "yarn": {"--cwd", "--use-yarnrc"},
-    }
-    return common | command_specific.get(command_name, set())
-
-
-def _looks_like_runtime_path(value: str) -> bool:
-    normalized = value.strip().replace("\\", "/")
-    if normalized.startswith(("./", "../", "~/", "/")):
-        return True
-    suffix = PurePath(normalized).suffix.lower()
-    if suffix not in {".cjs", ".js", ".json", ".mjs", ".py", ".ts"}:
-        return False
-    return "/" in normalized and not normalized.startswith("@")
-
-
-def _stable_digest(value: object) -> str:
-    payload = json.dumps(
-        _normalize_json_value(value),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return sha256(payload.encode()).hexdigest()
-
-
-def _normalize_json_value(value: object) -> object:
-    if value is None or isinstance(value, str | int | float | bool):
-        return value
-    if isinstance(value, tuple | list):
-        return [_normalize_json_value(item) for item in value]
-    if isinstance(value, set | frozenset):
-        return [_normalize_json_value(item) for item in sorted(value, key=str)]
-    if isinstance(value, dict):
-        return {
-            str(key): _normalize_json_value(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-        }
-    if isinstance(value, PurePath):
-        return str(value)
-    return repr(value)
 
 
 __all__ = [

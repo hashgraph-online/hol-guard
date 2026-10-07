@@ -45,15 +45,17 @@ on:
         description: Expiring public badge URL when visibility is public
         value: ${{ jobs.scan.outputs.badge_url }}
 
-permissions:
-  contents: read
-  id-token: write
-  attestations: write
-  artifact-metadata: write
-  security-events: write
+# New jobs start without a token grant; writers declare only their own scopes.
+permissions: {}
 
 jobs:
   scan:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+      security-events: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:

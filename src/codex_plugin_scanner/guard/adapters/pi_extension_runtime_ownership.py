@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..stable_guard_cli import desktop_core_shim_for_executable
+from ..stable_guard_cli import desktop_core_shim_for_executable, durable_desktop_current_hol_guard
 
 _DESKTOP_RUNTIME_OWNER_ENV = "HOL_GUARD_DESKTOP_RUNTIME_OWNER"
 
@@ -59,9 +59,13 @@ def resolve_pi_extension_runtime_ownership(
 
 def _stable_guard_cli_command(home_dir: Path) -> str:
     # AppImages prepend a transient mount to PATH. The official user install is
-    # durable and must own hooks after the desktop process exits.
+    # durable and must own hooks after the desktop process exits. Managed Core
+    # under the Desktop app-data directory is also durable and must outrank a
+    # PATH pipx hol-guard that would start a second, older daemon.
+    durable_desktop = durable_desktop_current_hol_guard(home_dir)
     candidates = (
         os.environ.get(_DESKTOP_RUNTIME_OWNER_ENV),
+        str(durable_desktop) if durable_desktop is not None else None,
         str(home_dir / ".local" / "bin" / "hol-guard"),
         shutil.which("hol-guard"),
     )
@@ -96,11 +100,12 @@ def _windows_cli_bootstrap(package_root: Path, *, guard_home: Path, harness: str
         "_windows_job=assign_current_process_to_windows_hook_job() if os.name=='nt' else None;"
         "sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;"
         "sys.stderr.flush() if _windows_job is not None else None;from pathlib import Path;"
+        "from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text;"
         "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;"
         "argv=json.loads(sys.argv[1]);config={'python_executable':sys.executable,"
         f"'package_root':{str(package_root)!r},'guard_home':{str(guard_home)!r},"
         f"'cli_args':argv,'harness':{harness!r},'timeout_seconds':0.75}};"
-        "raise SystemExit(run_bounded_cli_hook(config,input_text=sys.stdin.read(1000001)))"
+        "raise SystemExit(run_bounded_cli_hook(config,input_text=stamp_hook_input_text(sys.stdin.read(1000001))))"
     )
 
 

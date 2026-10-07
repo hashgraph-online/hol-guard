@@ -229,6 +229,48 @@ def test_native_raw_command_credentials_are_redacted_in_incident_copy() -> None:
     assert retained_tail in incident["launch_summary"]
 
 
+def test_package_request_from_guard_cli_is_a_local_package_command() -> None:
+    incident = build_incident_context(
+        harness="guard-cli",
+        artifact=None,
+        artifact_id="guard-cli:project:package-request:vitest",
+        artifact_name="bunx execute vitest",
+        artifact_type="package_request",
+        source_scope="project",
+        config_path=None,
+        changed_fields=["package_request"],
+        policy_action="require-reapproval",
+        launch_target="bunx vitest run example.test.ts",
+        risk_summary="HOL Guard's current package policy requires fresh approval for `vitest@latest`.",
+    )
+
+    assert incident["source_label"] == "Local package command"
+    assert "local package command" in incident["trigger_summary"]
+    assert "tool call" not in incident["trigger_summary"].lower()
+    assert "Guard-Cli" not in incident["source_label"]
+    assert "Guard CLI" not in incident["trigger_summary"] or "local package command" in incident["trigger_summary"]
+
+
+def test_package_request_from_grok_names_the_harness_command() -> None:
+    incident = build_incident_context(
+        harness="grok",
+        artifact=None,
+        artifact_id="guard-cli:project:package-request:chrome-devtools-mcp",
+        artifact_name="npx execute chrome-devtools-mcp",
+        artifact_type="package_request",
+        source_scope="project",
+        config_path=None,
+        changed_fields=["package_request"],
+        policy_action="require-reapproval",
+        launch_target="npx -y chrome-devtools-mcp@latest",
+        risk_summary="HOL Guard's current package policy requires fresh approval for `chrome-devtools-mcp@latest`.",
+    )
+
+    assert incident["source_label"] == "Grok command"
+    assert "Grok command" in incident["trigger_summary"]
+    assert "tool call" not in incident["trigger_summary"].lower()
+
+
 def test_native_raw_launch_target_is_redacted_without_truncating_command_tail() -> None:
     retained_tail = "raw-target-tail-" + ("y" * 180)
     raw_target = f"rm -f /workspace/project/output.txt --token=sk-testcredential123 --marker={retained_tail}"

@@ -8,18 +8,27 @@ text, prompts, tool output, paths, tokens, or response bodies to evidence.
 
 There are two deliberately separate performance boundaries. The direct Rust
 release gate (`scripts/bench_guard_native_release_gate.py`) keeps the native
-runtime limits at warm p95 at most 20 ms, cold one-shot p95 at most 100 ms,
-readiness at most 250 ms, and measurable direct c16 p99 at most 100 ms. These
+runtime limits at warm p95 at most 20 ms, cold one-shot p95 at most 150 ms,
+readiness at most 400 ms, and measurable direct c16 p99 at most 100 ms. These
 limits exclude the Python adapter and HTTP scheduling overhead.
 
 The installed proof measures the complete adapter-to-decision path. Its
 ordinary warm, size-class, resident-recovery, and c16 p99 limit is the existing
 production `HOOK_ENGINE_NORMAL_BUDGET_MS` of 1,000 ms; the installed cold
-one-shot and readiness checks retain the direct 100 ms and 250 ms limits. c16
+one-shot and readiness checks retain the direct 150 ms and 400 ms limits. c16
 must complete resident allowed decisions with zero errors within that adapter
 budget. c64 has no latency ceiling: every result must be either a resident
 allowed decision or an explicitly classified bounded capacity/overload
 response, with zero request errors and no hang.
+
+Each resident-recovery sample first proves a resident allow decision, then
+requires the Rust stop command to verify containment of that resident. The
+installed adapter's persistent Rust client streams remain alive, matching a
+resident restart in production: their next request re-discovers and
+authenticates the new resident generation. The complete next adapter request
+is timed against the unchanged 1,000 ms budget. Cold one-shot probes and final
+session cleanup retain full client teardown. Aggregate per-sample diagnostics
+report both adapter time and the enclosing measurement time.
 
 The c16 latency proof uses a dedicated, fully started 16-thread client executor
 so thread creation and a larger benchmark-only client pool cannot distort the

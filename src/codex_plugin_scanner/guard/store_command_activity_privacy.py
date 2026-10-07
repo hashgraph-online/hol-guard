@@ -54,6 +54,7 @@ _DELETE_TABLES: Final = (
     "command_activity_shadow_cohorts",
     "command_activity_shadow_evaluations",
     "command_activity_feedback",
+    "command_activity_invocation",
     "command_activity",
     "command_activity_match_effects",
     "command_activity_matches",

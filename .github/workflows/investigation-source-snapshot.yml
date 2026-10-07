@@ -21,7 +21,7 @@ jobs:
       - name: Create pull request source archive
         run: tar --exclude=.git -czf /tmp/hol-guard-source.tar.gz .
       - name: Upload pull request source archive
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: hol-guard-source
           path: /tmp/hol-guard-source.tar.gz
@@ -39,7 +39,7 @@ jobs:
       - name: Create release baseline archive
         run: tar --exclude=.git -czf /tmp/hol-guard-release-3.0.tar.gz .
       - name: Upload release baseline archive
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: hol-guard-release-3.0
           path: /tmp/hol-guard-release-3.0.tar.gz

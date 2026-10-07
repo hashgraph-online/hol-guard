@@ -117,6 +117,23 @@ test("enrollment waits for approval lookup and refreshes on Check again", async 
   await expect(page.getByRole("button", { name: "Copy setup command", exact: true })).toBeVisible();
 });
 
+test("recovery routes unconfigured approval to settings instead of asking for proof", async ({ page }) => {
+  const runtimeErrors: string[] = [];
+  page.on("pageerror", (error) => runtimeErrors.push(error.message));
+  await mountRecoveryFixture(page, {
+    configured: false,
+    enabled: false,
+    failSettings: false,
+    initialHealth: "tampered",
+  });
+  await page.goto(`/extensions?${DAEMON}`);
+  await expect(page.getByRole("heading", { name: "Protection needs repair" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Repair protection", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Set up approval", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\?.*section=approval/);
+  await expect(runtimeErrors).toEqual([]);
+});
+
 test("authenticated extension recovery shows progress and reaches protected state", async ({ page }) => {
   const runtimeErrors: string[] = [];
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
@@ -133,6 +150,16 @@ test("authenticated extension recovery shows progress and reaches protected stat
   await expect(page.getByText("Local protection repaired and verified.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Protection needs repair" })).toHaveCount(0);
   await expect(runtimeErrors).toEqual([]);
+});
+
+test("authenticator Enter submits the repair approval dialog", async ({ page }) => {
+  await mountRecoveryFixture(page);
+  await page.goto(`/extensions?${DAEMON}`);
+  await page.getByRole("button", { name: "Repair protection" }).click();
+  const dialog = page.getByRole("dialog", { name: "Repair protection" });
+  await dialog.getByLabel("Authenticator code").fill("123456");
+  await dialog.getByLabel("Authenticator code").press("Enter");
+  await expect(page.getByText("Local protection repaired and verified.")).toBeVisible();
 });
 
 test("failed extension recovery keeps the repair banner and explains the failure", async ({ page }) => {

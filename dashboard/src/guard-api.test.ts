@@ -7,6 +7,7 @@ import {
   fetchAllPendingRequests,
   fetchApprovalPage,
   GuardHarnessActionError,
+  GuardOperationTimeoutError,
   GuardProtectionRepairError,
   GuardSessionUnavailableError,
   fetchQueueSummary,
@@ -19,6 +20,7 @@ import {
   readGuardToken,
   runPackageFirewallAction,
   runPackageSync,
+  repairSupplyChainProtection,
   startPackageFirewallConnect,
 	  runAuditRemediation,
 	  resolveRequestWithQueueResult,
@@ -1445,6 +1447,59 @@ assert(
   firewallError instanceof GuardHarnessActionError && firewallError.payload?.error === "approval_gate_required",
   "L079db: runPackageFirewallAction preserves daemon error code for approval modal fallback"
 );
+
+installGuardWindow("?guard-token=token-repair&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const originalSetTimeout = globalThis.setTimeout;
+const repairDeadline: { expire?: () => void } = {};
+let repairSignal: AbortSignal | undefined;
+globalThis.setTimeout = ((callback: () => void) => {
+  repairDeadline.expire = callback;
+  return 1 as unknown as ReturnType<typeof setTimeout>;
+}) as typeof setTimeout;
+globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  repairSignal = init?.signal ?? undefined;
+  return new Promise<Response>(() => undefined);
+};
+const pendingRepair = repairSupplyChainProtection();
+await Promise.resolve();
+assert(repairSignal !== undefined, "local repair passes a cancellation signal to fetch");
+assert(typeof repairDeadline.expire === "function", "local repair sets a deadline");
+repairDeadline.expire();
+let repairTimeout: unknown = null;
+try {
+  await pendingRepair;
+} catch (error) {
+  repairTimeout = error;
+} finally {
+  globalThis.setTimeout = originalSetTimeout;
+}
+assert(repairTimeout instanceof GuardOperationTimeoutError, "a stalled repair reports a bounded timeout");
+assert(repairSignal.aborted, "a stalled repair aborts the pending fetch");
+
+const bodyDeadline: { expire?: () => void } = {};
+let bodySignal: AbortSignal | undefined;
+globalThis.setTimeout = ((callback: () => void) => {
+  bodyDeadline.expire = callback;
+  return 1 as unknown as ReturnType<typeof setTimeout>;
+}) as typeof setTimeout;
+globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  bodySignal = init?.signal ?? undefined;
+  return { ok: true, status: 200, json: () => new Promise<unknown>(() => undefined) } as Response;
+};
+const pendingBody = repairSupplyChainProtection();
+await Promise.resolve();
+await Promise.resolve();
+assert(typeof bodyDeadline.expire === "function", "repair keeps its deadline while reading the body");
+bodyDeadline.expire();
+try {
+  await pendingBody;
+  throw new Error("a stalled response body must time out");
+} catch (error) {
+  assert(error instanceof GuardOperationTimeoutError, "a stalled response body reports a bounded timeout");
+} finally {
+  globalThis.setTimeout = originalSetTimeout;
+}
+assert(bodySignal?.aborted, "a stalled response body aborts the pending request");
 
 installGuardWindow("?guard-token=token-sync&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const syncCalls = installFetchStub({

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 from ..aibom_detection import enrich_mcp_server_metadata
@@ -32,6 +33,7 @@ MANAGED_DENY_RULES = (
     "Bash(rm -rf **/.grok/hooks/hol-guard*)",
     "Edit(**/.grok/hooks/hol-guard*)",
     "Edit(**/.grok/managed_config.toml)",
+    "Edit(**/.grok/config.toml)",
     "Read(**/.grok/auth/**)",
     "Read(**/.grok/auth.json)",
     "Read(**/.env)",
@@ -101,11 +103,7 @@ def build_pretool_hook_json(hook_command: str) -> dict[str, object]:
 
 
 def build_observe_hook_json(hook_command: str) -> dict[str, object]:
-    """Install observe-only lifecycle hooks.
-
-    Grok ignores deny/stdout on these events. Guard still records prompt and
-    subagent inventory; enforcement stays on PreToolUse.
-    """
+    """Install the prompt gate alongside passive session and subagent hooks."""
 
     return {
         "hooks": {event_name: [_command_hook_entry(hook_command, timeout=15)] for event_name in OBSERVE_HOOK_EVENTS}
@@ -116,7 +114,132 @@ def _toml_inline_command_hook(hook_command: str, *, timeout: int) -> str:
     return '{ type = "command", command = ' + json.dumps(hook_command) + f", timeout = {timeout} }}"
 
 
-def build_managed_config_block(hook_command: str = "") -> str:
+FOREIGN_HOOK_COMPAT_VENDORS = ("claude", "cursor")
+
+
+def foreign_hook_compat_toml(vendors: tuple[str, ...] = FOREIGN_HOOK_COMPAT_VENDORS) -> str:
+    """Disable Grok's vendor hook-file import.
+
+    Grok merges other products' hook settings by default. Those files often
+    split the interpreter from its arguments. Grok runs only the interpreter
+    and feeds the hook JSON on stdin, so Python treats the payload as source
+    and exits 1 with a traceback on every prompt and tool event. Guard keeps
+    Grok-native hooks in this managed block and the dedicated hook JSON files.
+    """
+
+    chunks: list[str] = []
+    for vendor in vendors:
+        if chunks:
+            chunks.append("")
+        chunks.extend([f"[compat.{vendor}]", "hooks = false"])
+    return "\n".join(chunks)
+
+
+def _compat_table_span(text: str, vendor: str) -> tuple[int, int] | None:
+    match = re.search(
+        rf"(?m)^[ \t]*\[compat\.{re.escape(vendor)}\][ \t]*(?:#.*)?$",
+        text,
+    )
+    if match is None:
+        return None
+    rest = text[match.end() :]
+    nxt = re.search(r"(?m)^[ \t]*\[", rest)
+    end = match.end() + (nxt.start() if nxt else len(rest))
+    return match.start(), end
+
+
+def _compat_hooks_assignment(block: str) -> tuple[int, int, str, str] | None:
+    """Locate one compat hooks assignment and preserve its physical line ending."""
+
+    offset = 0
+    for line in block.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        newline = line[len(body) :]
+        stripped = body.lstrip(" \t")
+        if stripped.startswith("hooks"):
+            remainder = stripped[len("hooks") :].lstrip(" \t")
+            if remainder.startswith("="):
+                value = remainder[1:].lstrip(" \t").strip()
+                return offset, offset + len(line), value, newline
+        offset += len(line)
+    return None
+
+
+def force_compat_hooks_false(text: str, vendor: str) -> tuple[str, str | None]:
+    """Set hooks=false on an existing compat table. Return prior hooks value."""
+
+    span = _compat_table_span(text, vendor)
+    if span is None:
+        return text, None
+    start, end = span
+    block = text[start:end]
+    assignment = _compat_hooks_assignment(block)
+    previous = assignment[2] if assignment is not None else ""
+    if assignment is not None:
+        line_start, line_end, _, newline = assignment
+        block = block[:line_start] + "hooks = false" + newline + block[line_end:]
+    else:
+        header = f"[compat.{vendor}]"
+        block = block.replace(header, header + "\nhooks = false", 1)
+    return text[:start] + block + text[end:], previous
+
+
+def prepare_managed_config_text(
+    existing_text: str,
+    hook_command: str,
+    *,
+    saved_prior_hooks: Mapping[str, str | None] | None = None,
+) -> tuple[str, dict[str, str | None]]:
+    """Merge Guard's managed block without duplicating compat tables."""
+
+    cleaned = remove_managed_block(existing_text)
+    saved = dict(saved_prior_hooks or {})
+    prior_hooks: dict[str, str | None] = {}
+    emit_vendors: list[str] = []
+    for vendor in FOREIGN_HOOK_COMPAT_VENDORS:
+        if _compat_table_span(cleaned, vendor) is None:
+            emit_vendors.append(vendor)
+            prior_hooks[vendor] = saved.get(vendor)
+            continue
+        cleaned, previous = force_compat_hooks_false(cleaned, vendor)
+        saved_value = saved.get(vendor)
+        prior_hooks[vendor] = saved_value if saved_value is not None else previous
+    managed_block = build_managed_config_block(hook_command, emit_compat_vendors=tuple(emit_vendors))
+    merged = f"{cleaned.rstrip()}\n\n{managed_block}\n".lstrip()
+    return merged, prior_hooks
+
+
+def restore_compat_hooks(text: str, prior_hooks: Mapping[str, str | None]) -> str:
+    """Restore pre-install compat.hooks values after Guard uninstall."""
+
+    updated = text
+    for vendor, previous in prior_hooks.items():
+        span = _compat_table_span(updated, vendor)
+        if span is None or previous is None:
+            continue
+        start, end = span
+        block = updated[start:end]
+        assignment = _compat_hooks_assignment(block)
+        if previous == "":
+            if assignment is not None:
+                line_start, line_end, _, _ = assignment
+                block = block[:line_start] + block[line_end:]
+        else:
+            if assignment is not None:
+                line_start, line_end, _, newline = assignment
+                block = block[:line_start] + f"hooks = {previous}" + newline + block[line_end:]
+            else:
+                header = f"[compat.{vendor}]"
+                block = block.replace(header, header + f"\nhooks = {previous}", 1)
+        updated = updated[:start] + block + updated[end:]
+    return updated
+
+
+def build_managed_config_block(
+    hook_command: str = "",
+    *,
+    emit_compat_vendors: tuple[str, ...] = FOREIGN_HOOK_COMPAT_VENDORS,
+) -> str:
     deny_lines = ",\n".join(f'  "{rule}"' for rule in MANAGED_DENY_RULES)
     lines = [
         GUARD_MANAGED_BEGIN,
@@ -126,6 +249,9 @@ def build_managed_config_block(hook_command: str = "") -> str:
         deny_lines,
         "]",
     ]
+    compat = foreign_hook_compat_toml(emit_compat_vendors)
+    if compat:
+        lines.extend(["", compat])
     if hook_command.strip():
         command_hook = _toml_inline_command_hook(hook_command, timeout=GROK_PRETOOL_HOOK_TIMEOUT_SECONDS)
         observe_hook = _toml_inline_command_hook(hook_command, timeout=15)

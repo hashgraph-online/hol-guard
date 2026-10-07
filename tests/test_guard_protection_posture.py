@@ -224,7 +224,7 @@ def test_derive_and_dual_write_tables() -> None:
     assert dual_write_from_posture("watch", current_security_level="balanced") == ("observe", "balanced")
 
 
-def test_confidence_stop_only_when_explicit_and_strong() -> None:
+def test_confidence_stop_blocks_strong_exfiltration_even_when_implicit() -> None:
     asked = apply_posture_confidence(
         posture="protected",
         explicit=True,
@@ -255,7 +255,7 @@ def test_confidence_stop_only_when_explicit_and_strong() -> None:
     )
     assert asked == "require-reapproval"
     assert stopped == "block"
-    assert implicit == "require-reapproval"
+    assert implicit == "block"
     assert always == "block"
 
 
@@ -399,9 +399,7 @@ def test_managed_mode_lock_overrides_watch_payload() -> None:
     assert composed["mode"] == "enforce"
 
 
-def test_status_marks_legacy_observe_as_protection_off(
-    tmp_path: Path, capsys: object
-) -> None:
+def test_status_marks_legacy_observe_as_protection_off(tmp_path: Path, capsys: object) -> None:
     import json
 
     from codex_plugin_scanner.cli import main

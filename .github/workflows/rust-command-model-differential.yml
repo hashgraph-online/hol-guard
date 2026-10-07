@@ -9,6 +9,7 @@ on:
       - "rust/crates/guard-runtime/**"
       - "ci/native_runtime/test_command_model_differential.py"
       - ".github/workflows/rust-command-model-differential.yml"
+      - ".github/actions/setup-rust/**"
   push:
     branches: [main]
     paths:
@@ -18,6 +19,7 @@ on:
       - "rust/crates/guard-runtime/**"
       - "ci/native_runtime/test_command_model_differential.py"
       - ".github/workflows/rust-command-model-differential.yml"
+      - ".github/actions/setup-rust/**"
   workflow_dispatch:
 
 permissions:
@@ -43,15 +45,18 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Normalize changed Rust sources
         run: |
           rustfmt --edition 2021 rust/crates/guard-command/src/lib.rs rust/crates/guard-runtime/src/main.rs
           git diff --check -- rust/crates/guard-command/src/lib.rs rust/crates/guard-runtime/src/main.rs
+      # CI/native-workspace owns the required Linux proof on main PRs and pushes.
       - name: Validate locked command workspace
+        if: >-
+          !((github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         run: |
           cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps > /dev/null
           cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
@@ -67,7 +72,8 @@ jobs:
         run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
           rust/target/release/hol-guard-runtime self-test --json
           rust/target/release/hol-guard-runtime rule-contract --json
       - name: Compare Python and Rust command models

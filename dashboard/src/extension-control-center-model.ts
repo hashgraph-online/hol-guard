@@ -66,6 +66,7 @@ export function parseExtensionRoute(pathname: string): ExtensionRoute {
   if (!encoded || encoded.includes("/")) return { kind: "invalid" };
   try {
     const decoded = decodeURIComponent(encoded).trim().toLowerCase();
+    if (decoded === "command.dns") return { kind: "overview" };
     if (!EXTENSION_ID_PATTERN.test(decoded)) return { kind: "invalid" };
     return { kind: "detail", extensionId: decoded };
   } catch {
@@ -152,6 +153,14 @@ function managedExplicitControlState(
     if (control) return control.state;
   }
   return null;
+}
+
+/** Organization-managed state of one permission, or null when it is not managed. */
+export function managedPermissionState(
+  effective: EffectiveExtensionControls,
+  permissionId: string,
+): "enabled" | "disabled" | null {
+  return managedExplicitControlState(effective, "permission", permissionId);
 }
 
 export function extensionEffectiveState(

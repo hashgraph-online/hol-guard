@@ -186,8 +186,42 @@ pub(super) fn sensitive_key(key: &str) -> bool {
     .any(|marker| normalized.contains(marker))
 }
 
-pub(super) fn payload_sensitive_target(maps: &[&Map<String, Value>]) -> Result<bool, String> {
+/// Borrow only the top-level arguments of a known Codex command envelope.
+/// The caller supplies the normalized `codex` harness; other harness names,
+/// tools, action types and empty commands retain ordinary sensitive-key checks.
+fn codex_command_budget_input<'a>(
+    payload: &'a Value,
+    harness: &str,
+    action_type: PreToolActionTypeV1,
+) -> Option<&'a Map<String, Value>> {
+    if harness != "codex" || action_type != PreToolActionTypeV1::Command {
+        return None;
+    }
+    let envelope = payload.as_object()?;
+    if !matches!(
+        envelope.get("tool_name").and_then(Value::as_str),
+        Some("exec_command" | "functions.exec_command")
+    ) {
+        return None;
+    }
+    let input = envelope.get("tool_input")?.as_object()?;
+    let command = input.get("cmd")?.as_str()?;
+    if command.trim().is_empty() {
+        return None;
+    }
+    Some(input)
+}
+
+pub(super) fn payload_sensitive_target(
+    maps: &[&Map<String, Value>],
+    codex_budget_input: Option<&Map<String, Value>>,
+    codex_wait_process: Option<&Map<String, Value>>,
+) -> Result<bool, String> {
     let mut sensitive = path_values_sensitive(maps)?;
+    // Traversal borrows maps from the original JSON tree. Identity, rather
+    // than value equality, excludes nested and sibling copies. Zero is also
+    // numeric metadata; this does not interpret its budget semantics or relax
+    // command, path, intrinsic or managed floors.
     for record in maps {
         for (key, value) in *record {
             if key == "sensitive_target" {
@@ -195,12 +229,88 @@ pub(super) fn payload_sensitive_target(maps: &[&Map<String, Value>]) -> Result<b
                     .as_bool()
                     .ok_or_else(|| "native_policy_sensitive_target_invalid".to_owned())?;
                 sensitive |= value;
-            } else if sensitive_key(key) {
+            } else if sensitive_key(key)
+                && !((key == "max_output_tokens"
+                    && value.as_u64().is_some()
+                    && codex_budget_input.is_some_and(|input| std::ptr::eq(*record, input)))
+                    || (key == "startToken"
+                        && codex_wait_process.is_some_and(|input| std::ptr::eq(*record, input))))
+            {
+                // Only the numeric output budget in this exact Codex command
+                // argument object is metadata. Credential-shaped strings,
+                // nested data and every other sensitive selector still count.
                 sensitive = true;
             }
         }
     }
     Ok(sensitive)
+}
+
+fn codex_browser_process_metadata<'a>(
+    payload: &'a Value,
+    harness: &str,
+) -> Option<&'a Map<String, Value>> {
+    if harness != "codex" {
+        return None;
+    }
+    let process = payload
+        .as_object()?
+        .get("guard_codex_browser_wait_process")?
+        .as_object()?;
+    if process.len() != 2
+        || !process
+            .get("pid")?
+            .as_u64()
+            .is_some_and(|pid| pid > 0 && pid <= u32::MAX as u64)
+    {
+        return None;
+    }
+    let token = process.get("startToken")?.as_str()?;
+    let valid = if let Some(ticks) = token
+        .strip_prefix("linux:")
+        .or_else(|| token.strip_prefix("windows:"))
+    {
+        !ticks.is_empty() && ticks.len() <= 20 && ticks.bytes().all(|ch| ch.is_ascii_digit())
+    } else if let Some(started) = token.strip_prefix("posix:") {
+        let fields: Vec<_> = started.split_whitespace().collect();
+        fields.len() == 5
+            && matches!(
+                fields[0],
+                "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun"
+            )
+            && matches!(
+                fields[1],
+                "Jan"
+                    | "Feb"
+                    | "Mar"
+                    | "Apr"
+                    | "May"
+                    | "Jun"
+                    | "Jul"
+                    | "Aug"
+                    | "Sep"
+                    | "Oct"
+                    | "Nov"
+                    | "Dec"
+            )
+            && fields[2].len() <= 2
+            && fields[2]
+                .parse::<u8>()
+                .is_ok_and(|day| (1..=31).contains(&day))
+            && fields[3].len() == 8
+            && fields[3].split(':').count() == 3
+            && fields[3]
+                .split(':')
+                .zip([23, 59, 60])
+                .all(|(field, limit)| {
+                    field.len() == 2 && field.parse::<u8>().is_ok_and(|value| value <= limit)
+                })
+            && fields[4].len() == 4
+            && fields[4].bytes().all(|ch| ch.is_ascii_digit())
+    } else {
+        false
+    };
+    valid.then_some(process)
 }
 
 pub(super) fn optional_changed_bool(maps: &[&Map<String, Value>]) -> Result<bool, String> {
@@ -305,6 +415,7 @@ pub(super) fn payload_changed_hash(maps: &[&Map<String, Value>]) -> Result<bool,
 
 pub(super) fn payload_facts(
     payload: &Value,
+    harness: &str,
     action_type: PreToolActionTypeV1,
     reason_code: &str,
 ) -> Result<PolicyFacts, String> {
@@ -313,7 +424,12 @@ pub(super) fn payload_facts(
     collect_fact_maps(payload, 0, &mut nodes, &mut maps)?;
     let publisher = optional_identity(&maps, PUBLISHER_KEYS)?;
     let artifact = optional_identity(&maps, ARTIFACT_KEYS)?;
-    let sensitive_target = payload_sensitive_target(&maps)?
+    let budget_input = codex_command_budget_input(payload, harness, action_type);
+    // Only an exact root-level, syntactically bounded process start identity
+    // is timing metadata. Nested copies, extra keys, credentials and command
+    // floors retain ordinary enforcement. This grants no process authority.
+    let wait_process = codex_browser_process_metadata(payload, harness);
+    let sensitive_target = payload_sensitive_target(&maps, budget_input, wait_process)?
         || reason_code.contains("secret")
         || reason_code.contains("credential")
         || reason_code.contains("exfiltration");

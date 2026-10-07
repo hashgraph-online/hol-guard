@@ -18,6 +18,8 @@ Security contract:
 
 from __future__ import annotations
 
+import os
+import sys
 import threading
 import urllib.parse
 from dataclasses import dataclass
@@ -84,7 +86,30 @@ def desktop_bootstrap_is_preflight() -> bool:
     return desktop_preflight_requested()
 
 
-def build_desktop_dashboard_session_url(*, guard_home: Path) -> str:
+def _desktop_owned_core_executable() -> Path | None:
+    """Return the Core binary Desktop launched, so the daemon is that same binary."""
+
+    raw = os.environ.get("HOL_GUARD_DESKTOP_RUNTIME_OWNER")
+    if isinstance(raw, str) and raw.strip():
+        candidate = Path(raw).expanduser()
+        try:
+            if candidate.is_file() and (os.name == "nt" or os.access(candidate, os.X_OK)):
+                return candidate.resolve()
+        except OSError:
+            return None
+    if bool(getattr(sys, "frozen", False)):
+        try:
+            return Path(sys.executable).expanduser().resolve(strict=True)
+        except OSError:
+            return None
+    return None
+
+
+def build_desktop_dashboard_session_url(
+    *,
+    guard_home: Path,
+    home_dir: Path | None = None,
+) -> str:
     """Return a short-lived canonical dashboard URL for trusted Desktop embedding.
 
     The daemon's long-lived auth token never crosses this boundary. Desktop only
@@ -96,11 +121,33 @@ def build_desktop_dashboard_session_url(*, guard_home: Path) -> str:
 
     if desktop_bootstrap_is_preflight():
         raise RuntimeError("Desktop preflight does not start a local daemon")
-    approval_center_url = ensure_guard_daemon(guard_home)
+    approval_center_url = ensure_guard_daemon(
+        guard_home,
+        home_dir=home_dir,
+        executable=_desktop_owned_core_executable(),
+    )
     auth_token = load_guard_daemon_auth_token(guard_home)
     if auth_token is None:
         raise RuntimeError("Guard daemon auth token is not available")
-    parsed = urllib.parse.urlparse(approval_center_url)
+    return build_desktop_dashboard_session_url_for_daemon(
+        daemon_url=approval_center_url,
+        auth_token=auth_token,
+    )
+
+
+def build_desktop_dashboard_session_url_for_daemon(*, daemon_url: str, auth_token: str) -> str:
+    """Mint a dashboard session URL for a daemon this process already knows is local.
+
+    Callers inside the running daemon use this so bootstrap does not health-check
+    itself. The daemon auth token stays in-process; the URL fragment carries only
+    the short-lived dashboard session token.
+    """
+
+    parsed = urllib.parse.urlparse(daemon_url)
+    if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost"}:
+        raise ValueError("Desktop bootstrap session URL requires the loopback daemon")
+    if parsed.username or parsed.password:
+        raise ValueError("Desktop bootstrap session URL requires the loopback daemon")
     query_pairs = [
         (key, value)
         for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)

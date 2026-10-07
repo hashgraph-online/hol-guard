@@ -58,7 +58,9 @@
         "grok",
         "pi",
         "omp",
-        "zcode"
+        "zcode",
+        "devin",
+        "paseo"
     ],
     "action_categories": [
         "secrets",
@@ -388,6 +390,14 @@
             ],
             "auth_required": true,
             "writes_state": true
+        },
+        {
+            "route": "/protection/repair",
+            "persona": [
+                "solo"
+            ],
+            "auth_required": true,
+            "writes_state": true
         }
     ],
     "local_apis": [
@@ -645,6 +655,13 @@
         },
         {
             "path": "/v1/protection/repair",
+            "method": "POST",
+            "category": "config",
+            "auth_required": true,
+            "writes_state": true
+        },
+        {
+            "path": "/v1/protection/repair/approval-gate/setup",
             "method": "POST",
             "category": "config",
             "auth_required": true,

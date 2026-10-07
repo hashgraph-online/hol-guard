@@ -27,7 +27,7 @@ The projection contains only bounded product state needed to render the native s
 - Core version and compatibility status
 - Local runtime availability
 - Aggregate protection posture
-- Detected app identifiers and managed-state summaries
+- Managed app identifiers and managed-state summaries from the local store
 - Aggregate approval counts and bounded generic approval rows
 - Aggregate receipt counts and bounded generic receipt rows
 - Optional Cloud connection state

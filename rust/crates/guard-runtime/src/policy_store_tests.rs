@@ -15,7 +15,6 @@ use guard_policy_snapshot::{
     POLICY_SNAPSHOT_PUSH_SCHEMA, POLICY_SNAPSHOT_SCHEMA,
 };
 use serde_json::Value;
-use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
@@ -25,29 +24,22 @@ use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use super::normalize_scope_text;
 
+#[path = "policy_store_business_floor_tests.rs"]
+mod business_floor_tests;
+#[path = "policy_store_business_source_tests.rs"]
+mod business_source_tests;
+#[path = "policy_store_command_authority_tests.rs"]
+mod command_authority_tests;
+#[path = "policy_store_command_floor_tests.rs"]
+mod command_floor_tests;
 #[path = "policy_store_fault_tests.rs"]
 mod fault_tests;
+#[path = "policy_store_fixture_tests.rs"]
+mod fixture_tests;
 #[path = "policy_store_migration_tests.rs"]
 mod migration_tests;
 
-fn policy() -> EffectiveNativePolicyV3 {
-    EffectiveNativePolicyV3 {
-        protection_posture: "protected".into(),
-        security_level: "balanced".into(),
-        default_action: "warn".into(),
-        unknown_publisher_action: "review".into(),
-        changed_hash_action: "require-reapproval".into(),
-        new_network_domain_action: "warn".into(),
-        subprocess_action: "warn".into(),
-        risk_actions: BTreeMap::new(),
-        harness_risk_actions: BTreeMap::new(),
-        harness_actions: BTreeMap::new(),
-        publisher_actions: BTreeMap::new(),
-        artifact_actions: BTreeMap::new(),
-        sandbox_analysis: "off".into(),
-        receipt_redaction_level: "full".into(),
-    }
-}
+use fixture_tests::policy;
 
 fn policy_with_default(default_action: &str) -> EffectiveNativePolicyV3 {
     let mut value = policy();
@@ -64,19 +56,21 @@ fn fixture_directory(path: &Path) {
     fs::create_dir(path).unwrap();
 }
 
-fn fixture_file(path: &Path, bytes: &[u8]) {
+pub(super) fn fixture_file(path: &Path, bytes: &[u8]) {
     #[cfg(windows)]
     {
         use std::io::Write;
         let private_root = path.parent().unwrap_or(path);
-        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
+        // Match fs::write below: fault and marker fixtures intentionally replace
+        // existing bytes. CREATE_NEW correctly rejects those repeated writes.
+        let mut file = crate::resident_state::private_file(path, false, private_root).unwrap();
         file.write_all(bytes).unwrap();
     }
     #[cfg(not(windows))]
     fs::write(path, bytes).unwrap();
 }
 
-fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
+pub(super) fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
     signed_snapshot_with_policy(generation, key, guard_home, policy())
 }
 
@@ -103,6 +97,8 @@ fn signed_snapshot_with_policy(
             workspace_binding: "request-source".into(),
         },
         effective_policy,
+        command_extensions: None,
+        business_policy: None,
         issued_at_ms: now_ms().unwrap().saturating_sub(1),
         expires_at_ms: now_ms().unwrap() + 60_000,
         integrity: SnapshotIntegrityV3 {
@@ -116,7 +112,7 @@ fn signed_snapshot_with_policy(
     snapshot
 }
 
-fn test_root(label: &str) -> PathBuf {
+pub(super) fn test_root(label: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-policy-store-{label}-{}-{}",
         std::process::id(),
@@ -128,7 +124,7 @@ fn test_root(label: &str) -> PathBuf {
     root
 }
 
-fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTES] {
+pub(super) fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTES] {
     let key = [value; VERIFIER_KEY_BYTES];
     let path = root.join(VERIFIER_KEY_FILE_NAME);
     fixture_file(&path, &key);
@@ -248,6 +244,71 @@ fn restart_rehydrates_snapshot_and_hook_validation_uses_memory() {
 }
 
 #[test]
+fn compiled_generations_share_one_immutable_snapshot_and_reject_conflicts_before_publish() {
+    use std::sync::Arc;
+    let root = test_root("compiled-generations");
+    let key = install_test_key(&root, 21);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let mut effective = policy();
+    effective
+        .harness_actions
+        .insert("Claude".into(), "block".into());
+    effective
+        .harness_actions
+        .insert("claude-code".into(), "block".into());
+    let first = signed_snapshot_with_policy(1, &key, &root, effective.clone());
+    let first_value = serde_json::to_value(&first).unwrap();
+    store
+        .push(&serde_json::json!({"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": first}))
+        .unwrap();
+    let get_first = || {
+        store
+            .validate_request_snapshot(&first_value, root.to_string_lossy().as_ref(), 1)
+            .unwrap()
+    };
+    let retained = get_first();
+    assert!(Arc::ptr_eq(&retained, &get_first()));
+    assert_eq!(retained.snapshot(), &first);
+
+    effective
+        .harness_actions
+        .insert("claude-code".into(), "allow".into());
+    let invalid = signed_snapshot_with_policy(2, &key, &root, effective);
+    let authority_before = fs::read(root.join(SNAPSHOT_FILE_NAME)).unwrap();
+    assert_eq!(
+        store
+            .push(&serde_json::json!({"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": invalid}))
+            .unwrap_err(),
+        "snapshot_policy_invalid"
+    );
+    assert_eq!(
+        fs::read(root.join(SNAPSHOT_FILE_NAME)).unwrap(),
+        authority_before
+    );
+    assert!(Arc::ptr_eq(&retained, &get_first()));
+
+    let second = signed_snapshot_with_policy(2, &key, &root, policy_with_default("allow"));
+    let second_value = serde_json::to_value(&second).unwrap();
+    store
+        .push(&serde_json::json!({"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": second}))
+        .unwrap();
+    let current = store
+        .validate_request_snapshot(&second_value, root.to_string_lossy().as_ref(), 2)
+        .unwrap();
+    assert!(!Arc::ptr_eq(&retained, &current));
+    assert_eq!(retained.snapshot(), &first);
+    assert_eq!(
+        store
+            .validate_request_snapshot(&first_value, root.to_string_lossy().as_ref(), 1)
+            .unwrap_err(),
+        "native_policy_snapshot_not_current"
+    );
+    let restored = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    assert_eq!(restored.current_snapshot().unwrap(), second);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn restarted_resident_applies_installed_policy_without_request_time_io() {
     let root = test_root("evaluate");
     let key = install_test_key(&root, 11);
@@ -279,12 +340,15 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &restarted).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "block");
     assert_eq!(result.result["authority"], "rust");
+    assert!(result.receipt.origin_authentication.is_some());
+    crate::policy_store::native_review_origin::verify(&restarted, &result.receipt).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -317,6 +381,7 @@ fn authenticated_edge_preserves_clean_default_warning() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
@@ -360,6 +425,7 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();

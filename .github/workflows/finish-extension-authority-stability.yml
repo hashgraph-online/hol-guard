@@ -7,8 +7,8 @@ on:
     paths:
       - .github/workflows/finish-extension-authority-stability.yml
 
-permissions:
-  contents: write
+# New jobs start without a token grant; writers declare only their own scopes.
+permissions: {}
 
 concurrency:
   group: finish-extension-authority-stability
@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   finish:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -24,7 +26,7 @@ jobs:
         with:
           ref: fix/extension-control-authority-stability
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Configure commit identity and merge latest release base
         shell: bash
@@ -49,6 +51,7 @@ jobs:
       - name: Apply the reviewed refactor
         run: python scripts/ci/finish_extension_authority_stability.py
 
+      - uses: ./.github/actions/stage-command-projections
       - name: Install exact development environment
         run: uv sync --frozen --extra dev --python 3.12
 
@@ -97,8 +100,6 @@ jobs:
 
       - name: Verify final diff and squash away temporary automation
         shell: bash
-        env:
-          EXPECTED_REMOTE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           git diff --check
@@ -114,6 +115,17 @@ jobs:
           git reset --soft origin/release/3.0
           git commit -s -m "fix(guard): stabilize extension-control authority across restarts" \
             -m "Keep authority trust material in Guard's owner-only encrypted vault, migrate legacy keyring material, serialize first-use key creation across processes, and fail closed without destructive key rotation."
-          git push \
+      - name: Push reviewed branch
+        shell: bash
+        env:
+          EXPECTED_REMOTE_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+          GIT_CONFIG_VALUE_0="$auth_header" \
+            git push \
             --force-with-lease=refs/heads/fix/extension-control-authority-stability:${EXPECTED_REMOTE_SHA} \
             origin HEAD:refs/heads/fix/extension-control-authority-stability

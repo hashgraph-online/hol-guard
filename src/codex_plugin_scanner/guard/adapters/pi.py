@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _resolve_command
+from ..shims import prepare_guard_shim, remove_guard_shim
+from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _resolve_command
+from .pi_extension_previous_source import previous_managed_extension_source
 from .pi_support import (
     EXTENSION_SUFFIXES,
     OMP_AGENT_DIR,
@@ -21,8 +23,8 @@ from .pi_support import (
     append_found_path,
     artifact,
     disable_managed_extension,
-    enable_managed_extension,
     json_payload,
+    managed_extension_settings,
     managed_extension_source,
     resolve_configured_paths,
     stable_suffix,
@@ -525,31 +527,48 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
             dedupe_key=f"theme:{id_scope}:{path.resolve()}",
         )
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = install_guard_shim(
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        prepared_shim = prepare_guard_shim(
             self.harness,
             context,
             launcher_name=self.launcher_name,
             display_name=self.display_name,
         )
+        shim_manifest = prepared_shim.manifest
         extension_path = self._managed_extension_path(context)
-        extension_path.parent.mkdir(parents=True, exist_ok=True)
-        extension_path.write_text(
-            managed_extension_source(
-                guard_home=context.guard_home,
-                home_dir=context.home_dir,
-                settings_path=self._managed_settings_path(context),
-                harness=self.harness,
-                display_name=self.display_name,
-            ),
-            encoding="utf-8",
+        settings_path = self._managed_settings_path(context)
+        extension_before = _snapshot(extension_path)
+        settings_before = _snapshot(settings_path)
+        settings = json.loads(settings_before.decode("utf-8")) if settings_before is not None else {}
+        if not isinstance(settings, dict):
+            raise ValueError(f"{self.display_name} settings must be a JSON object.")
+        extension_after = managed_extension_source(
+            guard_home=context.guard_home,
+            home_dir=context.home_dir,
+            settings_path=settings_path,
+            harness=self.harness,
+            display_name=self.display_name,
+        ).encode("utf-8")
+        settings_after = managed_extension_settings(
+            settings, settings_path=settings_path, extension_path=extension_path
         )
-        enable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
+        files = list(prepared_shim.files)
+        for path, before, after in (
+            (extension_path, extension_before, extension_after),
+            (settings_path, settings_before, settings_after),
+        ):
+            mode = path.stat().st_mode & 0o777 if before is not None else 0o644
+            change = TransitionFile(path.resolve(strict=False), before, after, before_mode=mode, after_mode=mode)
+            change.payload()
+            files.append(change)
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
         )
-        return {
+        manifest: dict[str, object] = {
             "harness": self.harness,
             "active": True,
             "config_path": str(extension_path),
@@ -560,6 +579,10 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
                 *shim_notes,
             ],
         }
+        return PreparedHarnessInstall(tuple(files), manifest)
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(
@@ -630,6 +653,28 @@ class OmpHarnessAdapter(_PiFamilyHarnessAdapter):
     fallback_hint = "Oh My Pi keeps the blocked request in Guard and shows the reason inline before you retry."
 
 
+def _legacy_omp_managed_extension_sources(
+    context: HarnessContext,
+    settings_path: Path,
+) -> tuple[str, ...]:
+    return (
+        managed_extension_source(
+            guard_home=context.guard_home,
+            home_dir=context.home_dir,
+            settings_path=settings_path,
+            harness="pi",
+            display_name="Pi",
+        ),
+        previous_managed_extension_source(
+            guard_home=context.guard_home,
+            home_dir=context.home_dir,
+            settings_path=settings_path,
+            harness="pi",
+            display_name="Pi",
+        ),
+    )
+
+
 def legacy_omp_managed_extension_is_verified(
     context: HarnessContext,
     pi_managed_install: dict[str, object],
@@ -654,13 +699,8 @@ def legacy_omp_managed_extension_is_verified(
         source = omp_extension_path.read_text(encoding="utf-8")
     except OSError:
         return False
-    return source == managed_extension_source(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        settings_path=omp_settings_path,
-        harness="pi",
-        display_name="Pi",
-    )
+    expected_sources = _legacy_omp_managed_extension_sources(context, omp_settings_path)
+    return source in expected_sources
 
 
 def remove_legacy_omp_managed_extension(context: HarnessContext) -> bool:
@@ -672,14 +712,8 @@ def remove_legacy_omp_managed_extension(context: HarnessContext) -> bool:
         source = omp_extension_path.read_text(encoding="utf-8")
     except OSError:
         return False
-    expected_source = managed_extension_source(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        settings_path=omp_settings_path,
-        harness="pi",
-        display_name="Pi",
-    )
-    if source != expected_source:
+    expected_sources = _legacy_omp_managed_extension_sources(context, omp_settings_path)
+    if source not in expected_sources:
         return False
     disable_managed_extension(settings_path=omp_settings_path, extension_path=omp_extension_path)
     omp_extension_path.unlink()

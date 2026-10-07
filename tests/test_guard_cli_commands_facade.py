@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import importlib
+import subprocess
 import sys
+from pathlib import Path
 
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 
@@ -21,61 +22,36 @@ def test_commands_facade_exports_legacy_symbols() -> None:
         assert getattr(guard_commands_module, name) is not None
 
 
+def test_guard_package_lazily_resolves_legacy_command_export_in_fresh_process() -> None:
+    repository_root = Path(__file__).resolve().parents[1]
+    probe = """
+import importlib
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]) / "src"))
+guard = importlib.import_module("codex_plugin_scanner.guard")
+assert "codex_plugin_scanner.guard.cli.commands" not in sys.modules
+assert guard.__all__ == ["run_guard_command"]
+assert "run_guard_command" in dir(guard)
+from codex_plugin_scanner.guard import run_guard_command
+from codex_plugin_scanner.guard.cli.commands import run_guard_command as cli_run_guard_command
+assert run_guard_command is cli_run_guard_command
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", probe, str(repository_root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_commands_facade_wrapped_helpers_report_facade_module() -> None:
     assert guard_commands_module.add_guard_parser.__module__ == guard_commands_module.__name__
     assert guard_commands_module.run_guard_command.__module__ == guard_commands_module.__name__
     assert guard_commands_module._finalize_guard_connect_payload.__module__ == guard_commands_module.__name__
     assert guard_commands_module._headless_approval_resolver.__module__ == guard_commands_module.__name__
-
-
-def test_commands_facade_restores_propagated_overrides(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.cli import commands_hook_generic as generic_commands
-
-    original = generic_commands.schedule_guard_daemon_ensure
-
-    def replacement(_guard_home):
-        return "http://127.0.0.1:4455"
-
-    monkeypatch.setattr(guard_commands_module, "schedule_guard_daemon_ensure", replacement)
-
-    with guard_commands_module._support_overrides():
-        assert generic_commands.schedule_guard_daemon_ensure is replacement
-
-    assert generic_commands.schedule_guard_daemon_ensure is original
-
-
-def test_commands_facade_restores_late_loaded_compatibility_overrides(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.cli import commands_support as support
-
-    original = support.queue_blocked_approvals
-
-    def replacement(*_args, **_kwargs):
-        return []
-
-    monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", replacement)
-    module_name = f"{guard_commands_module.__package__}.commands_hook_generic"
-    package = sys.modules[guard_commands_module.__package__]
-    attribute_name = "commands_hook_generic"
-    previous_module = sys.modules.pop(module_name, None)
-    had_package_attribute = hasattr(package, attribute_name)
-    previous_package_attribute = getattr(package, attribute_name, None)
-    if had_package_attribute:
-        delattr(package, attribute_name)
-
-    try:
-        with guard_commands_module._support_overrides():
-            late_module = importlib.import_module(module_name)
-            assert late_module.queue_blocked_approvals is replacement
-
-        assert late_module.queue_blocked_approvals is original
-    finally:
-        sys.modules.pop(module_name, None)
-        if previous_module is not None:
-            sys.modules[module_name] = previous_module
-        if hasattr(package, attribute_name):
-            delattr(package, attribute_name)
-        if had_package_attribute:
-            setattr(package, attribute_name, previous_package_attribute)
 
 
 def test_commands_facade_restores_overrides_captured_by_modules_imported_inside_window(monkeypatch) -> None:

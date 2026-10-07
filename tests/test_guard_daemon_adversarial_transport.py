@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import socket
 import threading
@@ -21,6 +22,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 
 
 @contextmanager
@@ -197,6 +199,162 @@ def test_disconnected_slow_clients_do_not_emit_handler_exception_storm(
     assert daemon._server.active_requests == 0
 
 
+@pytest.mark.parametrize("traffic", ["unclassified", "normal"])
+@pytest.mark.parametrize(("authenticated", "expected_status"), [(True, 200), (False, 401)])
+def test_real_128_connection_admission_keeps_control_authenticated_and_releases_capacity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    traffic: str,
+    authenticated: bool,
+    expected_status: int,
+) -> None:
+    monkeypatch.setenv("HOL_GUARD_DAEMON_MAX_ACTIVE_REQUESTS", "128")
+    # Hold generated slow sockets long enough to measure admission, rather
+    # than letting the transport watchdog erase saturation during setup.
+    monkeypatch.setattr(daemon_server, "_DAEMON_REQUEST_READ_TIMEOUT_SECONDS", 2.0)
+    release = threading.Event()
+    entered = 0
+    entered_lock = threading.Lock()
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        server = daemon._server
+        assert server.connection_capacity_limit == 128
+        assert server._guard_capacity_limit == 128
+        control_routed = threading.Event()
+        submit_transport = server._submit_transport_request
+
+        def observed_submission(request, address, *, control):
+            if control:
+                control_routed.set()
+            return submit_transport(request, address, control=control)
+
+        monkeypatch.setattr(server, "_submit_transport_request", observed_submission)
+
+        def blocked_sessions(*_args, **_kwargs):
+            nonlocal entered
+            with entered_lock:
+                entered += 1
+            assert release.wait(5), "test did not release normal traffic"
+            return []
+
+        monkeypatch.setattr(server.store, "list_guard_sessions", blocked_sessions)
+        clients: list[socket.socket] = []
+        try:
+            for _ in range(128):
+                client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
+                clients.append(client)
+                if traffic == "normal":
+                    client.sendall(
+                        b"GET /v1/sessions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                        + f"X-Guard-Token: {server.auth_token}\r\n\r\n".encode()
+                    )
+            deadline = time.monotonic() + 1
+            while time.monotonic() < deadline:
+                with server.request_capacity_lock:
+                    normal = len(server.normal_connections)
+                with entered_lock:
+                    classified = entered
+                if normal >= 112 and (traffic == "unclassified" or classified >= 32):
+                    break
+                time.sleep(0.01)
+            assert 112 <= normal <= 128
+            if traffic == "normal":
+                assert classified >= 32, "actual normal worker pool must be occupied"
+            token = f"X-Guard-Token: {server.auth_token}\r\n".encode() if authenticated else b""
+            started = time.monotonic()
+            try:
+                response = _raw_request(
+                    daemon.port, b"GET /v1/healthz/details HTTP/1.1\r\nHost: 127.0.0.1\r\n" + token + b"\r\n"
+                )
+            except TimeoutError:
+                pytest.fail(
+                    f"control_routed={control_routed.is_set()}; "
+                    f"pending={len(server.pending_classifications)}; normal={len(server.normal_connections)}; "
+                    f"active={server.active_requests}; "
+                    f"watchdog_alive={server.unclassified_watchdog_thread.is_alive()}"
+                )
+            assert _status_code(response) == expected_status
+            control_ms = (time.monotonic() - started) * 1000
+            assert control_ms < 500
+            print(
+                f"C1 pass traffic={traffic} authenticated={authenticated} status={expected_status} "
+                f"normal={normal} classified={classified} capacity=128 control_ms={control_ms:.1f} "
+                f"control_target_ms=2000"
+            )
+        finally:
+            release.set()
+            for client in clients:
+                client.close()
+        deadline = time.monotonic() + 2
+        while server.active_requests and time.monotonic() < deadline:
+            time.sleep(0.01)
+        with server.request_capacity_lock:
+            assert server.active_requests == 0
+            assert not server.normal_connections and not server.active_connections
+            assert not server.request_accepted_at and not server.request_capacity_kinds
+        with server.unclassified_connections_lock:
+            assert not server.unclassified_connections
+        for semaphore in (server.connection_capacity, server._guard_slots):
+            acquired = 0
+            try:
+                while semaphore.acquire(blocking=False):
+                    acquired += 1
+                assert acquired == 128, "all actual transport permits must return"
+            finally:
+                for _ in range(acquired):
+                    semaphore.release()
+
+
+def test_shutdown_discards_deferred_classification_and_returns_both_permits(tmp_path, monkeypatch):
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        server = daemon._server
+        assert server.stop_unclassified_watchdog()
+        monkeypatch.setattr(server, "_reserve_normal_connection", lambda _request: False)
+        request, peer = socket.socketpair()
+        try:
+            server.process_request(request, ("127.0.0.1", 1))
+            assert len(server.pending_classifications) == 1
+            assert server.active_requests == 1
+            assert server._stop_request_executors()
+            assert not server.pending_classifications
+            assert not server.active_connections and not server.request_accepted_at
+            assert server.active_requests == 0
+            for semaphore, expected in (
+                (server.connection_capacity, server.connection_capacity_limit),
+                (server._guard_slots, server._guard_capacity_limit),
+            ):
+                acquired = 0
+                try:
+                    while semaphore.acquire(blocking=False):
+                        acquired += 1
+                    assert acquired == expected
+                finally:
+                    for _ in range(acquired):
+                        semaphore.release()
+        finally:
+            request.close()
+            peer.close()
+
+
+def test_pending_header_peek_is_nonblocking_and_tolerates_concurrent_close():
+    request, peer = socket.socketpair()
+    request.settimeout(2)
+    try:
+        started = time.monotonic()
+        assert not daemon_server._GuardDaemonHTTPServer._buffered_request_headers_complete(request, pending=True)
+        assert time.monotonic() - started < 0.05 * under_coverage_scale(4.0)
+        peer.sendall(b"GET /healthz HTTP/1.1\r\nHost:")
+        assert not daemon_server._GuardDaemonHTTPServer._buffered_request_headers_complete(request, pending=True)
+        assert request.gettimeout() == 2
+        peer.sendall(b" localhost\r\n\r\n")
+        assert daemon_server._GuardDaemonHTTPServer._buffered_request_headers_complete(request, pending=True)
+        assert request.gettimeout() == 2
+        request.close()
+        assert not daemon_server._GuardDaemonHTTPServer._buffered_request_headers_complete(request, pending=True)
+    finally:
+        request.close()
+        peer.close()
+
+
 def test_partial_connections_are_bounded_before_handler_threads_start(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -254,6 +412,191 @@ def test_absolute_header_deadline_closes_trickle_client(
     assert daemon._server.active_requests == 0
 
 
+@pytest.mark.parametrize("authenticated,expected_status", [(True, 200), (False, 401)])
+@pytest.mark.parametrize("fragmented", [False, True])
+def test_control_admission_survives_classified_normal_connection_saturation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, authenticated: bool, expected_status: int, fragmented: bool
+) -> None:
+    monkeypatch.setenv("HOL_GUARD_DAEMON_MAX_ACTIVE_REQUESTS", "4")
+    release = threading.Event()
+    entered_lock = threading.Lock()
+    entered = 0
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        daemon._server.connection_capacity_limit = 4
+        daemon._server.connection_capacity = threading.BoundedSemaphore(4)
+
+        def blocked_sessions(*args, **kwargs):
+            nonlocal entered
+            with entered_lock:
+                entered += 1
+            assert release.wait(3), "test did not release classified normal requests"
+            return []
+
+        monkeypatch.setattr(daemon._server.store, "list_guard_sessions", blocked_sessions)
+        clients: list[socket.socket] = []
+        try:
+            for _ in range(4):
+                client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
+                clients.append(client)
+                client.sendall(
+                    b"GET /v1/sessions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    + f"X-Guard-Token: {daemon._server.auth_token}\r\n\r\n".encode()
+                )
+            deadline = time.monotonic() + 1
+            while time.monotonic() < deadline:
+                with entered_lock:
+                    classified = entered
+                with daemon._server.request_capacity_lock:
+                    rejected = daemon._server.rejected_requests
+                if classified + rejected >= 4:
+                    break
+                time.sleep(0.01)
+            assert classified >= 3
+            with daemon._server.unclassified_connections_lock:
+                assert not daemon._server.unclassified_connections
+            token = f"X-Guard-Token: {daemon._server.auth_token}\r\n".encode() if authenticated else b""
+            started = time.monotonic()
+            if fragmented:
+                reserve_failed = threading.Event()
+                reserve = daemon._server._reserve_normal_connection
+
+                def observed_reserve(request):
+                    result = reserve(request)
+                    if not result:
+                        reserve_failed.set()
+                    return result
+
+                monkeypatch.setattr(daemon._server, "_reserve_normal_connection", observed_reserve)
+                client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
+                clients.append(client)
+                client.settimeout(1)
+                client.sendall(b"GET /v1/healthz/")
+                assert reserve_failed.wait(1)
+                client.sendall(b"details HTTP/1.1\r\nHost: 127.0.0.1\r\n" + token + b"\r\n")
+                client.shutdown(socket.SHUT_WR)
+                response = _recv_all(client)
+            else:
+                response = _raw_request(
+                    daemon.port,
+                    b"GET /v1/healthz/details HTTP/1.1\r\nHost: 127.0.0.1\r\n" + token + b"\r\n",
+                )
+            assert _status_code(response) == expected_status
+            assert time.monotonic() - started < 0.5
+        finally:
+            release.set()
+            for client in clients:
+                client.close()
+        deadline = time.monotonic() + 1
+        while daemon._server.active_requests and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert daemon._server.active_requests == 0
+        assert not daemon._server.normal_connections
+
+
+@pytest.mark.parametrize("control", [False, True])
+@pytest.mark.parametrize("failure", ["rejected", "exception"])
+def test_transport_submission_failure_releases_all_admission_ownership(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, control: bool, failure: str
+) -> None:
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        executors = (daemon._server.control_request_executor, daemon._server.general_request_executor)
+        submits = [executor.submit for executor in executors]
+        errors: list[object] = []
+        submission_attempted = threading.Event()
+        monkeypatch.setattr(daemon._server, "handle_error", lambda request, address: errors.append(address))
+
+        def fail_submit(*args, **kwargs):
+            submission_attempted.set()
+            if failure == "exception":
+                raise RuntimeError("injected executor failure")
+            return False
+
+        # The first transport peek may precede the request line. Inject at both
+        # executors so the test exercises ownership regardless of that timing.
+        for executor in executors:
+            monkeypatch.setattr(executor, "submit", fail_submit)
+        path = "/v1/healthz/details" if control else "/v1/sessions"
+        request = (
+            f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Guard-Token: {daemon._server.auth_token}\r\n\r\n"
+        ).encode()
+        try:
+            response = _raw_request(daemon.port, request)
+        except OSError as error:
+            # The injected rejection can close before the client half-close.
+            # Only the expected peer-close outcomes count as a closed response.
+            if error.errno not in {errno.ENOTCONN, errno.ECONNRESET, errno.EPIPE}:
+                raise
+            response = b""
+        assert submission_attempted.wait(1)
+        assert response == b""
+        deadline = time.monotonic() + 1
+        while daemon._server.active_requests and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert daemon._server.active_requests == 0
+        assert not daemon._server.normal_connections
+        assert not daemon._server.request_accepted_at
+        assert not daemon._server.active_connections
+        assert not daemon._server.unclassified_connections
+        for semaphore, limit in (
+            (daemon._server.connection_capacity, daemon._server.connection_capacity_limit),
+            (daemon._server._guard_slots, daemon._server._guard_capacity_limit),
+        ):
+            held = [semaphore.acquire(blocking=False) for _ in range(limit)]
+            try:
+                assert all(held)
+                assert not semaphore.acquire(blocking=False)
+            finally:
+                for acquired in held:
+                    if acquired:
+                        semaphore.release()
+        for executor, submit in zip(executors, submits, strict=True):
+            monkeypatch.setattr(executor, "submit", submit)
+        assert _status_code(_raw_request(daemon.port, request)) == 200
+
+
+def test_incomplete_control_headers_cannot_starve_authenticated_control_workers(tmp_path, monkeypatch):
+    with _running_daemon(tmp_path, monkeypatch) as daemon:
+        get_request = daemon._server.get_request
+
+        def accept_with_buffered_request_line():
+            # Arrange a real TCP request line before process_request, without
+            # consuming it or completing the deliberately missing headers.
+            request, address = get_request()
+            request.settimeout(1)
+            deadline = time.monotonic() + 1
+            while b"\n" not in request.recv(4096, socket.MSG_PEEK):
+                assert time.monotonic() < deadline
+                time.sleep(0.001)
+            return request, address
+
+        monkeypatch.setattr(daemon._server, "get_request", accept_with_buffered_request_line)
+        clients: list[socket.socket] = []
+        try:
+            for _ in daemon._server.control_request_executor.threads:
+                client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
+                clients.append(client)
+                client.sendall(b"GET /v1/healthz/details HTTP/1.1\r\n")
+            deadline = time.monotonic() + 1
+            while daemon._server.active_requests < len(clients) and time.monotonic() < deadline:
+                time.sleep(0.01)
+            with daemon._server.request_capacity_lock:
+                assert daemon._server.active_requests == len(clients)
+            with daemon._server.unclassified_connections_lock:
+                assert len(daemon._server.unclassified_connections) == len(clients)
+            assert not daemon._server.normal_connections
+            started = time.monotonic()
+            response = _raw_request(
+                daemon.port,
+                b"GET /v1/healthz/details HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                + f"X-Guard-Token: {daemon._server.auth_token}\r\n\r\n".encode(),
+            )
+            assert _status_code(response) == 200
+            assert time.monotonic() - started < 0.5
+        finally:
+            for client in clients:
+                client.close()
+
+
 def test_liveness_progresses_during_continuous_slow_client_replenishment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -309,12 +652,12 @@ def test_liveness_uses_reserved_capacity_when_general_requests_are_saturated(
         (
             "/v1/hooks/pi",
             {"hook_event_name": "PreToolUse", "tool_name": "read", "tool_input": {}},
-            ("decision", "allow"),
+            ("decision", "deny"),
         ),
         (
             "/v1/hooks/claude-code",
             {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}},
-            ("permissionDecision", "allow"),
+            ("permissionDecision", "deny"),
         ),
         (
             "/v1/hooks/claude-code",

@@ -26,8 +26,8 @@ from codex_plugin_scanner.guard.runtime.command_activity_lifecycle import (
     build_pre_hook_evidence,
     build_unpaired_post_evidence,
 )
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind, UncertaintyKind
+from tests.native_command_test_support import real_native_command_evaluation
 
 NOW = datetime(2026, 7, 18, 20, 0, tzinfo=timezone.utc)
 
@@ -52,7 +52,7 @@ def _decision(
 
 
 def test_pre_hook_uses_only_authoritative_evaluation_and_final_decision_facts() -> None:
-    evaluation = evaluate_command("rm -rf ./generated-output")
+    evaluation = real_native_command_evaluation("rm -rf ./generated-output").evaluation
     request = _correlation()
     evidence = build_pre_hook_evidence(
         evaluation,
@@ -83,7 +83,7 @@ def test_pre_hook_uses_only_authoritative_evaluation_and_final_decision_facts() 
 
 
 def test_allow_and_warn_are_allowed_unconfirmed_while_review_or_stronger_is_prevented() -> None:
-    evaluation = evaluate_command("rm -rf ./generated-output")
+    evaluation = real_native_command_evaluation("rm -rf ./generated-output").evaluation
     for action in ("allow", "warn"):
         evidence = build_pre_hook_evidence(
             evaluation,
@@ -106,18 +106,18 @@ def test_allow_and_warn_are_allowed_unconfirmed_while_review_or_stronger_is_prev
 
 def test_required_critical_rule_retains_the_evaluators_block_floor() -> None:
     evidence = build_pre_hook_evidence(
-        evaluate_command("mkfs /dev/example"),
+        real_native_command_evaluation("mkfs /dev/example").evaluation,
         _decision(action="block", receipt_id="receipt:critical"),
         activity_id="activity:critical",
         occurred_at=NOW,
         harness="codex",
     )
 
-    assert evidence.matches[0].default_floor == "block"
+    assert any(match.default_floor == "block" for match in evidence.matches)
 
 
 def test_no_match_reason_is_exact_and_does_not_invent_rule_evidence() -> None:
-    evaluation = evaluate_command("printf routine")
+    evaluation = real_native_command_evaluation("printf routine").evaluation
     evidence = build_pre_hook_evidence(
         evaluation,
         _decision(reason=ActivityDecisionReason.NO_MATCH),
@@ -141,7 +141,7 @@ def test_no_match_reason_is_exact_and_does_not_invent_rule_evidence() -> None:
 
 def test_claimed_workflow_capability_may_authorize_without_extension_matches() -> None:
     evidence = build_pre_hook_evidence(
-        evaluate_command("printf routine"),
+        real_native_command_evaluation("printf routine").evaluation,
         CommandActivityDecisionFacts(
             policy_action="allow",
             decision_reason_code=ActivityDecisionReason.CAPABILITY,
@@ -177,7 +177,7 @@ def test_capability_reason_requires_final_allow_and_a_claimed_authorization(
 
 
 def test_parser_uncertainty_is_bounded_without_storing_parser_input() -> None:
-    exact = evaluate_command("rm -rf ./generated-output")
+    exact = real_native_command_evaluation("rm -rf ./generated-output").evaluation
     uncertain_command = replace(
         exact.command,
         confidence="uncertain",
@@ -200,7 +200,7 @@ def test_parser_uncertainty_is_bounded_without_storing_parser_input() -> None:
 def test_correlated_success_and_failure_preserve_pre_hook_facts() -> None:
     request = _correlation()
     pre = build_pre_hook_evidence(
-        evaluate_command("rm -rf ./generated-output"),
+        real_native_command_evaluation("rm -rf ./generated-output").evaluation,
         _decision(),
         activity_id="activity:paired",
         occurred_at=NOW,
@@ -228,7 +228,7 @@ def test_correlated_success_and_failure_preserve_pre_hook_facts() -> None:
 def test_correlated_post_activity_accepts_the_parent_row_returned_by_storage() -> None:
     request = _correlation()
     pre = build_pre_hook_evidence(
-        evaluate_command("rm -rf ./generated-output"),
+        real_native_command_evaluation("rm -rf ./generated-output").evaluation,
         _decision(),
         activity_id="activity:stored",
         occurred_at=NOW,
@@ -250,7 +250,7 @@ def test_correlated_post_activity_accepts_the_parent_row_returned_by_storage() -
 def test_correlated_post_rejects_missing_mismatched_or_prevented_pre_hook() -> None:
     request = _correlation()
     allowed = build_pre_hook_evidence(
-        evaluate_command("rm -rf ./generated-output"),
+        real_native_command_evaluation("rm -rf ./generated-output").evaluation,
         _decision(),
         activity_id="activity:paired",
         occurred_at=NOW,
@@ -267,7 +267,7 @@ def test_correlated_post_rejects_missing_mismatched_or_prevented_pre_hook() -> N
     with pytest.raises(ValueError, match="exact pre-hook"):
         _ = build_correlated_post_evidence(without_request, request_correlation=request, succeeded=True)
     prevented = build_pre_hook_evidence(
-        evaluate_command("rm -rf ./generated-output"),
+        real_native_command_evaluation("rm -rf ./generated-output").evaluation,
         _decision(action="review", receipt_id="receipt:01"),
         activity_id="activity:prevented",
         occurred_at=NOW,
@@ -301,7 +301,7 @@ def test_unpaired_post_claims_no_decision_match_receipt_or_request_proof() -> No
 
 
 def test_runtime_construction_exposes_no_command_or_matcher_content_fields() -> None:
-    evaluation = evaluate_command("rm -rf /private/forbidden-sentinel")
+    evaluation = real_native_command_evaluation("rm -rf /private/forbidden-sentinel").evaluation
     evidence = build_pre_hook_evidence(
         evaluation,
         _decision(),

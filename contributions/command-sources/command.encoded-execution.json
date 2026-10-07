@@ -1,0 +1,126 @@
+{
+  "extension": {
+    "action_classes": [
+      "encoded or encrypted shell command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews decode-and-execute flows whose effective program is hidden from normal command inspection.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.encoded-execution",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Encoded execution protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "encoded or encrypted shell command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies decode or decrypt chains that immediately execute their output.",
+        "example_command": "echo <base64> | base64 --decode | sh",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Encoded execution",
+        "permission_id": "command.encoded-execution.permission.decode-and-execute",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Decode to a file, inspect the result, then invoke the reviewed file directly."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [],
+    "required": false,
+    "risk_classes": [
+      "encoded_execution"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "encoded or encrypted shell command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies decode or decrypt chains that immediately execute their output.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "consumer": {
+            "config": {
+              "allow_leading_options": false,
+              "executables": [
+                "bash",
+                "powershell",
+                "pwsh",
+                "sh",
+                "zsh"
+              ],
+              "fail_secure_unknown_options": false,
+              "forbidden_flags": [],
+              "interspersed_flags": [],
+              "interspersed_options_with_values": [],
+              "inverse_flag_pairs": [],
+              "leading_options_with_values": [],
+              "options_with_values": [],
+              "required_flags": [],
+              "required_flags_in_all_arguments": false,
+              "required_option_values": [],
+              "subcommands": []
+            },
+            "op": "executable.v1"
+          },
+          "op": "pipeline.v1",
+          "producer": {
+            "config": {
+              "executables": [
+                "base64",
+                "gpg",
+                "openssl"
+              ],
+              "required_arguments": [
+                "-d"
+              ]
+            },
+            "op": "arguments.v1"
+          }
+        },
+        "native_capability": null,
+        "permission_id": "command.encoded-execution.permission.decode-and-execute",
+        "risk_classes": [
+          "encoded_execution"
+        ],
+        "rule_id": "command.encoded-execution.decode-and-execute",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Decode to a file, inspect the result, then invoke the reviewed file directly."
+        ],
+        "severity": "high",
+        "title": "Encoded execution"
+      }
+    ],
+    "safer_alternatives": [
+      "Decode the payload to a file, inspect it, then invoke the reviewed file directly."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

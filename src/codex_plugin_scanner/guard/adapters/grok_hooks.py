@@ -36,6 +36,7 @@ _GROK_TOOL_ALIASES: dict[str, str] = {
 _GROK_EVENT_NAMES: dict[str, str] = {
     "pretooluse": "PreToolUse",
     "userpromptsubmit": "UserPromptSubmit",
+    "userpromptsubmitted": "UserPromptSubmit",
     "posttooluse": "PostToolUse",
     "posttoolusefailure": "PostToolUse",
     "sessionstart": "SessionStart",
@@ -47,11 +48,10 @@ _GROK_EVENT_NAMES: dict[str, str] = {
     "permissiondenied": "PermissionDenied",
 }
 
-# Grok treats these events as observe-only. A deny JSON is ignored, so Guard
-# must not claim they are an enforcement boundary.
+# These lifecycle events cannot reject a prompt or tool action.
+# UserPromptSubmit is a gate: Grok honors decision:block, not decision:deny.
 _OBSERVE_ONLY_EVENTS = frozenset(
     {
-        "UserPromptSubmit",
         "SessionStart",
         "SessionEnd",
         "SubagentStart",
@@ -75,7 +75,9 @@ def _canonical_grok_event_name(raw_event: str) -> str:
     return _GROK_EVENT_NAMES.get(normalized, raw_event or "PreToolUse")
 
 
-def _is_observe_only_event(event_name: str | None) -> bool:
+def is_grok_observe_only_event(event_name: str | None) -> bool:
+    """Return whether Guard observes this Grok event without enforcement."""
+
     if not isinstance(event_name, str) or not event_name.strip():
         return False
     return _canonical_grok_event_name(event_name.strip()) in _OBSERVE_ONLY_EVENTS
@@ -135,6 +137,8 @@ def prepare_grok_hook_payload(payload: Mapping[str, object]) -> dict[str, object
     raw_event = _raw_hook_event_name(normalized)
     if raw_event:
         normalized["hook_event_name"] = _canonical_grok_event_name(raw_event)
+        if raw_event.replace("_", "").replace("-", "").lower() == "posttoolusefailure":
+            normalized["failed"] = True
     tool_name = normalized.get("tool_name")
     if tool_name is None:
         tool_name = normalized.get("toolName")
@@ -190,7 +194,14 @@ def grok_hook_response_from_guard(
 ) -> dict[str, object]:
     """Translate Guard policy action into Grok hook stdout JSON."""
 
-    if recording_only or _is_observe_only_event(event_name):
+    if is_grok_observe_only_event(event_name):
+        # Passive callbacks do not authorize a prompt or tool action.
+        return {}
+    if _canonical_grok_event_name(event_name or "") == "UserPromptSubmit":
+        if recording_only or policy_action in {"allow", "warn"}:
+            return {}
+        return {"decision": "block", "reason": reason.strip() or "Blocked by HOL Guard."}
+    if recording_only:
         return {"decision": "allow"}
     if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         cleaned_reason = _dedupe_grok_block_reason(reason.strip() if isinstance(reason, str) else "")
@@ -243,9 +254,10 @@ def emit_grok_hook_response(
         approval_payload=live_payload,
         recording_only=recording_only,
     )
-    _last_grok_policy_action = "allow" if payload.get("decision") == "allow" else live_action
+    _last_grok_policy_action = "allow" if payload.get("decision") not in {"deny", "block"} else live_action
     stream = output_stream if output_stream is not None else sys.stdout
-    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
+    # stdout is the harness delivery channel; approval payloads must reach the operator.
+    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
 
@@ -310,7 +322,7 @@ def _guard_store_from_argv():
 
 
 def grok_hook_should_block(*, policy_action: str, event_name: str | None = None) -> bool:
-    if _recording_only_from_guard_home() or _is_observe_only_event(event_name):
+    if _recording_only_from_guard_home() or is_grok_observe_only_event(event_name):
         return False
     return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
 
@@ -331,5 +343,6 @@ __all__ = [
     "grok_hook_process_exit",
     "grok_hook_response_from_guard",
     "grok_hook_should_block",
+    "is_grok_observe_only_event",
     "prepare_grok_hook_payload",
 ]
