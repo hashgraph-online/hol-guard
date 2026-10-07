@@ -1,3 +1,7 @@
+use super::manifest_dependency_targets::manifest_dependency_targets;
+use super::manifest_versions::{
+    default_registry_range, source_url_from_raw_spec, source_url_from_specifier,
+};
 use super::*;
 
 /// `_evaluation_targets` (:2167-2175).
@@ -8,12 +12,18 @@ pub(super) fn evaluation_targets(
     artifact: &GuardArtifact,
     workspace_dir: Option<&Path>,
 ) -> Vec<Map<String, Value>> {
-    deps.manifest.evaluation_targets(
-        artifact,
-        workspace_dir,
-        &targets_from_artifact(artifact),
-        false,
-    )
+    let explicit = targets_from_artifact(artifact);
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    let intent_kind = optional_string(artifact.metadata.get("intent_kind"));
+    if !matches!(
+        intent_kind.as_deref(),
+        None | Some("install") | Some("sync")
+    ) {
+        return Vec::new();
+    }
+    manifest_dependency_targets(deps, artifact, workspace_dir, false)
 }
 
 /// `_cloud_evaluation_targets` (:2178-2187).
@@ -24,12 +34,18 @@ pub(super) fn cloud_evaluation_targets(
     artifact: &GuardArtifact,
     workspace_dir: Option<&Path>,
 ) -> Vec<Map<String, Value>> {
-    deps.manifest.evaluation_targets(
-        artifact,
-        workspace_dir,
-        &targets_from_artifact(artifact),
-        true,
-    )
+    let explicit = targets_from_artifact(artifact);
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    let intent_kind = optional_string(artifact.metadata.get("intent_kind"));
+    if !matches!(
+        intent_kind.as_deref(),
+        None | Some("install") | Some("sync")
+    ) {
+        return Vec::new();
+    }
+    manifest_dependency_targets(deps, artifact, workspace_dir, true)
 }
 
 /// `_targets_from_artifact` (:2190-2254).
@@ -72,11 +88,33 @@ pub(super) fn targets_from_artifact(artifact: &GuardArtifact) -> Vec<Map<String,
             continue;
         };
         let (namespace, name) = split_namespace_name(&package_name, &ecosystem);
-        let requested = optional_string(item_map.get("requested_specifier"));
+        let mut requested = optional_string(item_map.get("requested_specifier"));
         let raw_spec =
             optional_string(item_map.get("raw_spec")).or_else(|| Some(package_name.clone()));
-        let source_url = optional_string(item_map.get("source_url"));
-        let source_spec = npm_source_spec(raw_spec.as_deref(), &ecosystem);
+        let source_url = optional_string(item_map.get("source_url"))
+            .or_else(|| source_url_from_specifier(requested.as_deref()))
+            .or_else(|| {
+                if item_map.contains_key("source_kind") {
+                    None
+                } else {
+                    raw_spec.as_deref().and_then(source_url_from_raw_spec)
+                }
+            });
+        if source_url.is_some() {
+            requested = None;
+        } else if requested.is_none() {
+            requested = default_registry_range(&ecosystem).map(str::to_owned);
+        }
+        let source_spec = npm_source_spec(source_url.as_deref(), &ecosystem);
+        let version = requested
+            .as_deref()
+            .filter(|specifier| !requested_specifier_is_range(Some(specifier), &ecosystem));
+        let version = version.and_then(exact_version);
+        let normalized = crate::supply_chain_package_identity::normalize_qualified_package_name(
+            &ecosystem,
+            &package_name,
+        )
+        .unwrap_or_else(|_| package_name.trim().to_string());
         let mut target = Map::new();
         target.insert("ecosystem".to_string(), Value::String(ecosystem));
         target.insert(
@@ -84,6 +122,19 @@ pub(super) fn targets_from_artifact(artifact: &GuardArtifact) -> Vec<Map<String,
             Value::String(package_name.clone()),
         );
         target.insert("name".to_string(), Value::String(name.clone()));
+        target.insert("normalized_name".to_string(), Value::String(normalized));
+        target.insert(
+            "range".to_string(),
+            if version.is_none() {
+                requested.clone().map(Value::String).unwrap_or(Value::Null)
+            } else {
+                Value::Null
+            },
+        );
+        target.insert(
+            "version".to_string(),
+            version.map(Value::String).unwrap_or(Value::Null),
+        );
         target.insert(
             "namespace".to_string(),
             namespace.clone().map(Value::String).unwrap_or(Value::Null),
@@ -103,11 +154,7 @@ pub(super) fn targets_from_artifact(artifact: &GuardArtifact) -> Vec<Map<String,
         if let Some(spec) = &source_spec {
             target.insert(
                 "source_kind".to_string(),
-                if spec.is_git() {
-                    Value::String("git".into())
-                } else {
-                    Value::Null
-                },
+                Value::String(spec.source_kind.as_str().to_owned()),
             );
             target.insert(
                 "source_repository".to_string(),
@@ -118,7 +165,7 @@ pub(super) fn targets_from_artifact(artifact: &GuardArtifact) -> Vec<Map<String,
             );
             target.insert(
                 "source_revision_kind".to_string(),
-                Value::String(format!("{:?}", spec.revision_kind)),
+                Value::String(spec.revision_kind.as_str().to_owned()),
             );
             target.insert(
                 "source_identity".to_string(),
@@ -191,4 +238,51 @@ pub(super) fn targets_from_artifact(artifact: &GuardArtifact) -> Vec<Map<String,
 pub(super) fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     format!("{:x}", Sha256::digest(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn named_https_archive_uses_source_url_not_install_spec() {
+        let source = "https://packages.example.com/demo.tgz";
+        for source_fields in [
+            json!({"source_url": source, "requested_specifier": "^1.0.0"}),
+            json!({"requested_specifier": source}),
+            json!({}),
+        ] {
+            let Value::Object(mut item) = source_fields else {
+                unreachable!("source fixture must be an object");
+            };
+            item.insert("ecosystem".into(), json!("npm"));
+            item.insert("package_name".into(), json!("demo"));
+            item.insert("raw_spec".into(), json!(format!("demo@{source}")));
+            let artifact = GuardArtifact {
+                artifact_id: "archive-source".into(),
+                name: "demo".into(),
+                harness: "guard-cli".into(),
+                artifact_type: "package_request".into(),
+                source_scope: "project".into(),
+                config_path: "guard.json".into(),
+                command: None,
+                args: Vec::new(),
+                url: None,
+                transport: None,
+                publisher: None,
+                metadata: json!({"package_manager": "npm", "targets": [item]}),
+                runtime_private_metadata: Value::Null,
+            };
+            let targets = targets_from_artifact(&artifact);
+            let target = &targets[0];
+            assert_eq!(target["source_url"], source);
+            assert_eq!(target["source_kind"], "url");
+            assert_eq!(target["source_invalid_reason"], Value::Null);
+            assert_eq!(target["requested_specifier"], Value::Null);
+            assert_eq!(target["version"], Value::Null);
+            assert_eq!(target["external_archive_source_integrity_invalid"], false);
+            assert!(target_is_external_https_archive(target));
+        }
+    }
 }

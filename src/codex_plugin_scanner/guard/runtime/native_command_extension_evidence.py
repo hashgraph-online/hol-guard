@@ -141,7 +141,9 @@ def observations_from_native_evidence(
         known_variants = {item.variant_id for item in rule.safe_variants}
         if any(item.variant_id not in known_variants for item in variants):
             raise NativeCommandExtensionEvidenceError("native_command_extension_evidence_unknown_identity")
-        uncertainty = (UncertaintyKind.MATCHER_FAILURE,) if cast(list[str], raw["uncertainty_reasons"]) else ()
+        # Native uncertainty means the compatibility model could not attribute
+        # the command to an owner; disabled controls still block it.
+        uncertainty = (UncertaintyKind.UNSUPPORTED_INPUT,) if cast(list[str], raw["uncertainty_reasons"]) else ()
         result.append(
             NativeCommandExtensionObservation(
                 extension,

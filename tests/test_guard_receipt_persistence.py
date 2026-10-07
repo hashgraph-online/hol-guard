@@ -24,6 +24,7 @@ import pytest
 from codex_plugin_scanner.guard.models import GuardArtifact, GuardReceipt
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_receipt_rollups import backfill_receipt_rollups
+from tests.coverage_ci import under_coverage_scale
 
 
 def _make_store(tmp_path: Path) -> GuardStore:
@@ -611,4 +612,7 @@ class TestReceiptAnalytics:
         elapsed = time.perf_counter() - started
 
         assert analytics["total"] == 100_000
-        assert elapsed < 0.05, f"rollup analytics took {elapsed * 1000:.1f}ms, expected < 50ms"
+        analytics_budget_seconds = 0.05 * under_coverage_scale(4.0)
+        assert elapsed < analytics_budget_seconds, (
+            f"rollup analytics took {elapsed * 1000:.1f}ms, expected < {analytics_budget_seconds * 1000:.0f}ms"
+        )

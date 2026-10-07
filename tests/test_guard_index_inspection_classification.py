@@ -141,7 +141,7 @@ def test_execution_config_cached_diff_keeps_native_uncertainty(tmp_path: Path) -
     payload = inspect_command("git -c diff.external=payload diff --cached", cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "review"
-    assert payload["minimum_action"] == "block"
+    assert payload["minimum_action"] == "review"
     assert payload["classification"]["explicitly_benign"] is False
     assert payload["controlling_rule_id"] == "command.git.index-inspection"
 
@@ -165,7 +165,7 @@ def test_attached_config_override_keeps_native_uncertainty(tmp_path: Path) -> No
     payload = inspect_command("git -cdiff.external=payload diff --cached", cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "review"
-    assert payload["minimum_action"] == "block"
+    assert payload["minimum_action"] == "review"
     assert payload["classification"]["explicitly_benign"] is False
     assert payload["controlling_rule_id"] == "command.git.index-inspection"
 
@@ -179,7 +179,7 @@ def test_native_cached_check_requires_repository_evidence(tmp_path: Path) -> Non
     )
     assert payload["classification"]["explicitly_benign"] is False
     assert payload["status"] == "review"
-    assert payload["minimum_action"] == "block"
+    assert payload["minimum_action"] == "review"
     assert payload["controlling_rule_id"] == "command.git.index-inspection"
 
 
@@ -211,14 +211,21 @@ def test_unproven_cached_diff_variants_are_owned(tmp_path: Path, command: str) -
     assert request.action_class == "git index inspection"
 
 
-@pytest.mark.parametrize("command", ("git diff -- --cached", "git diff -- --staged"))
+@pytest.mark.parametrize(
+    "command",
+    ("git diff -- --cached", "git diff -- --staged"),
+)
 def test_pathspec_index_flag_names_are_not_owned(tmp_path: Path, command: str) -> None:
     home, repository = _repository(tmp_path)
     payload = inspect_command(command, cwd=repository, home_dir=home)
 
-    # The terminator makes these paths, not index flags. The native generic
-    # diff owner still requires proof that Git helpers cannot execute.
-    assert payload["status"] == "review"
+    # The terminator makes these paths, not index flags. A host that can prove
+    # Git helpers are inert reports no_match; every other host keeps review.
+    assert payload["status"] in {"review", "no_match"}
+    assert all(rule["rule_id"] != "command.git.index-inspection" for rule in payload["rules"])
+    if payload["status"] == "no_match":
+        return
+    # The native generic diff owner still requires proof that Git helpers cannot execute.
     assert payload["minimum_action"] == "review"
     assert payload["classification"]["action_class"] == "git read command"
     assert payload["controlling_rule_id"] == "command.git.diff"

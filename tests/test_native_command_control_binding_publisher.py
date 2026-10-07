@@ -42,7 +42,7 @@ def _publisher(store: GuardStore, monkeypatch: pytest.MonkeyPatch, client=None) 
     return NativePolicySnapshotPublisher(
         store=store,
         status_provider=_status,
-        client_request=client or (lambda **kwargs: _ack(kwargs["payload"])),
+        client_request=client or (lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))),
         poll_interval_seconds=0.05,
     )
 
@@ -114,7 +114,7 @@ def test_local_control_commit_invalidates_before_anchor_and_reopens_only_after_c
         assert authority.health is AuthorityHealth.PROTECTED
         assert snapshot["command_extensions"]["revision"] == authority.revision
         pushed_revisions.append(authority.revision)
-        return _ack(kwargs["payload"])
+        return _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
 
     publisher = _publisher(store, monkeypatch, client)
     first = _publish_ready(publisher)
@@ -179,7 +179,7 @@ def test_verified_post_ack_read_rejects_cross_process_control_change_without_cal
         if calls == 2:
             entered.set()
             assert release.wait(5.0)
-        return _ack(kwargs["payload"])
+        return _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
 
     publisher = _publisher(store, monkeypatch, client)
     first = _publish_ready(publisher)

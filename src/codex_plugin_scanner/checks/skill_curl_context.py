@@ -16,7 +16,25 @@ _READ_ONLY_CURL_FLAGS = {
     "--compressed",
     "--no-progress-meter",
 }
-_FENCE = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})(?P<info>[^\r\n]*)[\r\n]*$")
+
+
+def _parse_fence_boundary(line: str) -> tuple[str, str] | None:
+    """Parse one Markdown fence boundary without regex backtracking."""
+
+    if line.endswith("\r\n"):
+        body = line[:-2]
+    elif line.endswith(("\r", "\n")):
+        body = line[:-1]
+    else:
+        body = line
+    body = body.lstrip(" \t")
+    if not body or body[0] not in {"`", "~"}:
+        return None
+    marker = body[0]
+    width = len(body) - len(body.lstrip(marker))
+    if width < 3:
+        return None
+    return body[:width], body[width:]
 
 
 def read_only_curl_spans(content: str) -> tuple[tuple[int, int], ...]:
@@ -34,18 +52,19 @@ def read_only_curl_spans(content: str) -> tuple[tuple[int, int], ...]:
     safe = False
     saw_command = False
     for line in content.splitlines(keepends=True):
-        boundary = _FENCE.fullmatch(line)
+        boundary = _parse_fence_boundary(line)
         if not fence:
-            if boundary:
-                fence = boundary.group("fence")
-                safe = boundary.group("info").strip() in {"", "bash", "sh", "shell"}
+            if boundary is not None:
+                boundary_fence, boundary_info = boundary
+                fence = boundary_fence
+                safe = boundary_info.strip() in {"", "bash", "sh", "shell"}
                 body_start = offset + len(line)
                 saw_command = False
         elif (
-            boundary
-            and boundary.group("fence")[0] == fence[0]
-            and len(boundary.group("fence")) >= len(fence)
-            and not boundary.group("info").strip()
+            boundary is not None
+            and boundary[0][0] == fence[0]
+            and len(boundary[0]) >= len(fence)
+            and not boundary[1].strip()
         ):
             if safe and saw_command and offset - body_start <= 65536:
                 spans.append((body_start, offset))

@@ -744,7 +744,9 @@ args = ["workspace-skill.js", "--changed"]
         assert f"'{guard_home}'" in shim_text
         assert "'--home'" not in shim_text
 
-    def test_guard_status_reports_managed_launch_and_review_queue(self, tmp_path, capsys):
+    def test_guard_status_reports_managed_launch_and_review_queue(
+        self, tmp_path, capsys, native_context_digest: Path
+    ):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
@@ -822,7 +824,7 @@ args = ["workspace-skill.js", "--changed"]
         assert codex_summary["next_action"] == "review"
 
     @pytest.mark.usefixtures("native_hook_force")
-    def test_guard_shim_forwards_dash_prefixed_args(self, tmp_path, capsys, monkeypatch):
+    def test_guard_shim_forwards_dash_prefixed_args(self, tmp_path, capsys, monkeypatch, native_context_digest):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         fake_bin = tmp_path / "fake-bin"
