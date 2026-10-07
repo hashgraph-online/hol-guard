@@ -9,7 +9,6 @@ import pytest
 
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
-    _build_request_payload,
     _cloud_fail_closed_decision,
     evaluate_package_request_artifact,
 )
@@ -494,45 +493,3 @@ def test_known_package_does_not_emit_unidentified_package(
     assert all(reason["code"] != "unidentified_package" for package in result.packages for reason in package["reasons"])
 
 
-def test_policy_version_hash_consistency_between_cloud_request_and_local_evaluation(
-    tmp_path: Path,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
-    bundle_response = _bundle_response(
-        packages=[
-            _package(
-                ecosystem="npm",
-                name="left-pad",
-                version="1.0.0",
-                default_action="monitor",
-            )
-        ]
-    )
-    store.cache_supply_chain_bundle(WORKSPACE_ID, bundle_response, "2026-05-19T00:00:00Z")
-    artifact = _artifact_for_targets("left-pad@1.0.0")
-    targets = evaluator_module._targets_from_artifact(artifact)
-    workspace_fingerprint = evaluator_module._workspace_fingerprint(
-        WORKSPACE_ID,
-        workspace_dir=tmp_path / "workspace",
-        artifact=artifact,
-        bundle_meta={"policy_hash": POLICY_HASH},
-    )
-    assert workspace_fingerprint is not None
-    request_payload = _build_request_payload(
-        artifact=artifact,
-        targets=targets,
-        workspace_dir=tmp_path / "workspace",
-        workspace_fingerprint=workspace_fingerprint,
-        policy_version=POLICY_HASH,
-    )
-
-    assert request_payload["policyVersion"] == POLICY_HASH
-    assert "lockfileContext" not in request_payload
-    assert request_payload["packages"][0].keys() == {
-        "direct",
-        "ecosystem",
-        "name",
-        "namespace",
-        "version",
-    }

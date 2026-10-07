@@ -13100,6 +13100,8 @@ function detectCategory(receipt) {
   if (SECRET_PATTERNS.some((p) => p.test(text))) return "secret";
   if (DESTRUCTIVE_PATTERNS.some((p) => p.test(text))) return "destructive";
   if (HIDDEN_PATTERNS.some((p) => p.test(text))) return "hidden";
+  if (receipt.action_envelope_json?.action_type === "file_write") return "file-write";
+  if (receipt.action_envelope_json?.action_type === "file_read") return "other";
   if (artifactType === "mcp_tool" || MCP_PATTERNS.some((p) => p.test(text))) return "mcp";
   if (SKILL_PATTERNS.some((p) => p.test(text))) return "skill";
   if (artifactType === "package_script" || SUPPLY_CHAIN_PATTERNS.some((p) => p.test(text))) return "supply-chain";
@@ -14588,7 +14590,7 @@ function whyPaused(request) {
     case "hidden":
       return "This code is hidden or encoded. Guard stops this by default.";
     case "file-write":
-      return "This writes to a file on your computer. Guard stops this by default.";
+      return "Guard could not verify this file change as routine under the current policy. Review the target and changes before approving.";
     case "tool-call":
       if ((request.artifact_name ?? "").startsWith("chrome-devtools:") || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
         return "This uses the browser. Confirm it if you meant to.";
@@ -17657,6 +17659,7 @@ async function fetchSettings() {
         },
         approval_wait_timeout_seconds: 120,
         approval_surface_policy: "attention-aware",
+        blocked_request_mode: "safe-alternative",
         approval_browser_delay_seconds: 20,
         approval_browser_immediate_severity: "critical",
         telemetry: false,
@@ -28355,7 +28358,7 @@ const TIER_LABEL = {
 };
 function QueueBulkStickyBar(props) {
   if (!props.visible) return null;
-  const unit = props.selectedActionCount === 1 ? "read" : "reads";
+  const unit = props.selectedActionCount === 1 ? "action" : "actions";
   const ChipIcon = toneIcon(props.riskTone);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -28416,7 +28419,7 @@ function QueueBulkStatusBanner(props) {
 }
 function QueueBulkGatePrompt(props) {
   if (!props.visible) return null;
-  const unit = props.eligibleActionCount === 1 ? "read" : "reads";
+  const unit = props.eligibleActionCount === 1 ? "action" : "actions";
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
@@ -28426,7 +28429,7 @@ function QueueBulkGatePrompt(props) {
         unit,
         " at once"
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up a local approval password to unlock bulk approval for read-only file reads. Bulk approval always approves once and never remembers future reads." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Enable Ask for proof with a configured approval password to review eligible actions together. Bulk approval approves each action once and never remembers future actions." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
@@ -29160,7 +29163,7 @@ function ApprovalPasswordModal(props) {
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
-    false
+    props.busy === true
   );
   reactExports.useEffect(() => {
     if (!gateLocked) return void 0;
@@ -29184,16 +29187,14 @@ function ApprovalPasswordModal(props) {
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
-      if (e.target === e.currentTarget) props.onCancel();
+      if (e.target === e.currentTarget && props.busy !== true) props.onCancel();
     },
-    [props.onCancel]
+    [props.onCancel, props.busy]
   );
-  const handleKeyDown = reactExports.useCallback(
-    (e) => {
-      if (e.key === "Enter" && !submitDisabled) {
-        e.preventDefault();
-        props.onSubmit();
-      }
+  const handleSubmit = reactExports.useCallback(
+    (event) => {
+      event.preventDefault();
+      if (!submitDisabled) props.onSubmit();
     },
     [props.onSubmit, submitDisabled]
   );
@@ -29202,11 +29203,10 @@ function ApprovalPasswordModal(props) {
     {
       className: "fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm",
       onClick: handleBackdropClick,
-      onKeyDown: handleKeyDown,
       role: "dialog",
       "aria-modal": "true",
       "aria-labelledby": "approval-password-modal-title",
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl", children: [
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -29254,6 +29254,7 @@ function ApprovalPasswordModal(props) {
             {
               type: "button",
               onClick: props.onCancel,
+              disabled: props.busy === true,
               className: "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
               children: "Go back"
             }
@@ -29261,8 +29262,7 @@ function ApprovalPasswordModal(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
-              type: "button",
-              onClick: props.onSubmit,
+              type: "submit",
               disabled: submitDisabled,
               className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
               children: props.submitLabel
@@ -30215,7 +30215,7 @@ function ReviewDecisionCard(props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
   const handleModalSubmit = reactExports.useCallback(() => {
-    if (pendingAction === null) {
+    if (pendingAction === null || submitting !== null) {
       return;
     }
     if (pendingContractKey !== decisionContractKey) {
@@ -30225,7 +30225,7 @@ function ReviewDecisionCard(props) {
       return;
     }
     void handleResolve(pendingAction);
-  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey]);
+  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey, submitting]);
   const handleModalCancel = reactExports.useCallback(() => {
     setPendingAction(null);
     setPendingContractKey(null);
@@ -30466,6 +30466,7 @@ function ReviewDecisionCard(props) {
         onApprovalTotpCodeChange: handleApprovalTotpCodeChange,
         onUseCooldownChange: handleUseCooldownChange,
         onSubmit: handleModalSubmit,
+        busy: submitting !== null,
         onCancel: handleModalCancel,
         submitLabel: pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel
       }

@@ -499,7 +499,12 @@ def test_unsupported_heredocs_preserve_native_block_without_inventing_data_match
     expanded = inspect_command(f"cat <<EOF\n$({body})\nEOF", cwd=tmp_path, home_dir=tmp_path)
     script = inspect_command(f"bash <<'EOF'\n{body}\nEOF", cwd=tmp_path, home_dir=tmp_path)
 
-    for payload in (data, expanded, script):
+    assert data["status"] == "no_match"
+    assert data["minimum_action"] == "review"
+    assert data["classification"]["explicitly_benign"] is False
+    assert data["rules"] == []
+    assert data["command_model"]["uncertainty_reason"] == "command_redirect_not_yet_supported"
+    for payload in (expanded, script):
         assert payload["status"] == "native_unavailable"
         assert payload["minimum_action"] == "block"
         assert payload["classification"]["explicitly_benign"] is False
@@ -672,12 +677,19 @@ def test_explicit_github_merge_permission_allows_exact_merge_through_runtime_art
     assert decision_plane["proof_routes"] == ["verified"]
     assert decision_plane["controlling_reasons"] == [
         {
+            "source": "assurance",
+            "reason_code": "native.explicit-benign",
+            "action_floor": "allow",
+            "segment_ref": None,
+            "operation_ref": None,
+        },
+        {
             "source": "control",
             "reason_code": "control.explicitly-enabled-permission",
             "action_floor": "allow",
             "segment_ref": None,
             "operation_ref": None,
-        }
+        },
     ]
 
 

@@ -105,7 +105,7 @@ fn canonical_digest<T: Serialize>(value: &T, maximum: usize, code: &str) -> Resu
     Ok(digest_bytes(&bytes))
 }
 
-fn binding_digest(label: &str, values: &[&str]) -> Result<String, String> {
+pub(super) fn binding_digest(label: &str, values: &[&str]) -> Result<String, String> {
     let mut normalized = values
         .iter()
         .map(|value| value.trim())
@@ -258,14 +258,24 @@ pub(super) fn derive_context_with_snapshot(
         .map_err(|_| "native_approval_result_invalid".to_owned())?;
     crate::policy_enforcement::validate_pre_tool_result_matrix(&result)
         .map_err(|_| "native_approval_action_reconstruction_failed".to_owned())?;
-    let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
+    let unavailable_environment = guard_contracts::GuardExecutionEnvironmentV1::unavailable();
+    let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         &edge_result.harness,
         &edge_result.event_name,
         &envelope.raw_payload,
         None,
         None,
-        Some(envelope.source.home_dir.as_str()),
-        envelope.source.cwd.as_deref(),
+        guard_command::pretool::PathContext {
+            home_dir: Some(envelope.source.home_dir.as_str()),
+            cwd: envelope.source.cwd.as_deref(),
+        },
+        Some(
+            envelope
+                .source
+                .execution_environment
+                .as_ref()
+                .unwrap_or(&unavailable_environment),
+        ),
     );
     if result.action != intrinsic.action
         || action_rank(&intrinsic.minimum_action).is_none()

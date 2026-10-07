@@ -30,6 +30,7 @@ jobs:
           enable-cache: true
       - name: Set up Python
         run: uv python install 3.12
+      - uses: ./.github/actions/stage-command-projections
       - name: Install locked dependencies
         run: uv sync --frozen --extra dev --python 3.12
       - name: Format proof implementation

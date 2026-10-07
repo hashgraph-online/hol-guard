@@ -1,5 +1,20 @@
 # Local evaluation contract boundary
 
+Cleanup requires a private temporary parent with no untrusted same-user
+mutation while cleanup runs. Directory descriptors anchor traversal and
+detected ownership or identity changes reject cleanup; portable POSIX name
+deletion does not guarantee atomic removal of a previously validated inode
+against a malicious concurrent writer. This is a cleanup containment
+assumption, not a same-user tamper-prevention claim.
+
+If setup allocation fails after marker establishment and cleanup cannot finish, the setup object retains
+the owned-root identity and opaque token. CLI setup and synthetic-run owners
+write the private recovery token before returning the blocked result. API
+callers must retain that token outside the owned root. Token-storage failures
+remain explicit failures; they do not count as successful cleanup or recovery.
+Failures before a valid ownership marker exists retain the root identity and
+report `setup_recovery_unavailable`; no automatic recovery authority is inferred.
+
 The packaged [`hol-guard-eval`](evaluation-cli.md) command exposes the
 bounded preflight, evidence verification, and ownership-checked cleanup
 stages described below. It does not run scenarios or establish installed-host

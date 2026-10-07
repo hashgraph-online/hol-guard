@@ -1950,11 +1950,8 @@ function TotpEnrollmentQrPanel({ enrollment }) {
   ] }) });
 }
 function resolveSettingsSaveProofKind(input) {
-  if (!input.wasConfigured && input.draftGateEnabled) {
+  if (input.draftGateEnabled && !input.savedGateEnabled) {
     return "setup-gate";
-  }
-  if (input.wasConfigured && input.draftGateEnabled && !input.savedGateEnabled) {
-    return "verify-save";
   }
   if (input.savedGateEnabled) {
     return "verify-save";
@@ -3225,7 +3222,7 @@ function buildConsequenceSummary(settings) {
     const postureLabel = PROTECTION_POSTURE_COPY[posture].label;
     return `Using custom rules on top of ${postureLabel}.`;
   }
-  return "Guard stops dangerous actions automatically and asks once about new or unknown work.";
+  return "Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate.";
 }
 function hasUnsavedChanges(saved, draft) {
   if (saved === null || draft === null) return false;
@@ -4150,7 +4147,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       {
         eyebrow: "This machine",
         title: "Protection",
-        description: "Guard stops dangerous actions automatically and asks once about new or unknown work."
+        description: "Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       }
     ),
     selectedPosture === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { onTurnProtectionOn: handleTurnProtectionOn }) : null,
@@ -4299,8 +4296,38 @@ function SettingsWorkspace({ onApprovalGateChange }) {
             ] }) })
           ] }),
           activeTab === "approval" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-4", children: [
-            !approvalGateEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: draft?.approval_gate?.configured === true ? "Ask for proof is off. Your saved password and authenticator stay on this device." : "Add a password or phone app code before allow or trust changes stick." }) }) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsx(
+              SettingsFormSection,
+              {
+                title: "When Guard blocks a request",
+                description: "Applies to every harness. Blocked actions stay blocked in either mode.",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "space-y-3 py-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: "Blocked request behavior" }),
+                  [
+                    { value: "safe-alternative", label: "Find a safe alternative (default)", description: "The agent receives the block reason and continues with a permitted approach. No approval prompt opens. Guard still saves the block in the inbox." },
+                    { value: "ask", label: "Ask me for approval", description: "Pause for an approval questionnaire in the harness or Guard. Decisions that require review can be approved; hard blocks stay blocked." }
+                  ].map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-blue", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "radio",
+                        name: "blocked-request-mode",
+                        value: option.value,
+                        checked: (draft.blocked_request_mode ?? "safe-alternative") === option.value,
+                        onChange: handleStringChange("blocked_request_mode"),
+                        className: "mt-1 h-4 w-4 shrink-0 accent-brand-blue"
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-medium text-brand-dark", children: option.label }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-sm text-slate-600", children: option.description })
+                    ] })
+                  ] }, option.value))
+                ] })
+              }
+            ),
+            !approvalGateEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: draft?.approval_gate?.configured === true ? "Ask for proof is off. Your saved password and authenticator stay on this device." : "Add a password or phone app code before allow or trust changes stick." }) }) : null,
+            draft.blocked_request_mode === "ask" && /* @__PURE__ */ jsxRuntimeExports.jsx(
               SettingsFormSection,
               {
                 title: "Where Guard asks",
@@ -4316,7 +4343,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                       options: surfacePolicyOptions
                     }
                   ),
-                  draft.approval_surface_policy === "attention-aware" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-3 sm:grid-cols-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                  draft.approval_surface_policy === "attention-aware" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-3 sm:grid-cols-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Browser delay (seconds)" }),
                     /* @__PURE__ */ jsxRuntimeExports.jsx(
                       "input",
@@ -4329,7 +4356,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                         className: "mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                       }
                     )
-                  ] }) }) : null
+                  ] }) })
                 ] })
               }
             ),

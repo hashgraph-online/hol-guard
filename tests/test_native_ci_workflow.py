@@ -10,15 +10,21 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _workflow(name: str) -> dict:
-    return yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+    """Load expanded workflow definitions for CI contract assertions."""
+    return expand_ci_job_actions(yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")))
 
 
 def test_ci_rust_cache_can_only_be_written_by_main_pushes() -> None:
-    action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
+    """Verify CI Rust cache can only be written by main pushes."""
+    action = expand_ci_job_actions(
+        yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
+    )
     cache = next(step for step in action["runs"]["steps"] if step.get("uses", "").startswith("Swatinem/"))
     assert cache["with"]["save-if"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
     assert cache["with"]["cache-workspace-crates"] is True
@@ -135,6 +141,37 @@ def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str,
     assert ("--target" in cargo_arguments) == (target == "x86_64-apple-darwin")
     if "--target" in cargo_arguments:
         assert cargo_arguments[cargo_arguments.index("--target") + 1] == target
+
+
+def test_native_wheel_prs_only_fan_out_for_native_build_inputs() -> None:
+    workflow = _workflow("native-wheel-ci.yml")
+    trigger = workflow[True]["pull_request"]
+    assert trigger["branches"] == ["main", "release/3.2"]
+    assert set(trigger["paths"]) == {
+        "rust/**",
+        "ci/native_runtime/**",
+        "contracts/extensions/**",
+        "contributions/**",
+        "src/codex_plugin_scanner/guard/*native*.py",
+        "src/codex_plugin_scanner/guard/runtime_transition*.py",
+        "src/codex_plugin_scanner/guard/adapters/*native*.py",
+        "scripts/ci/**",
+        "scripts/build_command_projection_hook.py",
+        "scripts/build_native_command_program.py",
+        "scripts/build_native_hol_guard_wheel.py",
+        "scripts/bench_guard_native_installed_slo.py",
+        "scripts/stress_guard_daemon.py",
+        "scripts/sync_repo_version.py",
+        ".github/workflows/native-wheel-ci.yml",
+        ".github/actions/native-regression/**",
+        ".github/actions/setup-rust/**",
+        ".github/actions/stage-command-projections/**",
+        "pyproject.toml",
+        "requirements.txt",
+        "uv.lock",
+    }
+    assert "src/**" not in trigger["paths"]
+    assert "tests/**" not in trigger["paths"]
 
 
 def test_bounded_stress_never_claims_full_soak_qualification() -> None:

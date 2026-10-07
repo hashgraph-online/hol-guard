@@ -1,0 +1,31 @@
+{
+ "bad_gen": {
+  "cutover_complete": true,
+  "generation": -1,
+  "pending_generation": null,
+  "version": 1
+ },
+ "bad_pending": {
+  "cutover_complete": true,
+  "generation": 3,
+  "pending_generation": 2,
+  "version": 1
+ },
+ "bad_version": {
+  "cutover_complete": true,
+  "generation": 3,
+  "pending_generation": null,
+  "version": 2
+ },
+ "control": {
+  "cutover_complete": true,
+  "generation": 3,
+  "pending_generation": null,
+  "version": 1
+ },
+ "control_ref": "guard-policy-integrity-control:0941eb65149d8cce",
+ "guard_home": "/private/var/folders/9z/48v7m0s52llddzmskkyjbdl80000gn/T/hg-resolver-19olisny",
+ "key_id": "guard-policy-integrity-key:0941eb65149d8cce:2ef24a19c19e5347",
+ "key_ref": "guard-policy-integrity-key:0941eb65149d8cce",
+ "raw_key_b64": "3dDMflCo-ZbB3lHuLxPojUpzQrJ6kLNJXxY9x6xQKuw="
+}

@@ -61,7 +61,10 @@ def test_hook_worker_auto_is_native_first(
         }
 
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", fake_native)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        fake_native,
+    )
     result = worker.review_http_payload(
         payload={"hook_event_name": "PostToolUse", "tool_response": "clean output"},
         params={},
@@ -71,7 +74,10 @@ def test_hook_worker_auto_is_native_first(
         workspace=tmp_path,
     )
     assert native_calls == 1
-    assert result == {"policy_action": "allow", "hookSpecificOutput": {"hookEventName": "PostToolUse"}}
+    assert result == {
+        "policy_action": "allow",
+        "hookSpecificOutput": {"hookEventName": "PostToolUse"},
+    }
 
 
 def test_hook_worker_auto_fails_closed_when_native_unavailable(

@@ -230,13 +230,30 @@ def test_authority_workflow_is_always_selected() -> None:
     assert "fetch-depth: 0" in source
 
 
-def test_native_wheel_workflow_is_always_selected() -> None:
+def test_native_wheel_workflow_selects_protected_native_changes() -> None:
     source = (ROOT / ".github" / "workflows" / "native-wheel-ci.yml").read_text(encoding="utf-8")
     trigger = source.split("permissions:", maxsplit=1)[0]
 
     assert "pull_request:\n    branches: [main, release/3.2]" in trigger
-    assert "paths:" not in trigger
+    assert "paths:" in trigger
     assert "paths-ignore:" not in trigger
+    for path in (
+        "rust/**",
+        "ci/native_runtime/**",
+        "contracts/extensions/**",
+        "contributions/**",
+        "src/codex_plugin_scanner/guard/*native*.py",
+        "src/codex_plugin_scanner/guard/runtime_transition*.py",
+        "src/codex_plugin_scanner/guard/adapters/*native*.py",
+        "scripts/ci/**",
+        "scripts/build_command_projection_hook.py",
+        "scripts/build_native_command_program.py",
+        "scripts/build_native_hol_guard_wheel.py",
+        ".github/actions/stage-command-projections/**",
+        "pyproject.toml",
+        "uv.lock",
+    ):
+        assert f'- "{path}"' in trigger
     assert "HOL_GUARD_HOOK_FAST_PATH" in source
     assert "probe_native_default_auto.py --json native-default-auto.json" in source
 
