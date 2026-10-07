@@ -40,6 +40,7 @@ def test_generated_tool_call_awaits_exact_approval_without_replanning(
     script = f"""
 const harness = {json.dumps(harness)};
 const GUARD_CONFIG_PATH = '/fixture/settings.json';
+let approvalContinuationGeneration = 0;
 const openedApprovalUrls = new Set();
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let activeScenario;

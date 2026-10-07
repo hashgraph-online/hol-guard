@@ -15,11 +15,18 @@ def build_extension_source_tail(
     tool_approval_continuation_source: str,
 ) -> str:
     workspace_readiness_source = (
-        "    const workspaceReadiness = await ensureGuardWorkspaceReady(snapshot.cwd, false);\n"
+        "    const workspaceSetup = ensureGuardWorkspaceReady(snapshot.cwd);\n"
+        "    const setupGeneration = approvalContinuationGeneration;\n"
+        "    const workspaceReadiness = await workspaceSetup;\n"
         "    if (!workspaceReadiness.ready) {\n"
         "      const reason = readinessFailureReason(workspaceReadiness);\n"
         '      ctx.ui.notify(reason, "warning");\n'
         "      return { block: true, reason };\n"
+        "    }\n"
+        "    if (setupGeneration !== approvalContinuationGeneration ||\n"
+        "        !toolCallStillMatches(event, ctx, GUARD_CONFIG_PATH, snapshot) ||\n"
+        "        handlerAbortSignal(ctx)?.aborted) {\n"
+        '      return { block: true, reason: "HOL Guard blocked a tool call whose context changed during setup." };\n'
         "    }\n"
     )
     shared_source = build_source_tail_shared_v1(
