@@ -63,7 +63,9 @@ def _test_request_digest(harness: str, payload: object, workspace: object) -> st
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, object]) -> tuple[HookWorker, GuardStore]:
+def _worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, object], *, ask: bool = True
+) -> tuple[HookWorker, GuardStore]:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
         lambda: "auto",
@@ -110,6 +112,10 @@ def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, obj
         review_raw_hook_native,
     )
     store = GuardStore(tmp_path / "guard-home")
+    if ask:
+        from codex_plugin_scanner.guard.config import update_guard_settings
+
+        update_guard_settings(store.guard_home, {"blocked_request_mode": "ask"})
     store.upsert_runtime_state(
         session_id="native-review",
         daemon_host="127.0.0.1",
@@ -331,6 +337,80 @@ def test_native_review_honors_resolved_allow_on_retry(
     assert isinstance(hook_output, dict)
     assert hook_output["permissionDecision"] == "allow"
     assert second["policy_action"] == "allow"
+    assert store.list_approval_requests(status="pending") == []
+
+
+def test_safe_alternative_review_denies_without_prompting_but_reaches_the_inbox(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker, store = _worker(tmp_path, monkeypatch, _edge("cursor"), ask=False)
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "WebFetch",
+        "tool_input": {"url": "https://example.test"},
+    }
+    kwargs = {
+        "payload": payload,
+        "params": {},
+        "default_harness": "cursor",
+        "home_dir": tmp_path / "home",
+        "guard_home": tmp_path / "guard-home",
+        "workspace": tmp_path / "workspace",
+    }
+
+    first = worker.review_http_payload(**kwargs)
+    hook_output = first["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "deny"
+    assert first["prompted"] is False
+    assert first["blocked_request_mode"] == "safe-alternative"
+    assert "approval_request_id" not in first
+    assert "approval_url" not in first
+
+    worker.review_http_payload(**kwargs)
+    pending = store.list_approval_requests(status="pending")
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "review"
+
+    resolved = store.resolve_harness_native_approval_request(
+        str(pending[0]["request_id"]),
+        reason="operator approved the blocked request from the inbox",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
+        expected_harness="cursor",
+    )
+    assert resolved is True
+    retry = worker.review_http_payload(**kwargs)
+    retry_output = retry["hookSpecificOutput"]
+    assert isinstance(retry_output, dict)
+    assert retry_output["permissionDecision"] == "allow"
+    assert store.list_approval_requests(status="pending") == []
+
+
+def test_safe_alternative_block_still_records_nothing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    edge = _edge("cursor")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    result.update(policy_action="block", minimum_action="block", reason_code="native_command_permission_disabled")
+    worker, store = _worker(tmp_path, monkeypatch, edge, ask=False)
+    response = worker.review_http_payload(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "WebFetch",
+            "tool_input": {"url": "https://example.test"},
+        },
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    hook_output = response["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "deny"
     assert store.list_approval_requests(status="pending") == []
 
 

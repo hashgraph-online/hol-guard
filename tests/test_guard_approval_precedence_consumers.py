@@ -43,13 +43,19 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
-_EXACT_PACKAGE_CONTEXT_TOKEN = build_approval_context_token(
-    identity={"package": "guard-proof"},
-    content={"digest": "package-content"},
-    capabilities={"operation": "install"},
-    policy={"version": "policy-v2"},
-    sandbox={"analysis": "off"},
-)
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
+def _exact_package_context_token() -> str:
+    # Built lazily inside tests: the token is native-owned and a module-level
+    # call would run before the runtime fixture binds the resident home.
+    return build_approval_context_token(
+        identity={"package": "guard-proof"},
+        content={"digest": "package-content"},
+        capabilities={"operation": "install"},
+        policy={"version": "policy-v2"},
+        sandbox={"analysis": "off"},
+    )
 
 
 def _package_evaluation(action: GuardAction) -> PackageRequestEvaluation:
@@ -116,7 +122,7 @@ class _SavedPackagePolicyStore:
                 "scope": "artifact",
                 "source": "approval-gate",
                 "decision_id": 1,
-                "artifact_hash": _EXACT_PACKAGE_CONTEXT_TOKEN,
+                "artifact_hash": _exact_package_context_token(),
             },
             "ignored_local_integrity": None,
             "trust_status": {},
@@ -132,6 +138,7 @@ class _SavedPackagePolicyStore:
 def test_package_saved_allow_never_lowers_terminal_current_action(
     tmp_path: Path,
     current_action: GuardAction,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -143,7 +150,7 @@ def test_package_saved_allow_never_lowers_terminal_current_action(
         _package_evaluation(current_action),
         store=store,
         artifact=artifact,
-        artifact_hash=_EXACT_PACKAGE_CONTEXT_TOKEN,
+        artifact_hash=_exact_package_context_token(),
         workspace_dir=workspace,
         now="2026-07-17T00:00:00Z",
         execution_context=context,
@@ -157,7 +164,7 @@ def test_package_saved_allow_never_lowers_terminal_current_action(
     assert store.claimed is False
 
 
-def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path) -> None:
+def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path, native_context_digest: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
@@ -168,7 +175,7 @@ def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path) 
         _package_evaluation("require-reapproval"),
         store=store,
         artifact=artifact,
-        artifact_hash=_EXACT_PACKAGE_CONTEXT_TOKEN,
+        artifact_hash=_exact_package_context_token(),
         workspace_dir=workspace,
         now="2026-07-17T00:00:00Z",
         execution_context=context,
@@ -179,7 +186,7 @@ def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path) 
     assert store.claimed is True
 
 
-def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path) -> None:
+def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path, native_context_digest: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
@@ -190,7 +197,7 @@ def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path)
         _package_evaluation("review"),
         store=store,
         artifact=artifact,
-        artifact_hash=_EXACT_PACKAGE_CONTEXT_TOKEN,
+        artifact_hash=_exact_package_context_token(),
         workspace_dir=workspace,
         now="2026-07-17T00:00:00Z",
         execution_context=context,
@@ -201,7 +208,9 @@ def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path)
     assert store.claimed is True
 
 
-def test_package_reuse_uses_post_scanner_current_action_before_claim(tmp_path: Path) -> None:
+def test_package_reuse_uses_post_scanner_current_action_before_claim(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
@@ -212,7 +221,7 @@ def test_package_reuse_uses_post_scanner_current_action_before_claim(tmp_path: P
         _package_evaluation("review"),
         store=store,
         artifact=artifact,
-        artifact_hash=_EXACT_PACKAGE_CONTEXT_TOKEN,
+        artifact_hash=_exact_package_context_token(),
         workspace_dir=workspace,
         now="2026-07-17T00:00:00Z",
         execution_context=context,
@@ -224,7 +233,9 @@ def test_package_reuse_uses_post_scanner_current_action_before_claim(tmp_path: P
     assert store.claimed is False
 
 
-def test_package_weaker_supplied_current_action_cannot_erase_package_block(tmp_path: Path) -> None:
+def test_package_weaker_supplied_current_action_cannot_erase_package_block(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
@@ -235,7 +246,7 @@ def test_package_weaker_supplied_current_action_cannot_erase_package_block(tmp_p
         _package_evaluation("block"),
         store=store,
         artifact=artifact,
-        artifact_hash=_EXACT_PACKAGE_CONTEXT_TOKEN,
+        artifact_hash=_exact_package_context_token(),
         workspace_dir=workspace,
         now="2026-07-17T00:00:00Z",
         execution_context=context,
@@ -247,7 +258,7 @@ def test_package_weaker_supplied_current_action_cannot_erase_package_block(tmp_p
     assert store.claimed is False
 
 
-def test_package_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path) -> None:
+def test_package_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path, native_context_digest: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
@@ -267,7 +278,7 @@ def test_package_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path
         _package_evaluation("review"),
         store=store,
         artifact=artifact,
-        artifact_hash=_EXACT_PACKAGE_CONTEXT_TOKEN,
+        artifact_hash=_exact_package_context_token(),
         workspace_dir=workspace,
         now="2026-07-17T00:00:00Z",
         execution_context=context,
@@ -320,6 +331,7 @@ def test_package_policy_and_sandbox_context_changes_invalidate_review_approval(
     tmp_path: Path,
     changed_dimension: str,
     expected_reason: str,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -382,6 +394,7 @@ def test_package_policy_and_sandbox_context_changes_invalidate_review_approval(
 def test_package_lockfile_parser_version_changes_approval_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -463,6 +476,60 @@ def _dangerous_tool_artifact() -> GuardArtifact:
         config_path="/shared/.mcp.json",
         transport="stdio",
     )
+
+
+@pytest.mark.parametrize(
+    ("include_authority", "expected"),
+    [
+        (True, "42166ca3ebc09245c93f0b33ce989a75df475c38817fded4168ab4ec5699b0e4"),
+        (False, "5fcdb3a88b76692ed5f3344ac4bdecaa6034b5012eecdf602009a8e6004d333b"),
+    ],
+)
+def test_tool_call_hash_preserves_persisted_approval_identity(
+    native_context_digest: Path, include_authority: bool, expected: str,
+) -> None:
+    metadata = {
+        "server_fingerprint": {"resolved_executable": "/opt/bin/server", "tool_catalog_fingerprint": "catalog"},
+        "mcp_server_identity": {"identity_hash": "server"},
+        "mcp_tool_identity": {"schema_hash": "schema"},
+    }
+    if include_authority:
+        metadata.update({"mcp_tool_authority_hash": {"revision": 1}, "mcp_provider_catalog_hash": False})
+    artifact = GuardArtifact(
+        artifact_id="codex:mcp:filesystem:read_file", name="filesystem:read_file",
+        harness="codex", artifact_type="mcp_tool_call", source_scope="project",
+        config_path=".mcp.json", transport="stdio", metadata=metadata,
+    )
+    arguments = {
+        "path": "/opt/neutral/data/日本語.txt",
+        "limits": [1.0, -0.0, 1e-7, 2**80 + 1],
+        "nested": {"empty": {}, "missing": None},
+    }
+
+    assert build_tool_call_hash(artifact, arguments) == expected
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_tool_call_hash_cannot_mint_approval_when_native_digest_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: bool,
+) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    artifact = GuardArtifact(
+        artifact_id="codex:runtime:project:filesystem:read_file",
+        name="filesystem:read_file",
+        harness="codex",
+        artifact_type="tool_call",
+        source_scope="project",
+        config_path=".mcp.json",
+        command="read_file",
+        transport="stdio",
+    )
+    config = GuardConfig(workspace=tmp_path, guard_home=tmp_path / "guard-home") if configured else None
+    monkeypatch.setattr(native_context, "native_context_digest", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(ValueError, match="^native_mcp_tool_approval_hash_unavailable$"):
+        build_tool_call_hash(artifact, {"path": "data.txt"}, config=config)
 
 
 def test_tool_call_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path) -> None:
@@ -1090,7 +1157,9 @@ def _save_sensitive_read_allow(
     )
 
 
-def test_stdio_sensitive_read_exact_review_approval_is_reused_with_evidence(tmp_path: Path) -> None:
+def test_stdio_sensitive_read_exact_review_approval_is_reused_with_evidence(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
@@ -1139,6 +1208,7 @@ def test_stdio_sensitive_read_exact_review_approval_is_reused_with_evidence(tmp_
 def test_stdio_sensitive_read_saved_allow_and_payload_hint_never_lower_current_action(
     tmp_path: Path,
     current_action: GuardAction,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1208,6 +1278,7 @@ def test_stdio_sensitive_read_policy_and_sandbox_changes_invalidate_review_appro
     tmp_path: Path,
     changed_config_fields: dict[str, object],
     expected_reason: str,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

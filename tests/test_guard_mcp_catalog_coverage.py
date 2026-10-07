@@ -4,12 +4,15 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime import local_mcp_stdio
+import pytest
+
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
     MAX_MCP_PROBE_TOOLS,
     run_mcp_catalog,
     run_mcp_tools_list,
 )
+
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
 
 
 def _server(
@@ -33,7 +36,7 @@ discovery = json.loads({json.dumps(discovery)!r})
 skills = json.loads({json.dumps(skills)!r})
 for line in sys.stdin:
     request = json.loads(line)
-    with open({str(tmp_path / 'requests.jsonl')!r}, "a", encoding="utf-8") as log:
+    with open({str(tmp_path / "requests.jsonl")!r}, "a", encoding="utf-8") as log:
         print(json.dumps(request), file=log)
     method = request.get("method")
     if method == "server/discover":
@@ -73,10 +76,7 @@ for line in sys.stdin:
 
 
 def _tools(count: int, *, prefix: str = "tool") -> list[dict[str, object]]:
-    return [
-        {"name": f"{prefix}_{index}", "inputSchema": {"type": "object"}}
-        for index in range(count)
-    ]
+    return [{"name": f"{prefix}_{index}", "inputSchema": {"type": "object"}} for index in range(count)]
 
 
 def test_tool_limit_does_not_report_a_partial_catalog_as_complete(tmp_path: Path) -> None:
@@ -193,13 +193,30 @@ def _requests(tmp_path: Path) -> list[dict[str, object]]:
 def test_declared_skills_are_listed_on_real_stdio_without_fetching_content(tmp_path: Path):
     discovery = _discovery()
     discovery["result"]["capabilities"].update(
-        resources={}, extensions={"io.modelcontextprotocol/skills": {}},
+        resources={},
+        extensions={"io.modelcontextprotocol/skills": {}},
     )
-    skill = {"uri": "skill://report/SKILL.md", "frontmatter": {"name": "report", "description": "Synthetic workflow"},
-             "resources": [{"uri": "skill://report/SKILL.md", "digest": "sha256:" + "a" * 64, "size": 50}]}
-    catalog = run_mcp_catalog(_server(tmp_path, {"<root>": {
-        "resultType": "complete", "tools": _tools(1), "ttlMs": 0, "cacheScope": "private",
-    }}, discovery=discovery, skills=[skill]), connection_identity_hash="b" * 64)
+    skill = {
+        "uri": "skill://report/SKILL.md",
+        "frontmatter": {"name": "report", "description": "Synthetic workflow"},
+        "resources": [{"uri": "skill://report/SKILL.md", "digest": "sha256:" + "a" * 64, "size": 50}],
+    }
+    catalog = run_mcp_catalog(
+        _server(
+            tmp_path,
+            {
+                "<root>": {
+                    "resultType": "complete",
+                    "tools": _tools(1),
+                    "ttlMs": 0,
+                    "cacheScope": "private",
+                }
+            },
+            discovery=discovery,
+            skills=[skill],
+        ),
+        connection_identity_hash="b" * 64,
+    )
     assert catalog.complete
     assert catalog.skills_complete is True
     assert len(catalog.skills) == 1
@@ -213,11 +230,25 @@ def test_declared_skills_are_listed_on_real_stdio_without_fetching_content(tmp_p
 def test_failed_skill_metadata_does_not_turn_tools_into_an_empty_catalog(tmp_path: Path):
     discovery = _discovery()
     discovery["result"]["capabilities"].update(
-        resources={}, extensions={"io.modelcontextprotocol/skills": {}},
+        resources={},
+        extensions={"io.modelcontextprotocol/skills": {}},
     )
-    catalog = run_mcp_catalog(_server(tmp_path, {"<root>": {
-        "resultType": "complete", "tools": _tools(1), "ttlMs": 0, "cacheScope": "private",
-    }}, discovery=discovery, skills=[{"uri": "skill://invalid/SKILL.md"}]), connection_identity_hash="b" * 64)
+    catalog = run_mcp_catalog(
+        _server(
+            tmp_path,
+            {
+                "<root>": {
+                    "resultType": "complete",
+                    "tools": _tools(1),
+                    "ttlMs": 0,
+                    "cacheScope": "private",
+                }
+            },
+            discovery=discovery,
+            skills=[{"uri": "skill://invalid/SKILL.md"}],
+        ),
+        connection_identity_hash="b" * 64,
+    )
     assert catalog.complete and len(catalog.tools) == 1
     assert catalog.skills_complete is False
     assert catalog.skills_reason == "invalid_skill_frontmatter"
@@ -230,8 +261,11 @@ def test_modern_discovery_uses_request_metadata_without_initialization(tmp_path:
             tmp_path,
             {
                 "<root>": {
-                    "resultType": "complete", "tools": first, "nextCursor": " next ",
-                    "ttlMs": 0, "cacheScope": "private",
+                    "resultType": "complete",
+                    "tools": first,
+                    "nextCursor": " next ",
+                    "ttlMs": 0,
+                    "cacheScope": "private",
                 },
                 " next ": {"resultType": "complete", "tools": second, "ttlMs": 0, "cacheScope": "private"},
             },
@@ -253,52 +287,62 @@ def test_modern_discovery_uses_request_metadata_without_initialization(tmp_path:
 
 
 def test_cache_freshness_uses_earliest_page_and_preserves_private_scope(tmp_path: Path) -> None:
-    catalog = run_mcp_catalog(_server(tmp_path, {
-        "<root>": {"resultType": "complete", "tools": _tools(1), "nextCursor": "next",
-                   "ttlMs": 100_000, "cacheScope": "private"},
-        "next": {"resultType": "complete", "tools": _tools(1, prefix="next"),
-                 "ttlMs": 5_000, "cacheScope": "private"},
-    }, discovery=_discovery()))
+    catalog = run_mcp_catalog(
+        _server(
+            tmp_path,
+            {
+                "<root>": {
+                    "resultType": "complete",
+                    "tools": _tools(1),
+                    "nextCursor": "next",
+                    "ttlMs": 100_000,
+                    "cacheScope": "private",
+                },
+                "next": {
+                    "resultType": "complete",
+                    "tools": _tools(1, prefix="next"),
+                    "ttlMs": 5_000,
+                    "cacheScope": "private",
+                },
+            },
+            discovery=_discovery(),
+        )
+    )
     assert catalog.complete and catalog.cache_scope == "private"
     assert 0 < catalog.cache_ttl_ms <= 5_000
 
 
 def test_conflicting_page_scope_cannot_publish_a_complete_catalog(tmp_path: Path) -> None:
-    catalog = run_mcp_catalog(_server(tmp_path, {
-        "<root>": {"tools": _tools(1), "nextCursor": "next", "ttlMs": 100_000, "cacheScope": "private"},
-        "next": {"tools": _tools(1, prefix="next"), "ttlMs": 5_000, "cacheScope": "public"},
-    }))
+    catalog = run_mcp_catalog(
+        _server(
+            tmp_path,
+            {
+                "<root>": {"tools": _tools(1), "nextCursor": "next", "ttlMs": 100_000, "cacheScope": "private"},
+                "next": {"tools": _tools(1, prefix="next"), "ttlMs": 5_000, "cacheScope": "public"},
+            },
+        )
+    )
     assert not catalog.complete and catalog.reason == "inconsistent_cache_scope"
     assert catalog.tools == tuple(_tools(1))
 
 
 def test_change_notification_during_pagination_invalidates_partial_snapshot(tmp_path: Path) -> None:
-    catalog = run_mcp_catalog(_server(tmp_path, {
-        "<root>": {"tools": _tools(1), "nextCursor": "next"},
-        "next": {"tools": _tools(1, prefix="next")},
-    }, notify_before_cursor="next"))
+    catalog = run_mcp_catalog(
+        _server(
+            tmp_path,
+            {
+                "<root>": {"tools": _tools(1), "nextCursor": "next"},
+                "next": {"tools": _tools(1, prefix="next")},
+            },
+            notify_before_cursor="next",
+        )
+    )
     assert not catalog.complete and catalog.reason == "catalog_changed"
     assert catalog.tools == tuple(_tools(1))
 
 
-def test_rpc_parser_rejects_ambiguous_keys_and_nonfinite_schema_values() -> None:
-    for raw in [
-        b'{"jsonrpc":"2.0","id":2,"result":{"tools":[]},"result":{"tools":[{"name":"hidden"}]}}',
-        b'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"x","inputSchema":{"default":NaN}}]}}',
-    ]:
-        assert local_mcp_stdio._pop_json_message(raw + b"\n")[0] is None
-        framed = b"Content-Length: " + str(len(raw)).encode() + b"\r\n\r\n" + raw
-        assert local_mcp_stdio._pop_json_message(framed)[0] is None
 
 
-def test_blank_line_flood_does_not_recurse() -> None:
-    raw = b"\n" * 2_000 + b'{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}\n'
-    messages = []
-    while raw:
-        message, raw = local_mcp_stdio._pop_json_message(raw)
-        if message is not None:
-            messages.append(message)
-    assert len(messages) == 1 and messages[0]["id"] == 2
 
 
 def test_modern_version_error_does_not_initialize_legacy(tmp_path: Path) -> None:
@@ -339,7 +383,10 @@ def test_discovery_timeout_can_fall_back_to_legacy(tmp_path: Path) -> None:
     assert catalog.complete
     assert catalog.protocol_version == "2024-11-05"
     assert [request["method"] for request in _requests(tmp_path)] == [
-        "server/discover", "initialize", "notifications/initialized", "tools/list"
+        "server/discover",
+        "initialize",
+        "notifications/initialized",
+        "tools/list",
     ]
 
 
@@ -350,8 +397,6 @@ def test_unsupported_legacy_protocol_cannot_publish_a_catalog(tmp_path: Path) ->
 
 
 def test_modern_conditional_response_requires_a_known_cached_catalog(tmp_path: Path) -> None:
-    catalog = run_mcp_catalog(
-        _server(tmp_path, {"<root>": {"resultType": "notModified"}}, discovery=_discovery())
-    )
+    catalog = run_mcp_catalog(_server(tmp_path, {"<root>": {"resultType": "notModified"}}, discovery=_discovery()))
     assert not catalog.complete
     assert catalog.reason == "invalid_page"

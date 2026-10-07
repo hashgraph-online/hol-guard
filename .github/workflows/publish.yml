@@ -238,6 +238,9 @@ jobs:
                   echo "Could not inspect the GitHub release for ${RELEASE_VERSION}" >&2
                   exit 1
                 fi
+                if jq -e --arg candidate "$RELEASE_VERSION" 'index($candidate) == null' <<< "$PYPI_VERSIONS" >/dev/null; then
+                  REPAIR_ARGS+=(--deferred-pypi)
+                fi
                 if ! uv run --no-sync python scripts/stable_release_asset_repair.py \
                   --requested "$RELEASE_VERSION" \
                   --expected-next "$EXPECTED_VERSION" \
@@ -258,8 +261,15 @@ jobs:
               if git rev-parse -q --verify "v${RELEASE_VERSION}^{commit}" >/dev/null; then
                 tag_sha=$(git rev-parse "v${RELEASE_VERSION}^{commit}")
                 if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
-                  echo "Stable tag does not target the dispatch source" >&2
-                  exit 1
+                  if ! git merge-base --is-ancestor "$tag_sha" HEAD; then
+                    echo "Stable tag does not target the dispatch source or one of its ancestors" >&2
+                    exit 1
+                  fi
+                  # Finish an already reserved canonical version with repaired
+                  # workflow code, without moving its immutable source tag.
+                  SOURCE_SHA="$tag_sha"
+                  echo "release_repair=true" >> "$GITHUB_OUTPUT"
+                  REPAIRING=true
                 fi
               fi
               VERSION="$RELEASE_VERSION"
@@ -367,7 +377,27 @@ jobs:
             exit 0
           fi
           uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
+      - name: Generate projections for release source distributions
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ steps.version.outputs.source_sha }}
+          HOL_GUARD_PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          cargo +1.88.0 build --manifest-path rust/Cargo.toml --locked --release \
+            -p guard-command --bin guard-command-source
+          python scripts/build_native_command_program.py --compiler rust/target/release/guard-command-source
+          echo "HOL_GUARD_BUILD_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.3.14"
+      - name: Build dashboard assets from release source
+        working-directory: dashboard
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bun run build
       - name: Build Guard package (hol-guard)
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
         run: |
           cp pyproject.toml pyproject.toml.bak
           python3 - <<'PY'
@@ -388,6 +418,8 @@ jobs:
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
       - name: Build scanner package (plugin-scanner)
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
         run: |
           cp pyproject.toml pyproject.toml.bak
           python3 - <<'PY'
@@ -525,6 +557,10 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.build.outputs.source_sha }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
@@ -577,8 +613,19 @@ jobs:
       - name: Verify native command program is current
         shell: bash
         env:
+          HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
+          HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
           SOURCE_COMPILER: ${{ matrix.source_compiler }}
+          RUST_TARGET: ${{ matrix.target }}
         run: |
+          # Generated projections may lag their canonical tagged inputs.
+          # Bind both the binary and packaged JSON to this release build.
+          python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" \
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           arguments=(--compiler "$SOURCE_COMPILER")
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
@@ -592,6 +639,38 @@ jobs:
           jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
             '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
           "$SOURCE_COMPILER" compile < source-build.json > source-compiled.json
+      - name: Rebuild Guard base wheel after projection regeneration
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          HOL_GUARD_BUILD_SOURCE_COMPILER: ${{ matrix.source_compiler }}
+        run: |
+          CURRENT_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
+          if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
+            uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$VERSION"
+          fi
+          BACKUP="$RUNNER_TEMP/hol-guard-pyproject.toml"
+          cp pyproject.toml "$BACKUP"
+          restore_pyproject() {
+            cp "$BACKUP" pyproject.toml
+          }
+          trap restore_pyproject EXIT
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("[project.scripts]")
+          end = text.index("\n\n[project.urls]")
+          scripts = "[project.scripts]\n" \
+              'hol-guard = "codex_plugin_scanner.cli:main"\n' \
+              'plugin-guard = "codex_plugin_scanner.cli:main"\n' \
+              'hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"'
+          path.write_text(text[:start] + scripts + text[end:], encoding="utf-8")
+          PY
+          uv build --wheel --out-dir "$RUNNER_TEMP/hol-guard-base-dist"
+          mv "$RUNNER_TEMP/hol-guard-base-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            "base-dist/hol_guard-${VERSION}-py3-none-any.whl"
       - name: Verify Linux runtime is static
         if: runner.os == 'Linux'
         shell: bash
@@ -1457,6 +1536,8 @@ jobs:
       needs.reserve-main-tag.result == 'success' &&
       needs.build.outputs.channel == 'stable'
     needs: [build, assemble-native-guard-distributions, reserve-main-tag]
+    outputs:
+      pypi_deferred: ${{ steps.pypi_quota.outputs.blocked }}
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -1551,12 +1632,32 @@ jobs:
           [[ "$scanner_status" == "absent" || "$scanner_status" == "exact" ]]
           [[ "$guard_status" == "absent" ]] && echo "hol_guard_upload=true" >> "$GITHUB_OUTPUT" || echo "hol_guard_upload=false" >> "$GITHUB_OUTPUT"
           [[ "$scanner_status" == "absent" ]] && echo "plugin_scanner_upload=true" >> "$GITHUB_OUTPUT" || echo "plugin_scanner_upload=false" >> "$GITHUB_OUTPUT"
-      - name: Refuse PyPI upload when the project is over quota
+      - name: Check PyPI quota admission
+        id: pypi_quota
         if: steps.pypi.outputs.hol_guard_upload == 'true'
-        run: uv run --with packaging==25.0 python scripts/pypi_project_storage.py --fail-if-over-limit --pending-dir dist-hol-guard
+        run: |
+          set -euo pipefail
+          quota_output=""
+          quota_exit=0
+          quota_output=$(uv run --with packaging==25.0 python scripts/pypi_project_storage.py \
+            --fail-if-over-limit --pending-dir dist-hol-guard) || quota_exit=$?
+          printf '%s\n' "$quota_output"
+          if [[ "$quota_exit" == "0" ]]; then
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          elif jq -e '.over_limit == true' <<< "$quota_output" >/dev/null 2>&1; then
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### PyPI publication"
+              echo "PyPI publication was deferred after the quota admission check reported the project limit."
+              echo "The verified GitHub release path continues; PyPI publication remains pending."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "PyPI quota admission check failed without a confirmed quota limit." >&2
+            exit "$quota_exit"
+          fi
       - name: Publish HOL Guard to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
-        if: steps.pypi.outputs.hol_guard_upload == 'true'
+        if: steps.pypi.outputs.hol_guard_upload == 'true' && steps.pypi_quota.outputs.blocked != 'true'
         with:
           packages-dir: dist-hol-guard/
       - name: Publish plugin-scanner to PyPI
@@ -1567,9 +1668,11 @@ jobs:
       - name: Remove generated upload attestations
         run: rm -f dist-hol-guard/*.publish.attestation dist-plugin-scanner/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
+        if: steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
+          GUARD_QUOTA_BLOCKED: ${{ steps.pypi_quota.outputs.blocked }}
         run: |
           for attempt in {1..60}; do
             if ! guard_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
@@ -1584,11 +1687,19 @@ jobs:
             fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
             scanner_status=$(jq -r '.status' <<< "$scanner_result")
-            if [[ "$guard_status" == "exact" && "$scanner_status" == "exact" ]]; then
-              uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full || exit 1
+            guard_ready=false
+            if [[ "$GUARD_QUOTA_BLOCKED" == "true" ]]; then
+              [[ "$guard_status" == "absent" || "$guard_status" == "exact" ]] && guard_ready=true
+            elif [[ "$guard_status" == "exact" ]]; then
+              guard_ready=true
+            fi
+            if [[ "$guard_ready" == "true" && "$scanner_status" == "exact" ]]; then
+              if [[ "$GUARD_QUOTA_BLOCKED" != "true" ]]; then
+                uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full || exit 1
+              fi
               break
             fi
-            if [[ "$guard_status" != "absent" && "$guard_status" != "exact" ]] || \
+            if [[ "$GUARD_QUOTA_BLOCKED" != "true" && "$guard_status" != "absent" && "$guard_status" != "exact" ]] || \
               [[ "$scanner_status" != "absent" && "$scanner_status" != "exact" ]] || \
               [[ "$attempt" == "60" ]]; then
               echo "PyPI did not expose the exact release artifacts" >&2
@@ -1596,17 +1707,20 @@ jobs:
             fi
             sleep 5
           done
-          mapfile -t guard_wheels < <(
-            jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$guard_result"
-          )
           mapfile -t scanner_wheels < <(
             jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$scanner_result"
           )
-          [[ "${#guard_wheels[@]}" == "1" && "${#scanner_wheels[@]}" == "1" ]]
-          guard_wheel="${guard_wheels[0]}"
+          [[ "${#scanner_wheels[@]}" == "1" ]]
           scanner_wheel="${scanner_wheels[0]}"
-          [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
           [[ "$(uv tool run --from "$scanner_wheel" plugin-scanner --version)" == "plugin-scanner $VERSION" ]]
+          if [[ "$GUARD_QUOTA_BLOCKED" != "true" ]]; then
+            mapfile -t guard_wheels < <(
+              jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$guard_result"
+            )
+            [[ "${#guard_wheels[@]}" == "1" ]]
+            guard_wheel="${guard_wheels[0]}"
+            [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
+          fi
 
   release-main:
     name: Create main GitHub release
@@ -1634,6 +1748,13 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.build.outputs.source_sha }}
+      - name: Checkout release-notes tooling
+        if: needs.publish-main-pypi.outputs.pypi_deferred == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          path: .release-tooling
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions-native
@@ -1665,13 +1786,25 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           CHANNEL: ${{ needs.build.outputs.channel }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-        run: python3 scripts/ci/generate_release_notes.py --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md"
+          PYPI_DEFERRED: ${{ needs.publish-main-pypi.outputs.pypi_deferred }}
+        run: |
+          deferred_args=()
+          notes_script="scripts/ci/generate_release_notes.py"
+          if [[ "$PYPI_DEFERRED" == "true" ]]; then
+            notes_script=".release-tooling/scripts/ci/generate_release_notes.py"
+            deferred_args+=(--pypi-deferred)
+          fi
+          python3 "$notes_script" \
+            --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" \
+            --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md" \
+            "${deferred_args[@]}"
       - name: Create discoverable main release
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
           RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
+          PYPI_DEFERRED: ${{ needs.publish-main-pypi.outputs.pypi_deferred }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
           tag="v${VERSION}"
@@ -1727,6 +1860,9 @@ jobs:
                   --source-digest "$GITHUB_SHA" >/dev/null
               fi
             done
+            if [[ -s "$RUNNER_TEMP/release-notes.md" ]]; then
+              gh release edit "$tag" --notes-file "$RUNNER_TEMP/release-notes.md"
+            fi
             exit 0
           fi
           body_file="$RUNNER_TEMP/release-notes.md"

@@ -1,0 +1,41 @@
+name: CI windows-updater
+description: Run the windows-updater checks inside the existing CI job.
+inputs:
+  python-version:
+    description: Explicit python-version from the calling job.
+    required: true
+runs:
+  using: composite
+  steps:
+  - name: Download this run's current command projections
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      name: pytest-native-command-projections
+      path: .
+  - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+    with:
+      python-version: ${{ inputs.python-version }}
+  - name: Set up uv
+    id: setup-uv-primary
+    continue-on-error: true
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - name: Retry uv setup after transient download failure
+    if: steps.setup-uv-primary.outcome == 'failure'
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - run: uv sync --frozen --no-dev --group ci-test --python ${{ inputs.python-version }}
+    shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+  - name: Run trusted updater and daemon regressions
+    run: uv run --no-sync pytest tests/test_guard_update_artifact.py tests/test_guard_update_subprocess.py tests/test_guard_update_isolation.py
+      tests/test_guard_phase03_local_install.py tests/test_guard_phase03_remainder.py tests/test_dashboard_update.py tests/test_guard_daemon_manager.py
+      tests/test_guard_mdm_policy.py --tb=short
+    shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}

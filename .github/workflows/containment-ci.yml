@@ -32,6 +32,7 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+      - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Provision the production Linux backend
         run: |
@@ -66,4 +67,93 @@ jobs:
         with:
           name: containment-execution-results
           path: containment-results.xml
+          if-no-files-found: error
+
+  linux-protected-vitest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    # A minimal runtime image avoids indexing unrelated hosted toolchains.
+    # The tested child still receives the production namespace, Landlock and
+    # seccomp policy, including all negative boundary assertions below.
+    # These outer-container exceptions provision the production inner sandbox:
+    # SYS_ADMIN permits namespace mount setup; seccomp permits unshare/setns;
+    # AppArmor permits the nested bubblewrap profile; systempaths permits
+    # a fresh procfs inside the new PID namespace. Production child restrictions
+    # remain enabled and are verified by the deny assertions in this job.
+    container:
+      image: node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+      options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Provision the real Linux kernel backend
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates bubblewrap libseccomp2 procps
+          /usr/bin/bwrap --version
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12 --link-mode copy
+      - name: Install the real Vitest fixture without lifecycle scripts
+        env:
+          GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
+        run: |
+          mkdir -p "$GUARD_VITEST_FIXTURE"
+          cp .github/tools/containment-ci/package{,-lock}.json "$GUARD_VITEST_FIXTURE/"
+          npm ci --prefix "$GUARD_VITEST_FIXTURE" --ignore-scripts --no-audit --no-fund
+      - name: Verify protected workers with production sandbox limits
+        env:
+          GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
+        run: >-
+          uv run --no-sync pytest ci/containment/test_protected_vitest.py
+          --tb=short --junitxml=linux-protected-vitest-results.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: linux-protected-vitest-results
+          path: linux-protected-vitest-results.xml
+          if-no-files-found: error
+
+  macos-protected-vitest:
+    runs-on: macos-15
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install the real Vitest fixture without lifecycle scripts
+        env:
+          GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
+        run: |
+          mkdir -p "$GUARD_VITEST_FIXTURE"
+          cp .github/tools/containment-ci/package{,-lock}.json "$GUARD_VITEST_FIXTURE/"
+          npm ci --prefix "$GUARD_VITEST_FIXTURE" --ignore-scripts --no-audit --no-fund
+      - name: Verify protected workers and immutable transform images on Seatbelt
+        env:
+          GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
+        run: >-
+          uv run --no-sync pytest ci/containment/test_protected_vitest.py
+          --tb=short --junitxml=macos-protected-vitest-results.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: macos-protected-vitest-results
+          path: macos-protected-vitest-results.xml
           if-no-files-found: error

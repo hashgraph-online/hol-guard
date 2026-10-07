@@ -1,0 +1,1475 @@
+{
+  "extension": {
+    "action_classes": [
+      "command.appimg invocation"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "dependencies": [],
+    "description": "Conservative operation knowledge compiled from a contributor inventory.",
+    "ecosystem_ids": [],
+    "executables": [
+      "appimg"
+    ],
+    "extension_id": "command.appimg",
+    "homepage": "https://github.com/MrGilfy/appimg",
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "appimg",
+    "permissions": [
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": false,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg",
+        "fixed_reason": "Unknown operations retain review.",
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Unclassified invocation",
+        "permission_id": "command.appimg.permission.unclassified",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Root invocation",
+        "permission_id": "command.appimg.permission.op-75eb278d6a9fb4cf",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Use appimg list --json or appimg update --all --check instead of the interactive interface."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg adopt",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "adopt",
+        "permission_id": "command.appimg.permission.op-1a83df11ee5b78cd",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run appimg adopt --scan first to see candidates, and inspect the file offline with unsquashfs -l before adopting it. adopt --dry-run is safe only from appimg 0.4.1 on."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg completions",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "completions",
+        "permission_id": "command.appimg.permission.op-1d8f2e3384b44038",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg doctor",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "doctor",
+        "permission_id": "command.appimg.permission.op-2e390f4b1131c34a",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg edit",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "edit",
+        "permission_id": "command.appimg.permission.op-66ac10fbbea895e4",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the desktop entry in $XDG_DATA_HOME/applications before editing it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg export",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "export",
+        "permission_id": "command.appimg.permission.op-d76e96e3251de015",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run appimg export without a file to print the export to standard output instead of writing a file."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg import",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "import",
+        "permission_id": "command.appimg.permission.op-bb0b400368c64a1a",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Read the export file and confirm every listed source first. From appimg 0.4.1 on, import --dry-run shows what would be installed and from where."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg install",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "install",
+        "permission_id": "command.appimg.permission.op-6c69101a5444aed0",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the AppImage offline first, for example list its squashfs contents with unsquashfs -l (add -o with the offset past the ELF runtime). appimg install --dry-run is safe only from appimg 0.4.1 on; earlier versions run the AppImage."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg list",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "list",
+        "permission_id": "command.appimg.permission.op-28e623ce1c945c32",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg notify disable",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "notify disable",
+        "permission_id": "command.appimg.permission.op-6df54ad180aab1a8",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run appimg notify status first to see which timer would be stopped and removed."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg notify enable",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "notify enable",
+        "permission_id": "command.appimg.permission.op-c1ecd601718bd5de",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run appimg notify status first; enabling writes and starts a persistent systemd user timer."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg notify status",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "notify status",
+        "permission_id": "command.appimg.permission.op-b4d1dad95db6f6d7",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg notify test",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "notify test",
+        "permission_id": "command.appimg.permission.op-3c5f7f4c2183d9b4",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run appimg notify status to check the notification setup without showing a notification."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg remove",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "remove",
+        "permission_id": "command.appimg.permission.op-98ae7de9f4921295",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run appimg list first to confirm the exact application name."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg update",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "update",
+        "permission_id": "command.appimg.permission.op-227d251131facfdb",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run appimg update --all --check, or appimg update NAME --check, first to see what would change."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "example_command": "appimg update-source",
+        "fixed_reason": null,
+        "implementation_version": "1.0.1553386747106639577",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "update-source",
+        "permission_id": "command.appimg.permission.op-08443d1c3be6e196",
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run appimg update-source NAME without a source first, and confirm a new URL or github:owner/repo belongs to the application's publisher."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "MrGilfy",
+      "id": "community.appimg",
+      "url": "https://github.com/MrGilfy/appimg"
+    },
+    "reference_urls": [
+      "https://github.com/MrGilfy/appimg"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": []
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.unclassified",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.unclassified",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "severity": "medium",
+        "title": "Unclassified invocation"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--version",
+              "--yes",
+              "-V",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": []
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-75eb278d6a9fb4cf",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-75eb278d6a9fb4cf",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "--help"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-ba78a1af2fd00980"
+          },
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "--version"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-1d689eb699a41d70"
+          },
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "-V"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-38ceb05df5556898"
+          },
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "-h"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-0ae68914fb94ce3b"
+          }
+        ],
+        "safer_alternatives": [
+          "Use appimg list --json or appimg update --all --check instead of the interactive interface."
+        ],
+        "severity": "medium",
+        "title": "Root invocation"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--copy",
+              "--dry-run",
+              "--help",
+              "--keep-entries",
+              "--no-color",
+              "--scan",
+              "--terminal",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [
+              "--args",
+              "--asset",
+              "--categories",
+              "--comment",
+              "--icon",
+              "--name",
+              "--update-source"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--args",
+              "--asset",
+              "--categories",
+              "--comment",
+              "--icon",
+              "--name",
+              "--update-source"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "adopt"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-1a83df11ee5b78cd",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-1a83df11ee5b78cd",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "adopt",
+                  "--scan"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-7757b66f59adb812"
+          }
+        ],
+        "safer_alternatives": [
+          "Run appimg adopt --scan first to see candidates, and inspect the file offline with unsquashfs -l before adopting it. adopt --dry-run is safe only from appimg 0.4.1 on."
+        ],
+        "severity": "medium",
+        "title": "adopt"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "completions"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-1d8f2e3384b44038",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-1d8f2e3384b44038",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "completions",
+                  "bash"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-782f0a17d4bb404b"
+          },
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "completions",
+                  "elvish"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-ec7fdbc1e9098af3"
+          },
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "completions",
+                  "fish"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-6edd170f6e55bb8c"
+          },
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "completions",
+                  "zsh"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-2d3785c75d8e6dab"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "severity": "medium",
+        "title": "completions"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "doctor"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-2e390f4b1131c34a",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-2e390f4b1131c34a",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "severity": "medium",
+        "title": "doctor"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "edit"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-66ac10fbbea895e4",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-66ac10fbbea895e4",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the desktop entry in $XDG_DATA_HOME/applications before editing it."
+        ],
+        "severity": "medium",
+        "title": "edit"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "export"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-d76e96e3251de015",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-d76e96e3251de015",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run appimg export without a file to print the export to standard output instead of writing a file."
+        ],
+        "severity": "medium",
+        "title": "export"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--dry-run",
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "import"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-bb0b400368c64a1a",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.appimg.op-bb0b400368c64a1a",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read the export file and confirm every listed source first. From appimg 0.4.1 on, import --dry-run shows what would be installed and from where."
+        ],
+        "severity": "medium",
+        "title": "import"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--dry-run",
+              "--help",
+              "--no-color",
+              "--terminal",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [
+              "--args",
+              "--asset",
+              "--categories",
+              "--comment",
+              "--icon",
+              "--name",
+              "--update-source"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--args",
+              "--asset",
+              "--categories",
+              "--comment",
+              "--icon",
+              "--name",
+              "--update-source"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "install"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-6c69101a5444aed0",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.appimg.op-6c69101a5444aed0",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the AppImage offline first, for example list its squashfs contents with unsquashfs -l (add -o with the offset past the ELF runtime). appimg install --dry-run is safe only from appimg 0.4.1 on; earlier versions run the AppImage."
+        ],
+        "severity": "medium",
+        "title": "install"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--json",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "list"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-28e623ce1c945c32",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-28e623ce1c945c32",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "list",
+                  "--json"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-a3386b499e961cdd"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "severity": "medium",
+        "title": "list"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "notify",
+              "disable"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-6df54ad180aab1a8",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-6df54ad180aab1a8",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run appimg notify status first to see which timer would be stopped and removed."
+        ],
+        "severity": "medium",
+        "title": "notify disable"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "notify",
+              "enable"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-c1ecd601718bd5de",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-c1ecd601718bd5de",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run appimg notify status first; enabling writes and starts a persistent systemd user timer."
+        ],
+        "severity": "medium",
+        "title": "notify enable"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "notify",
+              "status"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-b4d1dad95db6f6d7",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-b4d1dad95db6f6d7",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact target and required permissions before running this operation."
+        ],
+        "severity": "medium",
+        "title": "notify status"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "notify",
+              "test"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-3c5f7f4c2183d9b4",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-3c5f7f4c2183d9b4",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run appimg notify status to check the notification setup without showing a notification."
+        ],
+        "severity": "medium",
+        "title": "notify test"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "remove"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-98ae7de9f4921295",
+        "risk_classes": [
+          "destructive_shell",
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-98ae7de9f4921295",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run appimg list first to confirm the exact application name."
+        ],
+        "severity": "medium",
+        "title": "remove"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--all",
+              "--check",
+              "--help",
+              "--json",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "update"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-227d251131facfdb",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.appimg.op-227d251131facfdb",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "update",
+                  "--all",
+                  "--check"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-66e1e8620aa1d397"
+          },
+          {
+            "matcher": {
+              "config": {
+                "arguments": [
+                  "update",
+                  "--all",
+                  "--check",
+                  "--json"
+                ],
+                "executable": "appimg"
+              },
+              "op": "reviewed-literal.v1"
+            },
+            "title": "Explicitly reviewed literal invocation",
+            "variant_id": "literal-01ae4365c0bc952c"
+          }
+        ],
+        "safer_alternatives": [
+          "Run appimg update --all --check, or appimg update NAME --check, first to see what would change."
+        ],
+        "severity": "medium",
+        "title": "update"
+      },
+      {
+        "action_classes": [
+          "command.appimg invocation"
+        ],
+        "default_mode": "review",
+        "description": "Reviews inventoried operations; unknown invocations also require review.",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "appimg"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--clear",
+              "--help",
+              "--no-color",
+              "--yes",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [
+              "--asset"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--asset"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "update-source"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.appimg.permission.op-08443d1c3be6e196",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.appimg.op-08443d1c3be6e196",
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run appimg update-source NAME without a source first, and confirm a new URL or github:owner/repo belongs to the application's publisher."
+        ],
+        "severity": "medium",
+        "title": "update-source"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect the exact target and required permissions before running this operation."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

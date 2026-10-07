@@ -152,31 +152,42 @@ class RuntimeHookScheduler:
                 cancellation=cancellation,
                 normalized_payload=normalized_payload or b"",
             )
-            self._enqueue(item)
             if byte_reservation is not None:
+                # Validate and claim ownership before publishing queued work.
+                # Reused/released reservations must leave no phantom waiter.
                 byte_reservation.transfer()
             else:
                 self._retained_bytes += payload_bytes
-            self._dispatch()
-            if not item.admitted and self._queue_listener is not None:
-                self._queue_listener()
-            while not item.admitted and item.rejection_reason is None:
-                remaining = resolved_deadline.expires_at - self._monotonic()
-                if remaining <= 0:
-                    if self._remove_queued(item):
-                        self._expired += 1
-                        self._condition.notify_all()
-                    return RuntimeHookAdmission(None, "daemon_hook_deadline_exhausted")
-                if cancellation is not None and cancellation.is_set():
-                    if self._remove_queued(item):
-                        self._cancelled += 1
-                        self._condition.notify_all()
-                    return RuntimeHookAdmission(None, "daemon_hook_deadline_exhausted")
-                _ = self._condition.wait(timeout=min(remaining, 0.05) if cancellation is not None else remaining)
+            self._enqueue(item)
+            try:
                 self._dispatch()
-            if item.rejection_reason is not None:
-                return RuntimeHookAdmission(None, item.rejection_reason)
-            return RuntimeHookAdmission(RuntimeHookPermit(self, item), None)
+                if not item.admitted and self._queue_listener is not None:
+                    self._queue_listener()
+                while not item.admitted and item.rejection_reason is None:
+                    remaining = resolved_deadline.expires_at - self._monotonic()
+                    if remaining <= 0:
+                        if self._remove_queued(item):
+                            self._expired += 1
+                            self._condition.notify_all()
+                        return RuntimeHookAdmission(None, "daemon_hook_deadline_exhausted")
+                    if cancellation is not None and cancellation.is_set():
+                        if self._remove_queued(item):
+                            self._cancelled += 1
+                            self._condition.notify_all()
+                        return RuntimeHookAdmission(None, "daemon_hook_deadline_exhausted")
+                    _ = self._condition.wait(timeout=min(remaining, 0.05) if cancellation is not None else remaining)
+                    self._dispatch()
+                if item.rejection_reason is not None:
+                    return RuntimeHookAdmission(None, item.rejection_reason)
+                return RuntimeHookAdmission(RuntimeHookPermit(self, item), None)
+            except BaseException:
+                # No permit reached the caller. A listener can synchronously
+                # admit this item, so clean up the state it actually owns.
+                if item.admitted:
+                    self.release_permit(item)
+                elif self._remove_queued(item):
+                    self._condition.notify_all()
+                raise
 
     def reserve_bytes(
         self,

@@ -26,3 +26,17 @@ def test_restricted_process_has_noninteractive_sanitized_standard_streams(
     assert "stdin=''" in captured.out
     assert "\x1b" not in captured.out
     assert "result" in captured.out
+
+
+def test_private_capability_stdout_is_bounded_and_not_replayed(capsys):
+    output = bytearray()
+    code = _run_backend_process(
+        [sys.executable, "-c", "import sys; print('capability-result'); print('diagnostic', file=sys.stderr)"],
+        env=os.environ,
+        timeout_seconds=5,
+        stdout_capture=output,
+    )
+    assert code == 0 and output == b"capability-result\n"
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "diagnostic" in captured.err

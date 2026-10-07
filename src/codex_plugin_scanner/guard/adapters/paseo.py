@@ -72,10 +72,12 @@ class PaseoHarnessAdapter(HarnessAdapter):
             warnings = (str(error),)
         return HarnessDetection(self.harness, bool(paths) or available, available, paths, artifacts, warnings)
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        """Install shared native hooks and publish a receipt only after their proofs verify."""
+    def preflight_management(self, context: HarnessContext, *, operation: str) -> None:
+        if operation == "install":
+            self._prepare_install_targets(context)
+
+    def _prepare_install_targets(self, context: HarnessContext) -> tuple[tuple[PaseoProvider, ...], list[str]]:
         providers = paseo_providers(context)
-        path = receipt_path(context)
         # Reinstall every available supported native provider, including drifted
         # installations. An empty receipt intentionally makes each a fresh target.
         rows = _provider_rows(providers, context, {})
@@ -90,6 +92,14 @@ class PaseoHarnessAdapter(HarnessAdapter):
             preflight_native(target, context)
         for shim in self.guard_launcher_paths(native_context(context)):
             require_local_path(context.guard_home, shim, home_dir=context.home_dir)
+        return providers, targets
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        """Install shared native hooks and publish a receipt only after their proofs verify."""
+        # Repeat preparation under the shared owner; the earlier read-only
+        # rejection does not authorize mutation or make this result immutable.
+        providers, targets = self._prepare_install_targets(context)
+        path = receipt_path(context)
         # Keep the last verified receipt until atomic replacement succeeds.
         proofs: dict[str, object] = {}
         for target in targets:
