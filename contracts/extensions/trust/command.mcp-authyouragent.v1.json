@@ -1,5 +1,5 @@
 {
-  "extension": "command.xrpl-muse-skill",
+  "extension": "command.mcp-authyouragent",
   "schemaVersion": "guard.extension-trust-binding.v1",
   "trustClass": "external"
 }

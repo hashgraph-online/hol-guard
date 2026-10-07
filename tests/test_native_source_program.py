@@ -261,6 +261,10 @@ def test_native_input_byte_budget(compiler: Path, example: dict) -> None:
 
 
 def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
+    # Exercise the matcher budget independently of the growing product catalog.
+    example = copy.deepcopy(example)
+    example["sources"] = example["sources"][:1]
+    example["mcp_sources"] = []
     groups = [
         {
             "op": "any.v1",
@@ -280,6 +284,7 @@ def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
         "config": {},
         "matchers": groups,
     }
+
     result = invoke(compiler, example)
     assert result.returncode != 0
     assert json.loads(result.stdout)["code"] == "command_source_matcher_budget_exceeded"

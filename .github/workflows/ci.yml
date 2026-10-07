@@ -208,6 +208,7 @@ jobs:
         run: cargo fmt --manifest-path rust/Cargo.toml --all --check
       - name: Build native command evaluators once for pytest shards
         run: |
+          python3 scripts/refresh_extension_artifacts.py --trust-only
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
       - name: Verify generated native command catalogs before pytest fan-out
         env:
@@ -346,11 +347,7 @@ jobs:
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
-      - name: Download matching native command projections
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-projections
-          path: .
+      - uses: ./.github/actions/restore-command-projections
       - run: |
           chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
           echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
