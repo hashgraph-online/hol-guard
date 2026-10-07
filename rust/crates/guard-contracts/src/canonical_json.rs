@@ -26,6 +26,15 @@ pub fn write_canonical_json_with_limit(
     limit: usize,
     err: &'static str,
 ) -> Result<(), &'static str> {
+    write_sorted_json::<false, true>(value, out, limit, err)
+}
+
+fn write_sorted_json<const SPACED: bool, const ENSURE_ASCII: bool>(
+    value: &Value,
+    out: &mut Vec<u8>,
+    limit: usize,
+    err: &'static str,
+) -> Result<(), &'static str> {
     if out.len() > limit {
         return Err(err);
     }
@@ -33,10 +42,9 @@ pub fn write_canonical_json_with_limit(
         Value::Null => out.extend_from_slice(b"null"),
         Value::Bool(flag) => out.extend_from_slice(if *flag { b"true" } else { b"false" }),
         Value::Number(number) => {
-            if let Some(int) = number.as_i64() {
-                out.extend_from_slice(int.to_string().as_bytes());
-            } else if let Some(uint) = number.as_u64() {
-                out.extend_from_slice(uint.to_string().as_bytes());
+            let raw = number.as_str();
+            if !raw.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E')) {
+                out.extend_from_slice(if raw == "-0" { b"0" } else { raw.as_bytes() });
             } else if let Some(float) = number.as_f64() {
                 if !float.is_finite() {
                     return Err(err);
@@ -46,14 +54,17 @@ pub fn write_canonical_json_with_limit(
                 return Err(err);
             }
         }
-        Value::String(text) => write_json_string(text, out),
+        Value::String(text) => write_json_string_with_ascii::<ENSURE_ASCII>(text, out),
         Value::Array(items) => {
             out.push(b'[');
             for (index, item) in items.iter().enumerate() {
                 if index > 0 {
                     out.push(b',');
+                    if SPACED {
+                        out.push(b' ');
+                    }
                 }
-                write_canonical_json_with_limit(item, out, limit, err)?;
+                write_sorted_json::<SPACED, ENSURE_ASCII>(item, out, limit, err)?;
             }
             out.push(b']');
         }
@@ -65,11 +76,17 @@ pub fn write_canonical_json_with_limit(
             for (key, item) in entries.iter() {
                 if !first {
                     out.push(b',');
+                    if SPACED {
+                        out.push(b' ');
+                    }
                 }
                 first = false;
-                write_json_string(key, out);
+                write_json_string_with_ascii::<ENSURE_ASCII>(key, out);
                 out.push(b':');
-                write_canonical_json_with_limit(item, out, limit, err)?;
+                if SPACED {
+                    out.push(b' ');
+                }
+                write_sorted_json::<SPACED, ENSURE_ASCII>(item, out, limit, err)?;
             }
             out.push(b'}');
         }
@@ -86,11 +103,27 @@ pub fn write_canonical_json(value: &Value, out: &mut Vec<u8>) -> Result<(), &'st
     write_canonical_json_with_limit(value, out, usize::MAX, "canonical_json_unencodable")
 }
 
+/// Sorted compact JSON with non-ASCII characters encoded as UTF-8.
+/// The producer must bound input size, as with the compact unbounded writer.
+pub fn write_canonical_json_utf8(value: &Value, out: &mut Vec<u8>) -> Result<(), &'static str> {
+    write_sorted_json::<false, false>(value, out, usize::MAX, "canonical_json_unencodable")
+}
+
+/// Sorted, ASCII-escaped JSON with CPython's default comma/colon spacing.
+/// The producer must bound input size, as with the compact unbounded writer.
+pub fn write_python_default_json(value: &Value, out: &mut Vec<u8>) -> Result<(), &'static str> {
+    write_sorted_json::<true, true>(value, out, usize::MAX, "canonical_json_unencodable")
+}
+
 /// Escape a string body the way CPython's `ensure_ascii` encoder does:
 /// printable ASCII passes through except `"` and `\`; short escapes cover
 /// the usual controls; every other code point becomes a lowercase `\uXXXX`
 /// sequence with non-BMP points emitted as UTF-16 surrogate pairs.
 pub fn write_json_string(text: &str, out: &mut Vec<u8>) {
+    write_json_string_with_ascii::<true>(text, out);
+}
+
+fn write_json_string_with_ascii<const ENSURE_ASCII: bool>(text: &str, out: &mut Vec<u8>) {
     out.push(b'"');
     for ch in text.chars() {
         match ch {
@@ -101,7 +134,7 @@ pub fn write_json_string(text: &str, out: &mut Vec<u8>) {
             '\u{0a}' => out.extend_from_slice(b"\\n"),
             '\u{0c}' => out.extend_from_slice(b"\\f"),
             '\u{0d}' => out.extend_from_slice(b"\\r"),
-            ch if (ch as u32) < 0x20 || (ch as u32) > 0x7e => {
+            ch if (ch as u32) < 0x20 || (ENSURE_ASCII && (ch as u32) > 0x7e) => {
                 let code = ch as u32;
                 if code > 0xffff {
                     let shifted = code - 0x1_0000;

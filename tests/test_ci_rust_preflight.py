@@ -44,7 +44,7 @@ def test_required_rust_checks_are_parallel_to_the_fast_artifact_producer() -> No
     assert "cargo clippy" not in commands and "cargo test" not in commands
     assert jobs["quality"]["needs"] == "native-command-evaluators"
     assert jobs["coverage-plan"]["needs"] == "native-command-evaluators"
-    assert jobs["coverage"]["needs"] == ["coverage-plan", "native-command-evaluators"]
+    assert jobs["coverage"]["needs"] == ["plan", "coverage-plan", "native-command-evaluators"]
     required = jobs["ci-python-312"]
     assert required["name"] == "ci (3.12)" and required["if"] == "always()"
     assert {"native-workspace", "quality", "coverage-plan", "coverage"} <= set(required["needs"])

@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from pathlib import Path
+from urllib.parse import parse_qs
 
 if __package__:
     from ..codex_binding_capture import record_bridge_ingress
     from ..codex_hook_bridge_runtime import BridgeConfig
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
+    from ..codex_hook_launch_runtime import (
+        desktop_hook_proxy_context,
+        isolated_hook_environment,
+        run_isolated_hook_process,
+    )
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from ..daemon.hook_availability_policy import hook_event_is_permission_request
     from ..daemon.hook_request_parsing import runtime_hook_event_name
@@ -44,6 +51,11 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
         bridge_config_from_argv as _parse_bridge_config,
     )
+    from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
+        desktop_hook_proxy_context,
+        isolated_hook_environment,
+        run_isolated_hook_process,
+    )
     from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
         hook_event_is_permission_request,
@@ -69,6 +81,7 @@ _LAUNCH_INTEGRITY_REASON = (
 _OVERLOAD_REASON = (
     "HOL Guard is temporarily saturated and kept this action blocked. No approval was requested; retry the action."
 )
+_TRANSITION_PROBE_OUTPUT_LIMIT = 64 * 1024
 
 
 def _json_object(text: str) -> dict[str, object] | None:
@@ -96,6 +109,88 @@ def _write_transition_observation(data: str, response: Mapping[str, object]) -> 
     # Diagnostics must never interfere with the app's enforcement response.
     with suppress(OSError, ValueError):
         sys.stderr.write(json.dumps(validated, sort_keys=True, separators=(",", ":")) + "\n")
+
+
+def _desktop_transition_probe_command(
+    *,
+    data: str,
+    state_path: str | Path,
+    query: str,
+    hook_timeouts: Mapping[str, int],
+    environment: Mapping[str, str] | None = None,
+) -> tuple[str, ...] | None:
+    """Build the strict signed-proxy path for an authenticated Desktop probe."""
+
+    source = os.environ if environment is None else environment
+    if not bool(getattr(sys, "frozen", False)) or sys.platform != "darwin":
+        return None
+    if source.get("HOL_GUARD_DESKTOP") != "1":
+        return None
+
+    payload = _json_object(data)
+    if payload is None or payload.get("hook_event_name") != "PreToolUse":
+        return None
+    from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
+        PROBE_FIELD,
+        transition_hook_probe,
+    )
+
+    if PROBE_FIELD not in payload or transition_hook_probe(payload) is None:
+        return None
+
+    guard_home = Path(state_path)
+    if guard_home.name == "daemon-state.json":
+        guard_home = guard_home.parent
+    if not guard_home.is_absolute():
+        raise RuntimeError("Desktop transition probe has no absolute Guard home")
+
+    proxy = desktop_hook_proxy_context(source).get("HOL_GUARD_DESKTOP_HOOK_PROXY")
+    timeout_seconds = hook_timeouts.get("PreToolUse")
+    if proxy is None or type(timeout_seconds) is not int or timeout_seconds <= 0:
+        raise RuntimeError("Desktop transition probe has no signed proxy or valid deadline")
+
+    query_values = parse_qs(query, keep_blank_values=True)
+    home_values = query_values.get("home", [])
+    home = Path(home_values[0]) if len(home_values) == 1 else None
+    workspace_value = payload.get("cwd")
+    workspace = Path(workspace_value) if isinstance(workspace_value, str) else None
+    if (
+        home is None
+        or not home.is_absolute()
+        or workspace is None
+        or not workspace.is_absolute()
+        or "\x00" in str(home)
+        or "\x00" in str(workspace)
+    ):
+        raise RuntimeError("Desktop transition probe has an invalid home or workspace")
+
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_cli_hook_command
+
+    command = bounded_cli_hook_command(
+        # The bundle executable is both the signed proxy and the fallback
+        # target. Requiring the proxy makes fallback exit before Core runs.
+        python_executable=proxy,
+        package_root=Path(__file__).resolve().parents[3],
+        guard_home=guard_home,
+        cli_args=[
+            "guard",
+            "hook",
+            "--guard-home",
+            str(guard_home.resolve(strict=False)),
+            "--harness",
+            "codex",
+            "--home",
+            str(home.resolve(strict=False)),
+            "--workspace",
+            str(workspace.resolve(strict=False)),
+        ],
+        harness="codex",
+        timeout_seconds=float(timeout_seconds),
+        require_desktop_proxy=True,
+    )
+    if len(command) != 10 or command[4] != proxy or command[8] != proxy or command[9] != "1":
+        raise RuntimeError("Desktop transition probe did not resolve to its strict signed proxy")
+    return command
 
 
 def _event_name(data: str) -> str:
@@ -257,6 +352,40 @@ def main(
     else:
         event_name, data, timeout_seconds, input_ready_at = hook_input
         deadline = input_ready_at + timeout_seconds
+        try:
+            probe_command = _desktop_transition_probe_command(
+                data=data,
+                state_path=state_path,
+                query=query,
+                hook_timeouts=hook_timeouts,
+            )
+        except (OSError, RuntimeError, ValueError):
+            sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
+            return 1
+        if probe_command is not None:
+            try:
+                probe_result = run_isolated_hook_process(
+                    probe_command,
+                    input_text=data,
+                    cwd=Path.home(),
+                    environment=isolated_hook_environment(),
+                    output_limit=_TRANSITION_PROBE_OUTPUT_LIMIT,
+                    deadline_monotonic=deadline,
+                )
+            except OSError:
+                sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
+                return 1
+            if (
+                probe_result.returncode != 0
+                or probe_result.timed_out
+                or probe_result.containment_failed
+                or probe_result.output_limit_exceeded
+            ):
+                sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
+                return 1
+            sys.stdout.write(probe_result.stdout)
+            sys.stderr.write(probe_result.stderr)
+            return 0
         failure_causes = []
         response, daemon_overloaded, launch_integrity_failed = bridge_review_response(
             state_path=state_path,

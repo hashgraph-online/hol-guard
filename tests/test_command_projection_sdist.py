@@ -21,9 +21,21 @@ def archive(tmp_path):
     spec.loader.exec_module(module)
     files = {
         "contributions/command-sources/command.example.json": {"extension": {"extension_id": "command.example"}},
-        "contracts/extensions/trust-class-map.v1.json": {"classes": {"external": ["command.example"]}},
+        "contracts/extensions/trust/command.example.v1.json": {
+            "schemaVersion": "guard.extension-trust-binding.v1",
+            "extension": "command.example",
+            "trustClass": "external",
+        },
         "contracts/extensions/command-catalog.v1.json": {"catalog": []},
         "contracts/extensions/native-command-program.v1.json": {"rules": []},
+        "contracts/extensions/trust-class-map.v1.json": {
+            "schemaVersion": "guard.extension-trust-class-map.v1",
+            "publishers": {
+                "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
+            },
+            "classes": {"first-party": [], "trusted-library": [], "external": ["command.example"]},
+        },
         "rust/Cargo.toml": "[workspace]\n",
         "rust/Cargo.lock": "version = 4\n",
         "rust/crates/example/src/lib.rs": "// implementation\n",
@@ -52,11 +64,12 @@ def test_frozen_archive_inputs_verify_without_invoking_rust(archive):
     "relative",
     [
         "contributions/command-sources/command.example.json",
-        "contracts/extensions/trust-class-map.v1.json",
+        "contracts/extensions/trust/command.example.v1.json",
         "rust/crates/example/src/lib.rs",
         "rust/Cargo.lock",
         "contracts/extensions/command-catalog.v1.json",
         "contracts/extensions/native-command-program.v1.json",
+        "contracts/extensions/trust-class-map.v1.json",
     ],
 )
 def test_changed_archive_input_or_output_is_rejected(archive, relative):
@@ -69,8 +82,19 @@ def test_changed_archive_input_or_output_is_rejected(archive, relative):
         path.write_text(json.dumps(value))
     else:
         path.write_text(path.read_text() + "changed\n")
-    with pytest.raises(ValueError, match="do not match"):
+    with pytest.raises(ValueError, match=r"do not match|does not match"):
         module.verify_projection_manifest(root)
+
+
+def test_archive_manifest_cannot_rebind_a_promoted_trust_projection(archive):
+    """An output cannot promote an external extension even with a refreshed manifest."""
+    module, root = archive
+    path = root / "contracts/extensions/trust-class-map.v1.json"
+    payload = json.loads(path.read_text())
+    payload["classes"] = {"first-party": ["command.example"], "trusted-library": [], "external": []}
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="trust map does not match authored bindings"):
+        module.write_projection_manifest(root)
 
 
 def test_new_canonical_source_is_rejected(archive):

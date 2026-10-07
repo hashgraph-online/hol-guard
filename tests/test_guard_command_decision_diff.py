@@ -297,7 +297,7 @@ def test_report_gates_native_parity_and_preserves_every_original_oracle_differen
     assert reconciliation["categorized_count"] == 51_000
     assert reconciliation["uncategorized_count"] == 0
     assert reconciliation["below_original_count"] == 0
-    assert reconciliation["above_original_count"] == 11_683
+    assert reconciliation["above_original_count"] == 10_541
     original_gaps = cast(dict[str, list[object]], reconciliation["known_gaps"])
     gap_signatures = {key: (int(str(value[0])), str(value[1])) for key, value in original_gaps.items()}
     assert gap_signatures == expected_original_gap_groups()

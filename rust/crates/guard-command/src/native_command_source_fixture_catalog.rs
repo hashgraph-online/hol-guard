@@ -90,8 +90,8 @@ mod tests {
         )))
         .unwrap();
         let trust: Value = serde_json::from_slice(include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../contracts/extensions/trust-class-map.v1.json"
+            env!("OUT_DIR"),
+            "/trust-class-map.v1.json"
         )))
         .unwrap();
         serde_json::json!({

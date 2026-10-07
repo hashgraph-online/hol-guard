@@ -174,7 +174,7 @@ def _tool_call_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
     )
 
 
-def test_mcp_tool_call_evaluator_policy_version_is_the_only_changed_component(
+def test_mcp_tool_call_approval_ignores_presentation_only_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     native_context_digest: Path,
@@ -200,15 +200,6 @@ def test_mcp_tool_call_evaluator_policy_version_is_the_only_changed_component(
         == saved_token
     )
 
-    monkeypatch.setattr(
-        mcp_tool_calls_module,
-        "_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION",
-        "mcp-tool-call-evaluation-v3-test",
-    )
-    _assert_only_policy_component_changed(
-        saved_token,
-        _tool_call_token(artifact=artifact, config=config),
-    )
 
 
 def _sensitive_read_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:

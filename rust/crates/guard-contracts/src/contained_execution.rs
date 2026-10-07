@@ -275,8 +275,6 @@ pub struct McpStdioProbeRequestV1 {
     pub extra_env: Option<BTreeMap<String, String>>,
     /// Probe timeout in seconds (None = default).
     pub timeout_seconds: Option<f64>,
-    /// Emit `reason` on failure when true; `None` result on false.
-    pub report_failure: bool,
     /// Optional connection identity hash for attestation binding.
     pub connection_identity_hash: Option<String>,
     pub guard_home: String,

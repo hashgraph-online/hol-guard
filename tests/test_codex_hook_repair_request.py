@@ -103,6 +103,18 @@ def test_exact_roundtrip_is_read_only_except_private_request(captured, tmp_path,
     assert after[parent][:2] == before[parent][:2]
     del after[parent]
     del before[parent]
+    # A live resident refreshes its own client-lease file's mtime during the
+    # round trip; that liveness marker is not a request mutation.
+    after = {
+        rel: entry
+        for rel, entry in after.items()
+        if "resident-client-leases.v1" not in rel
+    }
+    before = {
+        rel: entry
+        for rel, entry in before.items()
+        if "resident-client-leases.v1" not in rel
+    }
     assert after == before
     raw = path.read_text()
     assert "grant_id" not in raw and "session_nonce" not in raw and "approval_gate_input" not in raw

@@ -70,6 +70,7 @@ _PRE_TOOL_ACTION_OPERATIONS = {
     "harness": {"start", "stop", "set", "read"},
     "unknown": {"unknown"},
 }
+_UNCERTAIN_EXTENSION_FLOORS = frozenset({"review", "require-reapproval", "block"})
 _PRE_TOOL_RESULT_KEYS = {
     "schema",
     "version",
@@ -176,7 +177,9 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
         if extensions is None:
             return False
         binding = cast(dict[str, object], extensions["binding"])
-        if binding["uncertainty_count"] and result.get("minimum_action") != "block":
+        if extensions["evaluation_error"] is not None and result.get("minimum_action") != "block":
+            return False
+        if binding["uncertainty_count"] and result.get("minimum_action") not in _UNCERTAIN_EXTENSION_FLOORS:
             return False
     if not _valid_pre_tool_result_fields(result):
         return False

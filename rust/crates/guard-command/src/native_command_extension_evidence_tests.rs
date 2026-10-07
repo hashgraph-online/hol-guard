@@ -155,7 +155,7 @@ fn oracle_rm_rf_two_observations_one_uncertainty() {
                 "command.shell-mutations.destructive-shell".to_owned(),
                 "high".to_owned(),
                 "review".to_owned(),
-                vec!["matcher-failure".to_owned()],
+                vec!["unsupported-input".to_owned()],
                 Vec::<String>::new(),
                 1usize,
             ),
@@ -183,7 +183,7 @@ fn oracle_aws_help_safe_variant() {
 
 #[test]
 fn oracle_kubectl_secret_read_uncertainty() {
-    // Python oracle: delete-resources (no unc) + secret-read (matcher-failure).
+    // Python oracle: delete-resources (no unc) + secret-read (unsupported-input).
     assert_eq!(
         summarize("nce_7436786547861050890.json"),
         vec![
@@ -201,7 +201,7 @@ fn oracle_kubectl_secret_read_uncertainty() {
                 "command.kubernetes-secrets.secret-read".to_owned(),
                 "high".to_owned(),
                 "review".to_owned(),
-                vec!["matcher-failure".to_owned()],
+                vec!["unsupported-input".to_owned()],
                 Vec::<String>::new(),
                 1usize,
             ),
@@ -218,7 +218,7 @@ fn oracle_python_env_secret_read_uncertainty() {
             "command.shell-mutations.process-environment-secret-read".to_owned(),
             "high".to_owned(),
             "review".to_owned(),
-            vec!["matcher-failure".to_owned()],
+            vec!["unsupported-input".to_owned()],
             Vec::<String>::new(),
             1usize,
         )]

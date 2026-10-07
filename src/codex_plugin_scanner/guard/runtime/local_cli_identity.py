@@ -203,7 +203,7 @@ def recognize_operator_cli(
             return None, "common_shell_utility", common_utility_reject_message(exe)
         if exe is not None and is_reserved_tool_name(exe):
             return None, "reserved_tool", "Guard itself is not added as a custom extension."
-        if exe is not None and exe in owned:
+        if exe is not None and exe in owned and not _is_interpreter_name(exe):
             return None, "already_built_in", f"{exe} is already a built-in Guard extension."
         if "&&" in candidate or "||" in candidate or "|" in candidate:
             last_code = "compound_command"

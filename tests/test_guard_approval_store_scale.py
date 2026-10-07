@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.store_approvals import (
     resolve_approval_request,
     resolve_request_with_queue_result,
 )
+from tests.coverage_ci import under_coverage_scale
 
 
 def _make_conn() -> sqlite3.Connection:
@@ -271,7 +272,7 @@ class TestQueueScaleTargets:
         elapsed = time.perf_counter() - started
 
         assert len(page["items"]) == 25
-        assert elapsed < 0.05
+        assert elapsed < 0.05 * under_coverage_scale(4.0)
 
 
 class TestSearchFilter:

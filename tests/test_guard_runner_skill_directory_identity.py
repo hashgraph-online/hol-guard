@@ -21,10 +21,17 @@ def test_fresh_approval_survives_unchanged_incomplete_skill_redetection(
     monkeypatch: pytest.MonkeyPatch,
     native_context_digest: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
 
     home_dir = tmp_path / "home"
-    provision_native_policy_verifier_key(home_dir, b"\x07" * 32)
+    store = GuardStore(home_dir)
+    store.ensure_policy_integrity_ready_for_write(
+        harness="gemini",
+        now="2026-07-19T00:00:00Z",
+    )
+    provision_native_verifier_key_for_store(store)
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
     skill_dir = home_dir / ".gemini" / "skills" / "review"
@@ -68,7 +75,7 @@ def test_fresh_approval_survives_unchanged_incomplete_skill_redetection(
     result = guard_runner_module.guard_run(
         "gemini",
         context,
-        GuardStore(home_dir),
+        store,
         GuardConfig(guard_home=home_dir, workspace=workspace_dir),
         dry_run=False,
         passthrough_args=[],

@@ -852,13 +852,18 @@ def guard_run(
 ) -> dict[str, Any]:
     """Evaluate local harness state and optionally launch the harness."""
 
-    if passthrough_args:
-        # Guarded launch can be the first native caller in a fresh install.
-        # Reuse the publisher's store-derived verifier bootstrap; never create
-        # a separate authority or substitute Python when the resident is absent.
-        from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+    # `guard run` is usually the first native caller in a fresh install: the
+    # detection review (including bare `--dry-run`) resolves package-intent and
+    # launch identities through the resident, and the resident refuses every
+    # request until this store's verifier key exists. Reuse the publisher's
+    # store-derived bootstrap; never create a separate authority or substitute
+    # Python when the resident is absent. The digest home is bound too, so those
+    # calls resolve against this store instead of `$HOME`.
+    from ..native_context import bind_context_digest_home
+    from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 
-        provision_native_verifier_key_for_store(store)
+    provision_native_verifier_key_for_store(store)
+    bind_context_digest_home(getattr(store, "guard_home", None))
     detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
     launch_plan: _GuardRunLaunchPlan | None = None
     pending_approval_claims: list[tuple[Mapping[str, object], str, str]] = []

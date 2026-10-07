@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .pi_extension_contained_tests_source import with_contained_test_routing
+from .pi_extension_input_source import INPUT_HANDLER_SOURCE
 from .pi_extension_source_tail_shared_v1 import build_source_tail_shared_v1
 
 
@@ -28,6 +29,9 @@ def build_extension_source_tail(
         tool_approval_continuation_source=tool_approval_continuation_source,
         workspace_readiness_source=workspace_readiness_source,
     )
+    input_start = shared_source.index('  pi.on("input",')
+    input_end = shared_source.index('  pi.on("tool_call",', input_start)
+    shared_source = shared_source[:input_start] + INPUT_HANDLER_SOURCE + shared_source[input_end:]
     if harness == "omp":
         shared_source = with_contained_test_routing(shared_source)
     return shared_source + (

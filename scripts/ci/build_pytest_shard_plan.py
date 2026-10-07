@@ -29,6 +29,7 @@ MAX_NODES_PER_AFFINITY_GROUP = 8
 SINGLE_PROCESS_FILES = frozenset({"tests/test_guard_command_decision_diff.py"})
 SCHEDULING_ONLY_NODE_IDS = frozenset(
     {
+        "tests/test_guard_continuation_contract.py::test_bounded_adapter_cancels_a_hung_worker_and_records_timeout",
         "tests/test_guard_hook_process_runner.py::"
         "test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial",
         "tests/test_guard_daemon_storage_liveness.py::"
@@ -39,6 +40,8 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows",
         "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
         "test_resolving_one_request_with_100k_rows_stays_under_100ms",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-240-24]",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-480-two-client-24]",
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]",
         "tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner",
         "tests/test_guard_cloud_review_runtime_recovery.py::"
