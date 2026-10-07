@@ -944,6 +944,8 @@ def _bounded_daemon_call(daemon: Any, method_name: str) -> object | None:
     method = getattr(daemon, method_name, None)
     if not callable(method):
         raise ProbeError(f"installed Guard daemon {method_name} signal is unavailable")
+    if not hasattr(signal, "SIGALRM"):
+        return _bounded_daemon_call_without_alarm(method, method_name)
 
     try:
         prior_handler = signal.getsignal(signal.SIGALRM)
@@ -968,6 +970,29 @@ def _bounded_daemon_call(daemon: Any, method_name: str) -> object | None:
     finally:
         elapsed = time.monotonic() - started
         _restore_alarm_state(prior_handler=prior_handler, prior_timer=prior_timer, elapsed=elapsed)
+
+
+def _bounded_daemon_call_without_alarm(method: Any, method_name: str) -> object | None:
+    """Bound the call by joining a worker thread where SIGALRM does not exist (Windows)."""
+    outcome: dict[str, Any] = {}
+
+    def call() -> None:
+        try:
+            outcome["value"] = method()
+        except BaseException as exc:
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=call, name=f"guard-daemon-{method_name}", daemon=True)
+    worker.start()
+    worker.join(_daemon_cleanup_timeout_seconds())
+    if worker.is_alive():
+        raise _DaemonCallTimeoutError(f"authenticated Guard daemon {method_name} timed out")
+    error = outcome.get("error")
+    if error is not None:
+        if method_name == "stop":
+            raise ProbeError(f"authenticated Guard daemon cleanup failed: {type(error).__name__}") from error
+        raise ProbeError(f"authenticated Guard daemon {method_name} failed: {type(error).__name__}") from error
+    return outcome.get("value")
 
 
 def _bounded_daemon_finish(daemon: Any) -> bool:

@@ -136,12 +136,16 @@ class InferenceRelay:
                     size = 0
                     models: set[str] = set()
                     completed = False
+                    finished = False
+                    agent_open = True
+                    phase = "provider-connect"
                     with relay._opener.open(request, timeout=relay.timeout) as response:
                         if response.status != 200:
                             raise ValueError("provider response status")
                         self.send_response(200)
                         self.send_header("Content-Type", "text/event-stream")
                         self.end_headers()
+                        phase = "provider-read"
                         for line in response:
                             size += len(line)
                             if size > RESPONSE_LIMIT:
@@ -156,11 +160,31 @@ class InferenceRelay:
                                         chunk = json.loads(data)
                                         if isinstance(chunk.get("model"), str):
                                             models.add(chunk["model"])
-                                    except (ValueError, AttributeError):
+                                        finished = finished or any(
+                                            isinstance(choice, dict) and choice.get("finish_reason")
+                                            for choice in chunk.get("choices") or []
+                                        )
+                                    except (ValueError, AttributeError, TypeError):
                                         pass
-                            self.wfile.write(line)
-                            self.wfile.flush()
-                            row["delivered_bytes"] += len(line)
+                            if agent_open:
+                                phase = "agent-write"
+                                try:
+                                    self.wfile.write(line)
+                                    self.wfile.flush()
+                                    row["delivered_bytes"] += len(line)
+                                except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                                    # Agents may close once the model reports a
+                                    # finish reason, before the trailing usage
+                                    # chunk and DONE. Windows reports that close
+                                    # on the next write. Keep reading so the
+                                    # round still needs the provider's DONE; a
+                                    # close before the finish reason stays an
+                                    # error.
+                                    if not finished:
+                                        raise
+                                    agent_open = False
+                                    row["agent_closed_after_finish"] = True
+                                phase = "provider-read"
                             # DONE terminates an SSE event, even when the provider
                             # keeps its HTTP connection open after the delimiter.
                             if completed and not line.strip():
@@ -179,6 +203,7 @@ class InferenceRelay:
                         if "row" in locals() and row["status"] == "started":
                             row["status"] = "provider-error"
                             row["error_type"] = type(exc).__name__
+                            row["error_phase"] = locals().get("phase", "request")
                             if isinstance(exc, urllib.error.HTTPError):
                                 row["http_status"] = exc.code
                             relay._settled.notify_all()
