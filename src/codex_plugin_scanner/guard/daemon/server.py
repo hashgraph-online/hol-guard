@@ -6722,36 +6722,42 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None,
     ) -> dict[str, object] | None:
         """Try the resident hook worker; only explicit rollback may fall back."""
+        from contextlib import nullcontext
+
+        from ..sqlite_tuning import sqlite_operation_deadline
+
         daemon_server = self._daemon_server()
         effective_home_dir = Path(home_dir) if home_dir is not None else daemon_server.home_dir
         effective_guard_home = Path(guard_home) if guard_home is not None else daemon_server.store.guard_home
 
-        try:
-            worker = daemon_server.hook_worker
-            return worker.review_http_payload(
-                payload=payload,
-                params=params,
-                default_harness=default_harness,
-                home_dir=effective_home_dir,
-                guard_home=effective_guard_home,
-                workspace=Path(workspace) if workspace else None,
-                deadline=deadline,
-            )
-        except Exception as error:
-            # Fail safe: deny/block. Do not fall back to compatibility CLI for
-            # requests that omitted full output and supplied only guard_source_ref.
-            self._daemon_server().hook_worker.metrics.record_failure(
-                stage="server",
-                exception_type=type(error).__name__,
-            )
-            return self._runtime_hook_fail_safe_response(
-                payload,
-                params,
-                default_harness=default_harness,
-                reason="HOL Guard could not complete local hook review safely.",
-                reason_code="daemon_worker_exception",
-                native_authoritative=_native_mode_requires_rust(),
-            )
+        # Keep failure rendering on the same storage clock as direct review.
+        with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+            try:
+                worker = daemon_server.hook_worker
+                return worker.review_http_payload(
+                    payload=payload,
+                    params=params,
+                    default_harness=default_harness,
+                    home_dir=effective_home_dir,
+                    guard_home=effective_guard_home,
+                    workspace=Path(workspace) if workspace else None,
+                    deadline=deadline,
+                )
+            except Exception as error:
+                # Fail safe: deny/block. Do not fall back to compatibility CLI for
+                # requests that omitted full output and supplied only guard_source_ref.
+                self._daemon_server().hook_worker.metrics.record_failure(
+                    stage="server",
+                    exception_type=type(error).__name__,
+                )
+                return self._runtime_hook_fail_safe_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    reason="HOL Guard could not complete local hook review safely.",
+                    reason_code="daemon_worker_exception",
+                    native_authoritative=_native_mode_requires_rust(),
+                )
 
     def _handle_runtime_hook_compatibility_cli(
         self,
