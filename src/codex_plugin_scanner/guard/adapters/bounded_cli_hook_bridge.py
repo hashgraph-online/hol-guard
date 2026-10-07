@@ -137,6 +137,7 @@ def bounded_cli_hook_command(
     harness: str,
     timeout_seconds: float,
     prepared_files: list[TransitionFile] | None = None,
+    require_desktop_proxy: bool = False,
 ) -> tuple[str, ...]:
     """Build a shell-free hook command backed by a process-tree deadline."""
 
@@ -160,9 +161,20 @@ def bounded_cli_hook_command(
     )
     config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
     if frozen_launcher:
-        desktop_proxy = _trusted_desktop_hook_proxy_command(python_executable, config_json)
+        if require_desktop_proxy:
+            desktop_proxy = _trusted_desktop_hook_proxy_command(
+                python_executable,
+                config_json,
+                require_proxy=True,
+            )
+        else:
+            desktop_proxy = _trusted_desktop_hook_proxy_command(python_executable, config_json)
         if desktop_proxy is not None:
             return desktop_proxy
+        if require_desktop_proxy:
+            raise RuntimeError("trusted Desktop hook proxy is unavailable")
+    elif require_desktop_proxy:
+        raise RuntimeError("trusted Desktop hook proxy requires a frozen launcher")
     if frozen_launcher or harness.strip().lower() == "grok":
         isolated_command = _isolated_bounded_hook_command(
             guard_home=guard_home,

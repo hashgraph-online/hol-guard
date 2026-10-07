@@ -76,7 +76,10 @@ HOOK_EVENT_CAPABILITIES: dict[str, tuple[HarnessEventCapability, ...]] = {
             ("observe", "block", "approval"),
             "Approval hook failures remain fail closed or pending until Guard can return an authenticated decision.",
             "Claude Code must preserve the managed PermissionRequest hook group in its settings.",
-            ("Native approval behavior remains host/version dependent until a live proof is captured.",),
+            (
+                "Guard adds pending review context and defers to Claude's own permission dialog; the native "
+                "PreToolUse verdict remains the decision boundary.",
+            ),
             "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups",
         ),
         _capability(

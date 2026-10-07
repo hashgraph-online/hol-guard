@@ -69,6 +69,17 @@ python -m ci.gauntlet run \
   --output /absolute/path/outside-the-checkout/gauntlet-evidence
 ```
 
+Reasoning models can run at a fixed effort. Pass `--reasoning-effort` (`minimal`, `low`, `medium`, `high` or `xhigh`) or set `GUARD_GAUNTLET_REASONING_EFFORT`. The relay then sends that `reasoning_effort` on every request, replacing whatever the agent asked for, and records it as `requested_reasoning_effort` in each case's inference evidence. The agent's output budget rises from 8,192 to 32,768 tokens so reasoning does not use up the room for tool calls. For example, GPT 6 Luna High through OpenRouter:
+
+```sh
+export GUARD_GAUNTLET_PROVIDER_URL='https://openrouter.ai/api/v1'
+export GUARD_GAUNTLET_MODEL='openai/gpt-6-luna'
+export GUARD_GAUNTLET_PROVIDER_IDENTITY='openrouter/openai/gpt-6-luna/high'
+export GUARD_GAUNTLET_REASONING_EFFORT='high'
+```
+
+Leave the effort unset for models without reasoning controls; requests and evidence are then unchanged.
+
 For a GitHub test-merge checkout, also pass `--candidate-sha FULL_PR_HEAD_SHA`. The tested checkout must be that candidate or its exact two-parent test merge. The installed native build must match the checkout, and the PR evidence publisher checks the merge parents against GitHub's current PR head and base.
 
 The additive contained Bun/Vitest profile is selected explicitly, runs only on macOS, and requires an existing isolated fixture project with project-local `node_modules`; it never installs dependencies and does not qualify or replace core20:

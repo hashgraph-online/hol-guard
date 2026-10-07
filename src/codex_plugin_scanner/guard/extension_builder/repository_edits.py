@@ -97,7 +97,7 @@ def project_trust_map(bindings: dict[str, str]) -> str:
 
     ``bindings`` maps each ``trust/<id>.v1.json`` path to its content. Delegates
     to the runtime folder so the builder's projection is byte-identical to the
-    refresh pipeline's; the committed aggregate is regenerated, never hand-edited.
+    refresh pipeline's. The aggregate is ignored package output, never authored.
     """
     import tempfile
 

@@ -4,6 +4,8 @@ use serde::de::{DeserializeSeed, Error, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 use std::fmt;
 
+// The complete canonical inventory now exceeds 4 MiB. Keep a finite envelope
+// bound; value count, depth, string size and lowering budgets remain independent.
 pub(super) const MAX_SOURCE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_VALUES: usize = 1_000_000;
 // Inline matcher trees add object/array syntax levels around each matcher.
