@@ -21,7 +21,7 @@ impl CompiledNativeCommandControls {
         &self,
         command: Option<&CanonicalCommandV1>,
         tool: Option<&str>,
-        packages: &[String],
+        packages: &McpPackageEvidence<'_>,
         batch: &mut NativeCommandObservationBatchV1,
         deadline: Option<Instant>,
     ) -> Result<&'static str, &'static str> {
@@ -92,16 +92,37 @@ impl CompiledNativeCommandControls {
                 let lower = tool.to_ascii_lowercase();
                 let named = lower.strip_prefix(&prefix);
                 let package_match = mcp.mcp_launch.package.as_deref().is_some_and(|expected| {
-                    packages
+                    let expected = mcp.mcp_launch.package_version.as_ref().map_or_else(
+                        || expected.to_owned(),
+                        |version| {
+                            format!(
+                                "{}:{expected}@{version}",
+                                mcp.mcp_launch.command.as_deref().unwrap_or("")
+                            )
+                        },
+                    );
+                    let candidates = if mcp.mcp_launch.package_version.is_some() {
+                        packages.pins
+                    } else {
+                        packages.names
+                    };
+                    candidates
                         .iter()
-                        .any(|package| package.eq_ignore_ascii_case(expected))
+                        .any(|package| package.eq_ignore_ascii_case(&expected))
                 });
+                let package_name_match =
+                    mcp.mcp_launch.package.as_deref().is_some_and(|expected| {
+                        packages
+                            .names
+                            .iter()
+                            .any(|package| package.eq_ignore_ascii_case(expected))
+                    });
                 let remote_named = mcp.mcp_launch.kind == "remote-http"
                     && mcp.mcp_launch.server_names.iter().any(|server| {
                         let prefix = format!("mcp__{}__", server.to_ascii_lowercase());
                         lower.starts_with(&prefix)
                     });
-                if named.is_none() && !package_match && !remote_named {
+                if named.is_none() && !package_match && !package_name_match && !remote_named {
                     continue;
                 }
                 let name = named.unwrap_or_else(|| lower.rsplit("__").next().unwrap_or(&lower));
@@ -114,6 +135,14 @@ impl CompiledNativeCommandControls {
                 let Some(selected) = selected else {
                     continue;
                 };
+                // Namespace/name recognition may tighten, never relax, policy.
+                // Raw harness hooks often lack configured server identity.
+                if mcp.mcp_launch.package_version.is_some()
+                    && !package_match
+                    && !matches!(selected.state.as_str(), "block" | "review")
+                {
+                    continue;
+                }
                 floor = match selected.state.as_str() {
                     "block" => "block",
                     "review" if floor != "block" => "review",

@@ -80,6 +80,25 @@ pub(crate) fn extract_generic_signals(
             "packageManager",
         ],
     )?;
+    // Bind both parts to the same configured identity, never pair a package
+    // with an unrelated version field or treat the tool namespace as a pin.
+    let mut mcp_package_pins = Vec::new();
+    // Tool arguments are not configured-server metadata.
+    let direct_identity = root.get("mcp_server_identity");
+    let nested_identity = root
+        .get("metadata")
+        .and_then(Value::as_object)
+        .and_then(|metadata| metadata.get("mcp_server_identity"));
+    if direct_identity.is_some() && nested_identity.is_some() && direct_identity != nested_identity
+    {
+        return Err(GenericExtractionError::Ambiguous);
+    }
+    if let Some(pin) = direct_identity
+        .or(nested_identity)
+        .and_then(crate::native_mcp_package_pin::configured_package_pin)
+    {
+        mcp_package_pins.push(pin);
+    }
     let url_values = collect_key_strings(&maps, &["url", "urls", "uri", "href", "endpoint"])?;
     let prompt_values = collect_key_strings(
         &maps,
@@ -134,6 +153,7 @@ pub(crate) fn extract_generic_signals(
         tool_name,
         package_present: !package_values.is_empty(),
         package_values,
+        mcp_package_pins,
         path_values,
         url_values,
         prompt_present: !prompt_values.is_empty(),

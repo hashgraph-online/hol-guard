@@ -26,8 +26,9 @@ _PACKAGE_LAUNCH_PREFIX: Final[dict[str, str]] = {
 }
 
 
-def package_launch_example(command: str, package: str) -> str:
-    return f"{_PACKAGE_LAUNCH_PREFIX.get(command, command)} {package}"
+def package_launch_example(command: str, package: str, version: str | None = None) -> str:
+    specification = f"{package}@{version}" if version is not None else package
+    return f"{_PACKAGE_LAUNCH_PREFIX.get(command, command)} {specification}"
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
@@ -70,7 +71,10 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
             raise ValueError(f"{mcp_id} launch command is invalid")
         if not isinstance(package, str) or not package.strip():
             raise ValueError(f"{mcp_id} launch package is invalid")
-        example = package_launch_example(command, package)
+        package_version = launch.get("packageVersion")
+        if package_version is not None and not isinstance(package_version, str):
+            raise ValueError(f"{mcp_id} launch package version is invalid")
+        example = package_launch_example(command, package, package_version)
         executables = (command,)
     elif launch_kind == "direct-command":
         command = launch.get("command")

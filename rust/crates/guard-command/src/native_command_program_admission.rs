@@ -249,48 +249,58 @@ impl NativeCommandProgram {
                     .as_deref()
                     .is_some_and(|kind| kind != "package-firewall")
                 || extension.mcp.as_ref().is_some_and(|mcp| {
-                    let launch_invalid = match mcp.mcp_launch.kind.as_str() {
-                        "direct-command" => {
-                            let Some(command) = mcp.mcp_launch.command.as_deref() else {
-                                return true;
-                            };
-                            !valid_direct_mcp_command(command)
-                                || extension.executables != [command]
-                                || mcp.mcp_launch.package.is_some()
-                                || mcp.mcp_launch.url.is_some()
-                                || !mcp.mcp_launch.server_names.is_empty()
-                                || mcp.mcp_tools.iter().any(|tool| tool.state == "allow")
-                        }
-                        "package-launcher" => {
-                            let Some(command) = mcp.mcp_launch.command.as_deref() else {
-                                return true;
-                            };
-                            let Some(package) = mcp.mcp_launch.package.as_deref() else {
-                                return true;
-                            };
-                            !bounded_id(command)
-                                || !bounded_id(package)
-                                || !extension.executables.iter().any(|value| value == command)
-                                || mcp.mcp_launch.url.is_some()
-                                || !mcp.mcp_launch.server_names.is_empty()
-                        }
-                        "remote-http" => {
-                            let Some(url) = mcp.mcp_launch.url.as_deref() else {
-                                return true;
-                            };
-                            mcp.mcp_launch.command.is_some()
-                                || mcp.mcp_launch.package.is_some()
-                                || !valid_remote_mcp_url(url)
-                                || mcp.mcp_launch.server_names.is_empty()
-                                || mcp.mcp_launch.server_names.len() > 8
-                                || mcp
-                                    .mcp_launch
-                                    .server_names
-                                    .iter()
-                                    .any(|name| !valid_mcp_server_name(name))
-                        }
-                        _ => true,
-                    };
+                    let launch_invalid =
+                        match mcp.mcp_launch.kind.as_str() {
+                            "direct-command" => {
+                                let Some(command) = mcp.mcp_launch.command.as_deref() else {
+                                    return true;
+                                };
+                                !valid_direct_mcp_command(command)
+                                    || extension.executables != [command]
+                                    || mcp.mcp_launch.package.is_some()
+                                    || mcp.mcp_launch.package_version.is_some()
+                                    || mcp.mcp_launch.url.is_some()
+                                    || !mcp.mcp_launch.server_names.is_empty()
+                                    || mcp.mcp_tools.iter().any(|tool| tool.state == "allow")
+                            }
+                            "package-launcher" => {
+                                let Some(command) = mcp.mcp_launch.command.as_deref() else {
+                                    return true;
+                                };
+                                let Some(package) = mcp.mcp_launch.package.as_deref() else {
+                                    return true;
+                                };
+                                !bounded_id(command)
+                                    || !bounded_id(package)
+                                    || mcp.mcp_launch.package_version.as_ref().is_some_and(
+                                        |version| {
+                                            !crate::native_mcp_package_pin::valid_package_pin(
+                                                command, package, version,
+                                            )
+                                        },
+                                    )
+                                    || !extension.executables.iter().any(|value| value == command)
+                                    || mcp.mcp_launch.url.is_some()
+                                    || !mcp.mcp_launch.server_names.is_empty()
+                            }
+                            "remote-http" => {
+                                let Some(url) = mcp.mcp_launch.url.as_deref() else {
+                                    return true;
+                                };
+                                mcp.mcp_launch.command.is_some()
+                                    || mcp.mcp_launch.package.is_some()
+                                    || mcp.mcp_launch.package_version.is_some()
+                                    || !valid_remote_mcp_url(url)
+                                    || mcp.mcp_launch.server_names.is_empty()
+                                    || mcp.mcp_launch.server_names.len() > 8
+                                    || mcp
+                                        .mcp_launch
+                                        .server_names
+                                        .iter()
+                                        .any(|name| !valid_mcp_server_name(name))
+                            }
+                            _ => true,
+                        };
                     mcp.surface != "mcp"
                         || launch_invalid
                         || mcp.mcp_tools.len() > 512

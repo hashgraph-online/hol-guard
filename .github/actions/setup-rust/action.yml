@@ -20,6 +20,11 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Stage external contribution trust defaults
+      shell: bash
+      # Fold authored bindings and discover missing external defaults before
+      # native compilation, using the same strict projection as builder CI.
+      run: python scripts/refresh_extension_artifacts.py --trust-only
     - name: Install pinned Rust toolchain
       shell: bash
       env:

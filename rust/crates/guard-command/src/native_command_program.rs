@@ -56,6 +56,9 @@ mod compile;
 mod evaluation;
 #[path = "native_command_program_observations.rs"]
 mod observations;
+#[cfg(test)]
+#[path = "native_mcp_package_pin_tests.rs"]
+mod pinned_mcp_tests;
 #[path = "native_command_source.rs"]
 pub mod source;
 #[path = "native_command_program_wire.rs"]
@@ -111,6 +114,8 @@ pub struct ProgramMcpLaunch {
     pub command: Option<String>,
     #[serde(default)]
     pub package: Option<String>,
+    #[serde(rename = "packageVersion", default)]
+    pub package_version: Option<String>,
     #[serde(default)]
     pub url: Option<String>,
     #[serde(rename = "serverNames", default)]

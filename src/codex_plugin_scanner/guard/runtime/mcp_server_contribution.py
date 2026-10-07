@@ -30,6 +30,8 @@ _ALLOWED_ICON_NAMES: Final = frozenset(
     }
 )
 _ALLOWED_LAUNCHERS: Final = frozenset({"bunx", "npx", "npm", "pnpm", "uvx", "yarn", "pipx"})
+_NPM_LAUNCHERS: Final = frozenset({"bunx", "npx", "npm", "pnpm", "yarn"})
+_NPM_PACKAGE: Final = re.compile(r"(?:@[a-z0-9._-]+/)?[a-z0-9][a-z0-9._-]*", re.ASCII)
 _DIRECT_COMMAND_RESERVED: Final = _ALLOWED_LAUNCHERS | frozenset(
     re.findall(
         r"\S+",
@@ -278,6 +280,13 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
     if launch_kind == "package-launcher":
         if launch.get("command") not in _ALLOWED_LAUNCHERS:
             raise ValueError(f"{filename} launch command is not an allowlisted package launcher")
+        if "packageVersion" in launch and (
+            launch.get("command") not in _NPM_LAUNCHERS
+            or not isinstance(launch.get("package"), str)
+            or len(str(launch["package"])) > 214
+            or _NPM_PACKAGE.fullmatch(str(launch["package"])) is None
+        ):
+            raise ValueError(f"{filename} package version requires an npm launcher and canonical package name")
     elif launch_kind == "direct-command":
         command = launch.get("command")
         if not isinstance(command, str) or direct_mcp_command_name(command) != command:

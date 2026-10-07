@@ -44,6 +44,16 @@ def test_only_npx_examples_carry_the_yes_flag() -> None:
             continue
         permissions = _values_for_payload(payload)["permissions"]
         examples = {getattr(p, "example_command", None) for p in permissions}
-        assert examples == {package_launch_example(launch["command"], launch["package"])}, path.name
+        assert examples == {
+            package_launch_example(launch["command"], launch["package"], launch.get("packageVersion"))
+        }, path.name
         (example,) = examples
         assert ("-y" in example.split()) == (launch["command"] == "npx"), path.name
+
+
+@pytest.mark.parametrize("launcher", ["npx", "npm", "pnpm", "yarn", "bunx"])
+def test_pinned_example_parses_back_to_the_exact_version(launcher: str) -> None:
+    command, *args = shlex.split(package_launch_example(launcher, "@scope/pkg", "0.1.18"))
+    identity = build_mcp_server_identity(config_path="", command=command, args=tuple(args), transport="stdio")
+    assert identity.package_name == "@scope/pkg"
+    assert identity.package_version == "0.1.18"

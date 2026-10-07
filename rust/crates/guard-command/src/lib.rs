@@ -76,6 +76,7 @@ pub mod native_command_extension_evidence;
 #[cfg(test)]
 mod native_command_extension_evidence_tests;
 pub mod native_command_program;
+mod native_mcp_package_pin;
 pub mod npm_source_spec;
 pub mod package_execution_context;
 pub mod package_intent_common;

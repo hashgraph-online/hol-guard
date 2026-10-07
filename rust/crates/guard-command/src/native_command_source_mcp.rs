@@ -40,6 +40,12 @@ enum Launch {
     PackageLauncher {
         command: String,
         package: String,
+        #[serde(
+            rename = "packageVersion",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        package_version: Option<String>,
     },
     RemoteHttp {
         url: String,
@@ -68,6 +74,9 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
         .any(|key| canonical.get(key).is_some_and(Value::is_null))
         || canonical["publisher"]
             .get("url")
+            .is_some_and(Value::is_null)
+        || canonical["launch"]
+            .get("packageVersion")
             .is_some_and(Value::is_null)
     {
         return Err("command_source_mcp_contract_invalid");
@@ -102,18 +111,30 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
             }
             (vec![command.clone()], command.clone(), true)
         }
-        Launch::PackageLauncher { command, package } => {
+        Launch::PackageLauncher {
+            command,
+            package,
+            package_version,
+        } => {
             if !matches!(
                 command.as_str(),
                 "npx" | "uvx" | "bunx" | "pnpm" | "npm" | "yarn" | "pipx"
             ) || package.is_empty()
                 || package.chars().count() > 256
+                || package_version.as_ref().is_some_and(|version| {
+                    !crate::native_mcp_package_pin::valid_package_pin(command, package, version)
+                })
             {
                 return Err("command_source_mcp_launcher_invalid");
             }
             (
                 vec![command.clone()],
-                package_launch_example(command, package),
+                package_launch_example(
+                    command,
+                    &package_version
+                        .as_ref()
+                        .map_or_else(|| package.clone(), |version| format!("{package}@{version}")),
+                ),
                 false,
             )
         }

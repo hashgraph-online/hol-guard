@@ -49,11 +49,11 @@ def _read(path: Path) -> dict:
 
 
 def _write_json(path: Path, value: object, *, sort_keys: bool = True) -> bool:
-    content = json.dumps(value, indent=2, sort_keys=sort_keys, ensure_ascii=False) + "\n"
-    if path.is_file() and path.read_bytes() == content.encode():
+    content = (json.dumps(value, indent=2, sort_keys=sort_keys, ensure_ascii=False) + "\n").encode("utf-8")
+    if path.is_file() and path.read_bytes() == content:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_bytes(content)
     return True
 
 

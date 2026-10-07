@@ -36,6 +36,7 @@ from ..store import (
 )
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
+from .commands_hook_launch_identity import project_hook_launch_identity
 from .commands_parser_helpers import *
 from .commands_support_runtime_artifact_policy import (
     _resolve_configured_risk_action,
@@ -755,10 +756,7 @@ def _runtime_hook_executable_identity(
         "artifact_command": artifact.command,
         "artifact_tool": metadata.get("tool_name"),
         "configured_environment": configured_environment_identity,
-        "launch_argv_sha256": launch_identity["argv_sha256"],
-        "launch_cwd": launch_identity["launch_cwd"],
-        "resolved_artifact_command": launch_identity["executable"],
-        "resolved_entrypoint": launch_identity["entrypoint"],
+        **project_hook_launch_identity(launch_identity),
         "transport": artifact.transport,
     }
 

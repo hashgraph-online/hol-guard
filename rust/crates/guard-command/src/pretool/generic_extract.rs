@@ -23,6 +23,7 @@ pub(super) struct GenericSignals {
     pub(super) tool_name: Option<String>,
     pub(super) package_present: bool,
     pub(super) package_values: Vec<String>,
+    pub(super) mcp_package_pins: Vec<String>,
     pub(super) path_values: Vec<String>,
     pub(super) url_values: Vec<String>,
     pub(super) prompt_present: bool,

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from ..models import GuardAction, GuardArtifact
 from .extension_control_contract import ExtensionControlLayer
 from .extension_trust import extension_is_active
+from .mcp_protection import package_launcher_name
 from .mcp_server_contribution import (
     catalog_id_for_mcp_id,
     direct_mcp_command_name,
@@ -75,7 +76,11 @@ def matching_mcp_contribution(artifact: GuardArtifact) -> dict[str, object] | No
             if not isinstance(launch, dict) or launch.get("kind") != "package-launcher":
                 continue
             declared = launch.get("package")
-            if isinstance(declared, str) and declared.strip().lower() == package:
+            if (
+                isinstance(declared, str)
+                and declared.strip().lower() == package
+                and _matches_package_version(artifact, launch)
+            ):
                 return payload
     for payload in load_mcp_contribution_payloads():
         launch = payload.get("launch")
@@ -92,6 +97,53 @@ def matching_mcp_contribution(artifact: GuardArtifact) -> dict[str, object] | No
         elif launch.get("kind") == "remote-http" and _matches_remote_http_contribution(artifact, launch):
             return payload
     return None
+
+
+def _matches_package_version(artifact: GuardArtifact, launch: Mapping[str, object]) -> bool:
+    version = launch.get("packageVersion")
+    if version is None:
+        return True
+    identity = artifact.metadata.get("mcp_server_identity")
+    if not isinstance(identity, Mapping):
+        return False
+    command = identity.get("command")
+    return (
+        isinstance(command, str)
+        and package_launcher_name(command) == launch.get("command")
+        and identity.get("package_name") == launch.get("package")
+        and identity.get("package_version") == version
+        and identity.get("package_source") == "default"
+        and identity.get("transport") == "stdio"
+        and isinstance(artifact.transport, str)
+        and artifact.transport.strip().lower() == "stdio"
+        and _default_package_source_environment(identity)
+        and _mcp_identity_tool_name(artifact) is not None
+    )
+
+
+def _default_package_source_environment(identity: Mapping[str, object]) -> bool:
+    keys = identity.get("env_keys")
+    if not isinstance(keys, list) or len(keys) > 256:
+        return False
+    for key in keys:
+        if not isinstance(key, str):
+            return False
+        normalized = key.strip().lower()
+        if normalized in {
+            "home",
+            "userprofile",
+            "homedrive",
+            "homepath",
+            "appdata",
+            "localappdata",
+            "xdg_config_home",
+            "xdg_config_dirs",
+            "node_options",
+            "node_path",
+            "path",
+        } or normalized.startswith(("npm_config_", "yarn_", "bun_")):
+            return False
+    return True
 
 
 def _matches_remote_http_contribution(artifact: GuardArtifact, launch: Mapping[str, object]) -> bool:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 import subprocess
 import sys
@@ -84,6 +85,14 @@ def _read_binding(bindings_dir: Path, extension_id: str) -> dict:
     return json.loads((bindings_dir / f"{extension_id}.v1.json").read_bytes())
 
 
+def test_trust_json_writes_are_canonical_and_idempotent_on_windows(tmp_path):
+    path = tmp_path / "trust" / "command.fixture.v1.json"
+    payload = {"schemaVersion": "guard.extension-trust-binding.v1", "extension": "command.fixture"}
+    assert refresh._write_json(path, payload) is True
+    assert b"\r\n" not in path.read_bytes()
+    assert refresh._write_json(path, payload) is False
+
+
 def test_missing_command_and_mcp_ids_are_external_without_changing_reviewed_classes(checkout):
     root, bindings_dir = checkout
     sources = [
@@ -122,7 +131,7 @@ def test_trust_only_does_not_build_or_read_generated_catalogs(checkout, monkeypa
 
 
 def test_malformed_binding_is_not_silently_replaced(checkout):
-    root, bindings_dir = checkout
+    _root, bindings_dir = checkout
     bad = bindings_dir / "command.broken.v1.json"
     bad.write_text("invalid JSON", encoding="utf-8")
     with pytest.raises(ValueError):
@@ -219,3 +228,74 @@ def test_builder_stages_trust_before_dependency_install_and_native_build():
         "test_extension_builder_ci_preparation.py",
     ):
         assert path in steps[tests]["run"]
+
+
+def test_shared_rust_setup_stages_trust_before_toolchain_installation():
+    action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text())
+    steps = action["runs"]["steps"]
+    trust = next(i for i, step in enumerate(steps) if "--trust-only" in step.get("run", ""))
+    install = next(i for i, step in enumerate(steps) if "rustup toolchain install" in step.get("run", ""))
+    assert trust < install
+    assert steps[trust]["shell"] == "bash"
+    assert steps[trust]["run"] == "python scripts/refresh_extension_artifacts.py --trust-only"
+    assert "if" not in steps[trust]
+    assert "continue-on-error" not in steps[trust]
+
+
+def test_shared_rust_setup_prepares_source_only_mcp_with_authored_bindings(checkout):
+    root, bindings_dir = checkout
+    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    original = json.loads(trust.read_bytes())
+    contribution = write_json(root, "contributions/mcp-servers/mcp.new-server.json", {"id": "mcp.new-server"})
+    source_bytes = contribution.read_bytes()
+    for relative in ("scripts/refresh_extension_artifacts.py", "scripts/ci/detect_pending_extension_regen.py"):
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, target)
+    action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text())
+    step = next(step for step in action["runs"]["steps"] if "--trust-only" in step.get("run", ""))
+    command = shlex.split(step["run"])
+    assert command[0] == "python"
+    for changed in (True, False):
+        completed = subprocess.run(
+            [sys.executable, *command[1:]],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        assert json.loads(completed.stdout) == {"ok": True, "trust_map_changed": changed}
+    updated = json.loads(trust.read_bytes())
+    assert updated == {
+        **original,
+        "classes": {
+            **original["classes"],
+            "external": ["command.existing", "command.mcp-new-server"],
+        },
+    }
+    assert contribution.read_bytes() == source_bytes
+    assert _read_binding(bindings_dir, "command.mcp-new-server")["trustClass"] == "external"
+
+
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name"),
+    [
+        ("ci.yml", "native-command-evaluators"),
+        ("native-wheel-ci.yml", "linux-build"),
+        ("native-wheel-ci.yml", "windows-build"),
+        ("native-wheel-ci.yml", "macos-build"),
+    ],
+)
+def test_native_builds_stage_shared_trust_before_compilation(workflow_name, job_name):
+    workflow = yaml.safe_load((ROOT / ".github/workflows" / workflow_name).read_text())
+    steps = workflow["jobs"][job_name]["steps"]
+    setup = next(i for i, step in enumerate(steps) if step.get("uses") == "./.github/actions/setup-rust")
+    build = next(
+        i
+        for i, step in enumerate(steps)
+        if "cargo build" in step.get("run", "") or "build-native-wheel-macos.sh" in step.get("run", "")
+    )
+    assert setup < build
+    assert "if" not in steps[setup]
+    assert "continue-on-error" not in steps[setup]

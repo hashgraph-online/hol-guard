@@ -37,6 +37,24 @@ The schema is `contracts/mcp-servers/contribution.v1.schema.json`. Required meta
 
 Package-launched contributions use `launch.kind: package-launcher`, an allowlisted package command, and a package name. Launch matching uses the MCP package name, not the full argument hash, so user paths and extra flags still match.
 
+For an exact reviewed stable npm release, add `launch.packageVersion`, for example
+`"package": "lattice-talk", "packageVersion": "0.1.18"`. The runnable example then
+uses `npx -y lattice-talk@0.1.18`. Pins support npm launchers (`npx`, `npm`, `pnpm`,
+`yarn`, and `bunx`), canonical npm names of at most 214 characters, and canonical
+three-part versions, not ranges or tags. Selection
+requires the configured server's matching package, version, launcher, stdio
+transport, and default package source. Missing version evidence, a tool-name alias
+alone, a custom registry, or a mismatched release cannot select pinned defaults.
+Conflicting artifact and configured transport evidence also excludes a match.
+Configured home/config-directory, executable-search/preload, or npm/yarn/bun
+environment overrides exclude a pinned match, including indirect registry
+redirection through a different `.npmrc`. Ordinary server settings such as
+`REDIS_URL` remain compatible. Native namespace/name matching still applies tightening-only
+`review` and `block` floors when a raw harness hook lacks version evidence; it
+never supplies an allow decision or treats that hook as an exact pinned match.
+Unversioned existing contributions retain their name-based matching. A version
+pin is not an integrity proof or a saved execution approval.
+
 Native servers installed through Homebrew, Cargo, or release archives may use
 `launch: {"kind": "direct-command", "command": "example-mcp"}`. The command is a
 lowercase ASCII executable basename (letters, digits, hyphens, underscores and
