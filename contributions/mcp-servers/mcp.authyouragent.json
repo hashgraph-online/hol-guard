@@ -42,7 +42,7 @@
     { "name": "end_session", "state": "inherit" },
     { "name": "scroll", "state": "inherit" },
     { "name": "wait_for", "state": "inherit" },
-    { "name": "screenshot", "state": "inherit" },
+    { "name": "screenshot", "state": "review" },
     { "name": "notify_owner", "state": "inherit" },
     { "name": "report_site", "state": "inherit" },
     { "name": "other", "state": "inherit" }
