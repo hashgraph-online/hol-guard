@@ -235,6 +235,28 @@ def test_tag_lookup_failures_are_only_tolerated_for_missing_draft_tags(snapshot,
     assert not any(call[0] == "release" for call in calls)
 
 
+@pytest.mark.parametrize("commit_result", ["HTTP 404", "HTTP 503", "different-sha"])
+def test_existing_draft_tag_must_resolve_to_its_verified_source(snapshot, monkeypatch, commit_result):
+    _, output = snapshot
+    calls = []
+
+    def github(*args):
+        calls.append(args)
+        if "/git/ref/tags/" in args[1]:
+            return json.dumps({"object": {"sha": SHA, "type": "commit"}})
+        if "/commits/" in args[1]:
+            if commit_result.startswith("HTTP"):
+                raise RuntimeError(commit_result)
+            return json.dumps({"sha": "b" * 40})
+        return json.dumps({"draft": True, "target_commitish": SHA, "prerelease": True, "assets": []})
+
+    monkeypatch.setattr(publisher, "github", github)
+    error = RuntimeError if commit_result.startswith("HTTP") else ValueError
+    with pytest.raises(error):
+        publisher.publish(output, SHA)
+    assert not any(call[0] == "release" for call in calls)
+
+
 def test_api_outage_does_not_create_a_replacement_release(snapshot, monkeypatch):
     _, output = snapshot
     calls = []
