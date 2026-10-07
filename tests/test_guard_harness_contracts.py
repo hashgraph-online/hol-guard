@@ -100,6 +100,12 @@ class TestContractFor:
         assert c is not None
         assert "claude" in c.install_aliases and "claude-code" in c.install_aliases
 
+    def test_claude_code_does_not_claim_removed_prompt_hook(self) -> None:
+        c = contract_for("claude-code")
+        assert c is not None
+        assert "prompt" not in c.event_surfaces
+        assert "UserPromptSubmit" in c.known_blind_spots
+
     def test_opencode_alias(self) -> None:
         c = contract_for("opencode")
         assert c is not None

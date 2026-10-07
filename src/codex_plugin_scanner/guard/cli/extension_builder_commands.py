@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import TextIO
 
 from ..extension_builder.errors import BuilderError
-from ..extension_builder.io import canonical_json
+from ..extension_builder.io import canonical_json, object_value, read_json
 
 _METADATA_FLAGS = (
     "slug",
@@ -21,6 +23,7 @@ _METADATA_FLAGS = (
     "launcher",
     "package",
 )
+_HANDOFF_TIMEOUT_SECONDS = 1_500
 
 
 def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -54,7 +57,16 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     apply.add_argument("--repo", type=Path, required=True, help="HOL Guard source checkout")
     apply.add_argument("--write", action="store_true", help="Explicitly apply the inspected source changes")
     apply.add_argument("--expected-plan", help="Require the plan digest from a previous inspection")
-    for command in (generate, validate, diff, apply):
+    handoff = commands.add_parser(
+        "handoff", help="Check command-extension inputs and generated projections before opening a pull request"
+    )
+    handoff.add_argument("--source", type=Path, required=True, help="Canonical command source JSON")
+    handoff.add_argument("--fixture", type=Path, required=True, help="Portable command fixture JSON")
+    handoff.add_argument(
+        "--repo", type=Path, default=Path("."), help="HOL Guard checkout containing generated projections"
+    )
+    handoff.add_argument("--compiler", type=Path, help="Use an already-built native source compiler")
+    for command in (generate, validate, diff, apply, handoff):
         command.add_argument("--json", action="store_true", help="Emit a deterministic JSON result")
 
 
@@ -96,6 +108,82 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
     return {**kit.summary(), "generated": True}
 
 
+def _handoff(args: argparse.Namespace) -> dict[str, object]:
+    source = object_value(read_json(args.source), code="source_shape")
+    if source.get("schema") != "guard.command-extension-source.v1":
+        raise BuilderError("source_schema", "Source must use guard.command-extension-source.v1.")
+    extension = object_value(source.get("extension"), code="source_shape")
+    extension_id = extension.get("extension_id")
+    if not isinstance(extension_id, str) or not extension_id.startswith("command."):
+        raise BuilderError("source_identity", "Source must declare a command.* extension ID.")
+    try:
+        repo = args.repo.resolve(strict=True)
+        source_path = args.source.resolve(strict=True)
+        fixture_path = args.fixture.resolve(strict=True)
+    except OSError as exc:
+        raise BuilderError("repository_path", "Repository, source, and fixture paths must exist.") from exc
+    expected_source = repo / "contributions" / "command-sources" / f"{extension_id}.json"
+    expected_fixture = repo / "tests" / "fixtures" / f"command-source-{extension_id.removeprefix('command.')}.v1.json"
+    if source_path != expected_source or fixture_path != expected_fixture:
+        raise BuilderError("canonical_paths", "Source and fixture must use their canonical repository paths.")
+    bindings = repo / "contracts" / "extensions" / "trust"
+    if not bindings.is_dir():
+        raise BuilderError("trust_shape", "Repository authored trust bindings are missing.")
+    from ..runtime.extension_trust import trust_binding_index
+
+    try:
+        trust_class = trust_binding_index(bindings).get(extension_id)
+    except (OSError, ValueError) as exc:
+        raise BuilderError("trust_shape", "Repository trust bindings are invalid.") from exc
+    if trust_class is None:
+        raise BuilderError("missing_external_trust", "The extension needs a reviewed external trust binding.")
+    if trust_class != "external":
+        raise BuilderError("trust_class", "External contributions must remain in the reviewed external trust class.")
+    script = repo / "scripts" / "prepare_extension_contribution.py"
+    if script.is_symlink() or not script.is_file():
+        raise BuilderError("repository_layout", "Repository preparation tooling is unavailable.")
+    command = [
+        sys.executable,
+        str(script),
+        "--check",
+        "--source",
+        str(source_path),
+        "--fixture",
+        str(fixture_path),
+    ]
+    if args.compiler is not None:
+        command.extend(("--compiler", str(args.compiler)))
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=_HANDOFF_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise BuilderError("handoff_validation", "Native handoff validation could not be completed.") from exc
+    if completed.returncode:
+        raise BuilderError("handoff_validation", "Native source or generated-projection validation failed.")
+    try:
+        validation = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise BuilderError("handoff_validation", "Native handoff validation produced an invalid result.") from exc
+    if (
+        not isinstance(validation, dict)
+        or validation.get("ok") is not True
+        or validation.get("checked") is not True
+        or validation.get("targetCommandsExecuted") != 0
+    ):
+        raise BuilderError("handoff_validation", "Native handoff validation did not complete safely.")
+    return {
+        "contributionId": extension_id,
+        "readyForPullRequest": True,
+        "targetCommandsExecuted": 0,
+    }
+
+
 def _operate(args: argparse.Namespace) -> dict[str, object]:
     from ..extension_builder.kit import diff_kits, load_kit
     from ..extension_builder.repository_write import apply_kit
@@ -104,6 +192,8 @@ def _operate(args: argparse.Namespace) -> dict[str, object]:
     command = args.extension_builder_command
     if command == "generate":
         return _generate(args)
+    if command == "handoff":
+        return _handoff(args)
     if command == "validate":
         return {**load_kit(args.kit).summary(), "validated": True}
     if command == "diff":
@@ -129,6 +219,10 @@ def _emit(result: dict[str, object], command: str, output: TextIO) -> None:
         print("Kits differ." if result["changed"] else "Kits are identical.", file=output)
         for name in ("addedOperations", "removedOperations", "changedOperations", "changedReviews"):
             print(f"{name}: {result[name]}", file=output)
+    elif command == "handoff":
+        print(f"Contribution handoff is ready for {result['contributionId']}.", file=output)
+        print("Source, fixture, external trust mapping, and generated projections agree.", file=output)
+        print("No target was executed and active protection was not changed.", file=output)
     else:
         verb = "Generated" if command == "generate" else "Validated"
         print(

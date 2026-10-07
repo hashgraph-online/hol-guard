@@ -72,13 +72,13 @@ def test_installed_corpus_waits_before_mode_changes(tmp_path: Path, monkeypatch:
 
         def snapshot(self) -> Mapping[str, object]:
             self.reads += 1
-            return {"routes": {"native_resident": min(19 + self.reads, 21)}}
+            return {"routes": {"native_resident": min(19 + self.reads, 23)}}
 
     class CompleteWriter:
         def stats(self) -> Mapping[str, object]:
             return {
-                "receipt_accepted": 21,
-                "receipt_processed": 21,
+                "receipt_accepted": 23,
+                "receipt_processed": 23,
                 "receipt_dropped": 0,
                 "receipt_durable_pending": 0,
                 "receipt_deduped": 0,
@@ -104,7 +104,7 @@ def test_installed_corpus_waits_before_mode_changes(tmp_path: Path, monkeypatch:
             events.append("stopped")
 
     def exercise_routes(daemon, guard_home, workspace, routes, route_receipts, reason_codes) -> None:
-        route_receipts.extend({"route": "native_resident"} for _ in range(21))
+        route_receipts.extend({"route": "native_resident"} for _ in range(23))
 
     def exercise_modes(*args: object) -> dict[str, object]:
         assert metrics.reads >= 2, "Mode changes started before the last route was recorded"
@@ -117,8 +117,8 @@ def test_installed_corpus_waits_before_mode_changes(tmp_path: Path, monkeypatch:
     monkeypatch.setattr(probe, "_exercise_installed_routes", exercise_routes)
     monkeypatch.setattr(probe, "_exercise_mode_invariants", exercise_modes)
     result = probe._installed_hook_corpus(tmp_path)
-    assert result["native_resident_decisions"] == 21
-    assert result["route_count"] == 21
+    assert result["native_resident_decisions"] == 23
+    assert result["route_count"] == 23
     assert events == ["started", "modes", "stopped"]
 
 

@@ -456,7 +456,7 @@ def test_resolving_active_item_with_two_remaining_returns_next_hint(tmp_path: Pa
     assert {item["request_id"] for item in payload["remaining_pending_summaries"]} == {"req-newest", "req-old"}
     assert payload["copy"]["title"] == "Decision saved. Return to Codex."
     assert "could not find the original Codex chat" in payload["copy"]["body"]
-    assert "approval is now saved" in payload["copy"]["body"]
+    assert "a new tool call may require fresh approval" in payload["copy"]["body"]
     assert store.get_approval_request("req-active")["resolution_action"] == "allow"
 
 

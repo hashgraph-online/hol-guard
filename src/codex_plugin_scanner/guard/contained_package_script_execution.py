@@ -7,6 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import native_execution as _native_execution
 from .containment_execution_support import (
     contained_process_effect_decision as _contained_decision,
 )
@@ -56,6 +57,17 @@ def try_execute_contained_package_script(
 
     if manager.strip().lower() != "bun":
         return None
+    native_result = _native_execution.contained_package_script_execute_native(
+        workspace,
+        "bun",
+        argv,
+        guard_home=guard_home,
+        shim_directory=shim_directory,
+        environment=environment,
+        timeout_seconds=int(timeout_seconds),
+    )
+    if native_result is not None:
+        return native_result
     try:
         canonical_workspace = _canonical_directory(workspace)
         evidence = build_local_package_script_evidence("bun", argv, workspace=canonical_workspace)

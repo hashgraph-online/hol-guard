@@ -20,6 +20,17 @@ mod github;
 
 pub use catalog::compatibility_rule_ids;
 
+pub(crate) fn github_arguments_are_read_only(arguments: &[String]) -> bool {
+    github::arguments_are_read_only(arguments)
+}
+
+pub(crate) fn git_inspection_arguments<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<&'a [String]> {
+    git::inspection_arguments(arguments, context)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompatibilityMatch {
     pub rule_id: &'static str,
@@ -97,6 +108,20 @@ impl CompatibilityObservations {
     }
 }
 
+/// Whether the canonical model is exact enough for structured observation.
+/// Commands the parser cannot represent have no attributable segment evidence;
+/// their intrinsic floor stays authoritative instead of an observation error.
+pub(crate) fn compatibility_model_supported(command: &CanonicalCommandV1) -> bool {
+    command.confidence == "exact"
+        && command.uncertainty_reason.is_none()
+        && !command.segments.is_empty()
+        && !command.path_overridden
+        && command
+            .wrapper_chain
+            .iter()
+            .all(|wrapper| matches!(wrapper.as_str(), "sudo" | "timeout"))
+}
+
 fn deadline_check(deadline: Option<Instant>) -> Result<(), &'static str> {
     if deadline.is_some_and(|limit| Instant::now() >= limit) {
         Err("native_command_compatibility_deadline")
@@ -118,6 +143,18 @@ fn basename(segment: &CommandSegmentV1) -> String {
 pub fn compatibility_observations(
     command: &CanonicalCommandV1,
     deadline: Option<Instant>,
+) -> Result<CompatibilityObservations, &'static str> {
+    compatibility_observations_with_context(
+        command,
+        deadline,
+        crate::pretool::PathContext::default(),
+    )
+}
+
+pub fn compatibility_observations_with_context(
+    command: &CanonicalCommandV1,
+    deadline: Option<Instant>,
+    context: crate::pretool::PathContext<'_>,
 ) -> Result<CompatibilityObservations, &'static str> {
     deadline_check(deadline)?;
     if command.normalized_text.len() > 32_768
@@ -160,12 +197,7 @@ pub fn compatibility_observations(
     {
         return Err("native_command_compatibility_limit");
     }
-    if command.confidence != "exact"
-        || command.uncertainty_reason.is_some()
-        || command.segments.is_empty()
-        || command.path_overridden
-        || !command.wrapper_chain.is_empty()
-    {
+    if !compatibility_model_supported(command) {
         return Err("native_command_compatibility_model_unsupported");
     }
     let mut result = CompatibilityObservations::default();
@@ -173,7 +205,10 @@ pub fn compatibility_observations(
         deadline_check(deadline)?;
         if segment.executable.is_none()
             || segment.path_overridden
-            || !segment.wrapper_chain.is_empty()
+            || segment
+                .wrapper_chain
+                .iter()
+                .any(|wrapper| !matches!(wrapper.as_str(), "sudo" | "timeout"))
             || !segment.environment_names.is_empty()
             || segment.text.contains('\0')
             || segment.arguments.iter().any(|value| value.contains('\0'))
@@ -181,7 +216,7 @@ pub fn compatibility_observations(
             return Err("native_command_compatibility_context_unsupported");
         }
         match basename(segment).as_str() {
-            "git" => git::observe(segment, index, &mut result),
+            "git" => git::observe_with_context(segment, index, &mut result, context),
             "gh" => github::observe(segment, index, &mut result),
             _ => {}
         }

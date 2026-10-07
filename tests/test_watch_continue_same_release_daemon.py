@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -9,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard.daemon import recovery_lifecycle
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     availability_harness_response,
     cursor_fallback_permission,
@@ -68,6 +70,44 @@ def test_guard_daemon_state_rejects_older_desktop_core_sidecar() -> None:
     }
 
     assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_authenticated_daemon_identity_rejects_missing_state_id(tmp_path, monkeypatch) -> None:
+    token = "token-123"
+    guard_home = tmp_path / "guard"
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "load_authenticated_daemon_state",
+        lambda _guard_home: {
+            "auth_token_id": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        },
+    )
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "load_guard_daemon_auth_token",
+        lambda _guard_home: token,
+    )
+
+    assert daemon_manager_module._load_authenticated_daemon_identity(guard_home) is None
+
+
+def test_recovery_does_not_reuse_live_daemon_without_state_id(tmp_path, monkeypatch) -> None:
+    guard_home = tmp_path / "guard"
+    state = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "pid": 12345,
+        "port": 4781,
+    }
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_state_matches_current_runtime", lambda _state: True)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, *, expected_guard_home: expected_guard_home == guard_home,
+    )
+
+    assert recovery_lifecycle.authenticated_live_current_daemon_url(guard_home, state) is None
 
 
 def test_guard_daemon_state_matches_newer_windows_desktop_core_sidecar() -> None:
@@ -265,7 +305,7 @@ def test_load_guard_daemon_url_accepts_same_release_peer_fingerprint(
     assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
 
 
-def test_availability_watch_config_allows_git_and_network(tmp_path: Path) -> None:
+def test_availability_without_acknowledged_watch_denies_git_and_network(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     (guard_home / "config.toml").write_text(
@@ -282,7 +322,7 @@ def test_availability_watch_config_allows_git_and_network(tmp_path: Path) -> Non
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
-    assert git_cmd["decision"] == "allow"
+    assert git_cmd["decision"] == "deny"
     gh_cmd = availability_harness_response(
         {"hook_event_name": "PreToolUse", "tool_input": {"command": "gh pr view 1"}},
         harness="grok",
@@ -291,17 +331,17 @@ def test_availability_watch_config_allows_git_and_network(tmp_path: Path) -> Non
         reason="native unavailable",
         guard_home=guard_home,
     )
-    assert gh_cmd["decision"] == "allow"
+    assert gh_cmd["decision"] == "deny"
 
 
-def test_cursor_fallback_watch_allows_shell() -> None:
+def test_cursor_fallback_without_mode_authority_denies_shell() -> None:
     allow, code = cursor_fallback_permission(
         {"hook_event_name": "beforeShellExecution", "command": "rm -rf /"},
         hook_event_name="beforeShellExecution",
         recording_only=True,
     )
-    assert code == 0
-    assert allow["permission"] == "allow"
+    assert code == 2
+    assert allow["permission"] == "deny"
 
 
 def test_watch_unavailable_pretool_records_command_activity(
@@ -324,37 +364,11 @@ def test_watch_unavailable_pretool_records_command_activity(
     )
     writer = MagicMock()
     worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git status"}},
         params={},
         default_harness="grok",
-        home_dir=tmp_path / "home",
-        guard_home=guard_home,
-        workspace=tmp_path / "workspace",
-    )
-    assert result["decision"] == "allow"
-    writer.submit_command_activity.assert_called_once()
-    recorded = writer.submit_command_activity.call_args.kwargs
-    assert recorded["event"] == "PreToolUse"
-    assert recorded["succeeded"] is True
-
-
-def test_watch_http_pretool_unavailable_records_command_activity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    (guard_home / "config.toml").write_text(
-        'mode = "observe"\nprotection_posture = "watch"\n',
-        encoding="utf-8",
-    )
-    writer = MagicMock()
-    worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)
-    monkeypatch.setattr(worker, "_review_pre_tool_native", lambda *_args, **_kwargs: None)
-    result = worker._review_pre_tool_http(
-        {"hook_event_name": "PreToolUse", "tool_input": {"command": "git status"}},
-        harness="grok",
         home_dir=tmp_path / "home",
         guard_home=guard_home,
         workspace=tmp_path / "workspace",

@@ -2,6 +2,13 @@
 
 use super::*;
 
+#[path = "native_command_program_admission_direct_mcp.rs"]
+mod direct_mcp;
+
+pub(super) fn valid_direct_mcp_command(value: &str) -> bool {
+    direct_mcp::valid_direct_mcp_command(value)
+}
+
 fn valid_mcp_server_name(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -131,7 +138,7 @@ fn valid_component(value: &str, query: bool) -> bool {
     true
 }
 
-fn valid_remote_mcp_url(value: &str) -> bool {
+pub(super) fn valid_remote_mcp_url(value: &str) -> bool {
     // Retain the existing native metadata bound. This is not a network URL
     // parser: accept only the explicit public-HTTPS grammar the compiler emits.
     if value.len() > 260 || !value.is_ascii() || value.bytes().any(|b| b <= 0x20 || b == 0x7f) {
@@ -243,6 +250,17 @@ impl NativeCommandProgram {
                     .is_some_and(|kind| kind != "package-firewall")
                 || extension.mcp.as_ref().is_some_and(|mcp| {
                     let launch_invalid = match mcp.mcp_launch.kind.as_str() {
+                        "direct-command" => {
+                            let Some(command) = mcp.mcp_launch.command.as_deref() else {
+                                return true;
+                            };
+                            !valid_direct_mcp_command(command)
+                                || extension.executables != [command]
+                                || mcp.mcp_launch.package.is_some()
+                                || mcp.mcp_launch.url.is_some()
+                                || !mcp.mcp_launch.server_names.is_empty()
+                                || mcp.mcp_tools.iter().any(|tool| tool.state == "allow")
+                        }
                         "package-launcher" => {
                             let Some(command) = mcp.mcp_launch.command.as_deref() else {
                                 return true;

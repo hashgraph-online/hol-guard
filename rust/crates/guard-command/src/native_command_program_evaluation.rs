@@ -29,6 +29,7 @@ impl Evaluation<'_> {
         let program = self.program;
         let value = match &program.nodes[index].matcher {
             Matcher::Executable(node) => self.executable(node),
+            Matcher::VersionedPackageSubcommand(node) => self.versioned_package_subcommand(node),
             Matcher::Operand(matcher) => matcher
                 .match_segments_with_deadline(self.command, self.deadline)
                 .map(Arc::from),
@@ -204,6 +205,73 @@ impl Evaluation<'_> {
                     .forbidden_flags
                     .is_disjoint(&semantics.present_flags)
             {
+                evidence.push(index);
+            }
+        }
+        Ok(Arc::from(evidence))
+    }
+
+    /// Matches a launcher executable, a package token, and a fixed
+    /// subcommand suffix, tolerating an npm-style `@<version-or-tag>` suffix
+    /// on the package token. Consume launcher options only while matching the
+    /// prefix, then inspect the untouched suffix so a command-level `--` keeps
+    /// subsequent operands from being interpreted as safety flags.
+    fn versioned_package_subcommand(&self, node: &VersionedPackageSubcommandNode) -> MatchResult {
+        let mut prefix: Vec<String> =
+            Vec::with_capacity(node.leading_subcommands.len() + 1 + node.subcommands.len());
+        prefix.extend(node.leading_subcommands.iter().cloned());
+        prefix.push(node.package.clone());
+        prefix.extend(node.subcommands.iter().cloned());
+        let package_prefix = format!("{}@", node.package);
+        let mut evidence = Vec::new();
+        for (index, segment) in self.command.segments.iter().enumerate() {
+            self.check_deadline()?;
+            if !executable_matches(segment, &node.executables) {
+                continue;
+            }
+            let arguments: Vec<_> = segment
+                .arguments
+                .iter()
+                .map(|value| lowercase_for_ascii_comparison(value))
+                .collect();
+            let mut argument_index = 0;
+            let mut prefix_index = 0;
+            let mut options_ended = false;
+            while argument_index < arguments.len() && prefix_index < prefix.len() {
+                let argument = &arguments[argument_index];
+                if !options_ended {
+                    if argument == "--" {
+                        options_ended = true;
+                        argument_index += 1;
+                        continue;
+                    }
+                    if let Some(advance) = known_option_advance(
+                        argument,
+                        &node.interspersed_options_with_values,
+                        &node.interspersed_flags,
+                    ) {
+                        argument_index += advance;
+                        continue;
+                    }
+                }
+                let is_package = prefix_index == node.leading_subcommands.len()
+                    && argument.starts_with(&package_prefix);
+                if !is_package && argument != &prefix[prefix_index] {
+                    break;
+                }
+                argument_index += 1;
+                prefix_index += 1;
+            }
+            if prefix_index != prefix.len() {
+                continue;
+            }
+            let flag_arguments = &arguments[argument_index..];
+            let semantics = argument_semantics(
+                flag_arguments,
+                &node.interspersed_options_with_values,
+                &BTreeSet::new(),
+            );
+            if node.required_flags.is_subset(&semantics.present_flags) {
                 evidence.push(index);
             }
         }

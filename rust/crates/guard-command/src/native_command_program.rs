@@ -35,10 +35,18 @@ const MAX_RULES: usize = 1_024;
 const MAX_NODES: usize = 16_384;
 const MAX_DEPTH: usize = 32;
 const MATCH_DETAIL: &str = "Matched bounded structured command constraints.";
-const EMBEDDED_PROGRAM: &[u8] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../../contracts/extensions/native-command-program.v1.json"
-));
+#[cfg(not(guard_source_bootstrap))]
+const EMBEDDED_PROGRAM: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/native-command-program.v1.json"));
+// Only the host build dependency has no packaged default. It compiles supplied
+// sources; attempts to evaluate a default fail closed through normal admission.
+#[cfg(guard_source_bootstrap)]
+const EMBEDDED_PROGRAM: &[u8] = &[];
+
+/// The exact program admitted by the runtime, also used for rule attestation.
+pub const fn packaged_command_program_bytes() -> &'static [u8] {
+    EMBEDDED_PROGRAM
+}
 
 #[path = "native_command_program_admission.rs"]
 mod admission;
@@ -48,6 +56,8 @@ mod compile;
 mod evaluation;
 #[path = "native_command_program_observations.rs"]
 mod observations;
+#[path = "native_command_source.rs"]
+pub mod source;
 #[path = "native_command_program_wire.rs"]
 mod wire;
 use compile::{compile_node, validate_graph};
@@ -151,10 +161,28 @@ struct ArgumentsNode {
     required_arguments: BTreeSet<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VersionedPackageSubcommandNode {
+    executables: BTreeSet<String>,
+    package: String,
+    #[serde(default)]
+    leading_subcommands: Vec<String>,
+    #[serde(default)]
+    subcommands: Vec<String>,
+    #[serde(default)]
+    required_flags: BTreeSet<String>,
+    #[serde(default)]
+    interspersed_options_with_values: BTreeSet<String>,
+    #[serde(default)]
+    interspersed_flags: BTreeSet<String>,
+}
+
 #[derive(Debug)]
 enum Matcher {
     Executable(ExecutableNode),
     Arguments(ArgumentsNode),
+    VersionedPackageSubcommand(VersionedPackageSubcommandNode),
     Any(Vec<usize>),
     All(Vec<usize>),
     Pipeline(usize, usize),
@@ -190,6 +218,18 @@ pub fn packaged_command_program() -> Result<Arc<NativeCommandProgram>, &'static 
     PROGRAM
         .get_or_init(|| NativeCommandProgram::from_packaged_bytes(EMBEDDED_PROGRAM).map(Arc::new))
         .clone()
+}
+
+pub fn packaged_program_digests() -> (String, String, String) {
+    packaged_command_program()
+        .map(|program| {
+            (
+                program.program_digest.clone(),
+                program.catalog_digest.clone(),
+                program.trust_digest.clone(),
+            )
+        })
+        .unwrap_or_default()
 }
 
 pub fn digest_value(domain: &[u8], value: &impl serde::Serialize) -> Result<String, &'static str> {

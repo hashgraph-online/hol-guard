@@ -11,7 +11,6 @@ from dataclasses import replace
 from typing import Final
 
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
-from ..runtime.command_permission_catalog import CommandPermissionSpec
 from ..runtime.extension_control_contract import (
     ControlLayerKind,
     ControlState,
@@ -20,6 +19,7 @@ from ..runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from ..runtime.extension_control_resolver import compose_control_layers, resolve_extension_controls
+from ..runtime.generated_command_catalog import GeneratedCommandPermission
 
 SEMANTIC_PREVIEW_SCHEMA: Final = "guard.daemon.extension-control-semantic-preview.v1"
 _MAX_CHANGED_TARGETS: Final = 4096
@@ -48,7 +48,7 @@ def _explicit_state(
 def _permission_blocked(
     registry: CommandSafetyExtensionRegistry,
     layers: tuple[ExtensionControlLayer, ...],
-    permission: CommandPermissionSpec,
+    permission: GeneratedCommandPermission,
 ) -> bool:
     return resolve_extension_controls(
         layers,
@@ -190,7 +190,7 @@ def _provenance(
 def _warnings_for_permission(
     registry: CommandSafetyExtensionRegistry,
     proposed_layers: tuple[ExtensionControlLayer, ...],
-    permission: CommandPermissionSpec,
+    permission: GeneratedCommandPermission,
     *,
     requested_state: str,
     affected_permission_ids: tuple[str, ...],

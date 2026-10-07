@@ -6,6 +6,7 @@ import json
 import pytest
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
+from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool_review
 
 
 def _translate(payload: dict[str, object], *, harness: str = "grok", event: str = "PreToolUse"):
@@ -15,7 +16,7 @@ def _translate(payload: dict[str, object], *, harness: str = "grok", event: str 
 
 @pytest.mark.parametrize(
     ("harness", "expected_code"),
-    [("grok", 2), ("openclaw", 0), ("kimi", 2), ("pi", 2), ("zcode", 2)],
+    [("grok", 2), ("openclaw", 0), ("kimi", 2), ("pi", 2), ("zcode", 2), ("devin", 2)],
 )
 def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_code: int) -> None:
     payload, _stderr, code = _translate(
@@ -33,7 +34,7 @@ def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_
     )
 
     assert code == expected_code
-    assert payload["decision"] == "deny"
+    assert payload["decision"] == ("block" if harness == "devin" else "deny")
     assert payload["policy_action"] == "block"
     assert payload["reason"] == "Blocked by policy."
     assert payload["hookSpecificOutput"] == {
@@ -41,6 +42,109 @@ def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_
         "permissionDecision": "deny",
         "additionalContext": "retain context",
     }
+
+
+def test_zcode_review_pretool_exits_zero_and_keeps_ask_envelope() -> None:
+    # ZCode discards stdout JSON when a hook exits 2, so the review tier must
+    # exit 0 for its ask envelope to reach ZCode's native permission prompt.
+    payload, stderr, code = _translate(
+        {
+            "decision": "allow",
+            "policy_action": "review",
+            "reason": "Approval required.",
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+                "permissionDecisionReason": "Approval required.",
+            },
+        },
+        harness="zcode",
+    )
+
+    assert code == 0
+    assert stderr == ""
+    assert payload["decision"] == "deny"
+    assert payload["policy_action"] == "review"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_zcode_block_pretool_keeps_blocking_exit_with_stderr_reason() -> None:
+    payload, stderr, code = _translate(
+        {
+            "decision": "allow",
+            "policy_action": "block",
+            "reason": "Blocked by policy.",
+            "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+        },
+        harness="zcode",
+    )
+
+    assert code == 2
+    assert stderr == "Blocked by policy."
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_zcode_authority_block_stderr_carries_remediation() -> None:
+    _payload, stderr, code = _translate(
+        {
+            "decision": "allow",
+            "policy_action": "block",
+            "reason": "HOL Guard requires the native command extension policy before this action can execute.",
+            "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+        },
+        harness="zcode",
+    )
+
+    assert code == 2
+    assert "hol-guard command controls acknowledge-degraded" in stderr
+
+
+def test_zcode_prompt_blocks_keep_blocking_exit() -> None:
+    _payload, _stderr, code = _translate(
+        {"decision": "block", "policy_action": "review", "reason": "Prompt review."},
+        harness="zcode",
+        event="UserPromptSubmit",
+    )
+    assert code == 2
+
+
+def test_zcode_native_review_renderer_asks_and_exits_zero() -> None:
+    # The daemon worker renders review-tier PreToolUse responses through
+    # harness_json_from_native_pre_tool_review; for zcode that envelope must
+    # ask and the bridge must exit 0 so zcode opens its permission prompt.
+    rendered = harness_json_from_native_pre_tool_review(
+        "zcode",
+        {"policy_action": "review", "reason": "Approval required.", "reason_code": "native_pre_tool_review"},
+        approval=None,
+    )
+    payload, stderr, code = _translate(rendered, harness="zcode")
+
+    assert code == 0
+    assert stderr == ""
+    assert payload["policy_action"] == "review"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_zcode_sandbox_required_envelope_denies_with_exit_two() -> None:
+    payload, stderr, code = _translate(
+        {"policy_action": "sandbox-required", "reason": "Sandbox required."}, harness="zcode"
+    )
+
+    assert code == 2
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert payload["hookSpecificOutput"]["permissionDecisionReason"] == "Sandbox required."
+    assert stderr == "Sandbox required."
+
+
+def test_zcode_block_without_reason_still_writes_stderr() -> None:
+    payload, stderr, code = _translate(
+        {"decision": "allow", "policy_action": "block", "hookSpecificOutput": {"hookEventName": "PreToolUse"}},
+        harness="zcode",
+    )
+
+    assert code == 2
+    assert stderr.startswith("HOL Guard blocked this action")
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_native_deny_promotes_allow_policy_to_block() -> None:
@@ -322,3 +426,25 @@ def test_restrictive_prompt_policy_materializes_top_level_block(policy_action: s
         "decision": "block",
     }
     assert code == 2
+
+
+def test_devin_permission_request_review_blocks_with_top_level_decision() -> None:
+    payload, stderr, code = _translate(
+        {"policy_action": "review", "reason": "Needs review."},
+        harness="devin",
+        event="PermissionRequest",
+    )
+    assert code == 2
+    assert payload["decision"] == "block"
+    assert payload["reason"] == "Needs review."
+    assert stderr == "Needs review."
+
+
+def test_devin_pretooluse_allow_has_no_decision_key() -> None:
+    payload, _stderr, code = _translate(
+        {"policy_action": "allow", "reason": "Allowed."},
+        harness="devin",
+        event="PreToolUse",
+    )
+    assert code == 0
+    assert "decision" not in payload

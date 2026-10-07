@@ -19,11 +19,21 @@ POLICY_SNAPSHOT_V3_SCHEMA = "hol-guard-native-policy.v3"
 POLICY_SNAPSHOT_SCHEMA = POLICY_SNAPSHOT_V3_SCHEMA
 POLICY_SNAPSHOT_PUSH_SCHEMA = "guard-policy-snapshot-push.v1"
 POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION = "native_policy_snapshot_requires_new_generation"
+POLICY_SNAPSHOT_UNAVAILABLE_ERRORS = frozenset(
+    {
+        "native_policy_snapshot_native_disabled",
+        "native_policy_snapshot_runtime_unavailable",
+        "native_policy_snapshot_protocol_unsupported",
+        "native_policy_snapshot_integrity_key_unavailable",
+        "native_policy_snapshot_ack_mismatch",
+    }
+)
 POLICY_SNAPSHOT_V3_VERSION = 3
 POLICY_SNAPSHOT_PROTOCOL_VERSION = 1
 POLICY_SNAPSHOT_MAX_BYTES = 256 * 1024
 POLICY_SNAPSHOT_MAX_STRING_BYTES = 4 * 1024
 POLICY_SNAPSHOT_MAX_MAP_ENTRIES = 256
+POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS = 1024
 POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES = 64
 POLICY_SNAPSHOT_MAX_JSON_DEPTH = 32
 POLICY_SNAPSHOT_MAX_JSON_COLLECTION_ITEMS = 4_096
@@ -52,6 +62,7 @@ _NATIVE_POLICY_SNAPSHOT_PENDING_NAME = "policy-snapshot-publisher-v3.pending.jso
 _VERIFIER_KEY_BYTES = 32
 _PUBLISH_RETRY_SECONDS = 0.25
 _PUBLISH_TIMEOUT_SECONDS = 8.0 if sys.platform == "win32" else 2.0
+_PUBLISH_STARTUP_TIMEOUT_SECONDS = 9.0
 _MAX_ACK_BYTES = 4 * 1024
 _RENEWAL_LEAD_SECONDS = 5 * 60
 _RENEWAL_JITTER_MAX_SECONDS = 30.0

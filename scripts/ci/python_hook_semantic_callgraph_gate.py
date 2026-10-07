@@ -16,7 +16,7 @@ _SRC_PACKAGE = "codex_plugin_scanner.guard"
 _PRODUCTION_FILES: Final = (
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
-    "src/codex_plugin_scanner/guard/cli/commands_hook_source_ref.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py",
     "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
     "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
     "src/codex_plugin_scanner/guard/daemon/server.py",
@@ -26,8 +26,8 @@ _PRODUCTION_FILES: Final = (
 _ROOTS: Final = (
     ("src/codex_plugin_scanner/guard/cli/commands_hook.py", None, "_run_guard_hook_command"),
     ("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", None, "try_native_hook_authority"),
-    ("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", None, "try_native_or_source_ref_hook"),
-    ("src/codex_plugin_scanner/guard/cli/commands_hook_source_ref.py", None, "_try_source_ref_fast_path"),
+    ("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", None, "route_native_hook"),
+    ("src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py", None, "run_native_hook_pipeline"),
     ("src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py", None, "_run_resident_hook_request"),
     ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "HookWorker", "review_http_payload"),
     ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "HookWorker", "_review_post_tool_http"),

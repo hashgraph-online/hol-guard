@@ -36,14 +36,16 @@ def _request(request_id: str) -> GuardApprovalRequest:
     )
 
 
-def _post_json(port: int, token: str, path: str, payload: dict[str, object]) -> dict[str, object]:
+def _post_json(
+    port: int, token: str, path: str, payload: dict[str, object], *, timeout: float = 5
+) -> dict[str, object]:
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "X-Guard-Token": token},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=5) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -178,6 +180,7 @@ def test_codex_block_does_not_resume_codex_thread(
             daemon._server.auth_token,
             "/v1/requests/req-block/block",
             {"scope": "artifact", "reason": "blocked"},
+            timeout=15,
         )
     finally:
         daemon.stop()
@@ -306,7 +309,7 @@ def test_codex_approve_stale_live_hook_wait_requires_app_server_socket(
     assert payload["codexResume"]["status"] == "failed"
     assert payload["codexResume"]["reason"] == "socket_not_available"
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
-    assert "original chat" in payload["codexResume"]["message"]
+    assert "original Codex chat" in payload["codexResume"]["message"]
 
 
 def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
@@ -383,7 +386,7 @@ def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
     assert retried["status"] == "failed"
     assert retried["reason"] == "socket_not_available"
     assert retried["strategy"] == "codex-app-server-thread"
-    assert "original chat" in retried["message"]
+    assert "original Codex chat" in retried["message"]
 
 
 def test_request_resume_status_endpoint_returns_persisted_result(tmp_path: Path) -> None:
@@ -746,7 +749,7 @@ def test_codex_approve_fails_without_app_server_socket_and_never_starts_exec_res
     assert payload["codexResume"]["status"] == "failed"
     assert payload["codexResume"]["reason"] == "socket_not_available"
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
-    assert "original chat" in payload["codexResume"]["message"]
+    assert "original Codex chat" in payload["codexResume"]["message"]
 
 
 def test_codex_approve_uses_default_app_server_when_hook_omits_socket(

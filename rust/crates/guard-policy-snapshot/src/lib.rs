@@ -13,10 +13,20 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
+pub mod business_budget;
+pub mod business_match;
+pub mod business_policy;
+pub mod business_policy_document;
+pub mod business_source_anchor;
+pub mod business_source_authority;
+
 #[path = "policy_snapshot_canonical.rs"]
 mod canonical;
 #[path = "policy_snapshot_crypto.rs"]
 mod crypto;
+#[path = "policy_snapshot_validation.rs"]
+mod validation;
+pub use validation::{inspect_unverified_content, validate_v3};
 
 pub use canonical::{canonical_json_bytes, snapshot_bytes, snapshot_signing_bytes};
 pub use crypto::{
@@ -24,6 +34,12 @@ pub use crypto::{
     policy_digest, verifier_key_id,
 };
 
+pub mod local_authority_integrity;
+pub mod policy_integrity;
+
+#[cfg(test)]
+#[path = "business_policy_tests.rs"]
+mod business_policy_tests;
 #[cfg(test)]
 #[path = "policy_snapshot_tests.rs"]
 mod tests;
@@ -34,6 +50,7 @@ pub const POLICY_SNAPSHOT_PROTOCOL_VERSION: u16 = 1;
 pub const POLICY_SNAPSHOT_MAX_BYTES: usize = 256 * 1024;
 pub const POLICY_SNAPSHOT_MAX_STRING_BYTES: usize = 4 * 1024;
 pub const POLICY_SNAPSHOT_MAX_MAP_ENTRIES: usize = 256;
+pub const POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS: usize = 1024;
 pub const POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES: usize = 64;
 pub const POLICY_SNAPSHOT_MAX_EXPIRY_MS: u64 = 24 * 60 * 60 * 1000;
 pub const POLICY_SNAPSHOT_INTEGRITY_ALGORITHM: &str = "hmac-sha256";
@@ -111,6 +128,12 @@ pub struct EffectiveNativePolicyV3 {
     pub harness_actions: BTreeMap<String, String>,
     pub publisher_actions: BTreeMap<String, String>,
     pub artifact_actions: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mcp_tool_actions: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mcp_provider_actions: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_provider_catalog_hash: Option<String>,
     pub sandbox_analysis: String,
     pub receipt_redaction_level: String,
 }
@@ -139,6 +162,12 @@ pub struct PolicySnapshotV3 {
     pub effective_policy: EffectiveNativePolicyV3,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_extensions: Option<guard_contracts::NativeCommandControlBindingV1>,
+    #[serde(
+        default,
+        deserialize_with = "business_policy::present_binding",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub business_policy: Option<business_policy::BusinessPolicyBindingV1>,
     pub issued_at_ms: u64,
     pub expires_at_ms: u64,
     pub integrity: SnapshotIntegrityV3,
@@ -238,78 +267,6 @@ pub fn validate(snapshot: &PolicySnapshotV1, minimum_generation: u64) -> Result<
     Ok(())
 }
 
-pub fn validate_v3(
-    snapshot: &PolicySnapshotV3,
-    minimum_generation: u64,
-    expected_runtime_identity: &str,
-    expected_rule_digest: &str,
-    verifier_key: &[u8],
-    now_ms: u64,
-) -> Result<(), SnapshotError> {
-    if snapshot.schema != POLICY_SNAPSHOT_SCHEMA {
-        return Err(SnapshotError::Schema);
-    }
-    if snapshot.version != POLICY_SNAPSHOT_VERSION {
-        return Err(SnapshotError::Version);
-    }
-    if snapshot.generation == 0 {
-        return Err(SnapshotError::Generation);
-    }
-    if snapshot.generation < minimum_generation {
-        return Err(SnapshotError::Downgrade);
-    }
-    if !valid_hex(&snapshot.policy_digest, 64)
-        || !valid_hex(&snapshot.config_digest, 64)
-        || !valid_hex(&snapshot.rule_digest, 64)
-        || !valid_hex(&snapshot.runtime_identity, 64)
-        || !valid_hex(expected_runtime_identity, 64)
-        || !valid_hex(expected_rule_digest, 64)
-    {
-        return Err(SnapshotError::Digest);
-    }
-    if snapshot.runtime_identity != expected_runtime_identity {
-        return Err(SnapshotError::RuntimeIdentity);
-    }
-    if snapshot.rule_digest != expected_rule_digest {
-        return Err(SnapshotError::RuleDigest);
-    }
-    if snapshot.protocol_version != POLICY_SNAPSHOT_PROTOCOL_VERSION {
-        return Err(SnapshotError::Protocol);
-    }
-    if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
-        return Err(SnapshotError::Mode);
-    }
-    validate_scope(&snapshot.scope_contract)?;
-    validate_effective_policy(&snapshot.effective_policy)?;
-    if let Some(binding) = &snapshot.command_extensions {
-        binding.validate().map_err(|_| SnapshotError::Policy)?;
-    }
-    if snapshot.expires_at_ms <= snapshot.issued_at_ms
-        || snapshot.expires_at_ms - snapshot.issued_at_ms > POLICY_SNAPSHOT_MAX_EXPIRY_MS
-    {
-        return Err(SnapshotError::Expiry);
-    }
-    if snapshot.expires_at_ms <= now_ms {
-        return Err(SnapshotError::Expired);
-    }
-    if snapshot.integrity.algorithm != POLICY_SNAPSHOT_INTEGRITY_ALGORITHM
-        || snapshot.integrity.key_id != verifier_key_id(verifier_key)
-        || !valid_hex(&snapshot.integrity.mac, 64)
-    {
-        return Err(SnapshotError::Integrity);
-    }
-    if snapshot.config_digest != config_digest(&snapshot.effective_policy)?
-        || snapshot.policy_digest != policy_digest(snapshot)?
-    {
-        return Err(SnapshotError::DigestMismatch);
-    }
-    let expected_mac = integrity_mac(snapshot, verifier_key)?;
-    if !crypto::constant_time_eq(expected_mac.as_bytes(), snapshot.integrity.mac.as_bytes()) {
-        return Err(SnapshotError::IntegrityMismatch);
-    }
-    Ok(())
-}
-
 fn valid_hex(value: &str, length: usize) -> bool {
     value.len() == length
         && value
@@ -366,6 +323,7 @@ fn normalized_harness_selector(value: &str) -> Option<String> {
         "pi-agent" | "pi-coding-agent" => "pi",
         "oh-my-pi" => "omp",
         "zai" | "z-code" | "zai-zcode" => "zcode",
+        "devin-cli" | "cognition-devin" => "devin",
         _ => normalized.as_str(),
     };
     Some(canonical.to_owned())
@@ -396,6 +354,13 @@ fn validate_risk_action_map(map: &BTreeMap<String, String>, maximum: usize) -> b
             .all(|key| VALID_RISK_ACTION_KEYS.contains(&key.as_str()))
 }
 
+mod observed_mcp;
+pub use observed_mcp::{
+    mcp_provider_action_choice, mcp_provider_namespace_has_deny, mcp_tool_namespace,
+    observed_mcp_tool_action,
+};
+use observed_mcp::{validate_mcp_provider_actions, validate_mcp_tool_actions};
+
 fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), SnapshotError> {
     for action in [
         &policy.default_action,
@@ -420,6 +385,12 @@ fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), Sna
         || !validate_harness_action_map(&policy.harness_actions, POLICY_SNAPSHOT_MAX_MAP_ENTRIES)
         || !validate_action_map(&policy.publisher_actions, POLICY_SNAPSHOT_MAX_MAP_ENTRIES)
         || !validate_action_map(&policy.artifact_actions, POLICY_SNAPSHOT_MAX_MAP_ENTRIES)
+        || !validate_mcp_tool_actions(&policy.mcp_tool_actions)
+        || !validate_mcp_provider_actions(&policy.mcp_provider_actions)
+        || policy
+            .mcp_provider_catalog_hash
+            .as_ref()
+            .is_some_and(|digest| !valid_hex(digest, 64))
         || policy.harness_risk_actions.len() > POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES
         || !policy.harness_risk_actions.iter().all(|(key, value)| {
             valid_selector_key(key)

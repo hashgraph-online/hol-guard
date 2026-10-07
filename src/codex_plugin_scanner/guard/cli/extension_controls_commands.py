@@ -13,12 +13,14 @@ from typing import TextIO, cast
 from ..approval_gate import (
     ApprovalGateError,
     consume_extension_control_grant,
+    public_config,
     require_extension_control,
 )
 from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from ..daemon.runtime_peer import load_guard_daemon_endpoint
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..runtime.extension_control_authority import ExtensionControlAuthorityError
+from ..runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityError
 from ..runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlProofError,
@@ -26,6 +28,7 @@ from ..runtime.extension_control_proof import (
 )
 from ..store import GuardStore
 from .approval_gate_prompt import prompt_for_approval_gate
+from .commands_support_prompts import _shell_join
 
 
 def _client(guard_home: Path) -> GuardSurfaceDaemonClient:
@@ -95,8 +98,19 @@ def _mutation_payload(effective: dict[str, object], args: argparse.Namespace) ->
     }
 
 
+def _recovery_command(guard_home: Path) -> str:
+    arguments = ["hol-guard", "command", "--guard-home", str(guard_home), "controls", "recover-authority"]
+    return _shell_join(arguments)
+
+
 def _enroll(guard_home: Path, actor: str, output_stream: TextIO | None) -> int:
     store = GuardStore(guard_home)
+    current = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    if current.health is not AuthorityHealth.UNENROLLED:
+        raise ExtensionControlAuthorityError(
+            f"Extension-control authority is {current.health.value}; enrollment is only for a new authority. "
+            f"Authenticate recovery with: {_recovery_command(guard_home)}"
+        )
     enrollment = ExtensionControlEnrollment(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         actor_id=actor,
@@ -138,8 +152,14 @@ def _recover_authority(
         guard_home,
         use_cooldown=False,
         summary=f"Authenticate extension-control authority {command}.",
+        require_fresh_totp=command == "recover-authority",
     )
     if command == "recover-authority":
+        gate = public_config(guard_home)
+        if gate.enabled and gate.totp_enabled and (gate_input is None or not gate_input.totp_code):
+            raise ApprovalGateError(
+                "approval_gate_totp_required", "Enter a fresh authenticator code for authority recovery."
+            )
         grant = require_extension_control(
             guard_home,
             approval_gate_input=gate_input,
@@ -166,6 +186,12 @@ def _recover_authority(
             "catalog_digest": view.catalog_digest,
         }
     else:
+        from ..daemon.manager import ensure_guard_daemon
+
+        try:
+            ensure_guard_daemon(guard_home)
+        except RuntimeError as error:
+            raise GuardDaemonRequestError(str(error)) from error
         payload: dict[str, object] = {"session_nonce": session_nonce}
         if gate_input is not None:
             payload["approval_password"] = gate_input.password
@@ -281,6 +307,13 @@ def run_extension_controls_command(
                 command=command,
                 output_stream=output_stream,
             )
+        if command != "status":
+            from ..daemon.manager import ensure_guard_daemon
+
+            try:
+                ensure_guard_daemon(guard_home)
+            except RuntimeError as error:
+                raise GuardDaemonRequestError(str(error)) from error
         client = _client(guard_home)
         if command == "patterns":
             return _patterns(client, args, output_stream)
@@ -325,6 +358,23 @@ def run_extension_controls_command(
         payload["proof_id"] = proof_id
         _emit(client.apply_extension_controls(payload), output_stream)
         return 0
+    except NativePolicySnapshotError as error:
+        print(f"Error: native extension-control authority could not be verified ({error}).", file=sys.stderr)
+        if command == "recover-authority":
+            print(
+                "Recovery could not authenticate the retained native state. "
+                "Stop the Guard daemon for this guard home, restore access to the original "
+                "policy-integrity keyring or local vault, and retry. "
+                "Do not delete native authority, verifier, or rollback-floor files.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"Authenticate recovery with: {_recovery_command(guard_home)}\n"
+                "Recovery preserves verifiable controls and requires fresh approval; do not delete native state files.",
+                file=sys.stderr,
+            )
+        return 4
     except (
         ApprovalGateError,
         ExtensionControlAuthorityError,

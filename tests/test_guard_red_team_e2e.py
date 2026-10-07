@@ -17,10 +17,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import CompositionResult, compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, DetectorRegistry, register_default_detectors
+
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "guard-red-team"
 

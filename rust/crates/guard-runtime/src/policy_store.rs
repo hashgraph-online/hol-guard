@@ -25,10 +25,16 @@ pub(crate) mod approval_v4_authority;
 pub(crate) mod approval_v4_enrollment;
 #[path = "approval_v4_secure_state.rs"]
 pub(crate) mod approval_v4_secure_state;
+#[path = "native_review_origin.rs"]
+pub(crate) mod native_review_origin;
 #[path = "policy_store_approval.rs"]
 mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
 mod policy_store_authority;
+#[path = "policy_store_business_floor.rs"]
+mod policy_store_business_floor;
+#[path = "policy_store_business_source.rs"]
+mod policy_store_business_source;
 #[path = "policy_store_command_authority.rs"]
 mod policy_store_command_authority;
 #[path = "policy_store_command_floor.rs"]
@@ -41,6 +47,20 @@ mod policy_store_persistence;
 mod policy_store_request;
 #[path = "policy_store_validation.rs"]
 mod policy_store_validation;
+#[path = "resident_workspace_review_context.rs"]
+pub(crate) mod resident_workspace_review_context;
+#[path = "workspace_review_authority.rs"]
+pub(crate) mod workspace_review_authority;
+#[path = "workspace_review_business.rs"]
+pub(crate) mod workspace_review_business;
+#[path = "workspace_review_claim_index.rs"]
+pub(crate) mod workspace_review_claim_index;
+#[path = "workspace_review_decision.rs"]
+pub(crate) mod workspace_review_decision;
+#[path = "workspace_review_request.rs"]
+pub(crate) mod workspace_review_request;
+#[path = "workspace_review_secure_state.rs"]
+pub(crate) mod workspace_review_secure_state;
 
 use crate::policy_enforcement::AdmittedPolicySnapshot;
 use approval_authority::ApprovalAuthority;
@@ -51,12 +71,16 @@ use policy_store_persistence::*;
 use policy_store_validation::{read_verifier_key, validate_private_directory};
 
 #[cfg(test)]
+#[path = "policy_store_scope_tests.rs"]
+mod scope_tests;
+#[cfg(test)]
 #[path = "policy_store_tests.rs"]
 mod tests;
+
 const SNAPSHOT_FILE_NAME: &str = "policy-snapshot-v3.json";
 const GENERATION_FLOOR_FILE_NAME: &str = "policy-snapshot-generation-floor.json";
-const VERIFIER_KEY_FILE_NAME: &str = "policy-verifier.key";
-const VERIFIER_KEY_BYTES: usize = 32;
+pub(crate) const VERIFIER_KEY_FILE_NAME: &str = "policy-verifier.key";
+pub(crate) const VERIFIER_KEY_BYTES: usize = 32;
 const MAX_KEY_FILE_BYTES: u64 = VERIFIER_KEY_BYTES as u64;
 const MAX_FLOOR_BYTES: u64 = 8 * 1024;
 const GENERATION_FLOOR_SCHEMA: &str = "guard-policy-snapshot-generation-floor.v1";
@@ -110,6 +134,12 @@ struct PolicyAuthorityRecordV3 {
     pub(super) floor_mac: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
+    #[serde(
+        default,
+        deserialize_with = "policy_store_business_floor::present_floor",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(super) business_policy_floor: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,19 +158,25 @@ struct PolicyState {
     pub(super) policy_digest: Option<String>,
     pub(super) invalid_on_startup: bool,
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
+    pub(super) business_policy_floor: Option<String>,
 }
 
 struct LoadedAuthority {
     pub(super) snapshot: Option<PolicySnapshotV3>,
+    // Authenticated legacy content may remain useful for recovery while it is
+    // expired or incompatible with the current runtime admission context.
+    pub(super) recovered_snapshot: Option<PolicySnapshotV3>,
     pub(super) canonical_bytes: Vec<u8>,
     pub(super) generation_floor: u64,
     pub(super) policy_digest: Option<String>,
     pub(super) invalid_on_startup: bool,
     pub(super) migrate: bool,
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
+    pub(super) business_policy_floor: Option<String>,
 }
 
 pub(crate) struct PolicySnapshotStore {
+    state_base: PathBuf,
     authority_path: PathBuf,
     expected_runtime_identity: String,
     expected_rule_digest: String,
@@ -181,6 +217,11 @@ impl PolicySnapshotStore {
             &expected_scope_digest,
             &verifier_key,
         )?;
+        if loaded.migrate {
+            // Persist the recovered floor and its authenticated body before any
+            // startup or idempotent ACK can rely on them. Failure keeps us closed.
+            persist_loaded_authority(&authority_path, &loaded, &verifier_key)?;
+        }
         let approval_authority = approval_authority::load(state_base)?;
         let approval_v4_authority = approval_v4_authority::load(state_base)?;
         let approval_authority_observed = Arc::new(Mutex::new(
@@ -229,6 +270,7 @@ impl PolicySnapshotStore {
             None => (None, false),
         };
         Ok(Self {
+            state_base: state_base.to_owned(),
             authority_path,
             expected_runtime_identity: runtime_identity.to_owned(),
             expected_rule_digest,
@@ -250,8 +292,13 @@ impl PolicySnapshotStore {
                 policy_digest: loaded.policy_digest,
                 invalid_on_startup: loaded.invalid_on_startup || admission_failed,
                 command_control_floor: loaded.command_control_floor,
+                business_policy_floor: loaded.business_policy_floor,
             }),
         })
+    }
+
+    pub(crate) fn state_base(&self) -> &Path {
+        &self.state_base
     }
 
     /// Migrate legacy policy files only on an explicit upgrade command.
@@ -275,15 +322,7 @@ impl PolicySnapshotStore {
             &verifier_key,
         )?;
         if loaded.migrate {
-            if let Some(digest) = loaded.policy_digest.as_deref() {
-                persist_authority(
-                    &authority_path,
-                    loaded.generation_floor,
-                    digest,
-                    loaded.snapshot.as_ref(),
-                    &verifier_key,
-                )?;
-            }
+            persist_loaded_authority(&authority_path, &loaded, &verifier_key)?;
         }
         Ok(())
     }
@@ -322,6 +361,9 @@ impl PolicySnapshotStore {
             now,
         )
         .map_err(snapshot_error)?;
+        if request.snapshot.scope_contract.scope_digest != self.expected_scope_digest {
+            return Err("native_policy_snapshot_scope_mismatch".to_owned());
+        }
         if let Some(current) = state.snapshot.as_ref() {
             if request.snapshot.generation < current.generation {
                 return Err("native_policy_snapshot_generation_downgrade".to_owned());
@@ -343,6 +385,10 @@ impl PolicySnapshotStore {
             state.command_control_floor.as_ref(),
             &request.snapshot,
         )?;
+        let business_floor = policy_store_business_floor::next_floor(
+            state.business_policy_floor.as_deref(),
+            &request.snapshot,
+        )?;
         let admitted = Arc::new(AdmittedPolicySnapshot::new(request.snapshot)?);
         let mut observed = match self.authority_observed.lock() {
             Ok(observed) => observed,
@@ -362,6 +408,7 @@ impl PolicySnapshotStore {
             Some(admitted.snapshot()),
             &self.verifier_key,
             control_floor.as_ref(),
+            business_floor.as_deref(),
         )?;
         state.generation_floor = admitted.generation;
         state.policy_digest = Some(admitted.policy_digest.clone());
@@ -369,6 +416,7 @@ impl PolicySnapshotStore {
         state.canonical_bytes = snapshot_bytes;
         state.invalid_on_startup = false;
         state.command_control_floor = control_floor;
+        state.business_policy_floor = business_floor;
         *observed = authority_fingerprint(&self.authority_path);
         drop(observed);
         self.authority_changed.store(

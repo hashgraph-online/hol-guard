@@ -93,6 +93,11 @@ def test_protection_repair_all_retries_a_transient_containment_probe_failure(
     monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
     monkeypatch.setattr(
         daemon_server_module,
+        "_repair_command_activity_persistence_health",
+        lambda _store: None,
+    )
+    monkeypatch.setattr(
+        daemon_server_module,
         "repair_failing_managed_harness_hooks",
         lambda _store: ((), ()),
     )
@@ -175,6 +180,11 @@ def test_protection_repair_all_completes_supported_work_with_unsupported_contain
         lambda self: SimpleNamespace(active_error_count=0),
     )
     monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_repair_command_activity_persistence_health",
+        lambda _store: None,
+    )
     monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
     monkeypatch.setattr(GuardStore, "list_managed_installs", lambda self: [{"harness": "codex", "active": True}])
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -194,12 +204,14 @@ def test_protection_repair_all_completes_supported_work_with_unsupported_contain
     assert payload["repaired"] is True
     assert "failed_check_ids" not in payload
     assert payload["check_ids"] == [
+        "daemon",
         "policy_engine",
         "rule_packs",
         "tamper_checks",
         "harness_hooks",
         "decision_stream",
     ]
+    assert payload["check_reasons"] == {}
     assert payload["message"] == "Integrity protection restored."
 
 
@@ -233,6 +245,11 @@ def test_protection_repair_all_requires_a_connected_app(
         lambda self: SimpleNamespace(active_error_count=0),
     )
     monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_repair_command_activity_persistence_health",
+        lambda _store: None,
+    )
     monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

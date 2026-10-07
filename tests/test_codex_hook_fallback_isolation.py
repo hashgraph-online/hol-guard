@@ -91,6 +91,9 @@ def test_fallback_environment_drops_import_virtualenv_project_and_loader_control
         "PIP_CONFIG_FILE": str(tmp_path / "pip.conf"),
         "LD_PRELOAD": str(tmp_path / "preload.so"),
         "DYLD_INSERT_LIBRARIES": str(tmp_path / "inject.dylib"),
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": str(tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "HOL Guard"),
+        "HOL_GUARD_DESKTOP_RUNTIME_OWNER": str(tmp_path / "untrusted-runtime-owner"),
     }
 
     environment = isolated_hook_environment(hostile)
@@ -101,9 +104,12 @@ def test_fallback_environment_drops_import_virtualenv_project_and_loader_control
         "CODEX_HOME": hostile["CODEX_HOME"],
         "LANG": hostile["LANG"],
         "LC_ALL": hostile["LC_ALL"],
+        "HOL_GUARD_DESKTOP": hostile["HOL_GUARD_DESKTOP"],
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": hostile["HOL_GUARD_DESKTOP_HOOK_PROXY"],
     }
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_verified_fallback_ignores_workspace_and_ambient_python_imports(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -123,8 +129,15 @@ def test_verified_fallback_ignores_workspace_and_ambient_python_imports(
     monkeypatch.setenv("PYTHONSTARTUP", str(workspace / "sitecustomize.py"))
     monkeypatch.setenv("VIRTUAL_ENV", str(workspace / ".venv"))
     monkeypatch.setenv("UV_PROJECT_ENVIRONMENT", str(workspace))
+    proxy = tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "HOL Guard"
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", str(tmp_path / "untrusted-runtime-owner"))
 
     trusted = _trusted_launch(bridge_command, config)
+    assert trusted.environment["HOL_GUARD_DESKTOP"] == "1"
+    assert trusted.environment["HOL_GUARD_DESKTOP_HOOK_PROXY"] == str(proxy)
+    assert "HOL_GUARD_DESKTOP_RUNTIME_OWNER" not in trusted.environment
     fallback_command = _config_command(config, "fallback_command")
     payload = json.dumps(
         {
@@ -182,7 +195,10 @@ def test_tampered_bridge_launch_contract_fails_closed_without_executing_project_
     assert result.returncode == 0
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "hol-guard install codex" in result.stdout
-    assert result.stderr == ""
+    evidence = json.loads(result.stderr)
+    assert evidence["schema"] == "hol-guard.codex-bridge-failure.v1"
+    assert any(cause["stage"] == "launcher_validation" for cause in evidence["causes"])
+    assert str(marker) not in result.stderr
     assert not marker.exists()
 
 
@@ -413,7 +429,7 @@ def test_isolated_process_returns_when_tree_termination_cannot_be_confirmed(
         input_text="",
         cwd=tmp_path,
         environment={},
-        timeout_seconds=0,
+        timeout_seconds=0.01,
     )
     elapsed = time.monotonic() - started_at
     latched = run_isolated_hook_process(

@@ -25,6 +25,7 @@ _CLAUDE_CODE_ENV_MARKERS = frozenset({"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"})
 _CODEX_ENV_MARKERS = frozenset({"CODEX_SANDBOX", "CODEX_THREAD_ID"})
 _GROK_ENV_MARKERS = frozenset({"GROK_AGENT", "GROK_SESSION_ID"})
 _OPENCODE_ENV_MARKERS = frozenset({"OPENCODE_CONFIG_CONTENT"})
+_DEVIN_ENV_MARKERS = frozenset({"DEVIN_PROJECT_DIR"})
 ORIGIN_HARNESS_ENV = "HOL_GUARD_ORIGIN_HARNESS"
 _ORIGIN_HARNESS_VALUES = frozenset(
     {
@@ -38,6 +39,7 @@ _ORIGIN_HARNESS_VALUES = frozenset(
         "opencode",
         "pi",
         "zcode",
+        "devin",
     }
 )
 
@@ -52,6 +54,7 @@ _PROCESS_HARNESSES = {
     "pi": "pi",
     "omp": "omp",
     "opencode": "opencode",
+    "devin": "devin",
 }
 _APP_PATH_MARKERS = (
     ("/codex.app/", "codex"),
@@ -60,6 +63,7 @@ _APP_PATH_MARKERS = (
     ("/claude.app/", "claude-code"),
     ("/opencode.app/", "opencode"),
     ("/zcode.app/", "zcode"),
+    ("/devin.app/", "devin"),
 )
 
 
@@ -176,6 +180,8 @@ def resolve_environment_harness(env: Mapping[str, str] | None = None) -> str | N
         return "grok"
     if _env_marker_present(source, _OPENCODE_ENV_MARKERS):
         return "opencode"
+    if _env_marker_present(source, _DEVIN_ENV_MARKERS):
+        return "devin"
     return None
 
 

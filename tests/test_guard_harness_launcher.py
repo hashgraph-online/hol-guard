@@ -4,11 +4,51 @@ import argparse
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
-from codex_plugin_scanner.guard.durable_harness_launcher import build_windows_script
+from codex_plugin_scanner.guard.durable_harness_launcher import build_harness_shim, build_windows_script
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launcher execution")
+def test_python_repair_launcher_uses_desktop_core(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    desktop = tmp_path / "current-hol-guard"
+    desktop.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    desktop.chmod(0o700)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.durable_harness_launcher.durable_desktop_current_hol_guard",
+        lambda home: desktop,
+    )
+    context = SimpleNamespace(home_dir=tmp_path, guard_home=tmp_path / "guard home")
+    source = build_harness_shim(
+        "/missing/canary/python",
+        "omp",
+        context,
+        ["--workspace", "project root"],
+        trusted_python_flags=[],
+        trusted_launcher="",
+        trusted_import_root=tmp_path,
+        launcher_env={},
+        home_override_args=[],
+        is_transient_path=lambda path: False,
+    )
+    launcher = tmp_path / "guard-omp"
+    launcher.write_text(source)
+    launcher.chmod(0o700)
+    result = subprocess.run([str(launcher), "--version", "prompt with spaces"], capture_output=True, text=True)
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [
+        "run",
+        "omp",
+        "--guard-home",
+        str(context.guard_home),
+        "--workspace",
+        "project root",
+        "--arg=--version",
+        "--arg=prompt with spaces",
+    ]
 
 
 def test_run_shim_keeps_windows_forwarded_arguments_verbatim() -> None:

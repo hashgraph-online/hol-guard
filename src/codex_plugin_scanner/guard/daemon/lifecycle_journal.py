@@ -8,11 +8,17 @@ import re
 import time
 import uuid
 from contextlib import suppress
+from heapq import nlargest
 from pathlib import Path
 from typing import TypedDict, cast
 
+from ..private_file_io import read_private_regular_text
+
 _JOURNAL_DIRECTORY = "daemon-lifecycle"
 _MAX_JOURNAL_ENTRIES = 128
+_MAX_JOURNAL_EVENT_BYTES = 2048
+_MAX_INCIDENT_JOURNAL_SCAN = 256
+_MAX_INCIDENT_TIMELINE_ENTRIES = 20
 _PRIVATE_DIRECTORY_MODE = 0o700
 _PRIVATE_FILE_MODE = 0o600
 _SAFE_LABEL = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
@@ -107,17 +113,59 @@ def load_daemon_lifecycle_events(
     if bounded_limit == 0 or journal_dir.is_symlink() or not journal_dir.is_dir():
         return []
     events: list[DaemonLifecycleEvent] = []
-    for path in sorted(journal_dir.glob("*.json"), reverse=True)[:bounded_limit]:
-        if path.is_symlink():
-            continue
-        try:
-            value = cast(object, json.loads(path.read_text(encoding="utf-8")))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            continue
-        if _is_lifecycle_event(value):
-            events.append(cast(DaemonLifecycleEvent, value))
+    for path in nlargest(bounded_limit, journal_dir.glob("*.json"), key=lambda entry: entry.name):
+        event = _read_lifecycle_event(path)
+        if event is not None:
+            events.append(event)
     events.reverse()
     return events
+
+
+def load_bounded_incident_lifecycle_events(
+    guard_home: Path,
+    *,
+    limit: int = _MAX_INCIDENT_TIMELINE_ENTRIES,
+) -> tuple[list[DaemonLifecycleEvent], str]:
+    """Read a small journal snapshot without scanning an unbounded directory."""
+
+    journal_dir = guard_home / _JOURNAL_DIRECTORY
+    if journal_dir.is_symlink():
+        return [], "journal_path_unsafe"
+    if not journal_dir.is_dir():
+        return [], "journal_unavailable"
+    candidates: list[Path] = []
+    try:
+        for index, path in enumerate(journal_dir.iterdir()):
+            if index >= _MAX_INCIDENT_JOURNAL_SCAN:
+                return [], "journal_scan_limit"
+            if path.name.endswith(".json"):
+                candidates.append(path)
+    except OSError:
+        return [], "journal_unavailable"
+    events: list[DaemonLifecycleEvent] = []
+    invalid_seen = False
+    for path in nlargest(max(0, min(limit, _MAX_INCIDENT_TIMELINE_ENTRIES)), candidates, key=lambda entry: entry.name):
+        event = _read_lifecycle_event(path)
+        if event is None:
+            invalid_seen = True
+        else:
+            events.append(event)
+    events.reverse()
+    return events, "invalid_entries_omitted" if invalid_seen else "ok"
+
+
+def _read_lifecycle_event(path: Path) -> DaemonLifecycleEvent | None:
+    try:
+        raw = read_private_regular_text(path, max_bytes=_MAX_JOURNAL_EVENT_BYTES)
+    except OSError:
+        return None
+    if raw is None:
+        return None
+    try:
+        value = cast(object, json.loads(raw))
+    except (json.JSONDecodeError, RecursionError):
+        return None
+    return cast(DaemonLifecycleEvent, value) if _is_lifecycle_event(value) else None
 
 
 def _is_lifecycle_event(value: object) -> bool:

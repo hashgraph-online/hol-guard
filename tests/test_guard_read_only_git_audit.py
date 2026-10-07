@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -9,8 +10,9 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.read_only_git_audit import is_read_only_git_ancestry_audit
+from tests.git_execution_test_support import assert_host_git_proof_result
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 _GIT_ROUTING_ENV = (
     "GIT_CONFIG",
@@ -44,7 +46,7 @@ def _repository(tmp_path: Path) -> tuple[Path, Path]:
 
 def _audit(repository: Path, *, loop_variable: str = "commit", suffix: str = "") -> str:
     return (
-        f"cd {repository} && for {loop_variable} in deadbee cafebabe; do "
+        f"cd {shlex.quote(repository.as_posix())} && for {loop_variable} in deadbee cafebabe; do "
         f"git merge-base --is-ancestor ${loop_variable} HEAD 2>/dev/null && "
         f'echo "${loop_variable} YES" || echo "${loop_variable} NO"; done'
         f"{suffix}"
@@ -55,14 +57,17 @@ def _classification(result: Mapping[str, object]) -> Mapping[str, object]:
     return cast(Mapping[str, object], result["classification"])
 
 
-def test_literal_ancestry_audit_is_explicitly_benign(tmp_path: Path) -> None:
+def test_host_ancestry_audit_proof_does_not_override_native_unsupported_loop(tmp_path: Path) -> None:
     home, repository = _repository(tmp_path)
     command = _audit(repository)
 
-    assert is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home)
+    assert_host_git_proof_result(is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home), cwd=repository)
     result = inspect_command(command, cwd=home, home_dir=home)
-    assert _classification(result)["explicitly_benign"] is True
-    assert result["risk_classes"] == []
+    # Supported hosts recognize this bounded audit. Native command parsing does not
+    # support its loop, so production must keep its terminal classification.
+    assert _classification(result)["explicitly_benign"] is False
+    assert result["status"] == "native_unavailable"
+    assert result["minimum_action"] == "block"
 
 
 def test_ancestry_audit_rejects_path_as_loop_variable(tmp_path: Path) -> None:
@@ -82,10 +87,11 @@ def test_ancestry_audit_allows_bounded_log_and_numeric_pid_read(tmp_path: Path) 
         suffix='; echo "HEAD"; git log -1 --oneline; echo "LOCK"; cat .deploy.lock.d/pid 2>/dev/null || echo "none"',
     )
 
-    assert is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home)
+    assert_host_git_proof_result(is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home), cwd=repository)
     result = inspect_command(command, cwd=home, home_dir=home)
-    assert _classification(result)["explicitly_benign"] is True
-    assert result["risk_classes"] == []
+    assert _classification(result)["explicitly_benign"] is False
+    assert result["status"] == "native_unavailable"
+    assert result["minimum_action"] == "block"
 
 
 def test_ancestry_audit_rejects_workspace_outside_home_and_cwd(tmp_path: Path) -> None:
@@ -111,10 +117,11 @@ def test_ancestry_audit_allows_structured_status_substitutions(tmp_path: Path) -
         ),
     )
 
-    assert is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home)
+    assert_host_git_proof_result(is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home), cwd=repository)
     result = inspect_command(command, cwd=home, home_dir=home)
-    assert _classification(result)["explicitly_benign"] is True
-    assert result["risk_classes"] == []
+    assert _classification(result)["explicitly_benign"] is False
+    assert result["status"] == "native_unavailable"
+    assert result["minimum_action"] == "block"
 
 
 @pytest.mark.parametrize(
@@ -135,7 +142,7 @@ def test_ancestry_audit_rejects_widened_or_mutating_forms(
     home, repository = _repository(tmp_path)
     base = _audit(repository)
     variants = {
-        "mutating-prefix": f"cd {repository} && git checkout main; " + base.split(" && ", 1)[1],
+        "mutating-prefix": f"cd {shlex.quote(repository.as_posix())} && git checkout main; " + base.split(" && ", 1)[1],
         "dynamic-commit": base.replace("deadbee", "$(payload)"),
         "widened-target": base.replace("$commit HEAD", "$commit --all"),
         "output-write": base.replace("2>/dev/null", "> result.txt"),
@@ -184,7 +191,8 @@ def test_widened_ancestry_loop_remains_sensitive(tmp_path: Path, replacement: st
 
     result = inspect_command(command, cwd=home, home_dir=home)
     assert _classification(result)["explicitly_benign"] is False
-    assert result["risk_classes"]
+    assert result["status"] == "native_unavailable"
+    assert result["minimum_action"] == "block"
 
 
 def test_ancestry_audit_rejects_executable_log_pager(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,7 +212,7 @@ def test_git_pager_override_ignores_fallback_pager(tmp_path: Path, monkeypatch: 
     _ = subprocess.run(["git", "config", "pager.log", "!payload"], cwd=repository, check=True)
     command = _audit(repository, suffix="; git log -1 --oneline; cat .deploy.lock.d/pid 2>/dev/null || echo none")
 
-    assert is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home)
+    assert_host_git_proof_result(is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home), cwd=repository)
 
 
 def test_git_pager_override_still_rejects_executable_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

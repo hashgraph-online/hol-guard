@@ -9,9 +9,25 @@ from .command_extension_specs import CommandExtensionValues
 from .command_permission_catalog import permissions_for_action_classes
 from .mcp_server_contribution import (
     catalog_id_for_mcp_id,
+    direct_mcp_command_name,
     load_mcp_contribution_payloads,
     remote_mcp_endpoint_identity,
 )
+
+# Runnable example per package launcher. `-y` is an npx flag (`uvx -y <pkg>` fails);
+# the other forms match the launcher subcommands mcp_protection recognizes.
+# Keep in sync with package_launch_example in native_command_source_mcp.rs.
+_PACKAGE_LAUNCH_PREFIX: Final[dict[str, str]] = {
+    "npx": "npx -y",
+    "npm": "npm exec --yes",
+    "pnpm": "pnpm dlx",
+    "yarn": "yarn dlx",
+    "pipx": "pipx run",
+}
+
+
+def package_launch_example(command: str, package: str) -> str:
+    return f"{_PACKAGE_LAUNCH_PREFIX.get(command, command)} {package}"
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
@@ -54,7 +70,13 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
             raise ValueError(f"{mcp_id} launch command is invalid")
         if not isinstance(package, str) or not package.strip():
             raise ValueError(f"{mcp_id} launch package is invalid")
-        example = f"{command} -y {package}"
+        example = package_launch_example(command, package)
+        executables = (command,)
+    elif launch_kind == "direct-command":
+        command = launch.get("command")
+        if not isinstance(command, str) or direct_mcp_command_name(command) != command:
+            raise ValueError(f"{mcp_id} direct command is invalid")
+        example = command
         executables = (command,)
     elif launch_kind == "remote-http":
         remote_url = launch.get("url")

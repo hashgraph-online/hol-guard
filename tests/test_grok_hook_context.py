@@ -37,8 +37,26 @@ def _redirect(command: tuple[str, ...], target: Path, option: str) -> tuple[str,
 def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:
     """Generate native Python/frozen hooks or the signed desktop proxy envelope."""
     monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
+    if mode == "isolated":
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+            lambda: sys.executable,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
+            lambda: sys.executable,
+        )
     if mode == "frozen":
         monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+            lambda: None,
+        )
+    elif mode in {"python", "desktop"}:
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+            lambda: None,
+        )
     command = GrokHarnessAdapter._hook_command_parts(context)
     if mode != "desktop":
         return command
@@ -66,7 +84,7 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.security_critical
-@pytest.mark.parametrize("mode", ["python", "frozen", "desktop"])
+@pytest.mark.parametrize("mode", ["python", "frozen", "desktop", "isolated"])
 @pytest.mark.parametrize("option", ["--guard-home", "--home", "--workspace"])
 def test_all_generated_forms_reject_paired_path_redirects(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, option: str
@@ -78,7 +96,7 @@ def test_all_generated_forms_reject_paired_path_redirects(
     command = _generated(context, mode, monkeypatch)
     assert is_grok_hook_command(_shell_command(command), context)
     changed = _redirect(command, tmp_path / "redirected", option)
-    assert is_grok_hook_command(_shell_command(changed))  # Syntax alone is intentionally insufficient.
+    assert is_grok_hook_command(_shell_command(changed)) is (mode != "isolated" or option != "--guard-home")
     assert not is_grok_hook_command(_shell_command(changed), context)
 
 

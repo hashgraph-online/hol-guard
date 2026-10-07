@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -20,7 +21,12 @@ from codex_plugin_scanner.guard.runtime.command_reviewed_literal_matcher import 
     validate_reviewed_literal_argv,
 )
 from codex_plugin_scanner.guard.runtime.command_rules import CommandSafetyRule, CommandSafeVariant, ExecutableMatcher
-from tests.extension_builder_support import make_discovery, make_kit
+from tests.extension_builder_support import make_discovery, make_kit, use_built_native_source_compiler
+
+
+@pytest.fixture(autouse=True)
+def _native_source_compiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_built_native_source_compiler(monkeypatch)
 
 
 def reviewed_entry(discovery: Discovery, path: tuple[str, ...]) -> tuple[dict[str, object], dict[str, object]]:
@@ -200,10 +206,10 @@ def test_rule_revision_changes_with_review_not_only_source(tmp_path: Path) -> No
     after = build_kit(discovery, load_review(payload, discovery))
     assert before.revision != after.revision
     assert before.discovery.binding == after.discovery.binding
-    before_detector = next(content for path, content in before.files if path.endswith("extensions.py"))
-    after_detector = next(content for path, content in after.files if path.endswith("extensions.py"))
-    before_revision = next(line for line in before_detector.splitlines() if line.startswith("_RULE_REVISION"))
-    after_revision = next(line for line in after_detector.splitlines() if line.startswith("_RULE_REVISION"))
+    before_source = json.loads(next(content for path, content in before.files if "/command-sources/" in path))
+    after_source = json.loads(next(content for path, content in after.files if "/command-sources/" in path))
+    before_revision = before_source["extension"]["rules"][0]["rule_version"]
+    after_revision = after_source["extension"]["rules"][0]["rule_version"]
     assert before_revision != after_revision
     assert '"state": "allow"' not in canonical_json(after.review.to_dict())
 

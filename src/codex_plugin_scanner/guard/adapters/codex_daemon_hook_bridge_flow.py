@@ -8,8 +8,8 @@ import secrets
 import time
 import urllib.error
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
 from pathlib import Path
+from typing import Literal, TypedDict
 
 from ..codex_hook_bridge_runtime import TrustedHookLaunch, trusted_hook_launch
 from ..codex_hook_launch_runtime import isolated_hook_environment, run_isolated_hook_process
@@ -17,8 +17,156 @@ from .codex_daemon_hook_auth import _DaemonResponseError
 from .codex_daemon_hook_transport import _daemon_response_once, _DaemonGenerationChangedError
 
 _DAEMON_START_TIMEOUT_SECONDS = 8
+_DAEMON_RPC_TIMEOUT_SECONDS = 4.0
+_FALLBACK_TIMEOUT_SECONDS = 4.0
 _MINIMUM_OPERATION_SECONDS = 0.01
 _OVERLOAD_RESERVE_MS = 100
+_LAUNCHER_INTEGRITY_REASONS = frozenset(
+    {
+        "codex_hook_file_identity_invalid",
+        "codex_hook_validation_deadline_expired",
+        "codex_hook_validation_deadline_invalid",
+        "codex_hook_integrity_io_error",
+        "codex_hook_interpreter_path_mismatch",
+        "codex_hook_manifest_argv_mismatch",
+        "codex_hook_manifest_authentication_invalid",
+        "codex_hook_manifest_authentication_missing",
+        "codex_hook_manifest_baseline_untrusted",
+        "codex_hook_manifest_config_target_mismatch",
+        "codex_hook_manifest_context_mismatch",
+        "codex_hook_manifest_daemon_start_mismatch",
+        "codex_hook_manifest_directory_owner_mismatch",
+        "codex_hook_manifest_directory_permissions_unsafe",
+        "codex_hook_manifest_directory_unsafe",
+        "codex_hook_manifest_fallback_mismatch",
+        "codex_hook_manifest_generated_at_invalid",
+        "codex_hook_manifest_installation_mismatch",
+        "codex_hook_manifest_invalid",
+        "codex_hook_manifest_key_mismatch",
+        "codex_hook_manifest_mac_invalid",
+        "codex_hook_manifest_missing",
+        "codex_hook_manifest_not_regular",
+        "codex_hook_manifest_package_version_stale",
+        "codex_hook_manifest_packaged_files_invalid",
+        "codex_hook_manifest_packaged_files_stale",
+        "codex_hook_manifest_registration_invalid",
+        "codex_hook_manifest_registration_stale",
+        "codex_hook_manifest_schema_unsupported",
+        "codex_hook_manifest_secret_invalid",
+        "codex_hook_manifest_secret_missing",
+        "codex_hook_manifest_transport_invalid",
+        "codex_hook_package_reauthentication_refused",
+        "codex_hook_registration_mismatch",
+        "codex_hook_registration_missing",
+        "codex_hook_interpreter_identity_invalid",
+    }
+)
+
+
+class BridgeFailureCause(TypedDict):
+    stage: Literal["daemon_request", "daemon_retry", "daemon_worker", "launcher_validation"]
+    reason_code: str
+
+
+def _record_failure(
+    causes: list[BridgeFailureCause] | None,
+    stage: Literal["daemon_request", "daemon_retry", "daemon_worker", "launcher_validation"],
+    reason_code: str,
+) -> None:
+    # The current flow records one initial failure and at most two retry errors.
+    # Failed launcher validation prevents the daemon-start retry; worker failure
+    # replaces a successful response, so this bound retains the full cause chain.
+    if causes is not None and len(causes) < 4:
+        causes.append({"stage": stage, "reason_code": reason_code})
+
+
+def _daemon_failure_reason(error: BaseException) -> str:
+    if isinstance(error, _DaemonGenerationChangedError):
+        return "daemon_generation_changed"
+    if isinstance(error, _DaemonResponseError):
+        return "daemon_authenticated_http_error" if error.authenticated else "daemon_response_unauthenticated"
+    if isinstance(error, TimeoutError):
+        return "daemon_transport_timeout"
+    if isinstance(error, ConnectionRefusedError):
+        return "daemon_connection_refused"
+    if isinstance(error, urllib.error.URLError):
+        return "daemon_transport_unavailable"
+    if isinstance(error, ValueError):
+        messages = {
+            "daemon state is unreadable": "daemon_state_unreadable",
+            "daemon discovery key is unreadable": "daemon_discovery_key_unreadable",
+            "daemon auth token is unreadable": "daemon_token_unreadable",
+            "daemon state authentication failed": "daemon_state_authentication_failed",
+            "daemon identity challenge authentication failed": "daemon_challenge_authentication_failed",
+            "daemon identity challenge expired": "daemon_challenge_expired",
+            "daemon identity challenge did not match authenticated state": "daemon_challenge_identity_mismatch",
+            "daemon auth token does not match authenticated state": "daemon_token_binding_mismatch",
+        }
+        message = error.args[0] if len(error.args) == 1 and isinstance(error.args[0], str) else ""
+        return messages.get(message, "daemon_state_or_response_invalid")
+    if isinstance(error, http.client.HTTPException):
+        return "daemon_http_invalid"
+    return "daemon_transport_failure"
+
+
+def _launcher_failure_reason(error: BaseException) -> str:
+    # Match only fixed validation messages. Never export arbitrary exception text.
+    messages = {
+        "managed Codex hook paths must be absolute": "launcher_paths_not_absolute",
+        "managed Codex hook paths do not belong to this Guard home": "launcher_paths_state_home_mismatch",
+        "managed Codex hook manifest path is invalid": "launcher_manifest_path_invalid",
+        "managed Codex hook config target is invalid": "launcher_config_target_invalid",
+        "managed Codex hook packaged-file identity is invalid": "launcher_packaged_file_identity_invalid",
+        "managed Codex hook packaged-file roles are invalid": "launcher_packaged_file_roles_invalid",
+        "managed Codex hook package identity is incomplete": "launcher_package_identity_incomplete",
+        "managed Codex hook launch identity is incomplete": "launcher_identity_incomplete",
+        "managed Codex hook launch identity is invalid": "launcher_launch_identity_invalid",
+        "managed Codex hook fallback entrypoint is invalid": "launcher_fallback_entrypoint_invalid",
+        "managed Codex hook bridge path is invalid": "launcher_bridge_path_mismatch",
+        "managed Codex hook resume path is invalid": "launcher_resume_path_mismatch",
+        "managed Codex hook bridge runtime path is invalid": "launcher_bridge_runtime_path_mismatch",
+        "managed Codex hook launch runtime path is invalid": "launcher_launch_runtime_path_mismatch",
+        "managed Codex hook runtime trust path is invalid": "launcher_runtime_trust_path_mismatch",
+        "managed Codex hook Windows job path is invalid": "launcher_windows_job_path_mismatch",
+        "managed Codex hook transport identity is invalid": "launcher_transport_identity_mismatch",
+        "managed Codex hook manifest schema is unsupported": "launcher_manifest_schema_unsupported",
+        "managed Codex hook manifest belongs to another Guard home": "launcher_state_home_mismatch",
+        "managed Codex hook manifest target binding is invalid": "launcher_manifest_target_mismatch",
+        "managed Codex hook fallback contract is invalid": "launcher_fallback_contract_mismatch",
+        "managed Codex hook daemon-start contract is invalid": "launcher_start_contract_mismatch",
+        "managed Codex hook bridge config changed after authentication": "launcher_config_binding_mismatch",
+        "managed Codex hook bridge config is malformed": "launcher_config_malformed",
+        "managed Codex hook bridge identity is invalid": "launcher_bridge_identity_invalid",
+        "managed Codex hook event identity is invalid": "launcher_event_identity_invalid",
+        "managed Codex hook bridge compatibility identity is invalid": "launcher_compatibility_identity_invalid",
+        "managed Codex hook runtime directory is unavailable": "launcher_runtime_directory_unavailable",
+        "managed Codex hook runtime directory is not a regular directory": "launcher_runtime_directory_not_directory",
+        "managed Codex hook runtime directory changed during validation": "launcher_runtime_directory_changed",
+        "managed Codex hook runtime directory has an unexpected owner": "launcher_runtime_directory_owner_mismatch",
+        "managed Codex hook runtime directory is not owner-only": "launcher_runtime_directory_permissions_unsafe",
+        "managed Codex hook fallback argv is invalid": "launcher_fallback_argv_invalid",
+        "managed Codex hook daemon start argv is invalid": "launcher_start_argv_invalid",
+    }
+    for label, reason in {
+        "interpreter": "launcher_interpreter_identity_invalid",
+        "context": "launcher_context_identity_invalid",
+        "config": "launcher_config_identity_invalid",
+        "fallback": "launcher_fallback_identity_invalid",
+        "daemon start": "launcher_start_identity_invalid",
+        "packaged file": "launcher_packaged_file_identity_invalid",
+    }.items():
+        messages[f"managed Codex hook {label} identity is invalid"] = reason
+    if isinstance(error, ValueError):
+        message = error.args[0] if len(error.args) == 1 and isinstance(error.args[0], str) else ""
+        return messages.get(message, "launcher_validation_failed")
+    if isinstance(error, ImportError):
+        return "launcher_dependency_unavailable"
+    if isinstance(error, OSError):
+        return "launcher_files_unavailable"
+    reason = getattr(error, "reason", None)
+    if isinstance(reason, str) and reason in _LAUNCHER_INTEGRITY_REASONS:
+        return reason
+    return "launcher_authority_unavailable"
 
 
 def bridge_review_response(
@@ -31,6 +179,7 @@ def bridge_review_response(
     deadline: float,
     manifest_path: str | Path | None,
     config_json: str | None,
+    failure_causes: list[BridgeFailureCause] | None = None,
 ) -> tuple[dict[str, object] | None, bool, bool]:
     response: dict[str, object] | None = None
     trusted_launch: TrustedHookLaunch | None = None
@@ -42,22 +191,27 @@ def bridge_review_response(
             state_path=state_path,
             query=query,
             data=data,
-            timeout_seconds=_remaining_seconds(deadline),
+            timeout_seconds=min(_remaining_seconds(deadline), _DAEMON_RPC_TIMEOUT_SECONDS),
         )
 
     try:
         response = daemon_request()
     except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError) as error:
+        _record_failure(failure_causes, "daemon_request", _daemon_failure_reason(error))
         daemon_overloaded = _authenticated_daemon_overload(error)
         if _transient_overload(error) is not None:
-            with suppress(OSError, ValueError, http.client.HTTPException, urllib.error.URLError):
+            try:
                 response = _retry_transient_overload(error, deadline=deadline, request=daemon_request)
+            except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError) as retry_error:
+                _record_failure(failure_causes, "daemon_retry", _daemon_failure_reason(retry_error))
         trusted_launch, launch_integrity_failed = _trusted_launch_for_fallback(
             manifest_path=manifest_path,
             state_path=state_path,
             fallback_command=fallback_command,
             start_command=start_command,
             config_json=config_json,
+            failure_causes=failure_causes,
+            deadline_monotonic=deadline,
         )
         if _daemon_start_succeeded(
             daemon_overloaded=daemon_overloaded,
@@ -68,11 +222,25 @@ def bridge_review_response(
             deadline=deadline,
             failure_kind=_daemon_failure_kind(error),
         ):
-            with suppress(OSError, ValueError, http.client.HTTPException, urllib.error.URLError):
+            try:
                 response = daemon_request()
+            except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError) as retry_error:
+                _record_failure(failure_causes, "daemon_retry", _daemon_failure_reason(retry_error))
     if response is not None and _daemon_process_failed(response):
+        _record_failure(failure_causes, "daemon_worker", "daemon_worker_failed")
         response = None
     if response is None and not daemon_overloaded:
+        # A signed daemon failure authenticates neither fallback argv nor its files.
+        if trusted_launch is None and not launch_integrity_failed:
+            trusted_launch, launch_integrity_failed = _trusted_launch_for_fallback(
+                manifest_path=manifest_path,
+                state_path=state_path,
+                fallback_command=fallback_command,
+                start_command=start_command,
+                config_json=config_json,
+                failure_causes=failure_causes,
+                deadline_monotonic=deadline,
+            )
         response = _fallback_response(
             trusted_launch=trusted_launch,
             launch_integrity_failed=launch_integrity_failed,
@@ -145,6 +313,8 @@ def _trusted_launch_for_fallback(
     fallback_command: Sequence[str],
     start_command: Sequence[str],
     config_json: str | None,
+    failure_causes: list[BridgeFailureCause] | None = None,
+    deadline_monotonic: float | None = None,
 ) -> tuple[TrustedHookLaunch | None, bool]:
     if manifest_path is None and config_json is None:
         return None, False
@@ -158,10 +328,14 @@ def _trusted_launch_for_fallback(
                 fallback_command=fallback_command,
                 start_command=start_command,
                 config_json=config_json,
+                deadline_monotonic=deadline_monotonic,
             ),
             False,
         )
-    except (ImportError, OSError, RuntimeError, ValueError):
+    except Exception as error:
+        # A validator fault also leaves the launch unauthenticated. Never execute
+        # fallback argv after validation aborts, including unexpected error types.
+        _record_failure(failure_causes, "launcher_validation", _launcher_failure_reason(error))
         return None, True
 
 
@@ -199,14 +373,18 @@ def _fallback_response(
         fallback_stdout = trusted_launch.run_fallback(
             fallback_command,
             data=data,
-            timeout_seconds=_remaining_seconds(deadline),
+            timeout_seconds=_remaining_seconds(deadline, cap=_FALLBACK_TIMEOUT_SECONDS),
         )
         if fallback_stdout is None:
             return None
         return _json_object(fallback_stdout.strip()) if fallback_stdout.strip() else {}
     if launch_integrity_failed:
         return None
-    return _run_local_fallback(fallback_command, data=data, timeout_seconds=_remaining_seconds(deadline))
+    return _run_local_fallback(
+        fallback_command,
+        data=data,
+        timeout_seconds=_remaining_seconds(deadline, cap=_FALLBACK_TIMEOUT_SECONDS),
+    )
 
 
 def _run_daemon_start(

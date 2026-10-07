@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
@@ -196,6 +196,7 @@ def record_local_custom_extension_mutation(
     expected_revision: int,
     command_states: Mapping[str, LocalCliCommandState],
     now: str,
+    provider_updates: Sequence[tuple[str, str, int]] = (),
 ) -> int:
     """Commit a local grant and its continuity tombstone/state/receipt atomically."""
 
@@ -268,9 +269,10 @@ def record_local_custom_extension_mutation(
                 CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: raw,
             },
             observation_preconditions={identity.cli_id: _observation_precondition(local)},
+            provider_updates={identity.cli_id: provider_updates} if provider_updates else None,
         )
     except ValueError as error:
-        if str(error) == "local_cli_revision_conflict":
+        if str(error) in {"local_cli_revision_conflict", "provider_action_revision_conflict"}:
             raise
         raise CustomExtensionContinuityError("local continuity state changed during local mutation") from error
 

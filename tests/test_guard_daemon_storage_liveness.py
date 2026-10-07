@@ -30,8 +30,13 @@ from codex_plugin_scanner.guard.daemon.server import (
     GuardDaemonServer,
     _GuardDaemonHttpServer,
 )
-from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_override, sqlite_connect_timeout_seconds
+from codex_plugin_scanner.guard.sqlite_tuning import (
+    sqlite_connect_timeout_override,
+    sqlite_connect_timeout_seconds,
+    sqlite_operation_deadline_monotonic,
+)
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -61,7 +66,7 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
-    blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
+    blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
 
     try:
         initial_runtime = store.get_runtime_state()
@@ -158,7 +163,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         assert health["ok"] is True
         assert health_elapsed < 0.5
         assert max(elapsed for _payload, elapsed in results) < hook_timeout_seconds
-        assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
+        assert all(payload.get("decision") == "deny" for payload, _elapsed in results)
         assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
     finally:
         blocker.rollback()
@@ -173,7 +178,9 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         resumed_payload, resumed_elapsed = review(100)
         assert worker_stats["timeouts"] == 0
         assert worker_stats["ready"] >= 1
-        assert resumed_payload.get("policy_action") in {"allow", "warn"}
+        # Storage recovery does not enable the explicitly disabled native authority.
+        assert resumed_payload.get("policy_action") == "block"
+        assert resumed_payload.get("reason_code") == "native_hook_disabled"
         assert resumed_elapsed < 1.0
     finally:
         daemon.stop()
@@ -192,6 +199,7 @@ def test_runtime_heartbeat_writer_coalesces_pending_updates() -> None:
             session_id: str,
             last_heartbeat_at: str,
             timeout_seconds: float,
+            registration: object = None,
         ) -> bool:
             assert session_id == "session"
             assert timeout_seconds == 0.01
@@ -268,14 +276,26 @@ def test_internal_hook_sqlite_timeout_is_bounded_without_changing_default() -> N
 def test_sqlite_timeout_override_is_scoped_to_current_context() -> None:
     assert sqlite_connect_timeout_seconds({}) == 30.0
     with sqlite_connect_timeout_override(0.05):
-        assert sqlite_connect_timeout_seconds({}) == 0.05
+        assert 0 < sqlite_connect_timeout_seconds({}) <= 0.05
     assert sqlite_connect_timeout_seconds({}) == 30.0
+
+
+def test_sqlite_lock_wait_stays_short_when_the_operation_clock_is_longer() -> None:
+    with sqlite_connect_timeout_override(0.05, operation_seconds=5):
+        assert 0 < sqlite_connect_timeout_seconds({}) <= 0.05
+        deadline = sqlite_operation_deadline_monotonic()
+        assert deadline is not None
+        remaining = deadline - time.monotonic()
+        assert 4 < remaining <= 5
+    assert sqlite_connect_timeout_seconds({}) == 30.0
+    assert sqlite_operation_deadline_monotonic() is None
 
 
 def test_store_promotes_rollback_journal_before_bounded_hook_writes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    use_real_native_activity_reviews(monkeypatch)
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     database_path = guard_home / "guard.db"
@@ -312,7 +332,10 @@ def test_store_promotes_rollback_journal_before_bounded_hook_writes(
     try:
         reader.execute("begin")
         assert reader.execute("select count(*) from command_activity").fetchone() == (0,)
-        with sqlite_connect_timeout_override(0.05):
+        # The override is a wall clock from entry, and native review runs before
+        # the write. The reader keeps its transaction until this call returns,
+        # so a lock wait still fails instead of waiting the reader out.
+        with sqlite_connect_timeout_override(5):
             assert record_pre_hook_command_activity_best_effort(
                 store=store,
                 guard_home=guard_home,

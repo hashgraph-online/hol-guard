@@ -123,15 +123,21 @@ def resolve_path_within_allowed_roots(
     if not stripped or stripped.lower() in {"none", "null"}:
         return None
     try:
-        # codeql[py/path-injection] The resolved candidate is accepted only after an allowed-root containment check.
-        resolved = Path(stripped).expanduser().resolve()
+        expanded = os.path.expanduser(stripped)
+        if stripped.startswith("~") and expanded == stripped:
+            return None
+        resolved = os.path.realpath(expanded)
     except OSError:
         return None
-    if require_exists and not resolved.is_dir():
-        return None
     for root in allowed_roots:
-        if resolves_within_root(root, resolved, require_exists=require_exists):
-            return resolved
+        try:
+            root_path = os.path.realpath(root)
+        except (OSError, RuntimeError):
+            continue
+        if resolved == root_path:
+            return Path(root_path) if not require_exists or os.path.isdir(root_path) else None
+        if resolved.startswith(root_path.rstrip(os.sep) + os.sep):
+            return Path(resolved) if not require_exists or os.path.isdir(resolved) else None
     return None
 
 

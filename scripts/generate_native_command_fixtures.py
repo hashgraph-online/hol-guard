@@ -69,6 +69,28 @@ def main() -> None:
             "zsh -lc 'ollama push model'",
             "git status",
             "rm -rf /",
+            # VersionedPackageSubcommandMatcher: an npm-style @version/@tag
+            # suffix on the package token, and lookalikes that must not match.
+            "npx uivoid@latest create my-app",
+            "npx uivoid@1.2.3 create my-app",
+            "bunx uivoid@latest create my-app",
+            "npm exec uivoid@1.2.3 create my-app",
+            "pnpm exec uivoid@1.2.3 create my-app",
+            "pnpm dlx uivoid@latest create my-app",
+            "yarn dlx uivoid@latest create my-app",
+            "npx --yes uivoid@latest create my-app",
+            "npm exec --yes uivoid@1.2.3 create my-app",
+            "npx uivoid@latest login --token pat_abc123",
+            "npx uivoid@latest skill --install",
+            "NPX UIVOID@LATEST CREATE MY-APP",
+            "npx uivoidx@latest create my-app",
+            "npx @scope/uivoid@latest create my-app",
+            "npx not-uivoid create my-app",
+            "pnpm uivoid@latest create my-app",
+            "yarn uivoid@latest create my-app",
+            "npx uivoid@ create my-app",
+            "npm exec uivoid@ create my-app",
+            "pnpm dlx uivoid@ create my-app",
         }
     )
     fixtures = []

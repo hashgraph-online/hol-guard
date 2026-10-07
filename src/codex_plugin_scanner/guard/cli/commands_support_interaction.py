@@ -77,6 +77,17 @@ def _run_apps_command(
     if not harness:
         print("guard apps requires a harness.", file=sys.stderr)
         return 2
+    if apps_command == "repair" and (
+        bool(getattr(args, "restore_authority", False)) or getattr(args, "authority_request", None)
+        or getattr(args, "authority_request_sha256", None)
+        or getattr(args, "authority_deadline_epoch", None) is not None
+        or getattr(args, "authority_verification_workspace", None) is not None
+    ):
+        from .codex_authority_repair import run_codex_authority_repair
+
+        code, payload = run_codex_authority_repair(args, context, store, Path(workspace) if workspace else None)
+        _emit("apps", payload, getattr(args, "json", False))
+        return code
     if apps_command == "test":
         try:
             payload = build_harness_verification(harness, context, store, surface=getattr(args, "surface", None))
@@ -295,7 +306,7 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     harness = _canonical_harness_name(args.harness)
-    natives = {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode"}
+    natives = {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode", "devin"}
     return harness == "hermes" or (harness in natives and not getattr(args, "json", False))
 
 def _should_emit_claude_native_pretooluse_notice(
@@ -306,7 +317,6 @@ def _should_emit_claude_native_pretooluse_notice(
 ) -> bool:
     return (
         _canonical_harness_name(args.harness) == "claude-code"
-        and not getattr(args, "json", False)
         and event_name == "PreToolUse"
         and policy_action in {"review", "require-reapproval"}
     )
@@ -319,6 +329,8 @@ def _should_emit_native_hook_json_response(
 ) -> bool:
     harness = _canonical_harness_name(args.harness)
     if harness == "grok" and getattr(args, "json", False):
+        return True
+    if harness == "zcode" and getattr(args, "json", False):
         return True
     if harness == "codex" and getattr(args, "json", False) and event_name == "UserPromptSubmit":
         return True
@@ -336,7 +348,16 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     canonical = _canonical_harness_name(args.harness)
     compact_event = event_name.replace("_", "").replace("-", "").lower()
     blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and blocking:
+    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and blocking:
+        if canonical == "zcode":
+            from ..adapters.zcode_hooks import zcode_hook_process_exit
+
+            # ZCode turns exit code 2 into an unconditional deny and never
+            # parses the stdout JSON, so review-tier PreToolUse actions fall
+            # through to the JSON response path where
+            # ``permissionDecision: "ask"`` can reach ZCode's native
+            # permission prompt (and the process exits 0).
+            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name) == 2
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
@@ -354,8 +375,17 @@ def _codex_browser_approval_decision(
     expected_artifact_hash: str | None = None,
     fresh_context_provider: Callable[[], Mapping[str, object] | None] | None = None,
 ) -> str | None:
-    if browser_wait_bound is not True and not _codex_can_use_browser_approval(
-        args, event_name=event_name, policy_action=policy_action
+    if (
+        browser_wait_bound is not True
+        and not _codex_can_use_browser_approval(
+            args, event_name=event_name, policy_action=policy_action
+        )
+        and not (
+            daemon_client is not None
+            and _codex_json_bridge_can_use_browser_approval(
+                args, event_name=event_name, policy_action=policy_action
+            )
+        )
     ):
         return None
     request_ids = browser_wait.browser_wait_request_ids(response_payload, browser_wait_bound=browser_wait_bound)
@@ -488,6 +518,9 @@ def _codex_browser_exact_resolution_failure(
     expected_artifact_hash: str | None,
     expected_artifact_id: str | None = None,
 ) -> str | None:
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     resolved_by_id = {
         str(item.get("request_id")): item
         for item in resolved_items
@@ -546,12 +579,33 @@ def _codex_can_use_browser_approval(args: argparse.Namespace, *, event_name: str
         and policy_action in {"review", "require-reapproval"}
     )
 
+def _codex_json_bridge_can_use_browser_approval(
+    args: argparse.Namespace,
+    *,
+    event_name: str,
+    policy_action: str,
+) -> bool:
+    # --json output changes rendering, not approval semantics: when the hook
+    # already has an authenticated daemon bridge for the queued request, the
+    # wait/revalidation contract still applies — except for PreToolUse, where
+    # the deny document is the terminal answer and the caller retries the
+    # action after resolving the queued approval. A worker-spawned bridge
+    # (codex_browser_wait_process in the payload) still owns the PreToolUse
+    # wait through the dedicated branch in _codex_hook_waits_for_browser_approval.
+    return (
+        _canonical_harness_name(args.harness) == "codex"
+        and bool(getattr(args, "json", False))
+        and event_name in {"PostToolUse", "UserPromptSubmit"}
+        and policy_action in {"review", "require-reapproval"}
+    )
+
 def _codex_hook_waits_for_browser_approval(
     args: argparse.Namespace,
     *,
     event_name: str,
     policy_action: str,
     payload: Mapping[str, object] | None = None,
+    json_daemon_bridge: bool = False,
 ) -> bool:
     if (
         _canonical_harness_name(args.harness) == "codex"
@@ -560,7 +614,14 @@ def _codex_hook_waits_for_browser_approval(
         and _codex_bridge_wait_process(payload) is not None
     ):
         return True
-    return _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action)
+    return _codex_can_use_browser_approval(
+        args=args, event_name=event_name, policy_action=policy_action
+    ) or (
+        json_daemon_bridge
+        and _codex_json_bridge_can_use_browser_approval(
+            args, event_name=event_name, policy_action=policy_action
+        )
+    )
 
 def _codex_browser_wait_metadata(
     *,
@@ -569,6 +630,7 @@ def _codex_browser_wait_metadata(
     policy_action: str,
     config: GuardConfig,
     payload: Mapping[str, object] | None = None,
+    json_daemon_bridge: bool = False,
 ) -> dict[str, object]:
     bridge_wait_process = _codex_bridge_wait_process(payload)
     waits_for_browser = _codex_hook_waits_for_browser_approval(
@@ -576,6 +638,7 @@ def _codex_browser_wait_metadata(
         event_name=event_name,
         policy_action=policy_action,
         payload=payload,
+        json_daemon_bridge=json_daemon_bridge,
     )
     if not waits_for_browser:
         return {"codex_hook_waits_for_browser_approval": False}
@@ -745,7 +808,8 @@ __all__ = [
     "_codex_browser_wait_metadata",
     "_codex_browser_wait_timeout_seconds",
     "_codex_can_use_browser_approval",
-    "_codex_hook_waits_for_browser_approval", "_emit",
+    "_codex_hook_waits_for_browser_approval",
+    "_codex_json_bridge_can_use_browser_approval", "_emit",
     "_guard_cloud_app_error_payload", "_guard_cloud_app_urls", "_open_codex_live_approval",
     "_open_guard_cloud_app", "_policy_write_needs_approval_gate", "_policy_write_requires_approval_gate",
     "_preferred_approval_review_url", "_primary_approval_lookup_kwargs", "_record_harness_usage_for_hook",

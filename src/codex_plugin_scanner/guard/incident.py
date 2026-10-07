@@ -17,6 +17,7 @@ _HARNESS_LABELS = {
     "pi": "Pi",
     "omp": "Oh My Pi",
     "zcode": "ZCode",
+    "devin": "Devin",
     "grok": "Grok",
     "guard-cli": "Guard CLI",
 }

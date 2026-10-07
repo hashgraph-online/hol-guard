@@ -21,7 +21,10 @@ pub(super) fn compile_node(
 ) -> Result<Node, &'static str> {
     if matches!(
         node.op.as_str(),
-        "executable.v1" | "executable-path-set.v1" | "arguments.v1"
+        "executable.v1"
+            | "executable-path-set.v1"
+            | "arguments.v1"
+            | "versioned-package-subcommand.v1"
     ) && !ascii_configuration(&node.config)
     {
         return Err("native_command_ascii_configuration_required");
@@ -85,6 +88,9 @@ pub(super) fn compile_node(
                     serde_json::from_value(node.config)
                         .map_err(|_| "native_command_arguments_invalid")?,
                 ),
+                "versioned-package-subcommand.v1" => Matcher::VersionedPackageSubcommand(
+                    compile_versioned_package_subcommand(node.config)?,
+                ),
                 "leading-operand-count.v1"
                 | "subcommand-operand-prefix.v1"
                 | "option-value-key.v1"
@@ -104,6 +110,7 @@ pub(super) fn compile_node(
                 | "php-artisan-script.v1"
                 | "curl-elasticsearch-delete.v1"
                 | "repo2nb-expansion.v1"
+                | "tui-runner-expansion.v1"
                 | "reviewed-literal.v1" => {
                     Matcher::Specialized(SpecializedMatcher::from_config(operation, node.config)?)
                 }
@@ -126,15 +133,29 @@ pub(super) fn compile_node(
     })
 }
 
+fn compile_versioned_package_subcommand(
+    config: Value,
+) -> Result<VersionedPackageSubcommandNode, &'static str> {
+    let node: VersionedPackageSubcommandNode =
+        serde_json::from_value(config).map_err(|_| "native_command_versioned_package_invalid")?;
+    if node.executables.is_empty() || node.package.is_empty() || node.package.contains('@') {
+        return Err("native_command_versioned_package_invalid");
+    }
+    Ok(node)
+}
+
 fn compile_executable(operation: &str, mut config: Value) -> Result<ExecutableNode, &'static str> {
     let object = config
         .as_object_mut()
         .ok_or("native_command_executable_invalid")?;
     let mut paths: Vec<Vec<String>> = if operation == "executable.v1" {
+        // A missing `subcommands` list means the matcher applies to every
+        // invocation of the executable; the rendered unclassified fallback
+        // uses the same empty path for that semantic.
         vec![serde_json::from_value(
             object
                 .remove("subcommands")
-                .ok_or("native_command_subcommands_missing")?,
+                .unwrap_or_else(|| Value::Array(Vec::new())),
         )
         .map_err(|_| "native_command_subcommands_invalid")?]
     } else {

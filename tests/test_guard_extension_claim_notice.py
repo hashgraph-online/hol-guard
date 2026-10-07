@@ -11,7 +11,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/notify_merged_extension_claimants.py"
 WORKFLOW = ROOT / ".github/workflows/extension-claim-notice.yml"
-SCHEMA = ROOT / "contracts/extensions/listing.v1.schema.json"
+SCHEMA_V1 = ROOT / "contracts/extensions/listing.v1.schema.json"
+SCHEMA_V2 = ROOT / "contracts/extensions/listing.v2.schema.json"
 SPEC = importlib.util.spec_from_file_location("guard_extension_claim_notice", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -33,6 +34,22 @@ def listing(extension_id: str, ids: list[str]) -> dict[str, Any]:
     }
 
 
+def listing_v2(extension_id: str, ids: list[str]) -> dict[str, Any]:
+    result = listing(extension_id, ids)
+    result.update(
+        {
+            "schemaVersion": "guard.extension-listing.v2",
+            "summary": "Bounded public credit for the reviewed declarative extension contribution.",
+            "contributors": [{"githubId": "900", "githubLogin": "credit-author", "roles": ["author"]}],
+            "originalContributions": [
+                {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3020"}
+            ],
+            "upstream": {"name": "Example upstream", "url": "https://github.com/example/project"},
+        }
+    )
+    return result
+
+
 class FakeGitHub:
     def __init__(self) -> None:
         self.default_branch = "main"
@@ -46,6 +63,7 @@ class FakeGitHub:
         self.comment_rows: list[dict[str, Any]] = []
         self.logins: dict[str, str | None] = {}
         self.posted: list[tuple[int, str]] = []
+        self.updated: list[tuple[int, str]] = []
 
     def repo_metadata(self) -> dict[str, Any]:
         return {"default_branch": self.default_branch}
@@ -85,6 +103,9 @@ class FakeGitHub:
     def post_comment(self, number: int, body: str) -> None:
         self.posted.append((number, body))
 
+    def update_comment(self, comment_id: int, body: str) -> None:
+        self.updated.append((comment_id, body))
+
 
 def configure_new_contribution(
     client: FakeGitHub,
@@ -100,11 +121,20 @@ def configure_new_contribution(
         {"status": "added", "filename": listing_path},
     ]
     client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, listing_path)] = listing(extension_id, ids)
     # Current canonical state used by the delayed/backfill revalidation pass.
     client.file_payloads[(client.default_branch, listing_path)] = listing(
         extension_id, ids if tip_ids is None else tip_ids
     )
+
+
+def configure_unmapped_contribution(client: FakeGitHub, extension_id: str) -> str:
+    contribution_path = f"contributions/extensions/{extension_id}.json"
+    client.files = [{"status": "added", "filename": contribution_path}]
+    client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
+    return contribution_path
 
 
 def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
@@ -124,6 +154,15 @@ def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     assert "extension=command.example" not in body
     assert "PR author" not in body
     assert "runtime trust" in body
+    assert "## Claim your extension" in body
+    assert "continue with GitHub" in body
+    assert "public publisher page" in body
+    assert "launch story" in body
+    assert "setup guide and blog content" in body
+    assert "verified publisher badge toolkit" in body
+    assert "claiming alone does not publish" in body
+    assert "trust score" not in body
+    assert "installs" not in body
 
 
 def test_pr_authorship_never_creates_claim_authority() -> None:
@@ -131,6 +170,88 @@ def test_pr_authorship_never_creates_claim_authority() -> None:
     extension_id = "command.no-authority"
     client.files = [{"status": "added", "filename": f"contributions/extensions/{extension_id}.json"}]
     client.file_payloads[(MERGE_SHA, f"contributions/extensions/{extension_id}.json")] = {"schemaVersion": "v1"}
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_current_unmapped_contribution_gets_reviewed_mapping_instructions() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    body = client.posted[0][1]
+    assert MODULE.GUIDANCE_MARKER in body
+    assert "contributions/extension-listings/command.unmapped.json" in body
+    assert "publisher-metadata.md" in body
+    assert "?claim=" not in body
+    assert MODULE.MARKER not in body
+
+
+def test_updated_existing_unmapped_contribution_does_not_repeat_claim_guidance() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    client.file_payloads[(BEFORE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_guidance_is_idempotent_only_for_the_trusted_bot() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    client.comment_rows = [{"body": MODULE.GUIDANCE_MARKER, "user": {"id": 1234, "type": "User"}}]
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+
+    client.comment_rows.append(
+        {
+            "body": client.posted[0][1],
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    )
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+
+
+def test_removed_or_later_claimable_source_gets_no_stale_guidance() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    del client.file_payloads[(client.default_branch, contribution_path)]
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, "contributions/extension-listings/command.unmapped.json")] = listing(
+        "command.unmapped", ["100"]
+    )
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_empty_accepted_set_gets_guidance_without_a_claim_link() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    listing_path = "contributions/extension-listings/command.unmapped.json"
+    client.file_payloads[(MERGE_SHA, listing_path)] = listing("command.unmapped", [])
+    client.file_payloads[(client.default_branch, listing_path)] = listing("command.unmapped", [])
+    assert client.file_payloads[(client.default_branch, contribution_path)] is not None
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert "?claim=" not in client.posted[0][1]
+
+
+def test_invalid_current_listing_skips_guidance_without_a_claim_link() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    client.file_payloads[(client.default_branch, "contributions/extension-listings/command.unmapped.json")] = {
+        "schemaVersion": "invalid"
+    }
 
     assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
     assert client.posted == []
@@ -144,6 +265,7 @@ def test_listing_change_notifies_only_newly_accepted_ids() -> None:
     client.files = [{"status": "modified", "filename": listing_path}]
     client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(BEFORE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, listing_path)] = listing(extension_id, ["100", "200"])
     client.file_payloads[(BEFORE_SHA, listing_path)] = listing(extension_id, ["100"])
     client.file_payloads[(client.default_branch, listing_path)] = listing(extension_id, ["100", "200"])
@@ -178,14 +300,154 @@ def test_existing_marker_from_trusted_actions_identity_is_idempotent() -> None:
     assert client.posted == []
 
 
+def test_explicit_refresh_updates_only_existing_trusted_notice() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.refresh", ["400"])
+    client.logins = {"400": "reviewed-maintainer"}
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nOld notice",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True, dry_run=True) == 0
+    assert client.updated == []
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.posted == []
+    assert len(client.updated) == 1
+    assert client.updated[0][0] == 123
+    assert "@reviewed-maintainer" in client.updated[0][1]
+    assert "launch story" in client.updated[0][1]
+
+    client.comment_rows[0]["body"] = client.updated[0][1]
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert len(client.updated) == 1
+
+
+def test_refresh_rejects_trusted_comment_without_valid_id() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.refresh", ["400"])
+    client.comment_rows = [{"body": MODULE.MARKER, "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"}}]
+
+    with pytest.raises(MODULE.ClaimNoticeError, match="comment ID is invalid"):
+        MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True)
+
+
+def test_refresh_withdraws_link_after_claim_authority_is_removed() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.withdrawn", ["400"], tip_ids=[])
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\n[Old claim link](https://example.com)",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.posted == []
+    assert client.updated == [(123, MODULE.build_withdrawn_comment())]
+    assert "no longer current" in client.updated[0][1]
+    assert "?claim=" not in client.updated[0][1]
+
+
+def test_refresh_retains_existing_link_during_portal_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.portal-gated", ["400"])
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nOld claim notice",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+    monkeypatch.setattr(MODULE, "portal_readiness", lambda _url: ("provider_unavailable", "portal unreachable"))
+
+    assert (
+        MODULE.process(
+            client,
+            9,
+            MODULE.DEFAULT_STUDIO_URL,
+            refresh_existing=True,
+            portal_readiness_url="https://portal.example/ready",
+        )
+        == 0
+    )
+    assert client.posted == []
+    assert client.updated == []
+
+
+def test_refresh_does_not_withdraw_rename_backfill_without_opt_in() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.unmapped", [])
+    client.files.append(
+        {
+            "status": "renamed",
+            "filename": "contributions/extensions/command.renamed.json",
+            "previous_filename": "contributions/extensions/command.old.json",
+        }
+    )
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nEarlier rename claim link",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.updated == []
+
+
+def test_refresh_keeps_rename_link_when_another_extension_is_eligible() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.eligible", ["400"])
+    client.files.append(
+        {
+            "status": "renamed",
+            "filename": "contributions/extensions/command.renamed.json",
+            "previous_filename": "contributions/extensions/command.old.json",
+        }
+    )
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nEarlier rename claim link",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.updated == []
+
+
+def test_refresh_withdraws_link_after_native_contribution_is_removed() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.removed", ["400"])
+    client.file_payloads.pop((client.default_branch, "contributions/extensions/command.removed.json"))
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nEarlier claim link",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.updated == [(123, MODULE.build_withdrawn_comment())]
+
+
 def test_contributor_cannot_spoof_notice_marker() -> None:
     client = FakeGitHub()
     configure_new_contribution(client, "command.marker-spoof", ["400"])
     client.logins = {"400": "real-maintainer"}
     client.comment_rows = [{"body": MODULE.MARKER, "user": {"id": 1234, "type": "User"}}]
 
-    assert MODULE.process(client, 13, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert MODULE.process(client, 13, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
     assert len(client.posted) == 1
+    assert client.updated == []
 
 
 def test_renamed_contributions_require_explicit_maintainer_backfill() -> None:
@@ -203,6 +465,7 @@ def test_renamed_contributions_require_explicit_maintainer_backfill() -> None:
     client.file_payloads[(BEFORE_SHA, old_contribution)] = {"schemaVersion": "v1"}
     client.file_payloads[(BEFORE_SHA, old_listing)] = listing(old_id, ["700"])
     client.file_payloads[(MERGE_SHA, new_contribution)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, new_contribution)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, new_listing)] = listing(new_id, ["700"])
     client.file_payloads[(client.default_branch, new_listing)] = listing(new_id, ["700"])
     client.logins = {"700": "renamed-maintainer"}
@@ -255,14 +518,30 @@ def test_non_ascii_and_duplicate_github_ids_fail_closed() -> None:
         MODULE.accepted_github_ids(listing(extension_id, ["600", "600"]), extension_id)
 
 
+def test_v2_credit_never_becomes_claim_authority() -> None:
+    extension_id = "command.v2-credit"
+    v2 = listing_v2(extension_id, [])
+    assert MODULE.accepted_github_ids(v2, extension_id) == ()
+    v2["maintainerGithubIds"] = ["500"]
+    assert MODULE.accepted_github_ids(v2, extension_id) == ("500",)
+
+
+def test_v2_credit_contract_fails_closed() -> None:
+    v2 = listing_v2("command.invalid-v2-credit", ["500"])
+    v2["contributors"] = [{"githubId": "900", "githubLogin": "credit-author", "roles": ["owner"]}]
+    with pytest.raises(MODULE.ClaimNoticeError, match="contributor roles are invalid"):
+        MODULE.accepted_github_ids(v2, "command.invalid-v2-credit")
+
+
 def test_worker_authority_constants_match_public_schema() -> None:
-    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-    required = frozenset(schema["required"])
-    allowed = frozenset(schema["properties"])
-    categories = frozenset(schema["properties"]["category"]["enum"])
-    github_id_pattern = schema["properties"]["maintainerGithubIds"]["items"]["pattern"]
-    assert required == MODULE.LISTING_REQUIRED_KEYS
-    assert allowed == MODULE.LISTING_ALLOWED_KEYS
+    v1 = json.loads(SCHEMA_V1.read_text(encoding="utf-8"))
+    v2 = json.loads(SCHEMA_V2.read_text(encoding="utf-8"))
+    categories = frozenset(v1["properties"]["category"]["enum"])
+    github_id_pattern = v1["properties"]["maintainerGithubIds"]["items"]["pattern"]
+    assert frozenset(v1["required"]) == MODULE.LISTING_REQUIRED_KEYS
+    assert frozenset(v1["properties"]) == MODULE.LISTING_ALLOWED_KEYS
+    assert frozenset(v2["required"]) == MODULE.LISTING_V2_REQUIRED_KEYS
+    assert frozenset(v2["properties"]) == MODULE.LISTING_V2_ALLOWED_KEYS
     assert categories == MODULE.LISTING_CATEGORIES
     assert github_id_pattern == MODULE.GITHUB_ID_RE.pattern
 
@@ -311,12 +590,14 @@ def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
     assert "pr_number:" in text
     assert "allow_renames:" in text
     assert "dry_run:" in text
+    assert "refresh_existing:" in text
     assert "contributions/extension-listings/**" in text
     assert "pull-requests: write" in text
     assert "issues: write" not in text
     assert "persist-credentials: false" in text
     assert "--allow-renames" in text
     assert "--dry-run" in text
+    assert "--refresh-existing" in text
     assert "notify_merged_extension_claimants.py" in text
     assert "https://hol.org/guard/extension-studio" in text
 
@@ -397,6 +678,59 @@ def test_readiness_report_types_empty_mapping_as_no_mapping() -> None:
     assert report["entries"] == [{"extensionId": "command.empty-authority", "status": "no_mapping", "notifiedIds": []}]
 
 
+def test_readiness_report_maps_github_api_errors_to_provider_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+
+    def api_failure(number: int) -> list[dict[str, Any]]:
+        raise MODULE.ClaimNoticeError("GitHub API request failed")
+
+    monkeypatch.setattr(client, "comments", api_failure)
+    report = MODULE.readiness_report(client, 38)
+
+    assert report["prStatus"] == "provider_unavailable"
+    assert report["detail"] == "GitHub API request failed"
+    assert report["entries"] == []
+
+
+def test_readiness_report_reraises_non_api_claim_notice_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+
+    def invalid_provenance(number: int) -> list[dict[str, Any]]:
+        raise MODULE.ClaimNoticeError("invalid comment provenance")
+
+    monkeypatch.setattr(client, "comments", invalid_provenance)
+    with pytest.raises(MODULE.ClaimNoticeError, match="invalid comment provenance"):
+        MODULE.readiness_report(client, 39)
+
+
+def test_readiness_report_uses_first_entry_for_mixed_noneligible_statuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakeGitHub()
+
+    def mixed_statuses(
+        _client: Any,
+        _pr_number: int,
+        *,
+        allow_renames: bool = False,
+        records: list[Any] | None = None,
+    ) -> tuple[list[Any], str, bool]:
+        assert records is not None
+        records.extend(
+            [
+                MODULE.ExtensionReadiness("command.source-not-current", "source_not_current"),
+                MODULE.ExtensionReadiness("command.no-mapping", "no_mapping"),
+            ]
+        )
+        return [], "source_not_current", False
+
+    monkeypatch.setattr(MODULE, "_plan_notice_items", mixed_statuses)
+    report = MODULE.readiness_report(client, 40)
+
+    assert [entry["status"] for entry in report["entries"]] == ["source_not_current", "no_mapping"]
+    assert report["prStatus"] == "source_not_current"
+
+
 def test_readiness_report_reports_eligible_entry_and_portal_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     client = FakeGitHub()
     configure_new_contribution(client, "command.ready", ["600"])
@@ -459,6 +793,38 @@ def test_process_never_posts_when_configured_portal_is_not_ready(monkeypatch: py
         == 0
     )
     assert client.posted == []
+
+
+def test_portal_outage_does_not_suppress_mapping_guidance(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    monkeypatch.setattr(MODULE, "portal_readiness", lambda _url: ("portal_not_ready", "projection is stale"))
+
+    assert (
+        MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL, portal_readiness_url="https://portal.example/ready") == 0
+    )
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert MODULE.MARKER not in client.posted[0][1]
+
+
+def test_account_lookup_failure_does_not_suppress_mapping_guidance(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.mapped", ["800"])
+    unmapped_path = "contributions/extensions/command.unmapped.json"
+    client.files.append({"status": "added", "filename": unmapped_path})
+    client.file_payloads[(MERGE_SHA, unmapped_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, unmapped_path)] = {"schemaVersion": "v1"}
+
+    def lookup_failure(_account_id: str) -> str | None:
+        raise MODULE.ClaimNoticeError("GitHub API request failed")
+
+    monkeypatch.setattr(client, "user_login", lookup_failure)
+    with pytest.raises(MODULE.ClaimNoticeError, match="GitHub API request failed"):
+        MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL)
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert MODULE.MARKER not in client.posted[0][1]
 
 
 def test_trusted_marker_marks_readiness_already_notified() -> None:
@@ -542,11 +908,29 @@ def test_portal_readiness_maps_transport_failures_without_claiming_ready(monkeyp
     monkeypatch.setattr(MODULE.urllib.request, "urlopen", not_affirming)
     assert MODULE.portal_readiness("https://portal.example/ready")[0] == "portal_not_ready"
 
+    def non_200(req: object, timeout: float) -> Response:
+        return Response(b'{"ok": true}', status=202)
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", non_200)
+    assert MODULE.portal_readiness("https://portal.example/ready") == (
+        "portal_not_ready",
+        "portal returned HTTP 202",
+    )
+
     def http_error(req: object, timeout: float) -> Response:
         raise urllib.error.HTTPError(req.url if hasattr(req, "url") else "x", 503, "unavailable", None, None)  # type: ignore[arg-type]
 
     monkeypatch.setattr(MODULE.urllib.request, "urlopen", http_error)
     assert MODULE.portal_readiness("https://portal.example/ready")[0] == "provider_unavailable"
+
+    def http_not_found(req: object, timeout: float) -> Response:
+        raise urllib.error.HTTPError(req.url if hasattr(req, "url") else "x", 404, "not found", None, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", http_not_found)
+    assert MODULE.portal_readiness("https://portal.example/ready") == (
+        "portal_not_ready",
+        "portal returned HTTP 404",
+    )
 
     def os_error(req: object, timeout: float) -> Response:
         raise OSError("connection refused")
