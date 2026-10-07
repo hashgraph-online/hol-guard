@@ -231,3 +231,66 @@ def test_doctor_can_report_protected_after_linux_local_vault_repair(
     assert resolved.mode == "protected"
     assert resolved.trust_status.runtime_protection == "protected"
     assert resolved.trust_status.remembered_rules == "enforced"
+
+
+class _NoLogonSessionError(OSError):
+    winerror = 1312
+
+
+class _SessionlessWindowsKeyring:
+    """Credential Manager as seen from an OpenSSH key-authenticated logon."""
+
+    @staticmethod
+    def get_password(_service: str, _secret_id: str) -> str | None:
+        raise _NoLogonSessionError("A specified logon session does not exist.")
+
+    @staticmethod
+    def set_password(_service: str, _secret_id: str, _value: str) -> None:
+        raise _NoLogonSessionError("A specified logon session does not exist.")
+
+    @staticmethod
+    def delete_password(_service: str, _secret_id: str) -> None:
+        raise _NoLogonSessionError("A specified logon session does not exist.")
+
+
+def test_windows_session_without_credential_manager_uses_local_vault(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(policy_integrity_backend_module.sys, "platform", "win32", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: True))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_load_keyring_module_or_none",
+        classmethod(lambda cls: _SessionlessWindowsKeyring),
+    )
+
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
+
+    repaired = store.setup_policy_integrity(now="2026-10-07T20:00:00Z", include_items=False)
+
+    assert repaired["mode"] == "protected"
+    assert secret_store.fallback.get_secret(store._policy_integrity_key_ref) is not None
+    raw_key, key_id = store._policy_integrity_secret_material(create=False)
+    assert raw_key is not None and key_id is not None
+
+
+def test_windows_credential_manager_errors_other_than_missing_session_still_raise(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(policy_integrity_backend_module.sys, "platform", "win32", raising=False)
+    primary = SystemKeyringSecretStore(service_name="hol-guard.test")
+    fallback = EncryptedFileSecretStore(tmp_path)
+
+    def denied(_service: str, _secret_id: str, _value: str) -> None:
+        raise PermissionError("access denied")
+
+    keyring = type("DeniedKeyring", (), {"set_password": staticmethod(denied)})
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module_or_none", classmethod(lambda cls: keyring))
+
+    with pytest.raises(PermissionError, match="access denied"):
+        MirroredPolicyIntegritySecretStore(primary, fallback).set_secret("integrity-key", "new")
+    assert fallback.get_secret("integrity-key") is None

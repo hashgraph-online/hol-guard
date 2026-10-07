@@ -299,6 +299,9 @@ class StoreSecretPolicyIntegrityMixin:
 
     @staticmethod
     def _policy_integrity_secret_store_is_unavailable(secret_store: SecretStore | None) -> bool:
+        if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
+            # Its local vault holds the key when the session cannot open the keyring.
+            return False
         if isinstance(secret_store, SystemKeyringSecretStore):
             return secret_store._is_unavailable()
         if isinstance(secret_store, FallbackSecretStore):
@@ -421,6 +424,12 @@ class StoreSecretPolicyIntegrityMixin:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             return "unavailable"
+        if (
+            isinstance(secret_store, MirroredPolicyIntegritySecretStore)
+            and isinstance(secret_store.primary, SystemKeyringSecretStore)
+            and secret_store.primary._is_unavailable()
+        ):
+            return _secret_store_backend_name(secret_store.fallback)
         return _secret_store_backend_name(secret_store)
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:

@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.store import (
     _build_oauth_secret_store,
 )
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord
+from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
@@ -250,7 +251,7 @@ def test_windows_keyring_non_session_error_is_not_swallowed(monkeypatch: pytest.
     assert not store._is_unavailable()
 
 
-def test_windows_policy_integrity_keyring_write_session_failure_degrades_until_retry(
+def test_windows_policy_integrity_keyring_write_session_failure_uses_local_vault(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -269,31 +270,32 @@ def test_windows_policy_integrity_keyring_write_session_failure_degrades_until_r
 
     with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.store"):
         store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-        degraded = store.setup_policy_integrity(
+        sessionless = store.setup_policy_integrity(
             now="2026-09-13T21:00:00Z",
             include_items=False,
         )
 
-    assert degraded["backend"] == "unavailable"
-    assert degraded["mode"] == "degraded"
-    assert degraded["degraded_reasons"] == [
-        "system_keyring_unavailable",
-        "policy_integrity_control_unavailable",
-    ]
-    assert store._policy_integrity_secret_store._is_unavailable()
+    assert sessionless["backend"] == "encrypted-file"
+    assert sessionless["mode"] == "protected"
+    assert sessionless["degraded_reasons"] == []
     assert "1312" not in caplog.text
     assert "logon session" not in caplog.text
+    key_ref = store._policy_integrity_key_ref
+    vault_key = store._policy_integrity_secret_store.fallback.get_secret(key_ref)
+    assert vault_key is not None
+    assert module._secrets == {}
 
+    # A later interactive session keeps the vault key instead of minting another.
     writes_available = True
-    recovered = store.setup_policy_integrity(
+    interactive = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    recovered = interactive.setup_policy_integrity(
         now="2026-09-13T21:01:00Z",
         include_items=False,
     )
 
-    assert recovered["backend"] == "system-keyring"
     assert recovered["mode"] == "protected"
     assert recovered["degraded_reasons"] == []
-    assert not store._policy_integrity_secret_store._is_unavailable()
+    assert interactive._policy_integrity_secret_store.get_secret(key_ref) == vault_key
 
 
 def test_windows_policy_integrity_uses_accessible_system_keyring(
@@ -309,7 +311,9 @@ def test_windows_policy_integrity_uses_accessible_system_keyring(
         prime_policy_integrity=False,
     )
 
-    assert isinstance(store._policy_integrity_secret_store, SystemKeyringSecretStore)
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
+    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
     state = store.setup_policy_integrity(now="2026-09-13T21:00:00Z", include_items=False)
 
     assert state["backend"] == "system-keyring"
