@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 
 use guard_contracts::write_canonical_json;
 use serde_json::{json, Map, Value};
+#[cfg(test)]
 use sha2::{Digest, Sha256};
 
 use crate::command_tokens::executable_name;
@@ -268,7 +269,7 @@ fn cached_executable_hash(
     if opened_stat.size() > MAX_EXECUTABLE_HASH_BYTES {
         return (None, "too_large", None, "unverified");
     }
-    let mut digest = Sha256::new();
+    let mut digest = ring::digest::Context::new(&ring::digest::SHA256);
     let mut prefix: Vec<u8> = Vec::new();
     let mut total: u64 = 0;
     let mut reader = file;
@@ -301,7 +302,7 @@ fn cached_executable_hash(
     }
     let (shebang, shebang_status) = parse_executable_shebang(&prefix);
     (
-        Some(hex::encode(digest.finalize())),
+        Some(hex::encode(digest.finish().as_ref())),
         "verified",
         shebang,
         shebang_status,
