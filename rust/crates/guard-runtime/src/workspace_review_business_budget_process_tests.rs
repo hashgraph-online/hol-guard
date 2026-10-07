@@ -85,8 +85,14 @@ fn wait_for(path: &Path) {
 #[test]
 #[ignore = "subprocess entry invoked only by independent_processes_share_one_allowance"]
 fn reservation_child() {
-    let root = PathBuf::from(std::env::var_os("HOL_BUDGET_TEST_ROOT").unwrap());
-    let id = std::env::var("HOL_BUDGET_TEST_CHILD").unwrap();
+    let (root, id) = match (
+        std::env::var_os("HOL_BUDGET_TEST_ROOT"),
+        std::env::var("HOL_BUDGET_TEST_CHILD"),
+    ) {
+        (None, Err(std::env::VarError::NotPresent)) => return,
+        (Some(root), Ok(id)) => (PathBuf::from(root), id),
+        _ => panic!("budget subprocess requires both fixture variables"),
+    };
     assert!(matches!(id.as_str(), "left" | "right"));
     let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
     let now = store.current_snapshot().unwrap().issued_at_ms + 1;
