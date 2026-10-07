@@ -190,14 +190,43 @@ fn identity(metadata: &Metadata) -> FileIdentity {
     }
 }
 
+/// Identity of the regular file at `path`, which must have exactly one
+/// directory entry.
+#[cfg(windows)]
+fn windows_file_id(
+    path: &Path,
+    follow_leaf: bool,
+) -> Result<guard_runtime_windows_process::FileId, SecureReadError> {
+    let (id, links) = guard_runtime_windows_process::regular_file_id(path, follow_leaf)
+        .map_err(|_| SecureReadError::ReadFailed)?;
+    if links != 1 {
+        return Err(SecureReadError::HardLinkedFile);
+    }
+    Ok(id)
+}
+
+/// Reject a handle that reached a different file from the one inspected.
+#[cfg(windows)]
+fn ensure_windows_handle_is(
+    file: &fs::File,
+    expected: guard_runtime_windows_process::FileId,
+) -> Result<(), SecureReadError> {
+    let opened = guard_runtime_windows_process::handle_file_id(file)
+        .map_err(|_| SecureReadError::ReadFailed)?;
+    if opened != expected {
+        return Err(SecureReadError::Changed);
+    }
+    Ok(())
+}
+
 fn map_secure_open_error(error: SecureOpenError) -> SecureReadError {
     match error {
         SecureOpenError::PathChanged => SecureReadError::PathChanged,
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         SecureOpenError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
             SecureReadError::PermissionDenied
         }
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         SecureOpenError::Io(_) => SecureReadError::ReadFailed,
     }
 }
@@ -227,8 +256,12 @@ pub fn open_immutable_blob(path: &Path) -> Result<SecureBlob, SecureReadError> {
             return Err(SecureReadError::MutableLeaf);
         }
     }
+    #[cfg(windows)]
+    let leaf_id = windows_file_id(path, false)?;
     let canonical = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
     let file = secure_open(path, &canonical).map_err(map_secure_open_error)?;
+    #[cfg(windows)]
+    ensure_windows_handle_is(&file, leaf_id)?;
     let live = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
     if !live.is_file() {
         return Err(SecureReadError::NotRegularFile);
@@ -309,11 +342,15 @@ pub fn read_stable(
     }
 
     let source_before = checked_metadata(path, allow_leaf_symlink)?;
+    #[cfg(windows)]
+    let source_id = windows_file_id(path, allow_leaf_symlink)?;
     if source_before.len() > max_bytes as u64 {
         return Err(SecureReadError::TooLarge);
     }
     let canonical_before = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
     let mut file = secure_open(path, &canonical_before).map_err(map_secure_open_error)?;
+    #[cfg(windows)]
+    ensure_windows_handle_is(&file, source_id)?;
     let descriptor_before = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
     if !unchanged(&source_before, &descriptor_before) {
         return Err(SecureReadError::Changed);
@@ -329,6 +366,10 @@ pub fn read_stable(
     }
     let descriptor_after = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
     let source_after = checked_metadata(path, allow_leaf_symlink)?;
+    #[cfg(windows)]
+    if windows_file_id(path, allow_leaf_symlink)? != source_id {
+        return Err(SecureReadError::Changed);
+    }
     if bytes.len() as u64 != source_before.len()
         || !unchanged(&descriptor_before, &descriptor_after)
         || !unchanged(&source_before, &source_after)

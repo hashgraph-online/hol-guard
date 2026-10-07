@@ -41,7 +41,10 @@ def host_target() -> str:
 
 def verify_archive(path: Path, target: str) -> None:
     with path.open("rb") as handle:
-        actual = hashlib.file_digest(handle, "sha256").hexdigest()
+        digest = hashlib.sha256()
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+        actual = digest.hexdigest()
     if actual != CHECKSUMS[target]:
         raise RuntimeError(f"nextest archive checksum mismatch: {path} (got {actual})")
 

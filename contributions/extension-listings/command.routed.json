@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.routed",
+  "tagline": "Reviewed HOL Guard coverage for Routed host adapter and lifecycle commands.",
+  "summary": "Reviews host adapter changes, environment reconciliation, and updates through the Routed CLI.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://github.com/bshea-1/routed",
+  "tags": [
+    "routed",
+    "cli",
+    "adapters",
+    "safety"
+  ],
+  "contributors": [
+    {
+      "githubId": "202353692",
+      "githubLogin": "bshea-1",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3084"
+    }
+  ],
+  "upstream": {
+    "name": "Routed",
+    "url": "https://github.com/bshea-1/routed"
+  },
+  "maintainerGithubIds": []
+}

@@ -36,15 +36,18 @@ const MAX_NODES: usize = 16_384;
 const MAX_DEPTH: usize = 32;
 const MATCH_DETAIL: &str = "Matched bounded structured command constraints.";
 #[cfg(not(guard_source_bootstrap))]
-const EMBEDDED_PROGRAM: &[u8] =
+static EMBEDDED_PROGRAM: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/native-command-program.v1.json"));
 // Only the host build dependency has no packaged default. It compiles supplied
 // sources; attempts to evaluate a default fail closed through normal admission.
 #[cfg(guard_source_bootstrap)]
-const EMBEDDED_PROGRAM: &[u8] = &[];
+static EMBEDDED_PROGRAM: &[u8] = &[];
 
 /// The exact program admitted by the runtime, also used for rule attestation.
-pub const fn packaged_command_program_bytes() -> &'static [u8] {
+// One shared allocation and accessor keep multi-megabyte data out of caller
+// codegen units. Constant propagation otherwise emits redundant binary copies.
+#[inline(never)]
+pub fn packaged_command_program_bytes() -> &'static [u8] {
     EMBEDDED_PROGRAM
 }
 
@@ -216,7 +219,10 @@ pub struct NativeCommandProgram {
 pub fn packaged_command_program() -> Result<Arc<NativeCommandProgram>, &'static str> {
     static PROGRAM: OnceLock<Result<Arc<NativeCommandProgram>, &'static str>> = OnceLock::new();
     PROGRAM
-        .get_or_init(|| NativeCommandProgram::from_packaged_bytes(EMBEDDED_PROGRAM).map(Arc::new))
+        .get_or_init(|| {
+            NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())
+                .map(Arc::new)
+        })
         .clone()
 }
 
