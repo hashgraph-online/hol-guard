@@ -78,3 +78,6 @@ ci/pi-exact-continuation/node_modules/
 native-dist/
 source-build.json
 source-compiled.json
+
+# Gradle build caches created by fixture runs
+tests/fixtures/tier2/*/.gradle/
