@@ -10,9 +10,7 @@ use guard_contracts::{
     NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
 };
 
-use crate::native_command_program::{
-    digest_value, packaged_command_program, NativeCommandProgram, ProgramRule,
-};
+use crate::native_command_program::{digest_value, packaged_command_program, NativeCommandProgram};
 use crate::CanonicalCommandV1;
 
 #[derive(Debug)]
@@ -258,10 +256,33 @@ impl CompiledNativeCommandControls {
         } else {
             "native_command_extension_review"
         };
+        // An uncertain observation may belong to any of its candidate owners,
+        // so it takes the strongest of their floors and never less than review.
+        let mut uncertain_floor: Option<&'static str> = None;
         for observation in &batch.observations {
             if !observation.uncertainty_reasons.is_empty() {
-                floor = "block";
-                reason = "native_command_extension_uncertain";
+                let candidate = match self.rule_indices.get(&observation.rule_id) {
+                    Some(index) => {
+                        let rule = &self.program.rules[*index];
+                        if self
+                            .explicitly_enabled_permissions
+                            .contains(&rule.permission_id)
+                        {
+                            "review"
+                        } else {
+                            rule_floor(rule, self.program.extensions[rule.extension_index].required)
+                        }
+                    }
+                    None => "block",
+                };
+                let candidate = if rank(candidate) < rank("review") {
+                    "review"
+                } else {
+                    candidate
+                };
+                if uncertain_floor.is_none_or(|current| rank(candidate) > rank(current)) {
+                    uncertain_floor = Some(candidate);
+                }
             }
             if self.blocked_extensions.contains(&observation.extension_id) {
                 floor = "block";
@@ -292,9 +313,9 @@ impl CompiledNativeCommandControls {
             }
         }
         for observation in &batch.permission_observations {
+            // A ruleless permission has no declared floor to bound uncertainty.
             if !observation.uncertainty_reasons.is_empty() {
-                floor = "block";
-                reason = "native_command_extension_uncertain";
+                uncertain_floor = Some("block");
             }
             if self.blocked_extensions.contains(&observation.extension_id)
                 || self
@@ -303,6 +324,12 @@ impl CompiledNativeCommandControls {
             {
                 floor = "block";
                 reason = "native_command_permission_disabled";
+            }
+        }
+        if let Some(candidate) = uncertain_floor {
+            if rank(candidate) > rank(floor) {
+                floor = candidate;
+                reason = "native_command_extension_uncertain";
             }
         }
         let observations_digest =
@@ -424,62 +451,22 @@ impl CompiledNativeCommandControls {
 mod delegated;
 pub(crate) use delegated::normalized_tool;
 
-fn rule_floor(rule: &ProgramRule, required: bool) -> &'static str {
-    if rule.is_compatibility_attribution_only() {
-        return "allow";
-    }
-    if required {
-        return if rule.severity == "critical" {
-            "block"
-        } else {
-            "review"
-        };
-    }
-    match rule.default_mode.as_str() {
-        "disabled" => "allow",
-        "monitor" => "warn",
-        "review" | "required" => "review",
-        _ => "block",
-    }
-}
-
-fn rank(action: &str) -> u8 {
-    match action {
-        "allow" => 0,
-        "warn" => 1,
-        "review" => 2,
-        "require-reapproval" => 3,
-        "sandbox-required" => 4,
-        _ => 5,
-    }
-}
-
-fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &str) {
-    if rank(action) > rank(&result.minimum_action) {
-        result.minimum_action = action.to_owned();
-        result.policy_action = action.to_owned();
-        result.decision = if matches!(action, "allow" | "warn") {
-            "allow"
-        } else {
-            "deny"
-        }
-        .to_owned();
-        result.explicitly_benign = action == "allow";
-        result.reason_code = reason.to_owned();
-        result.reason = match reason {
-            "native_command_extension_evaluation_failed" => {
-                "HOL Guard could not evaluate the extension controls for this command. Check Guard diagnostics before retrying."
-            }
-            _ => "HOL Guard requires the native command extension policy before this action can execute.",
-        }
-        .to_owned();
-    }
-}
+#[path = "native_command_controls_floor.rs"]
+mod floor;
+use floor::{rank, rule_floor, strengthen};
 
 #[cfg(test)]
 #[path = "native_command_controls_tests.rs"]
 mod review_regressions;
 
 #[cfg(test)]
+#[path = "native_command_uncertainty_tests.rs"]
+mod uncertainty_regressions;
+
+#[cfg(test)]
 #[path = "native_command_compound_controls_tests.rs"]
 mod compound_regressions;
+
+#[cfg(test)]
+#[path = "native_command_script_controls_tests.rs"]
+mod script_regressions;

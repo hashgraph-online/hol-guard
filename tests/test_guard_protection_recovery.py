@@ -142,7 +142,7 @@ def test_repair_restores_missing_grok_managed_config_when_hooks_already_intercep
     _write_intercepting_grok_hooks(ctx)
     store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
     store.set_managed_install("grok", True, None, {"harness": "grok", "active": True}, "2026-08-17T12:00:00+00:00")
-    managed = ctx.home_dir / ".grok" / "managed_config.toml"
+    managed = ctx.home_dir / ".grok" / "config.toml"
     assert managed.is_file() is False
     assert grok_hooks_protection_ready(ctx) is False
     assert grok_runtime_hooks_verified(ctx) is True
@@ -266,21 +266,25 @@ def test_grok_hook_command_rejects_placeholder_invocations(tmp_path: Path) -> No
     assert _grok_hook_command_is_guard("true") is False
 
 
-def test_grok_managed_config_rejects_inline_commented_rule() -> None:
+def test_grok_managed_config_rejects_inline_commented_rule(tmp_path: Path) -> None:
+    import tomlkit
+
+    from codex_plugin_scanner.guard.adapters.grok_user_config import prepare_user_config_text
+
+    context = _ctx(tmp_path)
+    command = _shell_command(GrokHarnessAdapter._hook_command_parts(context))
+    valid, _ = prepare_user_config_text("", command, previous_state={})
+    assert _grok_managed_config_is_active(valid, context) is True
     assert (
         _grok_managed_config_is_active(
             "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
             'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n'
         )
-        is True
-    )
-    assert (
-        _grok_managed_config_is_active(
-            "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
-            "deny = [] # Read(**/.grok/auth/**)\n# END HOL GUARD MANAGED GROK\n"
-        )
         is False
     )
+    document = tomlkit.parse(valid)
+    document["permission"]["deny"] = tomlkit.array().comment("Read(**/.grok/auth/**)")
+    assert _grok_managed_config_is_active(tomlkit.dumps(document), context) is False
 
 
 def test_live_grok_hooks_reject_placeholder_command_and_marker_only_config(
@@ -366,10 +370,11 @@ def test_grok_install_proof_covers_hooks_and_managed_config(
     assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": True}
     artifacts = manifest["protection_artifact_proof"]["artifacts"]
     assert isinstance(artifacts, list)
-    artifact_paths = {item["path"] for item in artifacts if isinstance(item, dict)}
-    assert any(path.endswith("managed_config.toml") for path in artifact_paths)
-    assert any(path.endswith("hol-guard-pretooluse.json") for path in artifact_paths)
-    assert any(path.endswith("hol-guard-prompt.json") for path in artifact_paths)
+    artifact_paths = {Path(item["path"]) for item in artifacts if isinstance(item, dict)}
+    grok_home = (ctx.home_dir / ".grok").resolve()
+    assert grok_home / "config.toml" in artifact_paths
+    assert grok_home / "hooks" / "hol-guard-pretooluse.json" in artifact_paths
+    assert grok_home / "hooks" / "hol-guard-prompt.json" in artifact_paths
 
 
 def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
@@ -382,7 +387,7 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
     apply_managed_install("install", "grok", False, ctx, store, None, "2026-08-17T12:00:00+00:00")
     pretool = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
     pretool.write_text(json.dumps(_stale_pretool_payload()), encoding="utf-8")
-    (ctx.home_dir / ".grok" / "managed_config.toml").unlink()
+    (ctx.home_dir / ".grok" / "config.toml").unlink()
     store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
     store.record_command_activity_persistence_failure(error_code="shadow_evaluation_failed", occurred_at=_NOW)
     store.record_command_activity_persistence_failure(error_code="maintenance_failed", occurred_at=_NOW)
@@ -407,7 +412,7 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
     assert grok_hooks_protection_ready(ctx) is True
     assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": True}
     assert store.get_command_activity_persistence_health().active_error_count == 0
-    assert (ctx.home_dir / ".grok" / "managed_config.toml").is_file()
+    assert (ctx.home_dir / ".grok" / "config.toml").is_file()
     assert "matcher" not in json.loads(pretool.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]
 
 
@@ -438,7 +443,7 @@ def test_daemon_ownership_change_repairs_stale_managed_grok_hooks(
     apply_managed_install("install", "grok", False, ctx, store, None, "2026-08-17T12:00:00+00:00")
     pretool = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
     pretool.write_text(json.dumps(_stale_pretool_payload()), encoding="utf-8")
-    (ctx.home_dir / ".grok" / "managed_config.toml").unlink()
+    (ctx.home_dir / ".grok" / "config.toml").unlink()
     assert grok_hooks_protection_ready(ctx) is False
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

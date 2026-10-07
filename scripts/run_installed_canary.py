@@ -32,7 +32,7 @@ _FROZEN_MANIFEST_SHA256 = "9cb33472d122058e8ede6ede57d55d0ebf29b832f8b4eb5321a23
 # These counts belong to the source-bound 51k corpus validated by the manifest above.
 _FROZEN_CORPUS_CASE_COUNT = 51_000
 _FROZEN_NATIVE_REJECTION_COUNT = 27_084
-_FROZEN_ORACLE_ABOVE_COUNT = 11_558
+_FROZEN_ORACLE_ABOVE_COUNT = 10_541
 
 
 def _sha256(path: Path) -> str:
@@ -242,9 +242,14 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             encoding="utf-8",
             timeout=30,
         )
-        if completed.returncode != 0:
+        # A correctly-disabled harness emits a deny payload AND a fail-closed
+        # nonzero rc (the generic/CLI contract for `policy_action:"block"`).
+        # rc=0 would read the denial as allow to a shell harness — the exact
+        # fail-open regression the verdict-derived rc fix removes.
+        if completed.returncode == 0:
             raise InstalledCanaryError(
-                f"Installed no-post-proof hook returned {completed.returncode}, expected prompt-free continuation"
+                "Installed no-post-proof hook returned 0 despite emitting a block payload; "
+                "fail-closed rc is required so the deny is not read as allow"
             )
         response = json.loads(completed.stdout)
         hook_output = response.get("hookSpecificOutput") if isinstance(response, dict) else None

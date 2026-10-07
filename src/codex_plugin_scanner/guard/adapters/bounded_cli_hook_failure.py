@@ -10,16 +10,31 @@ from ..daemon.hook_availability_policy import (
 _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
 
 
+def grok_observe_event(harness: str, event_name: str) -> bool:
+    compact = event_name.strip().lower().replace("_", "").replace("-", "")
+    return harness == "grok" and compact in {
+        "sessionstart",
+        "sessionend",
+        "subagentstart",
+        "subagentstop",
+        "posttooluse",
+        "permissiondenied",
+    }
+
+
 def _is_permission_event(event_name: str) -> bool:
     return hook_event_is_permission_request(event_name)
 
 
 def _is_prompt_event(event_name: str) -> bool:
-    return event_name.strip().lower().replace("_", "").replace("-", "") in {"userpromptsubmit", "userpromptsubmitted"}
+    return event_name.strip().lower().replace("_", "").replace("-", "") in {
+        "userpromptsubmit",
+        "userpromptsubmitted",
+    }
 
 
 def watch_continue_payload(harness: str, event_name: str) -> dict[str, object]:
-    if harness == "grok" and _is_prompt_event(event_name):
+    if grok_observe_event(harness, event_name):
         return {}
     if harness == "copilot":
         return {"permissionDecision": "allow"}
@@ -101,11 +116,10 @@ def failure_payload(
     recording_only requires independently acknowledged mode authority. A raw
     local configuration flag cannot establish it during evaluation failure.
     """
+    if grok_observe_event(harness, event_name):
+        return {}, 0
     if recording_only:
         return watch_continue_payload(harness, event_name), 0
-    prompt_event = _is_prompt_event(event_name)
-    if prompt_event and harness == "grok":
-        return {}, 0
     pauses = hook_event_pauses_when_unavailable(event_name)
     if not pauses:
         # Observations continue processing completed activity without authorizing a tool action.

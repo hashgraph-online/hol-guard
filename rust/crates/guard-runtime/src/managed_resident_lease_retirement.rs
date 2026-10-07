@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use super::{
     acquire_directory_lock_until, lease_directory, lease_file_is_recent,
@@ -20,6 +20,7 @@ pub(super) fn retire_clients_for_update(
     let private_root = private_root_for_state_base(state_base)?;
     let directory = lease_directory(state_base)?;
     let _directory_lock = acquire_directory_lock_until(&directory, &private_root, deadline)?;
+    let observed_at = SystemTime::now();
     let mut paths = Vec::with_capacity(LEASE_MAX_FILES);
     for (entry_count, entry) in fs::read_dir(&directory)
         .map_err(|_| "native_resident_client_retirement_failed".to_owned())?
@@ -44,7 +45,7 @@ pub(super) fn retire_clients_for_update(
                 return Err("native_resident_client_retirement_failed".to_owned());
             }
             Err(LeaseReadError::Malformed(file)) => {
-                if lease_file_is_recent(file.modified) {
+                if lease_file_is_recent(file.modified, observed_at) {
                     return Err("native_resident_client_retirement_failed".to_owned());
                 }
                 let _ = file.remove_if_same(&path);
@@ -56,9 +57,9 @@ pub(super) fn retire_clients_for_update(
         }
         let actual_start_marker = match process_start_marker(record.process_id) {
             Ok(marker) => marker,
-            Err(_) if !lease_file_is_recent(record.modified) => {
+            Err(_) if !lease_file_is_recent(record.modified, observed_at) => {
                 if process_is_definitively_gone(record.process_id).unwrap_or(false) {
-                    let _ = remove_stale_lease(&path, &private_root);
+                    let _ = remove_stale_lease(&path, &private_root, observed_at);
                     continue;
                 }
                 return Err("native_resident_client_retirement_failed".to_owned());

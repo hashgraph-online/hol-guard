@@ -1,5 +1,11 @@
+#[path = "generic_evaluate.rs"]
+mod evaluate;
+use evaluate::evaluate_signals;
+
 #[path = "generic_extract.rs"]
 mod extract;
+#[path = "redirect_projection.rs"]
+mod redirect_projection;
 #[path = "generic_result.rs"]
 mod result;
 
@@ -10,14 +16,61 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use super::{evaluate_pre_tool_with_context, PreToolDecisionV1};
-use extract::{extract_generic_signals, GenericSignals};
-use result::{generic_action, generic_error_result, generic_result, review_reason};
+use super::evaluate_pre_tool_with_execution_context;
+use extract::extract_generic_signals;
+use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
 
+/// Bounded caller-supplied context, never authenticated provider facts.
+pub struct UntrustedCommandContext {
+    pub command: Option<String>,
+    pub business_action_present: bool,
+}
+
+/// Share native aliases, nested JSON handling, ambiguity checks and limits.
+pub fn extract_untrusted_command_context(
+    payload: &Value,
+) -> Result<UntrustedCommandContext, String> {
+    let signals = extract_generic_signals(payload)
+        .map_err(|_| "native_command_context_unavailable".to_owned())?;
+    Ok(UntrustedCommandContext {
+        command: signals.command,
+        business_action_present: signals.business_action_present,
+    })
+}
+
+#[path = "agent_metadata.rs"]
+mod agent_metadata;
+
+/// Reuse the exact host-input proof after execution; output content still
+/// requires its independent native scan and installed policy enforcement.
+pub fn bounded_task_metadata_output(payload: &serde_json::Value) -> bool {
+    let Some(root) = payload.as_object() else {
+        return false;
+    };
+    let Some(tool) = root.get("tool_name").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    if root
+        .get("toolName")
+        .is_some_and(|alias| alias.as_str() != Some(tool))
+    {
+        return false;
+    }
+    let input = root
+        .iter()
+        .filter(|(key, _)| {
+            !matches!(
+                key.as_str(),
+                "tool_response" | "toolResponse" | "toolResultPreview"
+            )
+        })
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    agent_metadata::bounded_task_list(&serde_json::Value::Object(input), Some(tool))
+}
 #[path = "generic_tools.rs"]
 mod tools;
-use tools::{infer_action_type, package_command, tool_matches};
 
 /// Evaluate the complete raw PreToolUse payload in native code. This stays
 /// separate from `evaluate_pre_tool`, the compatibility command-model
@@ -68,23 +121,118 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
+    evaluate_envelope(
+        harness,
+        event,
+        payload,
+        controls,
+        deadline,
+        context,
+        execution_environment,
+        true,
+    )
+}
+
+fn payload_with_command(payload: &Value, command: &str) -> Value {
+    let mut projected = payload.clone();
+    let Some(object) = projected.as_object_mut() else {
+        return projected;
+    };
+    for key in ["tool_input", "arguments", "input"] {
+        if let Some(nested) = object.get_mut(key).and_then(|value| value.as_object_mut()) {
+            for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
+                if nested.contains_key(command_key) {
+                    nested.insert(command_key.to_owned(), command.into());
+                }
+            }
+        }
+    }
+    for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
+        if object.contains_key(command_key) {
+            object.insert(command_key.to_owned(), command.into());
+        }
+    }
+    projected
+}
+
+#[allow(clippy::too_many_arguments)]
+fn evaluate_envelope(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+    context: super::PathContext<'_>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    project_redirects: bool,
+) -> PreToolResultV1 {
     let super::PathContext { home_dir, cwd } = context;
     let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
-    let command_decision = signals.command.as_deref().map(|command| {
-        evaluate_pre_tool_with_context(
-            &CommandModelRequestV1 {
-                command: command.to_owned(),
-                dialect: "posix".to_owned(),
-                transport: "shell_string".to_owned(),
-                extraction_provenance: "pre-tool-generic".to_owned(),
-            },
-            home_dir,
-            cwd,
-        )
-    });
+    // A search pattern is data, not a command: a proven Claude `Grep` scope
+    // skips the command authority but still passes the command controls below.
+    let search_scope_proven = event == "PreToolUse"
+        && harness == "claude-code"
+        && signals.tool_name.as_deref() == Some("Grep")
+        && signals.url_values.is_empty()
+        && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd);
+    if let Some(projection) = signals
+        .command
+        .as_deref()
+        .filter(|_| project_redirects && !search_scope_proven)
+        .and_then(|command| redirect_projection::project(command, context))
+    {
+        let projected_payload = payload_with_command(payload, &projection.command);
+        let projected = evaluate_envelope(
+            harness,
+            event,
+            &projected_payload,
+            controls,
+            deadline,
+            context,
+            execution_environment,
+            false,
+        );
+        {
+            let raw = evaluate_envelope(
+                harness,
+                event,
+                payload,
+                None,
+                deadline,
+                context,
+                execution_environment,
+                false,
+            );
+            return redirect_projection::join(projected, raw, projection.writes_file);
+        }
+    }
+    let task_metadata = event == "PreToolUse"
+        && agent_metadata::bounded_task_list(payload, signals.tool_name.as_deref())
+        && signals.command.is_none()
+        && !signals.package_present
+        && signals.path_values.is_empty()
+        && signals.url_values.is_empty();
+    let command_decision = signals
+        .command
+        .as_deref()
+        .filter(|_| !search_scope_proven)
+        .map(|command| {
+            evaluate_pre_tool_with_execution_context(
+                &CommandModelRequestV1 {
+                    command: command.to_owned(),
+                    dialect: "posix".to_owned(),
+                    transport: "shell_string".to_owned(),
+                    extraction_provenance: "pre-tool-generic".to_owned(),
+                },
+                home_dir,
+                cwd,
+                deadline,
+                execution_environment,
+            )
+        });
     // Parsed benign commands may contain credential words as search patterns.
     // Preserve independent structured-path/content risk, not the raw-text hint.
     if command_decision.as_ref().is_some_and(|decision| {
@@ -94,14 +242,36 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     }) {
         signals.sensitive_target = signals.independent_sensitive_target;
     }
-    let mut result = evaluate_signals(
-        harness,
-        event,
-        &signals,
-        command_decision.as_ref(),
-        home_dir,
-        cwd,
-    );
+    let mut result = if search_scope_proven {
+        generic_result(
+            generic_action(
+                harness,
+                event,
+                PreToolActionTypeV1::FileRead,
+                PreToolOperationV1::Read,
+                true,
+                false,
+            ),
+            "allow",
+            "native_bounded_search_scope",
+            "The Rust authority proved this directory search cannot reach a sensitive file.",
+        )
+    } else if task_metadata {
+        generic_result(
+            generic_action(harness, event, PreToolActionTypeV1::Harness,
+                if signals.tool_name.as_deref() == Some("TaskOutput") { PreToolOperationV1::Read } else { PreToolOperationV1::Set }, true, false),
+            "allow", "native_agent_task_metadata", "The Rust authority verified bounded host task metadata with no new execution or filesystem effects.",
+        )
+    } else {
+        evaluate_signals(
+            harness,
+            event,
+            &signals,
+            command_decision.as_ref(),
+            home_dir,
+            cwd,
+        )
+    };
     if event == "UserPromptSubmit" {
         let mut classes = Vec::new();
         if result.action.sensitive_target && signals.content_sensitive {
@@ -270,215 +440,4 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
         .into();
     }
     result
-}
-
-fn evaluate_signals(
-    harness: &str,
-    event: &str,
-    signals: &GenericSignals,
-    command_decision: Option<&Result<PreToolDecisionV1, String>>,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> PreToolResultV1 {
-    let (mut action_type, mut operation) = infer_action_type(
-        event,
-        signals.event_hint.as_deref(),
-        signals.tool_name.as_deref(),
-        signals,
-    );
-    if action_type == PreToolActionTypeV1::Command
-        && command_decision
-            .and_then(|decision| decision.as_ref().ok())
-            .is_some_and(|decision| package_command(&decision.command_model))
-    {
-        action_type = PreToolActionTypeV1::Package;
-        operation = PreToolOperationV1::Install;
-    }
-    let benign_prompt = event == "UserPromptSubmit"
-        && action_type == PreToolActionTypeV1::Prompt
-        && signals.benign_prompt;
-    let action = generic_action(
-        harness,
-        event,
-        action_type,
-        operation,
-        true,
-        signals.sensitive_target && !benign_prompt,
-    );
-    let command_proves_benign = command_decision
-        .and_then(|decision| decision.as_ref().ok())
-        .is_some_and(|decision| decision.explicitly_benign);
-    if !command_proves_benign {
-        if let Some(tool) = signals.tool_name.as_deref() {
-            if tool_matches(
-                tool,
-                &["shutdown", "reboot", "wipe", "format", "kill", "terminate"],
-            ) {
-                return generic_result(
-                    action,
-                    "block",
-                    "native_process_service_dangerous",
-                    "HOL Guard blocked a destructive process or service action before execution.",
-                );
-            }
-        }
-    }
-    if signals.sensitive_target
-        && !signals.url_values.is_empty()
-        && (!signals.path_values.is_empty() || signals.command.is_some())
-    {
-        return generic_result(
-            action,
-            "block",
-            "native_secret_exfiltration",
-            "HOL Guard blocked a PreToolUse action that combines sensitive data with network transfer.",
-        );
-    }
-    if signals.guard_bypass_intent && action_type == PreToolActionTypeV1::Prompt {
-        return generic_result(
-            action,
-            "block",
-            "native_guard_bypass_prompt",
-            "HOL Guard blocked this prompt because it asks to disable Guard protection.",
-        );
-    }
-    if signals.exfil_intent && action_type == PreToolActionTypeV1::Prompt {
-        let (floor, code) = if action.sensitive_target {
-            ("block", "native_prompt_exfiltration_block")
-        } else {
-            ("require-reapproval", "native_prompt_exfiltration_review")
-        };
-        return generic_result(
-            action,
-            floor,
-            code,
-            "HOL Guard requires review because this prompt asks to transfer data.",
-        );
-    }
-    if signals.destructive_intent && action_type == PreToolActionTypeV1::Prompt {
-        let (floor, code) = if action.sensitive_target {
-            ("block", "native_prompt_destructive_block")
-        } else {
-            ("require-reapproval", "native_prompt_destructive_review")
-        };
-        return generic_result(
-            action,
-            floor,
-            code,
-            "HOL Guard requires review because this prompt asks to change local files.",
-        );
-    }
-    if action.sensitive_target && action_type == PreToolActionTypeV1::Prompt {
-        // Prompts that request sensitive local data are reviewable: the
-        // installed risk policy (local_secret_read) still decides whether a
-        // stricter posture turns this floor into a terminal block.
-        return generic_result(
-            action,
-            "require-reapproval",
-            "native_sensitive_prompt",
-            "HOL Guard requires review because this prompt requests sensitive local data.",
-        );
-    }
-    if signals.prompt_injection_intent && action_type == PreToolActionTypeV1::Prompt {
-        return generic_result(
-            action,
-            "require-reapproval",
-            "native_prompt_injection_review",
-            "HOL Guard requires review because this prompt asks to override trusted instructions.",
-        );
-    }
-    if signals.subprocess_intent && action_type == PreToolActionTypeV1::Prompt {
-        return generic_result(
-            action,
-            "review",
-            "native_prompt_subprocess_review",
-            "HOL Guard requires review because this prompt asks to run a subprocess.",
-        );
-    }
-    if benign_prompt {
-        return generic_result(
-            action,
-            "allow",
-            "native_prompt_benign",
-            "HOL Guard found no guarded prompt intent in this bounded request.",
-        );
-    }
-    if let Some(command_decision) = command_decision {
-        let Ok(command_decision) = command_decision else {
-            return generic_result(
-                action,
-                "block",
-                "native_pre_tool_malformed_payload",
-                "HOL Guard blocked a malformed PreToolUse command before execution.",
-            );
-        };
-        if command_decision.minimum_action == "block" {
-            return generic_result(
-                action,
-                "block",
-                &command_decision.reason_code,
-                &command_decision.reason,
-            );
-        }
-        if action_type == PreToolActionTypeV1::Command {
-            // A benign command proves only its command text. Independent
-            // structured paths still describe the action the tool will take.
-            if signals.sensitive_target
-                && matches!(
-                    command_decision.minimum_action.as_str(),
-                    "allow" | "warn" | "review"
-                )
-            {
-                return generic_result(
-                    action,
-                    "review",
-                    "native_sensitive_access_review",
-                    "HOL Guard requires review before this action can access sensitive local data.",
-                );
-            }
-            return generic_result(
-                action,
-                &command_decision.minimum_action,
-                &command_decision.reason_code,
-                &command_decision.reason,
-            );
-        }
-    }
-    if action_type == PreToolActionTypeV1::FileRead
-        && !signals.sensitive_target
-        && signals.url_values.is_empty()
-        && signals.path_values.len() == 1
-        && super::safe_reads::bounded_file_read_target(&signals.path_values[0], home_dir, cwd)
-    {
-        return generic_result(
-            action,
-            "allow",
-            "native_exact_safe_file_read",
-            "The Rust command authority proved this bounded file read explicitly benign.",
-        );
-    }
-    if action_type == PreToolActionTypeV1::FileWrite
-        && signals.tool_name.as_deref().is_some_and(|tool| {
-            tool_matches(tool, &["write", "edit", "patch", "replace", "create_file"])
-                && !tool_matches(tool, &["delete", "remove", "mkdir"])
-        })
-        && !signals.sensitive_target
-        && signals.url_values.is_empty()
-        && signals.command.is_none()
-        && signals.path_values.len() == 1
-        && super::safe_reads::bounded_native_file_write_target(
-            &signals.path_values[0],
-            home_dir,
-            cwd,
-        )
-    {
-        return generic_result(
-            action,
-            "allow",
-            "native_exact_safe_file_write",
-            "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, or the verified user home and clears sensitive-path checks.",
-        );
-    }
-    let (reason_code, reason) = review_reason(action_type);
-    generic_result(action, "review", reason_code, reason)
 }

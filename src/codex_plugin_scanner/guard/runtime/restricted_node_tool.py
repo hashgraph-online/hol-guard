@@ -57,6 +57,7 @@ def prepare_restricted_node_tool(
     argv = _normalized_command(command)
     name, args = Path(argv[0]).name, argv[1:]
     expected_entry = None
+    runtime_args: tuple[str, ...] = ()
     if name in {"bun", "npm", "pnpm"}:
         if len(args) != 2 or args[0] != "run" or args[1] not in {"lint", "typecheck", "build"}:
             raise RestrictedPytestError(
@@ -85,6 +86,11 @@ def prepare_restricted_node_tool(
             raise RestrictedPytestError("node_tool_invalid_command", "Missing local runner.")
         name, args = args[0], args[1:]
     elif name in {"node", "nodejs"}:
+        if args and args[0].startswith("--max-old-space-size="):
+            value = args[0].partition("=")[2]
+            if not value.isascii() or not value.isdecimal() or not 16 <= int(value) <= 131072:
+                raise RestrictedPytestError("node_tool_invalid_command", "Invalid bounded Node memory option.")
+            runtime_args, args = (args[0],), args[1:]
         if not args:
             raise RestrictedPytestError("node_tool_invalid_command", "Missing local entrypoint.")
         expected_entry = Path(args[0])
@@ -137,7 +143,7 @@ def prepare_restricted_node_tool(
     return replace(
         base,
         profile_version=NODE_BUILD_OUTPUT_PROFILE_VERSION if name == "vite" else NODE_TOOL_READ_ONLY_PROFILE_VERSION,
-        command=(str(base.executable), str(entry), *args),
+        command=(str(base.executable), *runtime_args, str(entry), *args),
         output_roots=output_roots,
         denied_capabilities=tuple(
             "workspace-source-write" if name == "vite" and value == "workspace-write" else value

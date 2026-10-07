@@ -88,6 +88,7 @@ fn snapshot(generation: u64, key: &[u8], scope_digest: String) -> PolicySnapshot
         },
         effective_policy: policy,
         command_extensions: None,
+        business_policy: None,
         issued_at_ms: now.saturating_sub(1),
         expires_at_ms: now + 60_000,
         integrity: SnapshotIntegrityV3 {

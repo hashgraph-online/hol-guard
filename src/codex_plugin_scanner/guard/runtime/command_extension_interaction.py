@@ -60,6 +60,14 @@ def classify_command_extension_interaction(
         reason.reason_code in {"matcher-failure", "uncertainty.matcher-failure"}
         for reason in decision.controlling_reasons
     )
+    if matcher_failure_controls and decision.action != "block":
+        return CommandExtensionInteraction(
+            CommandExtensionInteractionMatch(
+                "command extension attribution uncertain",
+                "Guard requires review because it could not match this command to its extension permissions.",
+            ),
+            None,
+        )
     if matcher_failure_controls:
         return CommandExtensionInteraction(
             CommandExtensionInteractionMatch(

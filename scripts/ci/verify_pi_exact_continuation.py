@@ -192,6 +192,9 @@ def run_continuation_tests(env: dict[str, str], junit_path: Path) -> None:
         "pytest",
         "-q",
         "tests/test_pi_exact_continuation.py",
+        "tests/test_pi_exact_continuation_runner.py",
+        "tests/test_pi_exact_continuation_omp.py",
+        "tests/test_pi_exact_continuation_handlers.py",
         "--tb=short",
         f"--junitxml={junit_path}",
     ]

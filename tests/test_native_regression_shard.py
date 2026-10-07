@@ -134,7 +134,7 @@ def test_sonar_starts_independently_and_keeps_coverage_and_quality_gates() -> No
     job = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]["sonar"]
     assert "needs" not in job
     assert job["steps"][0]["id"] == "token-presence"
-    assert job["if"] == "vars.SONAR_CI_ENABLED == 'true'"
+    assert job["if"] == "vars.SONAR_CI_ENABLED == 'true' && github.event_name != 'pull_request'"
     assert all("steps.token-presence.outputs.has-token == 'true'" in step["if"] for step in job["steps"][1:])
     commands = "\n".join(step.get("run", "") for step in job["steps"])
     assert "select_pytest_coverage.py" in commands

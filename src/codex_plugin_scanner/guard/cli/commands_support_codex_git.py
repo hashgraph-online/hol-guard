@@ -123,6 +123,16 @@ def _codex_git_diff_targets_are_source_like(args: list[str], *, cwd: Path | None
     targets = _git_diff_pathspecs(diff_args, cwd=effective_cwd)
     if targets is None:
         return False
+    if effective_cwd is not None:
+        for target in targets:
+            literal_path = _git_literal_pathspec_path(target)
+            if literal_path is None:
+                continue
+            candidate = Path(literal_path)
+            if not candidate.is_absolute():
+                candidate = effective_cwd / candidate
+            if candidate.is_dir():
+                return False
     literal_selection = _git_literal_file_selection(targets, cwd=effective_cwd)
     if literal_selection is not None:
         selected_paths = literal_selection

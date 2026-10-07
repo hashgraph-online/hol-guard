@@ -80,6 +80,26 @@ def test_bridge_probe_sideband_requires_fresh_redacted_enforcing_receipt(capsys,
         assert observation is None and captured.err == ""
 
 
+def test_omp_receipt_is_bound_to_fresh_probe_id():
+    """The OMP transport uses the same strict receipt correlation as Codex."""
+    payload = probe_payload("ollama rm synthetic-model")
+    request_id = payload[PROBE_FIELD]["request_id"]
+    receipt = _receipt(
+        request_id=request_id,
+        harness="omp",
+        event_name="PreToolUse",
+        decision="deny",
+        model_output_action="block",
+        policy_action="block",
+        observed_policy_action="block",
+        reason_code="native_command_permission_disabled",
+    )
+    observation = transition_hook_observation(payload, receipt)
+    assert observation is not None
+    assert observation["native_receipt"]["harness"] == "omp"
+    assert observation["native_receipt"]["decision_id"] == receipt["decision_id"]
+
+
 @pytest.mark.parametrize("layout", ["legacy", "current", "partial", "foreign_path"])
 def test_observation_package_identity_requires_complete_new_roles_and_preserves_legacy(monkeypatch, layout):
     from pathlib import Path

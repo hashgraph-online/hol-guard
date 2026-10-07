@@ -45,9 +45,7 @@ from .grok_config import (
     build_observe_hook_json,
     build_pretool_hook_json,
     degraded_mode_warnings,
-    prepare_managed_config_text,
     remove_managed_block,
-    restore_compat_hooks,
 )
 from .grok_executable import (
     GrokExecutableResolution,
@@ -55,6 +53,10 @@ from .grok_executable import (
     resolve_trusted_grok_executable,
     sanitized_grok_launch_environment,
 )
+from .grok_install_settings import parse_install_state, remove_legacy_settings, uninstall_settings
+from .grok_state import grok_runtime_hooks_verified as grok_runtime_hooks_verified
+from .grok_user_config import prepare_user_config_text
+from .grok_version_probe import probe_grok_version
 
 _GROK_HOME_ENV_VAR = "GROK_HOME"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = GROK_HOOK_INTERNAL_TIMEOUT_SECONDS
@@ -77,7 +79,7 @@ class GrokHarnessAdapter(HarnessAdapter):
         "catch-all PreToolUse hook and routes blocked actions to the local approval center."
     )
     fallback_hint = (
-        "Grok prompt hooks are observe-only; enforcement happens on PreToolUse. "
+        "Guard screens submitted prompts and intercepts tool calls on PreToolUse. "
         "Use the Guard approval center when a tool call is denied."
     )
 
@@ -91,6 +93,10 @@ class GrokHarnessAdapter(HarnessAdapter):
     @classmethod
     def _grok_root(cls, context: HarnessContext) -> Path:
         return cls._grok_home_dir(context) / GROK_DIR
+
+    @classmethod
+    def _protection_config_path(cls, context: HarnessContext) -> Path:
+        return cls._config_path(context)
 
     @classmethod
     def _managed_config_path(cls, context: HarnessContext) -> Path:
@@ -123,37 +129,12 @@ class GrokHarnessAdapter(HarnessAdapter):
     _read_toml = staticmethod(read_toml_payload)
 
     @staticmethod
-    def _version_probe(
-        context: HarnessContext,
-        resolution: GrokExecutableResolution,
-    ) -> dict[str, object]:
-        executable = resolution.executable
-        if executable is None:
-            return {
-                "command": [],
-                "ok": False,
-                "return_code": None,
-                "stdout": "",
-                "stderr": resolution.error or "trusted Grok executable not found",
-            }
-        probe_cwd = context.guard_home / "runtime" / "grok-probe"
-        try:
-            probe_cwd.mkdir(parents=True, exist_ok=True, mode=0o700)
-            if os.name != "nt":
-                probe_cwd.chmod(0o700)
-        except OSError as error:
-            return {
-                "command": [str(executable.path), "--no-auto-update", "--version"],
-                "ok": False,
-                "return_code": None,
-                "stdout": "",
-                "stderr": f"trusted probe directory unavailable: {error}",
-            }
-        return _run_command_probe(
-            [str(executable.path), "--no-auto-update", "--version"],
-            timeout_seconds=8,
-            cwd=probe_cwd,
-            env=sanitized_grok_launch_environment(context, os.environ),
+    def _version_probe(context: HarnessContext, resolution: GrokExecutableResolution) -> dict[str, object]:
+        return probe_grok_version(
+            context,
+            resolution,
+            run_probe=_run_command_probe,
+            sanitize_environment=sanitized_grok_launch_environment,
         )
 
     def resolved_executable(self, context: HarnessContext) -> str | None:
@@ -381,41 +362,43 @@ class GrokHarnessAdapter(HarnessAdapter):
             display_name="grok",
         )
         shim_manifest = prepared_shim.manifest
-        managed_config_path = self._managed_config_path(context)
+        managed_config_path = self._protection_config_path(context)
+        legacy_path = self._managed_config_path(context)
         hooks_dir = self._hooks_dir(context)
         _ensure_path_within_root(self._grok_home_dir(context), managed_config_path, label="Grok")
+        _ensure_path_within_root(self._grok_home_dir(context), legacy_path, label="Grok")
         hook_files: list[TransitionFile] = []
         hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
         pretool_path = hooks_dir / GUARD_HOOK_PRETOOL_FILE
         prompt_path = hooks_dir / GUARD_HOOK_PROMPT_FILE
-        paths = (managed_config_path, pretool_path, prompt_path, self._state_path(context))
+        paths = (managed_config_path, pretool_path, prompt_path, self._state_path(context), legacy_path)
         snapshots = {path: _snapshot(path) for path in paths}
         config_before = snapshots[managed_config_path]
         existing_text = config_before.decode("utf-8") if config_before is not None else ""
         state_before = snapshots[self._state_path(context)]
-        state_payload = json.loads(state_before.decode("utf-8")) if state_before is not None else {}
-        if not isinstance(state_payload, dict):
-            raise ValueError("Grok managed state must be a JSON object.")
-        merged_text, prior_compat_hooks = prepare_managed_config_text(
+        state_payload = parse_install_state(state_before)
+        previous_settings = state_payload.get("user_config_settings")
+        merged_text, owned_settings = prepare_user_config_text(
             existing_text,
             hook_command,
-            saved_prior_hooks=_prior_compat_hooks_from_state(self._state_path(context), payload=state_payload),
+            previous_state=previous_settings if isinstance(previous_settings, Mapping) else {},
         )
         state = {
             "managed_config_path": str(managed_config_path),
             "pretool_hook_path": str(pretool_path),
             "prompt_hook_path": str(prompt_path),
-            "prior_compat_hooks": prior_compat_hooks,
+            "user_config_settings": owned_settings,
         }
         after = {
             managed_config_path: merged_text.encode("utf-8"),
             pretool_path: (json.dumps(build_pretool_hook_json(hook_command), indent=2) + "\n").encode("utf-8"),
             prompt_path: (json.dumps(build_observe_hook_json(hook_command), indent=2) + "\n").encode("utf-8"),
             self._state_path(context): (json.dumps(state, indent=2) + "\n").encode("utf-8"),
+            legacy_path: remove_legacy_settings(snapshots[legacy_path], self._state_path(context), state_payload),
         }
         files = [*prepared_shim.files, *hook_files]
         for path in paths[:3]:
-            backup = self._backup_path(context, "managed_config.toml" if path == managed_config_path else path.name)
+            backup = self._backup_path(context, path.name)
             before = _snapshot(backup)
             mode = backup.stat().st_mode & 0o777 if before is not None else 0o644
             source = snapshots[path]
@@ -450,10 +433,15 @@ class GrokHarnessAdapter(HarnessAdapter):
             "managed_hooks_path": str(pretool_path),
             "pretool_hook_path": str(pretool_path),
             "prompt_hook_path": str(prompt_path),
+            "protection_artifact_paths": [
+                str(managed_config_path),
+                str(pretool_path),
+                str(prompt_path),
+            ],
             "notes": [
                 "Guard catch-all PreToolUse hook installed in .grok/hooks/hol-guard-pretooluse.json",
-                "Guard observe hooks installed for prompts, session start, and subagent start",
-                "Guard permission rules and backup hooks installed in .grok/managed_config.toml",
+                "Guard prompt screening and lifecycle observation hooks installed",
+                "Guard permission rules and backup hooks installed in .grok/config.toml",
                 *shim_notes,
             ],
         }
@@ -463,21 +451,15 @@ class GrokHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        settings_notes = uninstall_settings(self, context)
         shim_manifest = remove_guard_shim(
             self.harness,
             context,
             launcher_name=self.launcher_name,
             display_name="grok",
         )
-        managed_config_path = self._managed_config_path(context)
+        managed_config_path = self._protection_config_path(context)
         hooks_dir = self._hooks_dir(context)
-        if managed_config_path.is_file():
-            _ensure_path_within_root(self._grok_home_dir(context), managed_config_path, label="Grok")
-            existing_text = managed_config_path.read_text(encoding="utf-8")
-            cleaned = remove_managed_block(existing_text)
-            prior_compat_hooks = _prior_compat_hooks_from_state(self._state_path(context))
-            restored = restore_compat_hooks(cleaned, prior_compat_hooks)
-            managed_config_path.write_text(restored.rstrip() + "\n", encoding="utf-8")
 
         for hook_name in (GUARD_HOOK_PRETOOL_FILE, GUARD_HOOK_PROMPT_FILE):
             hook_path = hooks_dir / hook_name
@@ -502,49 +484,12 @@ class GrokHarnessAdapter(HarnessAdapter):
             "config_path": str(managed_config_path),
             **shim_manifest,
             "notes": [
-                "Guard-managed Grok hooks and permission rules removed.",
+                "Guard hook files and launcher removed.",
                 "User .grok/config.toml, auth, skills, plugins, and sessions were preserved.",
+                *settings_notes,
                 *shim_notes,
             ],
         }
-
-
-def _prior_compat_hooks_from_state(
-    state_path: Path,
-    *,
-    payload: dict[str, object] | None = None,
-) -> dict[str, str | None]:
-    if payload is None:
-        if not state_path.is_file():
-            return {}
-        try:
-            payload = json.loads(state_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {}
-    raw = payload.get("prior_compat_hooks") if isinstance(payload, dict) else None
-    if not isinstance(raw, dict):
-        return {}
-    restored: dict[str, str | None] = {}
-    for key, value in raw.items():
-        if isinstance(key, str) and (value is None or isinstance(value, str)):
-            restored[key] = value
-    return restored
-
-
-def grok_runtime_hooks_verified(context: HarnessContext) -> bool:
-    """Return whether Grok catch-all PreToolUse and observe hooks are installed.
-
-    Managed permission rules in ``managed_config.toml`` are a second layer. Missing
-    that file must not fail machine-wide local protection health while hooks still
-    intercept every tool.
-    """
-
-    from ..cli.install_commands import _grok_pretool_is_catchall, _grok_prompt_hook_is_observe
-
-    hooks_dir = GrokHarnessAdapter._hooks_dir(context)
-    return _grok_pretool_is_catchall(hooks_dir / GUARD_HOOK_PRETOOL_FILE, context) and _grok_prompt_hook_is_observe(
-        hooks_dir / GUARD_HOOK_PROMPT_FILE, context
-    )
 
 
 _remove_managed_block = remove_managed_block

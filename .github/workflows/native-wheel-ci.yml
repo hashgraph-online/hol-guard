@@ -3,6 +3,28 @@ name: Native wheel CI
 on:
   pull_request:
     branches: [main, release/3.2]
+    paths:
+      - "rust/**"
+      - "ci/native_runtime/**"
+      - "contracts/extensions/**"
+      - "contributions/**"
+      - "src/codex_plugin_scanner/guard/*native*.py"
+      - "src/codex_plugin_scanner/guard/runtime_transition*.py"
+      - "src/codex_plugin_scanner/guard/adapters/*native*.py"
+      - "scripts/ci/**"
+      - "scripts/build_command_projection_hook.py"
+      - "scripts/build_native_command_program.py"
+      - "scripts/build_native_hol_guard_wheel.py"
+      - "scripts/bench_guard_native_installed_slo.py"
+      - "scripts/stress_guard_daemon.py"
+      - "scripts/sync_repo_version.py"
+      - ".github/workflows/native-wheel-ci.yml"
+      - ".github/actions/native-regression/**"
+      - ".github/actions/setup-rust/**"
+      - ".github/actions/stage-command-projections/**"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "uv.lock"
   push:
     branches: [main]
   schedule:
@@ -111,9 +133,11 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
+      - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - name: Run wheel-builder contracts
-        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py tests/test_native_source_compiler.py
+        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py
+          ci/native_runtime/test_native_wheel_compression.py tests/test_native_source_compiler.py
           --tb=short
   linux-build:
     runs-on: ubuntu-latest
@@ -185,6 +209,7 @@ jobs:
       - name: Assemble and install native wheel
         env:
           SOURCE_SHA: ${{ github.sha }}
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/x86_64-unknown-linux-musl/release/guard-command-source
         run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           uv build --wheel --out-dir pure-dist
@@ -250,6 +275,7 @@ jobs:
           .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
           .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
           .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_prompt.py --expected-source-sha "$(git rev-parse HEAD)" --json installed-native-prompt.json
       - name: Measure installed adapter-to-decision SLOs
         env:
           NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
@@ -306,6 +332,7 @@ jobs:
             native-default-auto.json
             installed-pi-output.json
             installed-native-extensions.json
+            installed-native-prompt.json
             native-installed-slo.json
             native-soak.json
             native-stress-smoke.json
@@ -392,6 +419,7 @@ jobs:
         shell: pwsh
         env:
           SOURCE_SHA: ${{ github.sha }}
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source.exe
         run: |
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -510,6 +538,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_extensions.py --json installed-native-extensions.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_prompt.py --expected-source-sha (git rev-parse HEAD) --json installed-native-prompt.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_command_control_lock.py --json installed-command-control-lock.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -520,6 +550,7 @@ jobs:
             native-dist/*.whl
             native-default-auto.json
             installed-native-extensions.json
+            installed-native-prompt.json
             installed-command-control-lock.json
           if-no-files-found: error
     needs: windows-build
@@ -616,6 +647,7 @@ jobs:
         run: |
           source scripts/ci/native-proof-environment.sh
           .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_prompt.py --expected-source-sha "$(git rev-parse HEAD)" --json installed-native-prompt.json
       - name: Measure installed adapter-to-decision SLOs
         if: matrix.proof == 'performance'
         env:
@@ -739,6 +771,7 @@ jobs:
             native-default-auto.json
             installed-pi-output.json
             installed-native-extensions.json
+            installed-native-prompt.json
             native-installed-slo.json
             native-installed-slo-attempt-*.json
             native-installed-slo-attempt-*.json.stderr

@@ -9,6 +9,25 @@ fn python_runtime_name(name: &str) -> bool {
     })
 }
 
+fn python_inline_eval_args(arguments: &[String]) -> bool {
+    let mut rest = arguments;
+    let mut flags = 0_u8;
+    while let Some(flag) = rest.first() {
+        let bits = match flag.as_str() {
+            "-I" => 1,
+            "-S" => 2,
+            "-IS" | "-SI" => 3,
+            _ => break,
+        };
+        if flags & bits != 0 {
+            return false;
+        }
+        flags |= bits;
+        rest = &rest[1..];
+    }
+    matches!(rest, [flag, _program] if flag == "-c")
+}
+
 /// Classify a direct pytest invocation for delegation, never direct allowance.
 /// The execution sink must resolve the interpreter and enforce pytest-readonly-v2.
 pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
@@ -52,8 +71,40 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let executable = segment.executable.as_deref()?;
     let arguments = segment.arguments.as_slice();
+    if executable
+        .replace('\\', "/")
+        .contains("/node_modules/@esbuild/")
+        && executable.ends_with("/bin/esbuild")
+        && matches!(arguments, [service, ping] if ping == "--ping"
+        && service.strip_prefix("--service=").is_some_and(|version| {
+            let parts: Vec<_> = version.split('.').collect();
+            parts.len() == 3 && parts.iter().all(|part| !part.is_empty() && part.len() <= 8
+                && part.bytes().all(|byte| byte.is_ascii_digit()))
+        }))
+    {
+        // Delegation only: the sink snapshots this local image and executes it
+        // inside the same credential-filtering, read-only Vitest boundary.
+        return Some("native_vitest_readonly_containment_required");
+    }
+    let arguments = if matches!(super::executable_basename(executable), "node" | "nodejs") {
+        match arguments {
+            [flag, rest @ ..] if flag.starts_with("--max-old-space-size=") => {
+                let value = flag.strip_prefix("--max-old-space-size=")?;
+                if value.is_empty()
+                    || !value.bytes().all(|byte| byte.is_ascii_digit())
+                    || !matches!(value.parse::<u32>(), Ok(16..=131072))
+                {
+                    return None;
+                }
+                rest
+            }
+            rest => rest,
+        }
+    } else {
+        arguments
+    };
     match (super::executable_basename(executable), arguments) {
-        (name, [flag, _program]) if python_runtime_name(name) && flag == "-c" => {
+        (name, args) if python_runtime_name(name) && python_inline_eval_args(args) => {
             return Some("native_python_eval_readonly_containment_required");
         }
         ("node" | "nodejs", [flag, _program]) if matches!(flag.as_str(), "-e" | "--eval") => {
@@ -117,7 +168,8 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     {
         return Some("native_node_tool_readonly_containment_required");
     }
-    if super::executable_basename(executable) == "git" && super::git_helper_context_required(model)
+    if super::executable_basename(executable) == "git"
+        && super::git_helper_context::git_helper_context_required(model)
     {
         return Some("native_git_readonly_containment_required");
     }
@@ -149,8 +201,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return Some("native_vitest_readonly_containment_required");
     }
     if matches!(super::executable_basename(executable), "node" | "nodejs")
-        && segment
-            .arguments
+        && arguments
             .first()
             .is_some_and(|argument| argument == "--test")
     {

@@ -15,6 +15,11 @@ from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, TextIO
 
+from .restricted_credential_patterns import (
+    _read_only_credential_denials,
+    _read_only_credential_patterns,
+    _seatbelt_string,
+)
 from .restricted_pytest_model import (
     _DEFAULT_CPU_SECONDS,
     _DEFAULT_FILE_BYTES,
@@ -123,7 +128,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     read_roots = [plan.workspace, private_root]
     read_roots.extend(plan.read_only_roots)
     read_roots.extend(path for path in _MACOS_READ_ROOTS if path.exists())
-    read_roots.extend(_runtime_read_roots(plan))
+    read_roots.extend(_runtime_read_roots(plan, private_root=private_root))
     read_files = [path for path in _MACOS_READ_FILES if path.exists()]
     if plan.profile_version in {
         "node-test-readonly-v1",
@@ -162,6 +167,12 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             '(literal "/dev/null")',
         )
     )
+    immutable_executables = " ".join(
+        f"(literal {_seatbelt_string(path)})"
+        for path in plan.allowed_executables
+        if not _path_is_within(path, plan.workspace)
+    )
+    immutable_executable_denial = f"(deny file-write* {immutable_executables})" if immutable_executables else ""
     return "\n".join(
         (
             "(version 1)",
@@ -177,6 +188,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             # their contents and unrelated external metadata remain unavailable.
             f"(allow file-read* {read_filters} {read_file_filters})",
             f"(allow file-write* {write_filters})",
+            *([immutable_executable_denial] if immutable_executable_denial else ()),
             *(
                 _read_only_credential_denials(
                     hide_metadata=plan.profile_version in {"vitest-readonly-v1", "node-build-output-v1"}
@@ -185,75 +197,6 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
                 else ()
             ),
         )
-    )
-
-
-def _seatbelt_string(path: Path | str) -> str:
-    value = str(path)
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
-    return f'"{escaped}"'
-
-
-def _read_only_credential_patterns() -> tuple[str, ...]:
-    # Deny rules dominate workspace/runtime read grants, including paths reached
-    # through symlinks. Match case variants consistently with native path policy.
-    def literal(value: str) -> str:
-        return "".join(
-            f"[{character.lower()}{character.upper()}]"
-            if character.isascii() and character.isalpha()
-            else "\\" + character
-            if character in ".-"
-            else character
-            for character in value
-        )
-
-    names = (
-        ".envrc",
-        ".authrc",
-        ".npmrc",
-        ".pypirc",
-        ".netrc",
-        ".git-credentials",
-        "terraform.tfvars",
-        "private.key",
-        "wallet.key",
-    )
-    return (
-        f"(^|/){literal('.env')}($|[./])",
-        f"(^|/)[^/]*{literal('.key')}$",
-        f"(^|/){literal('krb5cc_')}[^/]*$",
-        "(^|/)(" + "|".join(literal(name) for name in names) + ")$",
-        "(^|/)[^/]*("
-        + "|".join(
-            literal(name)
-            for name in (
-                "private-key",
-                "private_key",
-                "wallet-key",
-                "wallet_key",
-            )
-        )
-        + ")[^/]*$",
-        "(^|/)("
-        + "|".join(
-            literal(name)
-            for name in (
-                ".ssh",
-                ".aws",
-                ".docker",
-                ".kube",
-                ".gnupg",
-                ".hol-guard",
-            )
-        )
-        + ")(/|$)",
-    )
-
-
-def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, ...]:
-    operation = "file-read*" if hide_metadata else "file-read-data"
-    return tuple(
-        f"(deny {operation} (regex {_seatbelt_string(pattern)}))" for pattern in _read_only_credential_patterns()
     )
 
 
@@ -294,20 +237,23 @@ def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[
         "/tmp",
     ]
     readonly_paths = [path for path in (*_LINUX_READ_ROOTS, *_LINUX_READ_FILES) if path.exists()]
-    readonly_paths.extend(_runtime_read_roots(plan))
+    readonly_paths.extend(_runtime_read_roots(plan, private_root=private_root))
     readonly_paths.extend(path for path in plan.allowed_executables if not _path_is_within(path, plan.workspace))
-    for path in _dedupe_parent_paths(readonly_paths):
-        argv.extend(("--ro-bind", str(path), str(path)))
     argv.extend(("--bind", str(plan.workspace), str(plan.workspace)))
     argv.extend(("--dir", str(private_root)))
     argv.extend(("--bind", str(private_root), str(private_root)))
+    for path in _dedupe_parent_paths(readonly_paths):
+        argv.extend(("--ro-bind", str(path), str(path)))
     argv.extend(("--chdir", str(plan.cwd), "--", *plan.command))
     return argv
 
 
 def _dedupe_parent_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
     resolved: list[Path] = []
-    for path in sorted({item.resolve(strict=False) for item in paths}, key=lambda item: (len(item.parts), str(item))):
+    for path in sorted(
+        {item.resolve(strict=False) for item in paths},
+        key=lambda item: (len(item.parts), str(item)),
+    ):
         if any(_path_is_within(path, parent) for parent in resolved):
             continue
         resolved.append(path)
@@ -325,9 +271,11 @@ def _ancestor_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(ancestors)
 
 
-def _runtime_read_roots(plan: RestrictedPytestPlan) -> tuple[Path, ...]:
+def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None = None) -> tuple[Path, ...]:
     roots: list[Path] = []
     for executable in plan.allowed_executables:
+        if private_root is not None and _path_is_within(executable, private_root):
+            continue
         symlink_runtime_roots = _symlink_runtime_roots(executable)
         for symlink_runtime_root in symlink_runtime_roots:
             if symlink_runtime_root not in roots:
@@ -377,7 +325,13 @@ def _current_user_process_ceiling() -> int:
     try:
         with tempfile.TemporaryFile(mode="w+b") as output:
             result = subprocess.run(
-                ["/bin/ps", "-U", str(os.getuid()), "-o", "nlwp=" if sys.platform == "linux" else "pid="],
+                [
+                    "/bin/ps",
+                    "-U",
+                    str(os.getuid()),
+                    "-o",
+                    "nlwp=" if sys.platform == "linux" else "pid=",
+                ],
                 stdin=subprocess.DEVNULL,
                 stdout=output,
                 stderr=subprocess.DEVNULL,
@@ -444,7 +398,10 @@ def _run_backend_process(
         if hasattr(resource_module, "RLIMIT_NPROC"):
             _set_resource_limit(resource_module.RLIMIT_NPROC, process_ceiling)
 
-    with tempfile.TemporaryFile(mode="w+b") as stdout_file, tempfile.TemporaryFile(mode="w+b") as stderr_file:
+    with (
+        tempfile.TemporaryFile(mode="w+b") as stdout_file,
+        tempfile.TemporaryFile(mode="w+b") as stderr_file,
+    ):
         try:
             process = subprocess.Popen(
                 list(argv),
@@ -463,7 +420,10 @@ def _run_backend_process(
                 f"Restricted pytest sandbox could not start; execution was not started: {error}",
             ) from error
 
-        previous_handlers: dict[int, int | signal.Handlers | Callable[[int, FrameType | None], object] | None] = {}
+        previous_handlers: dict[
+            int,
+            int | signal.Handlers | Callable[[int, FrameType | None], object] | None,
+        ] = {}
 
         def forward_signal(signum: int, _frame: object) -> None:
             with contextlib.suppress(OSError):

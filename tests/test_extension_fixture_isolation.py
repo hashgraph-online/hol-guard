@@ -18,9 +18,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path, monkeypatch):
     """Verify catalog publication does not rewrite tests or rebuild runtime."""
+    bindings_dir = tmp_path / "contracts/extensions/trust"
+    bindings_dir.mkdir(parents=True)
+    (bindings_dir / "command.demo.v1.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": "command.demo",
+                "trustClass": "external",
+            }
+        )
+    )
     trust = tmp_path / "contracts/extensions/trust-class-map.v1.json"
-    trust.parent.mkdir(parents=True)
-    trust.write_text(json.dumps({"classes": {"external": ["command.demo"]}}))
+    trust.parent.mkdir(parents=True, exist_ok=True)
+    trust.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-trust-class-map.v1",
+                "publishers": {
+                    "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                    "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
+                },
+                "classes": {"first-party": [], "trusted-library": [], "external": ["command.demo"]},
+            }
+        )
+    )
     (trust.parent / "command-catalog.v1.json").write_text(json.dumps({"catalog_digest": "a" * 64}))
     preserved = {}
     for name in (
@@ -37,16 +59,34 @@ def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path,
     calls = []
     monkeypatch.setattr(refresh, "ROOT", tmp_path)
     monkeypatch.setattr(refresh, "TRUST_MAP", trust)
+    monkeypatch.setattr(refresh, "TRUST_BINDINGS", bindings_dir)
     monkeypatch.setattr(refresh, "contribution_ids", lambda: ["command.demo"])
     monkeypatch.setattr(refresh, "pending_contribution_ids", lambda: [])
     monkeypatch.setattr(refresh, "_run", lambda command, **kwargs: calls.append(command))
-    assert refresh.main() == 0
+    assert refresh.main([]) == 0
     cargo = [command for command in calls if command[0] == "cargo"]
     assert len(cargo) == 1
     assert cargo[0][-2:] == ["--bin", "guard-command-source"]
     assert cargo[0][cargo[0].index("--target-dir") + 1] == str(refresh.TARGET_DIR)
     assert all("hol-guard-runtime" not in command for command in calls)
     assert all(not any("tests/" in part for part in command) for command in calls)
+    assert all("scripts/prepare_extension_contribution.py" not in command for command in calls)
+    projections = [command for command in calls if "scripts/build_native_command_program.py" in command]
+    assert projections == [
+        [refresh.sys.executable, "scripts/build_native_command_program.py", "--compiler", str(refresh.COMPILER)],
+        [
+            refresh.sys.executable,
+            "scripts/build_native_command_program.py",
+            "--compiler",
+            str(refresh.COMPILER),
+            "--check",
+        ],
+    ]
+    assert [command for command in calls if "scripts/export_extension_directory.py" in command] == [
+        [refresh.sys.executable, "scripts/export_extension_directory.py"],
+        [refresh.sys.executable, "scripts/export_extension_directory.py", "--check"],
+        [refresh.sys.executable, "scripts/export_extension_directory.py", "--check"],
+    ]
     assert {path: path.read_bytes() for path in preserved} == preserved
 
 
