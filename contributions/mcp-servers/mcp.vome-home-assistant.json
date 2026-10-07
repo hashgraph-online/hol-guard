@@ -272,9 +272,9 @@
     "https://www.npmjs.com/package/@vortitron/home-assistant-mcp"
   ],
   "saferAlternatives": [
-    "The server is read-only unless HA_ALLOW_WRITE=true; leave it unset when the agent only needs to inspect state, history, logs and automations.",
+    "In direct mode the server is read-only unless HA_ALLOW_WRITE=true; leave it unset when the agent only needs to inspect state, history, logs and automations. In brokered mode a VomeHome key with write scope can authorize writes regardless of that flag, so issue the key without write scopes.",
     "Use HA_DENY_DOMAINS (for example lock, alarm_control_panel, cover) or HA_ALLOW_DOMAINS to fence ha_call_service away from doors, alarms and garage openers.",
-    "Config editing needs HA_ALLOW_CONFIG_WRITE=true as well; keep it off and use ha_check_config and ha_render_template to test changes before applying them.",
+    "In direct mode config editing also needs HA_ALLOW_CONFIG_WRITE=true; keep it off and use ha_check_config and ha_render_template to test changes before applying them. In brokered mode, withhold config-write scopes from the key.",
     "Use esphome_validate and esphome_compile before esphome_upload; flashing replaces a device's firmware over the air.",
     "Prefer read tools (ha_get_state, ha_get_history, ha_get_system_log, ha_list_automations) for diagnosis; they stay on Guard's usual handling."
   ]
