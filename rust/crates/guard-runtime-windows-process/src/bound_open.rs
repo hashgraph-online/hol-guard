@@ -8,7 +8,7 @@ use winapi::shared::ntdef::HANDLE;
 use winapi::um::fileapi::{
     GetFileInformationByHandle, GetFileType, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_TAG_INFO,
 };
-use winapi::um::minwinbase::FileAttributeTagInfo;
+use winapi::um::minwinbase::{FileAttributeTagInfo, FileIdInfo};
 use winapi::um::winbase::{
     GetFileInformationByHandleEx, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
     FILE_TYPE_DISK,
@@ -25,11 +25,22 @@ use super::private_files::open_raw_with_flags;
 // object where it is and are not aliases.
 const NAME_SURROGATE_TAG_BIT: DWORD = 0x2000_0000;
 
-/// Volume serial number and file index of one file.
+/// Volume serial number and file ID of one file.
+///
+/// ReFS, including Windows 11 Dev Drives, uses 128-bit file IDs, and the
+/// 64-bit `nFileIndex` is not guaranteed unique there, so the full
+/// `FILE_ID_INFO` is used when the file system provides it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FileId {
-    volume_serial: DWORD,
-    index: u64,
+    volume_serial: u64,
+    id: [u8; 16],
+}
+
+// `winapi` 0.3.9 defines `FileIdInfo` but not its output structure.
+#[repr(C)]
+struct FileIdInformation {
+    volume_serial_number: u64,
+    file_id: [u8; 16],
 }
 
 struct HandleInfo {
@@ -68,12 +79,40 @@ fn handle_info(file: &std::fs::File) -> io::Result<HandleInfo> {
     let reparse = information.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
         || tag_info.NextEntryOffset & FILE_ATTRIBUTE_REPARSE_POINT != 0
         || tag_info.ReparseTag != 0;
+    let mut id_info = FileIdInformation {
+        volume_serial_number: 0,
+        file_id: [0; 16],
+    };
+    // SAFETY: The output buffer matches FILE_ID_INFO's layout and size, and
+    // `raw` remains open.
+    let id = if unsafe {
+        GetFileInformationByHandleEx(
+            raw,
+            FileIdInfo,
+            &mut id_info as *mut FileIdInformation as *mut _,
+            size_of::<FileIdInformation>() as DWORD,
+        )
+    } != FALSE
+    {
+        FileId {
+            volume_serial: id_info.volume_serial_number,
+            id: id_info.file_id,
+        }
+    } else {
+        // File systems without FileIdInfo, such as FAT, still report the
+        // 64-bit index, which is unique on them. A volume answers the same
+        // way for every file, so both forms never meet in one comparison.
+        let index =
+            (u64::from(information.nFileIndexHigh) << 32) | u64::from(information.nFileIndexLow);
+        let mut id = [0; 16];
+        id[..8].copy_from_slice(&index.to_le_bytes());
+        FileId {
+            volume_serial: u64::from(information.dwVolumeSerialNumber),
+            id,
+        }
+    };
     Ok(HandleInfo {
-        id: FileId {
-            volume_serial: information.dwVolumeSerialNumber,
-            index: (u64::from(information.nFileIndexHigh) << 32)
-                | u64::from(information.nFileIndexLow),
-        },
+        id,
         links: information.nNumberOfLinks,
         directory: information.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0,
         reparse_tag: reparse.then_some(tag_info.ReparseTag),
