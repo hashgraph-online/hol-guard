@@ -22,11 +22,13 @@ const handlers = new Map(), requests = [];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
   const response = await originalFetch(url, options);
-  requests.push({route: new URL(String(url)).pathname, status: response.status});
+  const body = await response.clone().json().catch(() => ({}));
+  requests.push({route: new URL(String(url)).pathname, status: response.status,
+    decision: body.decision, reason_code: body.reason_code, native_route: body.native_route});
   return response;
 };
 (await import(pathToFileURL(extension).href)).default({on(name, fn) {handlers.set(name, fn);}});
-const ctx = {cwd, sessionManager: {getSessionId() {return 'restart-fixture';}},
+const ctx = {cwd, sessionManager: {getSessionId() {return 'restart-fixture';}, getCwd() {return cwd;}},
   ui: {notify() {}}, signal: new AbortController().signal};
 await handlers.get('session_start')({}, ctx);
 console.log(JSON.stringify({phase: 'prepared'}));
@@ -35,13 +37,19 @@ const input = {path: cwd + '/ordinary.ts'};
 const event = {toolCallId: 'read-after-restart', toolName: 'read', input};
 const preserved = JSON.stringify(event);
 const result = await handlers.get('tool_call')(event, ctx);
-if (result?.block) throw Error('ordinary read blocked after daemon restart');
+if (result?.block) throw Error('ordinary read blocked after daemon restart: ' + JSON.stringify({
+  requests, reason_codes: result.reason?.match(/\b(?:daemon|native)_[a-z0-9_]+\b/g),
+  snapshot_failed: result.reason?.includes('immutable tool-call snapshot'),
+  context_changed: result.reason?.includes('context changed'),
+}));
 const content = readFileSync(input.path, 'utf8');
 if (content !== 'export const ordinary = 42;\n') throw Error('source bytes mismatch');
 const output = await handlers.get('tool_result')({
   ...event, content: [{type: 'text', text: content}], isError: false, details: {},
 }, ctx);
 if (output?.isError) throw Error('ordinary output blocked after daemon restart');
+console.log(JSON.stringify({phase: 'ordinary-verified'}));
+await lines.next();
 const negative = await handlers.get('tool_call')({
   toolCallId: 'secret-after-restart', toolName: 'read', input: {path: cwd + '/.env'},
 }, ctx);
@@ -101,7 +109,17 @@ def main() -> int:
         )
         # Do not warm the replacement from Python: the same loaded extension
         # must authenticate and publish its workspace before admitting the read.
-        output, error = child.communicate("replacement-ready\n", timeout=90)
+        child.stdin.write("replacement-ready\n")
+        child.stdin.flush()
+        if not select.select([child.stdout], [], [], 90)[0]:
+            raise probe.ProbeError("replacement extension review exceeded its bounded deadline")
+        ordinary = child.stdout.readline()
+        if not ordinary or json.loads(ordinary) != {"phase": "ordinary-verified"}:
+            raise probe.ProbeError("ordinary review did not complete before the negative probe")
+        with sqlite3.connect(f"file:{guard_home / 'guard.db'}?mode=ro", uri=True) as database:
+            ordinary_approvals = database.execute("SELECT COUNT(*) FROM approval_requests").fetchone()[0]
+        assert ordinary_approvals == 0
+        output, error = child.communicate("negative-ready\n", timeout=90)
         if child.returncode:
             raise probe.ProbeError(f"restart runner failed: {probe._short(error)}")
         result = json.loads(output)
@@ -112,7 +130,8 @@ def main() -> int:
         result["native_routes"] = probe._wait_for_native_route_metrics(daemon, 3)
         with sqlite3.connect(f"file:{guard_home / 'guard.db'}?mode=ro", uri=True) as database:
             result["approval_count"] = database.execute("SELECT COUNT(*) FROM approval_requests").fetchone()[0]
-        assert result["approval_count"] == 0
+        result["ordinary_approval_count"] = ordinary_approvals
+        assert result["approval_count"] <= 1  # A protected read may legitimately require fresh approval.
         Path(sys.argv[1]).write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps({key: result[key] for key in ["ordinary_allowed", "secret_blocked", "tool_bytes_unchanged"]}))
         return 0
