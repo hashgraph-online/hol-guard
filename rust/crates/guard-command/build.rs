@@ -71,6 +71,17 @@ fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
                     "source filename/identity mismatch"
                 );
             }
+            if directory == "contracts/extensions/trust" {
+                let binding: Value = serde_json::from_str(&text).expect("trust binding JSON");
+                let expected = binding["extension"]
+                    .as_str()
+                    .map(|id| format!("{id}.v1.json"));
+                assert_eq!(
+                    path.file_name().and_then(|name| name.to_str()),
+                    expected.as_deref(),
+                    "trust binding filename mismatch"
+                );
+            }
             text
         })
         .collect()
@@ -93,12 +104,6 @@ fn trust_map(root: &Path) -> Value {
             .as_str()
             .expect("trust binding identity");
         assert!(seen.insert(extension.to_owned()), "duplicate trust binding");
-        let path = root.join(directory).join(format!("{extension}.v1.json"));
-        assert_eq!(
-            read_input(root, &path),
-            text,
-            "trust binding filename mismatch"
-        );
         let class = binding["trustClass"].as_str().expect("trust binding class");
         classes
             .get_mut(class)

@@ -106,7 +106,7 @@ preparation command:
 ```sh
 COMPILER=$(uv run --no-sync python -c \
   'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler as f; print(f())')
-"$COMPILER" export-trust > contracts/extensions/trust-class-map.v1.json
+uv run --no-sync python scripts/refresh_extension_artifacts.py --trust-only
 
 uv run --no-sync python scripts/prepare_extension_contribution.py \
   --compiler "$COMPILER" \

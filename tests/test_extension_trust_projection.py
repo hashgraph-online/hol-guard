@@ -25,11 +25,15 @@ def test_standalone_parser_loads_only_trusted_tooling_code(tmp_path):
     """Uninstalled tooling accepts inspected bindings without importing inspected Python."""
     binding = tmp_path / "contracts/extensions/trust/command.example.v1.json"
     binding.parent.mkdir(parents=True)
-    binding.write_text(json.dumps({
-        "schemaVersion": "guard.extension-trust-binding.v1",
-        "extension": "command.example",
-        "trustClass": "external",
-    }))
+    binding.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": "command.example",
+                "trustClass": "external",
+            }
+        )
+    )
     (tmp_path / "src").mkdir()
     (tmp_path / "src/codex_plugin_scanner.py").write_text("raise RuntimeError('untrusted Python imported')")
     root = Path(__file__).parents[1]
