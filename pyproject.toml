@@ -172,6 +172,7 @@ artifacts = [
 ]
 exclude = [
     "contributions/extensions/**",
+    "contracts/extensions/trust-class-map.v1.json",
     "src/codex_plugin_scanner/_native/guard-command-source",
     "src/codex_plugin_scanner/_native/source-compiler-manifest.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json",

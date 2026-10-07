@@ -74,6 +74,7 @@ def test_package_build_stages_and_verifies_before_registering_absent_outputs(hoo
     expected = {
         f"{prefix}/command-catalog.v1.json",
         f"{prefix}/native-command-program.v1.json",
+        f"{prefix}/trust-class-map.v1.json",
     }
     expected.add(
         "contributions/extensions"

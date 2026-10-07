@@ -33,12 +33,14 @@ class CommandProjectionBuildHook(BuildHookInterface):
         root = Path(self.root)
         archive = _archive_support()
         descriptors = root / "contributions/extensions"
+        trust_map = root / "contracts/extensions/trust-class-map.v1.json"
         if (root / "PKG-INFO").is_file():
             # Hatch source archives carry frozen projections plus a fingerprint
             # of all authored inputs. Verify those without requiring Cargo.
             archive.verify_projection_manifest(root)
         else:
             descriptors = root / "contracts/extensions/build-descriptors"
+            trust_map = root / "contracts/extensions/build-trust-class-map.v1.json"
             command = [
                 sys.executable,
                 str(root / "scripts/build_native_command_program.py"),
@@ -62,6 +64,12 @@ class CommandProjectionBuildHook(BuildHookInterface):
             if self.target_name == "sdist"
             else "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
         )
+        build_data["force_include"].pop("contracts/extensions/trust-class-map.v1.json", None)
+        build_data["force_include"][str(trust_map)] = (
+            "contracts/extensions/trust-class-map.v1.json"
+            if self.target_name == "sdist"
+            else "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
+        )
         # Register only after generation so editable dependency setup works
         # with absent outputs. Ignored files still travel in both artifacts.
         for name in ("command-catalog.v1.json", "native-command-program.v1.json"):
@@ -73,5 +81,5 @@ class CommandProjectionBuildHook(BuildHookInterface):
             )
             build_data["force_include"][str(root / relative)] = destination
         if self.target_name == "sdist":
-            archive.write_projection_manifest(root, descriptors=descriptors)
+            archive.write_projection_manifest(root, descriptors=descriptors, trust_map=trust_map)
             build_data["force_include"][str(root / archive.MANIFEST)] = archive.MANIFEST

@@ -36,7 +36,7 @@ def _generator(root: Path):
     return module
 
 
-def projection_manifest(root: Path, *, descriptors: Path | None = None) -> dict:
+def projection_manifest(root: Path, *, descriptors: Path | None = None, trust_map: Path | None = None) -> dict:
     """Fingerprint canonical sources, native implementation, and both outputs."""
     generator = _generator(root)
     for name in NAMES:
@@ -60,16 +60,21 @@ def projection_manifest(root: Path, *, descriptors: Path | None = None) -> dict:
         }
         if any(path.is_symlink() for path in descriptors.glob("*.json")):
             raise ValueError("descriptor cannot be a symlink")
+    if trust_map is not None:
+        generator.read_object(trust_map)
+        result["trust_map_sha256"] = hashlib.sha256(trust_map.read_bytes()).hexdigest()
     return result
 
 
-def write_projection_manifest(root: Path, *, descriptors: Path | None = None) -> None:
+def write_projection_manifest(root: Path, *, descriptors: Path | None = None, trust_map: Path | None = None) -> None:
     """Record the source and output fingerprints shipped in the source archive."""
     generator = _generator(root)
     destination = root / MANIFEST
     if destination.is_symlink():
         raise ValueError("source-distribution projection manifest cannot be a symlink")
-    destination.write_bytes(generator.canonical_bytes(projection_manifest(root, descriptors=descriptors)))
+    destination.write_bytes(
+        generator.canonical_bytes(projection_manifest(root, descriptors=descriptors, trust_map=trust_map))
+    )
 
 
 def verify_projection_manifest(root: Path) -> None:
@@ -77,5 +82,6 @@ def verify_projection_manifest(root: Path) -> None:
     generator = _generator(root)
     saved = generator.read_object(root / MANIFEST)
     descriptors = root / "contributions/extensions" if "descriptors" in saved else None
-    if saved != projection_manifest(root, descriptors=descriptors):
+    trust_map = root / "contracts/extensions/trust-class-map.v1.json" if "trust_map_sha256" in saved else None
+    if saved != projection_manifest(root, descriptors=descriptors, trust_map=trust_map):
         raise ValueError("source-distribution command projections do not match their build inputs")

@@ -139,11 +139,9 @@ def _sync_aggregate_map() -> bool:
 def sync_trust_map() -> bool:
     """Add contribution ids missing a trust binding as ``external`` files.
 
-    Gate on committed-aggregate consistency first: if the generated map was
-    hand-edited or is stale, fail instead of silently rewriting it to match the
-    bindings. Only after a clean baseline do we add missing bindings and regen.
+    Authored bindings are the authority. Legacy aggregate copies can be stale
+    after merges; regenerate them without admitting their values into policy.
     """
-    check_trust_consistency()
     missing = sorted(set(contribution_ids()) - _read_binding_ids())
     changed = False
     for extension_id in missing:

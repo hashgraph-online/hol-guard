@@ -150,7 +150,8 @@ def main() -> int:
             "compile",
         ]
     )
-    request = canonical_bytes(build_request())
+    request_payload = build_request()
+    request = canonical_bytes(request_payload)
     if len(request) > 8 * 1024 * 1024:
         raise ValueError("source build envelope exceeds native input budget")
     completed = subprocess.run(command, input=request, stdout=subprocess.PIPE, cwd=ROOT, timeout=600, check=False)
@@ -177,10 +178,22 @@ def main() -> int:
         ARTIFACT: canonical_bytes(program),
         ROOT / "contracts/extensions/command-catalog.v1.json": canonical_bytes(catalog),
     }
+    # Native lowering defaults unmapped contribution IDs to external. Ship the
+    # same complete trust inventory instead of the frozen compatibility map.
+    trust = request_payload["trust"]
+    classes = {name: set(ids) for name, ids in trust["classes"].items()}
+    for descriptor in compiled["descriptors"]:
+        classes[descriptor["trustClass"]].add(descriptor["id"])
+    trust = {**trust, "classes": {name: sorted(ids) for name, ids in classes.items()}}
+    trust_path = ROOT / "contracts/extensions/build-trust-class-map.v1.json"
+    outputs[trust_path] = canonical_bytes(trust)
     package_directory = ROOT / "src/codex_plugin_scanner/guard/contracts/data/extensions"
     if any(parent.is_symlink() for parent in (package_directory, *package_directory.parents) if parent != ROOT):
         raise ValueError("package resource directory cannot traverse a symlink")
-    outputs.update({package_directory / path.name: content for path, content in tuple(outputs.items())})
+    outputs.update(
+        {package_directory / path.name: content for path, content in tuple(outputs.items()) if path != trust_path}
+    )
+    outputs[package_directory / "trust-class-map.v1.json"] = outputs[trust_path]
     descriptor_directory = args.descriptor_dir or ROOT / "contributions/extensions"
     if not descriptor_directory.is_absolute():
         descriptor_directory = ROOT / descriptor_directory

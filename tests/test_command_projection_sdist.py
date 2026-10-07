@@ -98,3 +98,14 @@ def test_descriptor_projection_is_bound_in_new_archives(archive):
     descriptor.write_text('{"id":"command.changed"}')
     with pytest.raises(ValueError, match="do not match"):
         module.verify_projection_manifest(root)
+
+
+def test_generated_trust_map_is_bound_in_new_archives(archive):
+    module, root = archive
+    trust_map = root / "contracts/extensions/trust-class-map.v1.json"
+    trust_map.write_text('{"classes":{"external":["command.example"]}}')
+    module.write_projection_manifest(root, trust_map=trust_map)
+    module.verify_projection_manifest(root)
+    trust_map.write_text('{"classes":{"first-party":["command.example"]}}')
+    with pytest.raises(ValueError, match="do not match"):
+        module.verify_projection_manifest(root)

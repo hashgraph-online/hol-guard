@@ -131,7 +131,8 @@ def test_existing_matching_snapshot_is_verified_without_overwrite(snapshot, monk
     assert any("edit" in call for call in calls) is draft
 
 
-def test_partial_draft_can_resume_but_mismatching_assets_cannot_be_replaced(snapshot, monkeypatch):
+@pytest.mark.parametrize("matching", [True, False])
+def test_partial_draft_can_resume_but_mismatching_assets_cannot_be_replaced(snapshot, monkeypatch, matching):
     _, output = snapshot
     calls = []
 
@@ -147,13 +148,21 @@ def test_partial_draft_can_resume_but_mismatching_assets_cannot_be_replaced(snap
             )
         if args[1] == "download":
             destination = Path(args[args.index("--dir") + 1])
-            (destination / bundle.ARCHIVE).write_bytes(b"wrong existing asset")
+            name = args[args.index("--pattern") + 1]
+            (destination / name).write_bytes((output / name).read_bytes() if matching else b"wrong existing asset")
         return ""
 
     monkeypatch.setattr(publisher, "github", github)
-    with pytest.raises(ValueError, match="refusing to overwrite"):
+    if matching:
         publisher.publish(output, SHA)
-    assert not any("upload" in call or "edit" in call for call in calls)
+        uploads = [call for call in calls if "upload" in call]
+        assert len(uploads) == 1 and str(output / bundle.MANIFEST) in uploads[0]
+        assert any("edit" in call for call in calls)
+        assert len([call for call in calls if "download" in call]) == 2
+    else:
+        with pytest.raises(ValueError, match="refusing to overwrite"):
+            publisher.publish(output, SHA)
+        assert not any("upload" in call or "edit" in call for call in calls)
 
 
 def test_new_snapshot_stays_draft_until_downloaded_assets_verify(snapshot, monkeypatch):

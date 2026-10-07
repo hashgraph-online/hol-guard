@@ -28,6 +28,12 @@ _CONTRIBUTION_SOURCES = (
 
 def _artifacts(source_root: Path) -> dict[str, str]:
     artifacts = dict(_STATIC_ARTIFACTS)
+    generated_trust = source_root / "contracts/extensions/build-trust-class-map.v1.json"
+    if generated_trust.is_symlink():
+        raise ValueError("generated trust map cannot be a symlink")
+    if generated_trust.is_file():
+        del artifacts["contracts/extensions/trust-class-map.v1.json"]
+        artifacts["contracts/extensions/build-trust-class-map.v1.json"] = "extensions/trust-class-map.v1.json"
     for relative_dir, pattern, destination_dir in _CONTRIBUTION_SOURCES:
         source_dir = source_root / relative_dir
         if not source_dir.is_dir():

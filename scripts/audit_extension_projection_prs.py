@@ -38,15 +38,22 @@ def audit() -> dict:
         raise ValueError("open PR audit may be truncated")
     affected = []
     for pr in prs:
-        paths = [item["path"] for item in pr["files"]]
-        if len(paths) != pr["changedFiles"]:
-            pages = github(
-                "api", f"repos/{REPOSITORY}/pulls/{pr['number']}/files?per_page=100", "--paginate", "--slurp"
-            )
-            paths = [item["filename"] for page in pages for item in page]
+        # The PR-list connection omits rename origins. Always use the complete
+        # files API so a move out of a legacy path cannot escape this audit.
+        pages = github("api", f"repos/{REPOSITORY}/pulls/{pr['number']}/files?per_page=100", "--paginate", "--slurp")
+        files = [item for page in pages for item in page]
+        paths = [item["filename"] for item in files]
         if len(paths) != pr["changedFiles"] or len(paths) != len(set(paths)):
             raise ValueError("PR file audit is incomplete")
-        legacy = [path for path in paths if path.startswith(LEGACY_PREFIXES)]
+        current = github("api", f"repos/{REPOSITORY}/pulls/{pr['number']}")
+        if (
+            current["state"] != "open"
+            or current["head"]["sha"] != pr["headRefOid"]
+            or current["changed_files"] != len(paths)
+        ):
+            raise ValueError("PR changed during its file audit; retry the audit")
+        origins = [item["previous_filename"] for item in files if "previous_filename" in item]
+        legacy = sorted({path for path in paths + origins if path.startswith(LEGACY_PREFIXES)})
         if legacy:
             affected.append({"number": pr["number"], "head_sha": pr["headRefOid"], "paths": sorted(legacy)})
     return {"repository": REPOSITORY, "complete": True, "open_prs": len(prs), "affected_prs": affected}

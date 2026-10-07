@@ -59,7 +59,7 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
     )
     compiled = {
         "catalog": [],
-        "descriptors": [{"id": identity, "fixture": True} for identity in descriptor_ids],
+        "descriptors": [{"id": identity, "fixture": True, "trustClass": "external"} for identity in descriptor_ids],
         "program": {
             "catalog_digest": "c" * 64,
             "program_digest": "p" * 64,
@@ -105,6 +105,8 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
     staged = staged_root / "extensions/native-command-program.v1.json"
     assert json.loads(generated.read_text(encoding="utf-8"))["program_digest"] == "p" * 64
     assert staged.read_bytes() == generated.read_bytes()
+    generated_trust = source_root / "contracts/extensions/build-trust-class-map.v1.json"
+    assert (staged_root / "extensions/trust-class-map.v1.json").read_bytes() == generated_trust.read_bytes()
     assert (staged_root / "extensions/contributions/command.blitcp.json").is_file()
 
 
