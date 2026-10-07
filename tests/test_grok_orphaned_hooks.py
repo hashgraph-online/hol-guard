@@ -1,13 +1,13 @@
 """Changing Guard homes must not leave deleted clients blocking Grok."""
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 import tomlkit
 
 from codex_plugin_scanner.guard.adapters.base import _shell_command
-from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
 from codex_plugin_scanner.guard.adapters.grok_user_config import prepare_user_config_text
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_missing_grok_hook_command
 
@@ -25,9 +25,8 @@ def command(home: Path, *, workspace: Path | None = None) -> str:
         "timeout_seconds": 85,
         "cli_args": [*args, "--json"],
     }
-    interpreter = isolated_cursor_hook_python()
-    assert interpreter is not None
-    return _shell_command((interpreter, "-I", str(home / "managed/bounded-hooks/grok.py"), json.dumps(config)))
+    # Command recognition must not depend on a system isolated interpreter.
+    return _shell_command((sys.executable, "-I", str(home / "managed/bounded-hooks/grok.py"), json.dumps(config)))
 
 
 def test_repair_removes_orphans_even_without_their_ownership_record(tmp_path: Path) -> None:
