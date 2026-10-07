@@ -1,6 +1,8 @@
 use super::*;
 
-fn owned_decision(fixture: &Fixture) -> Value {
+pub(in crate::policy_store::workspace_review_business) fn owned_decision(
+    fixture: &Fixture,
+) -> Value {
     use crate::policy_store::workspace_review_decision::{
         self as decision, WorkspaceReviewDecisionContext,
     };

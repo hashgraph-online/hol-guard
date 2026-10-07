@@ -466,3 +466,7 @@ mod uncertainty_regressions;
 #[cfg(test)]
 #[path = "native_command_compound_controls_tests.rs"]
 mod compound_regressions;
+
+#[cfg(test)]
+#[path = "native_command_script_controls_tests.rs"]
+mod script_regressions;

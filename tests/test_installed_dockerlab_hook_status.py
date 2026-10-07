@@ -70,3 +70,35 @@ def test_installed_cursor_denial_requires_exit_two(status: int) -> None:
     else:
         with pytest.raises(RuntimeError, match=f"returned {status}, expected 2"):
             lab._run_installed_hook("cursor", {"hook_event_name": "PreToolUse"}, expect_denial=True)
+
+
+@pytest.mark.parametrize(
+    ("harness", "action", "decision", "accepted"),
+    [
+        ("claude-code", "review", "ask", True),
+        ("claude-code", "require-reapproval", "ask", True),
+        ("claude-code", "review", "allow", False),
+        ("claude-code", "warn", "ask", False),
+        ("claude-code", "block", "ask", False),
+        ("codex", "review", "ask", False),
+    ],
+)
+def test_installed_claude_review_requires_native_approval(
+    harness: str, action: str, decision: str, accepted: bool,
+) -> None:
+    lab = _lab()
+    response = {"policy_action": action, "hookSpecificOutput": {"permissionDecision": decision}}
+    completed = subprocess.CompletedProcess([], 0, json.dumps(response), "")
+    lab.subprocess = SimpleNamespace(run=lambda *_args, **_kwargs: completed)
+    if accepted:
+        lab._run_installed_hook(harness, {"hook_event_name": "PreToolUse"}, expect_approval=True)
+    else:
+        with pytest.raises(RuntimeError):
+            lab._run_installed_hook(harness, {"hook_event_name": "PreToolUse"}, expect_approval=True)
+
+
+@pytest.mark.parametrize("prefix", ["#", "#guardDaemon=http%3A%2F%2F127.0.0.1%3A4781&", "?"])
+def test_installed_hook_diagnostic_redacts_approval_tokens(prefix: str) -> None:
+    lab = _lab()
+    value = f'approve http://127.0.0.1/requests/fixture{prefix}guard-token=fixture-token&view=inbox next'
+    assert lab._safe_hook_diagnostic(value) == value.replace("fixture-token", "[REDACTED]")

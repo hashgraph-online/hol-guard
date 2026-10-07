@@ -19,6 +19,11 @@ const DIRECTORY: &str = "workspace-review-business-inputs";
 const MAX_PRIVATE_BYTES: u64 = 512 * 1024;
 const DOMAIN: &[u8] = b"hol-guard.business-private-review.v1\0";
 
+#[path = "workspace_review_business_producer.rs"]
+mod producer;
+#[allow(unused_imports)] // The authenticated worker route is not yet published.
+pub(crate) use producer::{prepare_google_review, OwnedGoogleBusinessReview};
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Context {

@@ -70,6 +70,23 @@ def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path,
     assert cargo[0][cargo[0].index("--target-dir") + 1] == str(refresh.TARGET_DIR)
     assert all("hol-guard-runtime" not in command for command in calls)
     assert all(not any("tests/" in part for part in command) for command in calls)
+    assert all("scripts/prepare_extension_contribution.py" not in command for command in calls)
+    projections = [command for command in calls if "scripts/build_native_command_program.py" in command]
+    assert projections == [
+        [refresh.sys.executable, "scripts/build_native_command_program.py", "--compiler", str(refresh.COMPILER)],
+        [
+            refresh.sys.executable,
+            "scripts/build_native_command_program.py",
+            "--compiler",
+            str(refresh.COMPILER),
+            "--check",
+        ],
+    ]
+    assert [command for command in calls if "scripts/export_extension_directory.py" in command] == [
+        [refresh.sys.executable, "scripts/export_extension_directory.py"],
+        [refresh.sys.executable, "scripts/export_extension_directory.py", "--check"],
+        [refresh.sys.executable, "scripts/export_extension_directory.py", "--check"],
+    ]
     assert {path: path.read_bytes() for path in preserved} == preserved
 
 
