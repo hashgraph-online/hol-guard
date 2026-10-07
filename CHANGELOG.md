@@ -11,7 +11,7 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 ### Bug Fixes
 * **native:** hash executable contents with the existing hardware-aware SHA-256 backend while retaining fresh reads, file-descriptor identity checks, and replacement detection; no content cache is introduced.
 * **hooks:** carry the original hook deadline through native review, failure-record SQL operations, and late-result fail-safe rendering, preserving earlier inherited deadlines and restoring the caller's context.
-* **tests:** isolate native cwd fixtures across repeated CI runs and assert protected-call denials rather than incidental review wording.
+* **tests:** isolate native cwd fixtures across repeated CI runs and assert protected-call denials rather than incidental review wording or source indentation.
 * **ci:** provision real checkout-built native runtime and compiler executables for updater regressions, including explicit Windows `.exe` selectors; retain fail-closed MCP identity checks.
 * **packages:** share `uvx` option arity rules for executable and dependency selection, including Python/index/constraint short aliases; preserve executable argument boundaries. Keep here-strings distinct from heredocs so `<<<` cannot hide subsequent package commands.
 * **ci:** fail projection preparation after a bounded five-minute subprocess timeout instead of leaving coverage shards waiting indefinitely.
