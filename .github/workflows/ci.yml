@@ -130,26 +130,12 @@ jobs:
           retention-days: 7
 
   quality:
-    needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-evaluators
-          path: rust/target/release
-      - name: Bind the compiled native runtime
-        run: |
-          chmod 0755 rust/target/release/hol-guard-runtime
-          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-projections
-          path: .
       - uses: ./.github/actions/ci-job-quality
 
   # Rust validation is required, but is not on the artifact/Python fan-out critical path.
@@ -165,6 +151,12 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Configure the checked optimized test profile
+        if: matrix.check == 'test'
+        run: |
+          echo "CARGO_PROFILE_TEST_OPT_LEVEL=1" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-workspace-${{ matrix.check }}
@@ -186,7 +178,11 @@ jobs:
                 exit "$clippy_status"
               fi
               ;;
-            test) cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets ;;
+            test)
+              nextest_bin="$(python3 scripts/ci/install_nextest.py)"
+              PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --workspace --all-targets \
+                --test-threads 2 --retries 0 --no-fail-fast
+              ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
       - name: Bind successful strict Clippy report
@@ -215,10 +211,6 @@ jobs:
       - name: Check native formatting before compilation
         run: cargo fmt --manifest-path rust/Cargo.toml --all --check
       - name: Build native command evaluators once for pytest shards
-        # Diagnose leaf-unit invalidation only after the trusted cache restore.
-        # Putting CARGO_LOG on the cache step would change its hashed key.
-        env:
-          CARGO_LOG: cargo::core::compiler::fingerprint=info
         run: |
           python3 scripts/refresh_extension_artifacts.py --trust-only
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime

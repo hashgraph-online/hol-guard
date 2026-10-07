@@ -83,6 +83,8 @@ def _hook_harness_is_unmanaged(daemon_server: Any, harness: str) -> bool:
     """True when leftover hooks belong to an app Guard is not currently protecting."""
 
     store = getattr(daemon_server, "store", None)
+    if store is None:
+        return False
     getter = getattr(store, "get_managed_install", None)
     if not callable(getter):
         return False

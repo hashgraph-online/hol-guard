@@ -10,6 +10,7 @@ import sys
 import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol, cast
@@ -18,7 +19,7 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.ci.pytest_duration_manifest import load_latest_duration_manifest, node_id_digest
-from scripts.ci.pytest_shard import discover_test_nodes
+from scripts.ci.test_inventory import build_inventory, build_suite_metrics, collect_test_items
 
 PLAN_SCHEMA_VERSION = 1
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
@@ -248,7 +249,10 @@ def main() -> int:
         args.max_manifest_age_days,
     )
     collection_started = time.monotonic()
-    nodes = discover_test_nodes(root)
+    items = collect_test_items(root, validate_invariants=True)
+    nodes = sorted(item.nodeid for item in items)
+    markers = {item.nodeid: tuple(marker.name for marker in item.iter_markers()) for item in items}
+    inventory = build_inventory(nodes, markers)
     collection_seconds = time.monotonic() - collection_started
     shards, loads = build_affinity_node_shards(nodes, args.shard_count, durations)
     write_shard_plan(
@@ -256,6 +260,10 @@ def main() -> int:
         shards=shards,
         estimated_loads=loads,
         manifest_used=manifest_used,
+    )
+    (args.output_directory / "test-inventory.json").write_text(
+        json.dumps(asdict(build_suite_metrics(root, inventory)), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     print(
         json.dumps(
