@@ -66,6 +66,10 @@ use local_files::*;
 #[path = "package_intent_parser/tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "package_intent_parser/uvx_value_options_tests.rs"]
+mod uvx_value_options_tests;
+
 // ---------------------------------------------------------------------------
 // Module constants  (package_intent_parser.py :51-131)
 // ---------------------------------------------------------------------------

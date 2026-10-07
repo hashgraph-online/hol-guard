@@ -1,5 +1,107 @@
 use super::*;
 
+// Value-taking uv tool run options (uvx is its alias). Keep both package and
+// dependency traversal on the same arity rules.
+const UVX_VALUE_OPTIONS: &[&str] = &[
+    "--from",
+    "--with",
+    "-w",
+    "--with-editable",
+    "--with-requirements",
+    "--constraints",
+    "--constraint",
+    "-c",
+    "--build-constraints",
+    "--build-constraint",
+    "-b",
+    "--overrides",
+    "--override",
+    "--env-file",
+    "--python-platform",
+    "--torch-backend",
+    "--index",
+    "--default-index",
+    "--index-url",
+    "-i",
+    "--extra-index-url",
+    "--find-links",
+    "-f",
+    "--index-strategy",
+    "--keyring-provider",
+    "--upgrade-package",
+    "-P",
+    "--resolution",
+    "--prerelease",
+    "--fork-strategy",
+    "--exclude-newer",
+    "--exclude-newer-package",
+    "--no-sources-package",
+    "--reinstall-package",
+    "--link-mode",
+    "--config-setting",
+    "--config-settings",
+    "-C",
+    "--config-settings-package",
+    "--no-build-isolation-package",
+    "--no-build-package",
+    "--no-binary-package",
+    "--cache-dir",
+    "--refresh-package",
+    "--python",
+    "-p",
+    "--color",
+    "--allow-insecure-host",
+    "--trusted-host",
+    "--directory",
+    "--project",
+    "--config-file",
+    "--python-preference",
+    "--python-fetch",
+    "--preview-features",
+    "--preview-feature",
+];
+
+enum UvxArgument<'a> {
+    Option(&'a str, &'a str),
+    Command(&'a str),
+}
+
+fn uvx_arguments(tokens: &[String]) -> impl Iterator<Item = UvxArgument<'_>> {
+    let mut tokens = tokens.iter().skip(1);
+    let mut finished = false;
+    std::iter::from_fn(move || {
+        if finished {
+            return None;
+        }
+        while let Some(token) = tokens.next() {
+            if token == "--" {
+                finished = true;
+                return tokens.next().map(|token| UvxArgument::Command(token));
+            }
+            if !token.starts_with('-') {
+                finished = true;
+                return Some(UvxArgument::Command(token));
+            }
+            let (name, attached) = token
+                .split_once('=')
+                .map_or((token.as_str(), None), |(name, value)| (name, Some(value)));
+            if UVX_VALUE_OPTIONS.contains(&name) {
+                let value = attached.or_else(|| tokens.next().map(String::as_str))?;
+                return Some(UvxArgument::Option(name, value));
+            }
+            // Clap accepts short values both attached and with an equals sign.
+            if !token.starts_with("--") && token.len() > 2 {
+                if let Some(name) = token.get(..2) {
+                    if UVX_VALUE_OPTIONS.contains(&name) {
+                        return Some(UvxArgument::Option(name, &token[2..]));
+                    }
+                }
+            }
+        }
+        None
+    })
+}
+
 // package_intent_parser.py `_parse_exec_intent`
 #[allow(clippy::too_many_arguments)]
 pub(super) fn parse_exec_intent(
@@ -26,36 +128,10 @@ pub(super) fn parse_exec_intent(
     };
     let mut targets = vec![target];
     if command == "uvx" {
-        let mut index = 1;
-        while index < tokens.len() {
-            let token = &tokens[index];
-            if token == "--" {
-                break;
-            }
-            if matches!(token.as_str(), "--with" | "-w") && index + 1 < tokens.len() {
-                targets.push(python_target(&tokens[index + 1], false, None, Vec::new()));
-                index += 2;
-                continue;
-            }
-            if let Some(spec) = token
-                .strip_prefix("--with=")
-                .or_else(|| token.strip_prefix("-w="))
-                .or_else(|| token.strip_prefix("-w").filter(|spec| !spec.is_empty()))
-            {
+        for argument in uvx_arguments(tokens) {
+            if let UvxArgument::Option("--with" | "-w", spec) = argument {
                 targets.push(python_target(spec, false, None, Vec::new()));
             }
-            if matches!(
-                token.as_str(),
-                "--from" | "--python" | "--with-requirements" | "--with-editable"
-            ) && index + 1 < tokens.len()
-            {
-                index += 2;
-                continue;
-            }
-            if !token.starts_with('-') {
-                break;
-            }
-            index += 1;
         }
     }
     let is_local = LOCAL_EXECUTION_COMMANDS.contains(command.as_str());
@@ -173,18 +249,11 @@ pub(super) fn exec_package_spec(tokens: &[String]) -> Option<String> {
         return first_positional(&tokens[1..], &["--bun"]);
     }
     if command == "uvx" {
-        return option_value(tokens, "--from").or_else(|| {
-            first_positional(
-                &tokens[1..],
-                &[
-                    "--from",
-                    "--python",
-                    "--with",
-                    "-w",
-                    "--with-requirements",
-                    "--with-editable",
-                ],
-            )
+        return uvx_arguments(tokens).find_map(|argument| match argument {
+            UvxArgument::Option("--from", spec) | UvxArgument::Command(spec) => {
+                Some(spec.to_owned())
+            }
+            _ => None,
         });
     }
     None
