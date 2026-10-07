@@ -57,6 +57,7 @@ pub(super) struct Fixture {
     pub(super) store: super::super::PolicySnapshotStore,
     pub(super) snapshot: PolicySnapshotV3,
     pub(super) key: [u8; 32],
+    pub(super) source_document: Option<Value>,
 }
 impl Fixture {
     pub(super) fn new(label: &str) -> Self {
@@ -81,6 +82,7 @@ impl Fixture {
             store,
             snapshot,
             key,
+            source_document: None,
         }
     }
 
@@ -128,6 +130,7 @@ impl Fixture {
             store,
             snapshot,
             key,
+            source_document: Some(document),
         }
     }
     fn stage(&self, value: &Value) -> Value {

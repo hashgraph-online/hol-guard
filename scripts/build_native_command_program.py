@@ -70,14 +70,24 @@ def build_request() -> dict:
 def _trust_request_payload() -> dict:
     """Assemble the trust block from authored per-extension bindings.
 
-    The committed aggregate map is a generated projection; building the native
-    request from the bindings guarantees the compiled program and catalog carry
-    binding truth even if the committed aggregate is stale or hand-edited.
+    The aggregate is an ignored package projection. Only authored bindings
+    determine the compiled program, catalog, and packaged trust classifications.
     """
     sys.path.insert(0, str(ROOT / "src"))
     from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
 
     return trust_map_from_bindings(ROOT / "contracts" / "extensions" / "trust")
+
+
+def packaged_trust_map(request: dict) -> dict:
+    """Keep reviewed classes and default unbound canonical contributions off."""
+    trust = request["trust"]
+    classes = {name: set(ids) for name, ids in trust["classes"].items()}
+    known = set().union(*classes.values())
+    ids = {source["extension"]["extension_id"] for source in request["sources"]}
+    ids.update("command.mcp-" + source["id"].removeprefix("mcp.") for source in request["mcp_sources"])
+    classes["external"].update(ids - known)
+    return {**trust, "classes": {name: sorted(ids) for name, ids in classes.items()}}
 
 
 def _implementation_files(directory: Path) -> set[Path]:
@@ -127,6 +137,9 @@ def main() -> int:
         "--projections-only", action="store_true", help="Stage package inputs without rewriting published descriptors."
     )
     parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")
+    parser.add_argument(
+        "--descriptor-dir", type=Path, help="Generate descriptors outside the tracked contribution tree."
+    )
     args = parser.parse_args()
     command = (
         [str(args.compiler.resolve(strict=True)), "compile"]
@@ -147,7 +160,8 @@ def main() -> int:
             "compile",
         ]
     )
-    request = canonical_bytes(build_request())
+    request_value = build_request()
+    request = canonical_bytes(request_value)
     if len(request) > 8 * 1024 * 1024:
         raise ValueError("source build envelope exceeds native input budget")
     completed = subprocess.run(command, input=request, stdout=subprocess.PIPE, cwd=ROOT, timeout=600, check=False)
@@ -161,6 +175,9 @@ def main() -> int:
     built = subprocess.run([*command[:-1], "export-built"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
     if built.returncode or json.loads(built.stdout) != compiled:
         raise ValueError("source compiler does not embed the current authored sources; rebuild it before staging")
+    trust = subprocess.run([*command[:-1], "export-trust"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
+    if trust.returncode or json.loads(trust.stdout) != request_value["trust"]:
+        raise ValueError("source compiler trust map does not match the authored bindings; rebuild it before staging")
     program = compiled["program"]
     catalog = {
         "schema": "guard.command-catalog.v1",
@@ -170,20 +187,35 @@ def main() -> int:
         "source_digest": compiled["source_digest"],
         "implementation_digest": compiled["implementation_digest"],
     }
+    trust_path = (
+        ROOT
+        / "contracts/extensions"
+        / ("build-trust-class-map.v1.json" if args.descriptor_dir else "trust-class-map.v1.json")
+    )
     outputs = {
+        trust_path: canonical_bytes(packaged_trust_map(request_value)),
         ARTIFACT: canonical_bytes(program),
         ROOT / "contracts/extensions/command-catalog.v1.json": canonical_bytes(catalog),
     }
     package_directory = ROOT / "src/codex_plugin_scanner/guard/contracts/data/extensions"
     if any(parent.is_symlink() for parent in (package_directory, *package_directory.parents) if parent != ROOT):
         raise ValueError("package resource directory cannot traverse a symlink")
-    outputs.update({package_directory / path.name: content for path, content in tuple(outputs.items())})
+    outputs.update(
+        {package_directory / path.name: content for path, content in tuple(outputs.items()) if path != trust_path}
+    )
+    outputs[package_directory / "trust-class-map.v1.json"] = outputs[trust_path]
+    descriptor_directory = args.descriptor_dir or ROOT / "contributions/extensions"
+    if not descriptor_directory.is_absolute():
+        descriptor_directory = ROOT / descriptor_directory
+    if any(path.is_symlink() for path in (descriptor_directory, *descriptor_directory.parents) if path != ROOT):
+        raise ValueError("descriptor output directory cannot traverse a symlink")
+    descriptor_directory = descriptor_directory.resolve()
+    descriptor_directory.relative_to(ROOT.resolve())
     for descriptor in () if args.projections_only else compiled["descriptors"]:
         identity = descriptor["id"]
         if "/" in identity or "\\" in identity or not identity.startswith("command."):
             raise ValueError("invalid generated descriptor identity")
-        outputs[ROOT / "contributions/extensions" / f"{identity}.json"] = canonical_bytes(descriptor)
-    descriptor_directory = ROOT / "contributions/extensions"
+        outputs[descriptor_directory / f"{identity}.json"] = canonical_bytes(descriptor)
     expected_descriptors = {path for path in outputs if path.parent == descriptor_directory}
     unexpected_descriptors = sorted(
         path
@@ -231,6 +263,8 @@ def main() -> int:
         if any(identity.get(key) != program[key] for key in ("program_digest", "catalog_digest")):
             raise ValueError("native compiler embeds a stale program; rebuild it after generating the artifacts")
     else:
+        if not args.projections_only:
+            descriptor_directory.mkdir(parents=True, exist_ok=True)
         for path in unexpected_descriptors:
             path.unlink()
         for path, content in outputs.items():

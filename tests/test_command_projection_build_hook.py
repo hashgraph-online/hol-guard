@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import types
@@ -27,7 +28,8 @@ def hook(monkeypatch, tmp_path):
     spec.loader.exec_module(module)
     archive = types.ModuleType("archive_test_support")
     archive.MANIFEST = "contracts/extensions/command-projection-build.v1.json"
-    archive.write_projection_manifest = lambda root: None
+    archive.NAMES = ("command-catalog.v1.json", "native-command-program.v1.json", "trust-class-map.v1.json")
+    archive.write_projection_manifest = lambda root, **kwargs: None
     archive.verify_projection_manifest = lambda root: None
     monkeypatch.setattr(module, "_archive_support", lambda: archive)
     instance = module.CommandProjectionBuildHook()
@@ -68,12 +70,19 @@ def test_package_build_stages_and_verifies_before_registering_absent_outputs(hoo
     hook.initialize("standard", data)
     assert len(calls) == 2
     assert calls[1] == [*calls[0], "--check"]
-    assert "--projections-only" in calls[0]
+    assert "--descriptor-dir" in calls[0]
+    assert str(Path(hook.root) / "contracts/extensions/build-descriptors") in calls[0]
     prefix = "contracts/extensions" if target == "sdist" else "codex_plugin_scanner/guard/contracts/data/extensions"
     expected = {
         f"{prefix}/command-catalog.v1.json",
         f"{prefix}/native-command-program.v1.json",
+        f"{prefix}/trust-class-map.v1.json",
     }
+    expected.add(
+        "contributions/extensions"
+        if target == "sdist"
+        else "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
+    )
     if target == "sdist":
         expected.add(hook.archive_test_support.MANIFEST)
     assert set(data["force_include"].values()) == expected
@@ -146,10 +155,27 @@ def test_generated_path_gate_permits_removal_but_rejects_reintroduction():
     paths = [
         f"{prefix}/{name}.v1.json"
         for prefix in ("contracts/extensions", "src/codex_plugin_scanner/guard/contracts/data/extensions")
-        for name in ("command-catalog", "native-command-program")
+        for name in ("command-catalog", "native-command-program", "trust-class-map")
     ]
     files = [{"filename": path, "status": status} for path in paths for status in ("removed", "added", "modified")]
-    other = "src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
-    files.append({"filename": other, "status": "removed"})
     result = subprocess.run(["jq", "-r", query], input=json.dumps(files), text=True, capture_output=True, check=True)
-    assert result.stdout.splitlines() == [path for path in paths for _ in range(2)] + [other]
+    owned = "".join(re.findall(r"owned\+?='([^']+)'", run))
+    protected = subprocess.run(["grep", "-E", owned], input=result.stdout, text=True, capture_output=True, check=True)
+    expected = [path for path in paths if path != "contracts/extensions/trust-class-map.v1.json"]
+    assert protected.stdout.splitlines() == [path for path in expected for _ in range(2)]
+
+
+def test_regeneration_prs_cannot_track_ignored_package_projections():
+    """Automation receives no exemption for outputs removed from version control."""
+    root = Path(__file__).parents[1]
+    workflow = yaml.safe_load((root / ".github/workflows/generated-artifacts-guard.yml").read_text())
+    job = workflow["jobs"]["regen-owned-paths"]
+    assert "if" not in job
+    step = job["steps"][1]
+    assert "if" not in step
+    query = step["run"].split("--jq '", 1)[1].split("'", 1)[0]
+    path = "contracts/extensions/native-command-program.v1.json"
+    files = [{"filename": path, "status": status} for status in ("removed", "added", "modified")]
+    files.append({"filename": "contracts/extensions/trust-class-map.v1.json", "status": "modified"})
+    result = subprocess.run(["jq", "-r", query], input=json.dumps(files), text=True, capture_output=True, check=True)
+    assert result.stdout.splitlines() == [path, path]
