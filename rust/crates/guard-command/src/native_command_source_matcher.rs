@@ -78,6 +78,21 @@ impl SourceGraph {
                     Value::String(self.lower(*consumer, depth + 1)?),
                 );
             }
+            // Fed confirmation wraps the stage whose prompt the consent reaches,
+            // so it carries a consumer and no producer: the consent can arrive
+            // from an earlier pipeline stage or from the stage's own here-string.
+            "confirmation-fed.v1" => {
+                if !matcher.matchers.is_empty() || matcher.producer.is_some() {
+                    return Err("command_source_confirmation_fed_children_invalid");
+                }
+                let consumer = matcher
+                    .consumer
+                    .ok_or("command_source_confirmation_fed_children_invalid")?;
+                children.insert(
+                    "consumer".to_owned(),
+                    Value::String(self.lower(*consumer, depth + 1)?),
+                );
+            }
             _ => {
                 if !matcher.matchers.is_empty()
                     || matcher.producer.is_some()
