@@ -454,11 +454,13 @@ pub(crate) fn ensure_current_native_workspace_review_provenance(
 
 #[path = "workspace_review_decision_request.rs"]
 mod request_claim;
-#[allow(unused_imports)] // Private worker routing is not enabled yet.
-pub(crate) use request_claim::claim_owned_business_request;
 #[cfg(test)]
 pub(crate) use request_claim::claim_owned_business_request_at_for_test;
+#[cfg(test)]
+pub(crate) use request_claim::claim_owned_business_request_with_clock;
 pub(crate) use request_claim::verify_and_claim_request;
+#[allow(unused_imports)] // Private worker routing is not enabled yet.
+pub(crate) use request_claim::{claim_owned_business_request, claim_owned_business_request_with};
 
 pub(crate) fn verify_and_claim_bytes_at(
     state_base: &Path,

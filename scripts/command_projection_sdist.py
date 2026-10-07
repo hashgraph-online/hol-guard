@@ -6,7 +6,7 @@ import hashlib
 import importlib.util
 from pathlib import Path
 
-NAMES = ("command-catalog.v1.json", "native-command-program.v1.json")
+NAMES = ("command-catalog.v1.json", "native-command-program.v1.json", "trust-class-map.v1.json")
 MANIFEST = "contracts/extensions/command-projection-build.v1.json"
 
 
@@ -37,13 +37,16 @@ def _generator(root: Path):
 
 
 def projection_manifest(root: Path) -> dict:
-    """Fingerprint canonical sources, native implementation, and both outputs."""
+    """Fingerprint canonical sources, native implementation, and packaged outputs."""
     generator = _generator(root)
     for name in NAMES:
         generator.read_object(root / "contracts/extensions" / name)
+    request = generator.build_request()
+    if generator.read_object(root / "contracts/extensions/trust-class-map.v1.json") != request["trust"]:
+        raise ValueError("source-distribution trust map does not match authored bindings")
     return {
         "schema": "guard.command-projection-build.v1",
-        "request_sha256": hashlib.sha256(generator.canonical_bytes(generator.build_request())).hexdigest(),
+        "request_sha256": hashlib.sha256(generator.canonical_bytes(request)).hexdigest(),
         "bindings_sha256": _binding_fingerprint(root),
         "implementation_digest": generator.implementation_digest(),
         "artifacts": {

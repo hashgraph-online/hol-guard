@@ -3,6 +3,130 @@ use super::*;
 use guard_policy_snapshot::{integrity_mac, policy_digest};
 
 #[test]
+fn expiry_and_clock_rollback_during_journal_persistence_spend_without_release() {
+    for rollback in [false, true] {
+        let fixture = Fixture::new(if rollback {
+            "business-journal-clock-rollback"
+        } else {
+            "business-journal-expiry"
+        });
+        let prepared = prepare(input(b"private-worker-body", &[])).unwrap();
+        persist_prepared_review(&fixture.store, "business-test", &prepared, || true).unwrap();
+        let value = super::super::tests::owned_input_tests::owned_decision(&fixture);
+        let now = value["issued_at_ms"].as_u64().unwrap();
+        let expires = value["expires_at_ms"].as_u64().unwrap();
+        let bytes = canonical_json_bytes(&value).unwrap();
+        let mut times = [now, now, now, if rollback { now - 1 } else { expires }].into_iter();
+        let result =
+            super::super::super::workspace_review_decision::claim_owned_business_request_with_clock(
+                &fixture.store,
+                "business-test",
+                &bytes,
+                || times.next().ok_or_else(|| "test_clock_exhausted".into()),
+                |owned| {
+                    journal::Journal::claimed_unlocked(
+                        &fixture.store,
+                        "business-test",
+                        owned.binding(),
+                    )
+                },
+            );
+        assert!(result.is_err());
+        assert!(fixture
+            .root
+            .join("workspace-review-business-attempts/business-test.json")
+            .exists());
+        assert!(
+            super::super::super::workspace_review_decision::claim_owned_business_request(
+                &fixture.store,
+                "business-test",
+                &bytes
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn producer_shared_claim_path_persists_before_return_and_refuses_replay() {
+    let fixture = Fixture::new("business-producer-journal-return");
+    let prepared = prepare(input(b"private-frozen-worker-body", &[])).unwrap();
+    let binding = prepared.binding().to_owned();
+    persist_prepared_review(&fixture.store, "business-test", &prepared, || true).unwrap();
+    let decision = canonical_json_bytes(&super::super::tests::owned_input_tests::owned_decision(
+        &fixture,
+    ))
+    .unwrap();
+    let claimed = claim_refreshed_review(
+        &fixture.store,
+        "business-test",
+        &decision,
+        &binding,
+        prepared,
+        |_| true,
+        PreparedBusinessInputV1::binding,
+    )
+    .unwrap();
+    assert_eq!(claimed.owned.binding(), binding);
+    assert_eq!(claimed.input.primary_bytes(), b"private-frozen-worker-body");
+    let bytes = std::fs::read(
+        fixture
+            .root
+            .join("workspace-review-business-attempts/business-test.json"),
+    )
+    .unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["status"], "claimed");
+    assert_eq!(value["input_binding"], binding);
+    assert!(!String::from_utf8(bytes)
+        .unwrap()
+        .contains("private-frozen-worker-body"));
+    assert!(
+        super::super::super::workspace_review_decision::claim_owned_business_request(
+            &fixture.store,
+            "business-test",
+            &decision
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn producer_shared_claim_path_persistence_failure_spends_approval_without_release() {
+    let fixture = Fixture::new("business-producer-journal-failed");
+    let prepared = prepare(input(b"private-frozen-worker-body", &[])).unwrap();
+    let binding = prepared.binding().to_owned();
+    persist_prepared_review(&fixture.store, "business-test", &prepared, || true).unwrap();
+    let decision = canonical_json_bytes(&super::super::tests::owned_input_tests::owned_decision(
+        &fixture,
+    ))
+    .unwrap();
+    let directory = fixture.root.join("workspace-review-business-attempts");
+    crate::resident_state::ensure_private_directory(&directory, true).unwrap();
+    crate::resident_state::ensure_private_directory(&directory.join("business-test.json"), true)
+        .unwrap();
+    assert!(claim_refreshed_review(
+        &fixture.store,
+        "business-test",
+        &decision,
+        &binding,
+        prepared,
+        |_| true,
+        PreparedBusinessInputV1::binding
+    )
+    .is_err());
+    assert!(directory.join("business-test.json").is_dir());
+    assert!(
+        super::super::super::workspace_review_decision::claim_owned_business_request(
+            &fixture.store,
+            "business-test",
+            &decision
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn expiry_after_persistence_removes_new_files_and_preserves_shared_input() {
     let fixture = Fixture::new("business-producer-rollback");
     let prepared = prepare(input(b"shared-private-body", &[])).unwrap();

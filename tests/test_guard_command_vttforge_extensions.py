@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
 from tests.native_command_test_support import _resolve_native_binary, real_native_command_evaluation
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -207,7 +208,7 @@ def test_vttforge_portable_fixture_binds_canonical_sources() -> None:
     assert len(ids) == len(set(ids))
     for source, extension_id in zip(build["sources"], ids, strict=True):
         assert source == json.loads((ROOT / "contributions/command-sources" / f"{extension_id}.json").read_text())
-    canonical_trust = json.loads((ROOT / "contracts/extensions/trust-class-map.v1.json").read_text())
+    canonical_trust = trust_map_from_bindings(ROOT / "contracts/extensions/trust")
     assert build["trust"]["schemaVersion"] == canonical_trust["schemaVersion"]
     assert build["trust"]["publishers"] == canonical_trust["publishers"]
     for extension_id in ids:
