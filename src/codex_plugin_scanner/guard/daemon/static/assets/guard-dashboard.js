@@ -30399,6 +30399,16 @@ function ReviewDecisionCard(props) {
     setUseCooldown(event.target.checked);
   }, []);
   if (!detail || !item) {
+    if (props.detailError) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { role: "alert", className: "rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold text-brand-dark", children: "Request details are unavailable" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: props.detailError }),
+        props.onRetryDetail && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { className: "mt-4", variant: "outline", onClick: props.onRetryDetail, children: "Refresh request" })
+      ] });
+    }
+    if (props.detailLoading) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-busy": "true", "aria-live": "polite", className: "p-5 text-sm text-brand-dark/80", children: "Loading request details…" });
+    }
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
@@ -31414,6 +31424,9 @@ function ReviewWorkspace(props) {
         ReviewDecisionCard,
         {
           detail,
+          detailError: props.detailError,
+          detailLoading: props.detailLoading,
+          onRetryDetail: props.onRetryDetail,
           onResolve: props.onResolve,
           onGoHome: props.onGoHome,
           approvalGate: props.approvalGate ?? null
@@ -31795,6 +31808,9 @@ function renderInboxContent(props) {
     {
       requests: props.requests.items,
       activeRequestId: props.activeRequestId,
+      detailError: props.detail.kind === "error" ? props.detail.message : null,
+      detailLoading: props.detail.kind === "loading",
+      onRetryDetail: props.onRetryDetail,
       detail: props.detail.kind === "ready" ? {
         item: props.detail.item,
         diff: props.detail.diff,
@@ -32302,6 +32318,7 @@ function App() {
   const appDetailHarness = parseAppDetail(pathname);
   const [requests, setRequests] = reactExports.useState({ kind: "loading" });
   const [detail, setDetail] = reactExports.useState({ kind: "idle" });
+  const [detailRefreshKey, setDetailRefreshKey] = reactExports.useState(0);
   const [receipts, setReceipts] = reactExports.useState({ kind: "loading" });
   const [runtime, setRuntime] = reactExports.useState({ kind: "loading" });
   const [policies, setPolicies] = reactExports.useState({ kind: "loading" });
@@ -32342,7 +32359,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeRequestId]);
+  }, [activeRequestId, detailRefreshKey]);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
       const target = event.target;
@@ -32924,6 +32941,7 @@ function App() {
         onResolve: handleResolve,
         onBulkApprove: handleBulkApprove,
         onRetry: handleRetry,
+        onRetryDetail: () => setDetailRefreshKey((key) => key + 1),
         onRepair: handleRepair,
         onGuardReconnected: handleRetry,
         onClearEvidence: handleClearEvidence,

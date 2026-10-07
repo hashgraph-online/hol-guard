@@ -51,6 +51,9 @@ export type ReviewWorkspaceProps = {
   requests: GuardApprovalRequest[];
   activeRequestId: string | null;
   detail: ReviewViewModel | null;
+  detailError?: string | null;
+  detailLoading?: boolean;
+  onRetryDetail?: () => void;
   runtime: GuardRuntimeSnapshot | null;
   resolutionMessage: string | null;
   codexResume: GuardCodexResumeResult | null;
@@ -332,6 +335,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         </div>
         <ReviewDecisionCard
           detail={detail}
+          detailError={props.detailError}
+          detailLoading={props.detailLoading}
+          onRetryDetail={props.onRetryDetail}
           onResolve={props.onResolve}
           onGoHome={props.onGoHome}
           approvalGate={props.approvalGate ?? null}

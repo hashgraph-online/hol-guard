@@ -71,6 +71,9 @@ export function approvalGateRefreshFailureMessage(message: string): string {
 
 export function ReviewDecisionCard(props: {
   detail: ReviewViewModel | null;
+  detailError?: string | null;
+  detailLoading?: boolean;
+  onRetryDetail?: () => void;
   onResolve: ReviewWorkspaceProps["onResolve"];
   onGoHome: () => void;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -377,6 +380,20 @@ export function ReviewDecisionCard(props: {
   }, []);
 
   if (!detail || !item) {
+    if (props.detailError) {
+      return <section role="alert" className="rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-5">
+        <h3 className="text-lg font-semibold text-brand-dark">Request details are unavailable</h3>
+        <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{props.detailError}</p>
+        {props.onRetryDetail && <ActionButton className="mt-4" variant="outline" onClick={props.onRetryDetail}>
+          Refresh request
+        </ActionButton>}
+      </section>;
+    }
+    if (props.detailLoading) {
+      return <div aria-busy="true" aria-live="polite" className="p-5 text-sm text-brand-dark/80">
+        Loading request details…
+      </div>;
+    }
     return (
       <EmptyState
         title="Select an action"

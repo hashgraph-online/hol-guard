@@ -2895,7 +2895,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     native_detail = native_request_detail(store, unquote(path_parts[2]))
                 except NativeBusinessReviewQueueReadError:
                     self._write_json(
-                        {"error": "native_local_business_queue_read_failed"},
+                        {
+                            "error": "native_local_business_queue_read_failed",
+                            "message": (
+                                "Saved request details could not be verified. "
+                                "Refresh this request or return to the queue."
+                            ),
+                            "recovery": {
+                                "code": "request_unavailable",
+                                "title": "Request details are unavailable.",
+                                "body": (
+                                    "The saved request could not be checked. "
+                                    "Refresh this request or return to the queue."
+                                ),
+                                "queue_url": self._local_queue_url(),
+                            },
+                        },
                         status=503,
                         extra_headers={"Cache-Control": "no-store"},
                     )

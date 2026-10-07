@@ -20,7 +20,7 @@ const approval = {
   created_at: "2026-10-05T00:00:00Z", resolved_at: null, action_envelope_json: null, decision_v2_json: null,
 };
 
-async function mount(page: Page, nextSummary: () => unknown, displayOnly = false, nativeFailure: "with-sql" | "empty" | null = null, summaryStatus = 200) {
+async function mount(page: Page, nextSummary: () => unknown, displayOnly = false, nativeFailure: "with-sql" | "empty" | null = null, summaryStatus = 200, detailReadFailure: boolean | (() => boolean) = false) {
   const request = displayOnly ? { ...approval, harness: "native-business", created_at: "",
     allowed_scopes: [], recommended_scope: null, native_business_review_display_only: true } : approval;
   await page.route("**/v1/**", async route => {
@@ -39,7 +39,16 @@ async function mount(page: Page, nextSummary: () => unknown, displayOnly = false
         return;
       }
     }
-    else if (path.endsWith("/requests/business-test")) body = request;
+    else if (path.endsWith("/requests/business-test")) {
+      if (typeof detailReadFailure === "function" ? detailReadFailure() : detailReadFailure) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({
+          error: "native_local_business_queue_read_failed",
+          message: "Saved request details could not be verified. Refresh this request or return to the queue.",
+        }) });
+        return;
+      }
+      body = request;
+    }
     else if (path.endsWith("/requests")) body = { items: nativeFailure === "empty" ? [] : [request], next_cursor: null,
       total_pending_count: nativeFailure === "empty" ? 0 : 1, total_count: nativeFailure === "empty" ? 0 : 1, status: "pending",
       ...(nativeFailure ? { native_business_queue_error: "native_local_business_queue_read_failed" } : {}) };
@@ -128,6 +137,18 @@ test("non-JSON optional-summary 404 omits the panel without a read error", async
   await expect(page.getByText("Review is not connected yet")).toBeVisible();
   await expect(page.getByRole("region", { name: "Saved business action details" })).toHaveCount(0);
   await expect(page.getByText("Saved business details could not be loaded.")).toHaveCount(0);
+});
+
+test("unverified request lookup shows recovery guidance without declaring it missing", async ({ page }) => {
+  let unavailable = true;
+  await mount(page, () => summary, true, null, 200, () => unavailable);
+  await expect(page.getByText("Saved request details could not be verified. Refresh this request or return to the queue.")).toBeVisible();
+  await expect(page.getByText("This request is no longer waiting.")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Approve|^Block once|^Stop this/ })).toHaveCount(0);
+  unavailable = false;
+  await page.getByRole("button", { name: "Refresh request", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Saved business action details" })).toBeVisible();
+  await expect(page.getByText("Saved request details could not be verified. Refresh this request or return to the queue.")).toHaveCount(0);
 });
 
 test("native read failure offers refresh instead of disappearing", async ({ page }) => {

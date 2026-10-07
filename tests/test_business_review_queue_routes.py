@@ -179,7 +179,18 @@ def test_real_local_http_routes_expose_only_read_only_projection(tmp_path, monke
             with pytest.raises(urllib.error.HTTPError) as rejected:
                 urllib.request.urlopen(request, timeout=5)
             assert rejected.value.code == 503
-            assert json.loads(rejected.value.read()) == {"error": "native_local_business_queue_read_failed"}
+            payload = json.loads(rejected.value.read())
+            assert payload["error"] == "native_local_business_queue_read_failed"
+            assert (
+                payload["message"]
+                == "Saved request details could not be verified. Refresh this request or return to the queue."
+            )
+            assert payload["recovery"] == {
+                "code": "request_unavailable",
+                "title": "Request details are unavailable.",
+                "body": "The saved request could not be checked. Refresh this request or return to the queue.",
+                "queue_url": f"{base}/#/inbox",
+            }
     finally:
         daemon.stop()
 
