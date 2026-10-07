@@ -14,6 +14,8 @@ from pathlib import Path
 
 from extension_artifact_bundle import ARCHIVE, MANIFEST, source_sha, verify_bundle
 
+from codex_plugin_scanner.no_redirect import RejectRedirects
+
 REPOSITORY = "hashgraph-online/hol-guard"
 
 
@@ -21,11 +23,6 @@ def github_id(value: object) -> int:
     if type(value) is not int or value <= 0:
         raise ValueError("GitHub resource identity is invalid")
     return value
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
 
 
 def upload_asset(release_id: int, path: Path) -> dict:
@@ -44,7 +41,7 @@ def upload_asset(release_id: int, path: Path) -> dict:
     )
     # The destination is constructed locally. Never follow a response redirect
     # carrying the token, or accept a server-supplied upload URL.
-    with urllib.request.build_opener(NoRedirect()).open(request, timeout=120) as response:
+    with urllib.request.build_opener(RejectRedirects()).open(request, timeout=120) as response:
         asset = json.load(response)
     github_id(asset.get("id"))
     if asset.get("name") != path.name:

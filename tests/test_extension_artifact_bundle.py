@@ -214,6 +214,14 @@ def test_new_snapshot_uses_create_response_until_downloaded_assets_verify(snapsh
     assert not any("/releases/tags/" in c[1] or "--paginate" in c for c in remote.calls[created + 1:])
 
 
+def test_corrupt_new_upload_keeps_verified_draft_unpublished(snapshot, remote):
+    remote.bad_download = True
+    with pytest.raises(ValueError, match="uploaded snapshot differs"):
+        publisher.publish(snapshot[1], SHA)
+    assert remote.created and remote.uploads and remote.downloads
+    assert remote.release["draft"] is True and not remote.published
+
+
 @pytest.mark.parametrize("draft,status", [(False, 404), (True, 403), (True, 503)])
 def test_tag_lookup_failures_are_only_tolerated_for_missing_draft_tags(snapshot, remote, draft, status):
     remote.set_release(draft, [])
@@ -272,7 +280,7 @@ def test_upload_targets_fixed_host_without_redirecting_credentials(tmp_path, mon
             return io.BytesIO(json.dumps({"id": 456, "name": path.name}).encode())
 
     def opener(handler):
-        assert isinstance(handler, publisher.NoRedirect)
+        assert isinstance(handler, publisher.RejectRedirects)
         assert handler.redirect_request(None, None, 302, "", {}, "https://other.example") is None
         return Opener()
 
