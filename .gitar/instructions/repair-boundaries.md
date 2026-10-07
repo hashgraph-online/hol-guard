@@ -34,8 +34,8 @@ bindings):
 
 1. Check that the source filename, fixture filename, fixture source binding,
    and the extension's trust-binding file agree. `trust-class-map.v1.json` is a
-   generated projection of `trust/`; it is synchronized by the refresh script,
-   never authored by hand.
+   ignored package projection of `trust/`; builds generate it, and PRs must
+   never commit or hand-edit it.
 2. When those authored inputs are valid, synchronize only deterministic
    projections with `scripts/prepare_extension_contribution.py` and include its
    generated descriptor, native program, catalog, and package-resource updates.

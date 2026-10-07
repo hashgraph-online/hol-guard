@@ -8,6 +8,13 @@ use serde_json::{json, Value};
 use std::io::{Read, Write};
 
 fn run(arguments: &[String]) -> Result<Value, &'static str> {
+    if arguments == ["export-trust"] {
+        return serde_json::from_slice(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/trust-class-map.v1.json"
+        )))
+        .map_err(|_| "command_source_trust_output_invalid");
+    }
     if arguments == ["export-built"] {
         return serde_json::from_slice(include_bytes!(concat!(
             env!("OUT_DIR"),
