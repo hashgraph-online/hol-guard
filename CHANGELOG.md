@@ -35,6 +35,48 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.30.0](https://github.com/hashgraph-online/hol-guard/compare/v3.29.0...v3.30.0) (2026-10-07)
+
+
+### Features
+
+* **contributions:** add lattice-talk MCP server (external opt-in) ([#3049](https://github.com/hashgraph-online/hol-guard/issues/3049)) ([720adae](https://github.com/hashgraph-online/hol-guard/commit/720adaecaf979d4b5694cd24a080bb87cddd3b16))
+* **extensions:** add AgentHub MCP server contribution ([#3455](https://github.com/hashgraph-online/hol-guard/issues/3455)) ([d2748c0](https://github.com/hashgraph-online/hol-guard/commit/d2748c0d7c570359d08947754679408de336705e))
+* **extensions:** add ClipUGC MCP server contribution ([#3287](https://github.com/hashgraph-online/hol-guard/issues/3287)) ([314b1b5](https://github.com/hashgraph-online/hol-guard/commit/314b1b577ff1f8c8b31fffe16a7fbdac43cab57d))
+* **extensions:** add enola MCP server contribution ([#3210](https://github.com/hashgraph-online/hol-guard/issues/3210)) ([1f608ca](https://github.com/hashgraph-online/hol-guard/commit/1f608ca5214ca4781119b14d9de6b645a43f71fc))
+* **extensions:** add Home Assistant MCP (Vome) server contribution ([#3420](https://github.com/hashgraph-online/hol-guard/issues/3420)) ([1be8696](https://github.com/hashgraph-online/hol-guard/commit/1be869648c1494f57ecc7f8f0accb4b65e087dcf))
+* **extensions:** add opt-in Salesforce sf data command rules ([#3706](https://github.com/hashgraph-online/hol-guard/issues/3706)) ([8d3a88a](https://github.com/hashgraph-online/hol-guard/commit/8d3a88a8d55d91e02fc53eee146453e32c4483b6))
+* **extensions:** add publisher listing for mcp.authyouragent ([#3707](https://github.com/hashgraph-online/hol-guard/issues/3707)) ([3fed4a6](https://github.com/hashgraph-online/hol-guard/commit/3fed4a6de83766ead611477b86815bce536d4f3e))
+* **extensions:** add Theourgia command protection extension ([#3320](https://github.com/hashgraph-online/hol-guard/issues/3320)) ([980c427](https://github.com/hashgraph-online/hol-guard/commit/980c42751d34296681fb0768e192d9b6b359e247))
+* **extensions:** add Xahau MCP and Evernode MCP server contributions ([#3310](https://github.com/hashgraph-online/hol-guard/issues/3310)) ([099cfa7](https://github.com/hashgraph-online/hol-guard/commit/099cfa7b730af6cd02006189cf37fad667430654))
+* **extensions:** add XRPL Muse Skill command source ([#3482](https://github.com/hashgraph-online/hol-guard/issues/3482)) ([1d569c9](https://github.com/hashgraph-online/hol-guard/commit/1d569c93a52497635dce82dfeca1d650f39c885a))
+* **extensions:** review Kranz CLI mutations ([#3188](https://github.com/hashgraph-online/hol-guard/issues/3188)) ([1c8a492](https://github.com/hashgraph-online/hol-guard/commit/1c8a49214d965d3e666e9fcf28fe1fef94a94418))
+* **gauntlet:** pin a reasoning effort for live inference ([#3687](https://github.com/hashgraph-online/hol-guard/issues/3687)) ([1f05f1b](https://github.com/hashgraph-online/hol-guard/commit/1f05f1b5007d674da1fe774039ebe1a0562a6040))
+* **guard:** add kim command safety extension ([#2895](https://github.com/hashgraph-online/hol-guard/issues/2895)) ([e7b754c](https://github.com/hashgraph-online/hol-guard/commit/e7b754c5d4b2f7d927312eccb9a712ecfc09118e))
+* **guard:** add Routed command safety extension ([#3084](https://github.com/hashgraph-online/hol-guard/issues/3084)) ([8d06d15](https://github.com/hashgraph-online/hol-guard/commit/8d06d1554d73a73601eff3c920941af6f644df93))
+* **guard:** add tether memory MCP server contribution ([#2843](https://github.com/hashgraph-online/hol-guard/issues/2843)) ([af9ba3b](https://github.com/hashgraph-online/hol-guard/commit/af9ba3bf6f244d2f80326baeaf23c9b085f5a0dc))
+* **guard:** implement command.repopy safety extension ([#2988](https://github.com/hashgraph-online/hol-guard/issues/2988)) ([6ab3a9c](https://github.com/hashgraph-online/hol-guard/commit/6ab3a9c78cc499eee6877cdb63bad99068510743))
+* **identity:** retain and revoke registered Google accounts ([d67319e](https://github.com/hashgraph-online/hol-guard/commit/d67319e4c55beda724eabf4089410ba2a929bc0a))
+* **mcp:** add MusicContext MCP server contribution ([#3683](https://github.com/hashgraph-online/hol-guard/issues/3683)) ([a160cf2](https://github.com/hashgraph-online/hol-guard/commit/a160cf26315d7e4044e7c0063911c6a2f8fa412c))
+* **runtime:** retain cumulative business budgets in native policy ([f41963d](https://github.com/hashgraph-online/hol-guard/commit/f41963d73a3362078406da677286b429b9963901))
+
+
+### Bug Fixes
+
+* **artifacts:** publish snapshots using returned release IDs ([#3715](https://github.com/hashgraph-online/hol-guard/issues/3715)) ([635c949](https://github.com/hashgraph-online/hol-guard/commit/635c94973161b9cafd8341c442c845e13305cdc7))
+* **ci:** generate extension artifacts from current sources ([639eb51](https://github.com/hashgraph-online/hol-guard/commit/639eb511df5a0b521d2f99a7109638dc4c7a0044))
+* **extensions:** convert AgentBridge to a command source and stage missing trust bindings ([#3709](https://github.com/hashgraph-online/hol-guard/issues/3709)) ([51a80bc](https://github.com/hashgraph-online/hol-guard/commit/51a80bc34eba9f9a220b2b60df70a8fabe0fcd43))
+* **extensions:** generate the shared trust map from reviewed bindings ([fe92b6a](https://github.com/hashgraph-online/hol-guard/commit/fe92b6a4f72d70515802cf9294ec74ec31c52115))
+* **extensions:** omit ambiguous operation examples ([#3708](https://github.com/hashgraph-online/hol-guard/issues/3708)) ([74487b9](https://github.com/hashgraph-online/hol-guard/commit/74487b93b8dbeccdd378d3f70f6b510ba95720e0))
+* **extensions:** publish generated artifacts after merge ([#3695](https://github.com/hashgraph-online/hol-guard/issues/3695)) ([4cbc714](https://github.com/hashgraph-online/hol-guard/commit/4cbc714b6ad6153c55d53f6a71f0a36357455307))
+* **extensions:** publish snapshots when draft tags do not exist yet ([dccfce7](https://github.com/hashgraph-online/hol-guard/commit/dccfce76b71ae464fd1d1449dd4a74a972fc54c9))
+* **extensions:** send claim notices for source-only command contributions ([#3703](https://github.com/hashgraph-online/hol-guard/issues/3703)) ([43b5b69](https://github.com/hashgraph-online/hol-guard/commit/43b5b693b18c62172547ee00c2eaa0f66eefb4b6))
+* **gauntlet:** accept inert bash defaults in Watch fixtures ([#3711](https://github.com/hashgraph-online/hol-guard/issues/3711)) ([bd98880](https://github.com/hashgraph-online/hol-guard/commit/bd988807388a6ae33dd166dde1e2cbde3075573d))
+* **gauntlet:** require fixture output and metadata proofs for tool coverage cases ([3a9450d](https://github.com/hashgraph-online/hol-guard/commit/3a9450d44e99402de1c033f8bffdd84bc85818bc))
+* **grok:** remove orphaned Guard hooks during repair ([#3704](https://github.com/hashgraph-online/hol-guard/issues/3704)) ([688a1cb](https://github.com/hashgraph-online/hol-guard/commit/688a1cb1f66cc589dba6b579c902da653cd37ceb))
+* **omp:** recover readiness after daemon replacement ([#3688](https://github.com/hashgraph-online/hol-guard/issues/3688)) ([fece86d](https://github.com/hashgraph-online/hol-guard/commit/fece86d699bcca986871640b7f3dbc5b0a5275ca))
+* **release:** retry temporarily absent registry metadata ([bd161de](https://github.com/hashgraph-online/hol-guard/commit/bd161def907c6d08ee8d1483b4d81919619341b0))
+
 ## [3.29.0](https://github.com/hashgraph-online/hol-guard/compare/v3.28.0...v3.29.0) (2026-10-07)
 
 
