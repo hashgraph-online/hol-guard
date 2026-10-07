@@ -49,7 +49,9 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
 
 
-def test_complete_proxy_catalog_binds_advertised_tool_definition(tmp_path: Path) -> None:
+def test_complete_proxy_catalog_binds_advertised_tool_definition(tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     proxy = CodexMcpGuardProxy(
@@ -393,6 +395,7 @@ def _seed_exact_package_block(
 def test_nonpackage_authenticated_saved_block_is_terminal_without_inline_or_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -506,6 +509,7 @@ def test_authenticated_saved_package_block_is_terminal_before_generic_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     approval_surface: str,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -572,6 +576,7 @@ def test_authenticated_saved_package_block_is_terminal_before_generic_approval(
 def test_package_retry_claims_inner_and_outer_exact_one_shot_allows_after_revision_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -987,6 +992,7 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
 def test_package_observe_mode_records_each_authority_without_approval_requests(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
     tool_action: GuardAction,
     package_action: GuardAction,
     expected_tool_queue: list[GuardAction],
@@ -1347,6 +1353,7 @@ def test_python_module_entrypoint_is_content_bound_and_unresolved_package_launch
 def test_runtime_mcp_binds_only_configured_server_env_values_without_leaking_them(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -1646,6 +1653,7 @@ def test_runtime_mcp_redacts_secret_argument_fields_from_every_persisted_surface
 def test_observe_mode_does_not_consume_exact_saved_tool_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -1835,6 +1843,7 @@ def test_observe_mode_preserves_fresh_executable_warn_at_final_tool_boundary(
 def test_runtime_mcp_rebuilds_tool_authority_after_exact_claim_before_forward(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -1932,6 +1941,7 @@ def test_runtime_mcp_retained_tool_policy_requires_same_row_after_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     delete_after_claim: bool,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -2147,6 +2157,7 @@ def test_runtime_mcp_tool_catalog_fingerprint_is_canonical_and_complete() -> Non
 def test_runtime_mcp_saved_allow_is_not_reused_before_complete_catalog(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -2207,6 +2218,7 @@ def test_runtime_mcp_saved_allow_is_not_reused_before_complete_catalog(
 def test_runtime_mcp_drains_idle_list_changed_before_saved_approval_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
@@ -2308,6 +2320,7 @@ def test_runtime_mcp_process_boundary_clears_cross_session_response_buffers(tmp_
 def test_runtime_mcp_final_prewrite_drain_catches_notification_after_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     _context_value, store, proxy, marker_path, messages, _artifact_id, _artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2358,6 +2371,7 @@ def test_runtime_mcp_final_prewrite_drain_catches_notification_after_claim(
 def test_runtime_mcp_exact_claim_binds_unchanged_full_advertised_catalog(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     _context_value, store, proxy, marker_path, messages, _artifact_id, _artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2385,6 +2399,7 @@ def test_runtime_mcp_exact_claim_binds_unchanged_full_advertised_catalog(
 def test_runtime_mcp_exact_claim_fails_closed_when_current_config_refresh_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     _context_value, store, proxy, marker_path, messages, _artifact_id, _artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2423,6 +2438,7 @@ def test_runtime_mcp_exact_claim_fails_closed_when_current_config_refresh_fails(
 def test_runtime_mcp_exact_claim_rejects_different_tool_catalog_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     _context_value, store, proxy, marker_path, messages, _artifact_id, _artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2472,6 +2488,7 @@ def test_runtime_mcp_exact_claim_rejects_different_tool_catalog_change(
 def test_runtime_mcp_same_context_saved_block_after_claim_has_truthful_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context, store, proxy, marker_path, messages, artifact_id, artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2552,20 +2569,25 @@ def test_runtime_mcp_quarantines_child_when_entrypoint_changes_during_spawn(
         source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
-    real_popen = runtime_mcp_module.subprocess.Popen
-    processes: list[Any] = []
+    real_open_native = runtime_mcp_module.mcp_stdio_session_open_native
+    sessions: list[str] = []
 
     def mutate_after_spawn(*args: Any, **kwargs: Any) -> Any:
-        process = real_popen(*args, **kwargs)
-        processes.append(process)
+        # RTM-023 moved the child spawn into the resident; the launch-identity
+        # re-check happens after `mcp_stdio_session_open_native` returns. Mutate
+        # the entrypoint inside the native-open seam so the post-spawn verify
+        # sees a swapped file, then let the real opener run.
         server_script.write_text("raise SystemExit(93)\n", encoding="utf-8")
-        return process
+        session_id = kwargs.get("session_id")
+        if session_id:
+            sessions.append(str(session_id))
+        return real_open_native(*args, **kwargs)
 
-    monkeypatch.setattr(runtime_mcp_module.subprocess, "Popen", mutate_after_spawn)
+    monkeypatch.setattr(runtime_mcp_module, "mcp_stdio_session_open_native", mutate_after_spawn)
 
     with pytest.raises(RuntimeError, match="launch identity changed"):
         proxy._start_process()
 
-    assert processes and processes[0].poll() is not None
+    assert sessions
     assert proxy._active_runtime_launch_identity is None
     assert proxy._active_executable_identity is None

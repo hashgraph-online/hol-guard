@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,8 +63,21 @@ def build_request() -> dict:
         "schema": "guard.command-extension-build.v1",
         "sources": sources,
         "mcp_sources": [read_object(path) for path in mcp_paths],
-        "trust": read_object(ROOT / "contracts/extensions/trust-class-map.v1.json"),
+        "trust": _trust_request_payload(),
     }
+
+
+def _trust_request_payload() -> dict:
+    """Assemble the trust block from authored per-extension bindings.
+
+    The committed aggregate map is a generated projection; building the native
+    request from the bindings guarantees the compiled program and catalog carry
+    binding truth even if the committed aggregate is stale or hand-edited.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
+    return trust_map_from_bindings(ROOT / "contracts" / "extensions" / "trust")
 
 
 def _implementation_files(directory: Path) -> set[Path]:

@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 
 
 @contextmanager
@@ -340,7 +341,7 @@ def test_pending_header_peek_is_nonblocking_and_tolerates_concurrent_close():
     try:
         started = time.monotonic()
         assert not daemon_server._GuardDaemonHTTPServer._buffered_request_headers_complete(request, pending=True)
-        assert time.monotonic() - started < 0.05
+        assert time.monotonic() - started < 0.05 * under_coverage_scale(4.0)
         peer.sendall(b"GET /healthz HTTP/1.1\r\nHost:")
         assert not daemon_server._GuardDaemonHTTPServer._buffered_request_headers_complete(request, pending=True)
         assert request.gettimeout() == 2

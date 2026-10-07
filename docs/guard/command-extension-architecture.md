@@ -21,7 +21,8 @@ operations and require no new Rust code.
 | Artifact | Owner and purpose |
 | --- | --- |
 | `contributions/command-sources/command.<name>.json` | Author-edited metadata, stable IDs, permissions, rules, and inline native matcher trees |
-| `contracts/extensions/trust-class-map.v1.json` | Separately reviewed trust classification and activation defaults |
+| `contracts/extensions/trust/command.<name>.v1.json` | Author-edited, separately reviewed per-extension trust classification |
+| `contracts/extensions/trust-class-map.v1.json` | Generated projection of `contracts/extensions/trust/`; activation defaults ship here |
 | `tests/fixtures/command-source-<slug>.v1.json` | Portable command and synthetic-control cases evaluated by Rust |
 | `contributions/extensions/command.<name>.json` | Generated v2 contribution descriptor |
 | `contracts/extensions/native-command-program.v1.json` | Generated admitted graph, rule coverage, candidate indexes, and program identity |
