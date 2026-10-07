@@ -109,14 +109,16 @@ def test_existing_matching_snapshot_is_verified_without_overwrite(snapshot, monk
         if args[0] == "api":
             if "/commits/" in args[1]:
                 return json.dumps({"sha": SHA})
-            return json.dumps(
-                {
-                    "draft": draft,
-                    "target_commitish": SHA,
-                    "prerelease": True,
-                    "assets": [{"name": n} for n in (bundle.ARCHIVE, bundle.MANIFEST)],
-                }
-            )
+            if draft and "/releases/tags/" in args[1]:
+                raise RuntimeError("HTTP 404")
+            release = {
+                "tag_name": "extension-artifacts-" + SHA,
+                "draft": draft,
+                "target_commitish": SHA,
+                "prerelease": True,
+                "assets": [{"name": n} for n in (bundle.ARCHIVE, bundle.MANIFEST)],
+            }
+            return json.dumps([[release]] if "--paginate" in args else release)
         if args[1] == "download":
             name = args[args.index("--pattern") + 1]
             destination = Path(args[args.index("--dir") + 1])
@@ -169,8 +171,24 @@ def test_new_snapshot_stays_draft_until_downloaded_assets_verify(snapshot, monke
                     raise RuntimeError("HTTP 404")
                 return json.dumps({"sha": SHA})
             if not created:
+                if "/releases/tags/" in args[1]:
+                    raise RuntimeError("HTTP 404")
+                return json.dumps([[]])
+            if "/releases/tags/" in args[1]:
                 raise RuntimeError("HTTP 404")
-            return json.dumps({"draft": True, "prerelease": True, "target_commitish": SHA, "assets": []})
+            return json.dumps(
+                [
+                    [
+                        {
+                            "tag_name": "extension-artifacts-" + SHA,
+                            "draft": True,
+                            "prerelease": True,
+                            "target_commitish": SHA,
+                            "assets": [],
+                        }
+                    ]
+                ]
+            )
         if args[1] == "create":
             assert "--draft" in args and "--latest=false" in args
             created = True

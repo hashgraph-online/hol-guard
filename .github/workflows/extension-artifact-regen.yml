@@ -32,8 +32,8 @@ on:
       - .github/workflows/extension-artifact-regen.yml
   workflow_dispatch:
 
-# Serialized so back-to-back merges batch: each run regenerates against the
-# HEAD it checks out, so a queued run absorbs intermediate merges.
+# Serialize publication without cancelling an active upload. Every retained
+# run publishes the exact commit that triggered it.
 concurrency:
   group: extension-artifact-regen-main
   cancel-in-progress: false

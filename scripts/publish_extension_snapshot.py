@@ -21,16 +21,28 @@ def github(*arguments: str) -> str:
     return result.stdout
 
 
+def find_release(tag: str) -> dict | None:
+    endpoint = f"repos/{REPOSITORY}/releases/tags/{tag}"
+    try:
+        return json.loads(github("api", endpoint))
+    except RuntimeError as error:
+        if "HTTP 404" not in str(error):
+            raise
+    # The tag endpoint excludes drafts. Writers can retrieve them from the
+    # paginated list, including a draft whose tag has not been created yet.
+    pages = json.loads(github("api", f"repos/{REPOSITORY}/releases?per_page=100", "--paginate", "--slurp"))
+    matches = [release for page in pages for release in page if release["tag_name"] == tag]
+    if len(matches) > 1:
+        raise ValueError("snapshot tag has duplicate releases")
+    return matches[0] if matches else None
+
+
 def publish(directory: Path, expected_sha: str) -> None:
     expected_sha = source_sha(expected_sha)
     verify_bundle(directory, expected_sha)
     tag = "extension-artifacts-" + expected_sha
-    endpoint = f"repos/{REPOSITORY}/releases/tags/{tag}"
-    try:
-        release = json.loads(github("api", endpoint))
-    except RuntimeError as error:
-        if "HTTP 404" not in str(error):
-            raise
+    release = find_release(tag)
+    if release is None:
         github(
             "release",
             "create",
@@ -47,7 +59,9 @@ def publish(directory: Path, expected_sha: str) -> None:
             "--notes",
             "Verified extension directory and metadata for source commit " + expected_sha + ".",
         )
-        release = json.loads(github("api", endpoint))
+        release = find_release(tag)
+        if release is None:
+            raise ValueError("created snapshot draft could not be retrieved")
     if release.get("target_commitish") != expected_sha or release.get("prerelease") is not True:
         raise ValueError("snapshot release does not match its source")
     try:
