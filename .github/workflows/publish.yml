@@ -451,6 +451,7 @@ jobs:
       - name: Verify distributions
         run: |
           uv run --no-sync twine check dist/*
+          python scripts/ci/check_wheel_size.py --dist-dir dist
           python3 scripts/verify_guard_wheel_entrypoints.py dist
       - name: Record immutable distribution hashes
         run: |
@@ -705,6 +706,7 @@ jobs:
             --source-compiler "$SOURCE_COMPILER" \
             --implementation-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["implementation_digest"])')" \
             --base-program-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["base_program_digest"])')"
+          python scripts/ci/check_wheel_size.py --dist-dir native-dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-guard-wheel-${{ matrix.platform_tag }}

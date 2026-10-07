@@ -209,7 +209,9 @@ const COMPONENTS: &[(&str, &[u8])] = &[
     ),
     (
         "native-command-program-artifact",
-        guard_command::native_command_program::packaged_command_program_bytes(),
+        // Resolved from the shared allocation when hashing, so this constant
+        // table cannot embed another copy of the program in the runtime.
+        &[],
     ),
     (
         "guard-command-command-ascii-comparison",
@@ -301,9 +303,16 @@ fn sha256_hex(bytes: &[u8]) -> String {
 pub fn rule_contract() -> RuleContract {
     let components: Vec<RuleComponentDigest> = COMPONENTS
         .iter()
-        .map(|(name, bytes)| RuleComponentDigest {
-            name,
-            sha256: sha256_hex(bytes),
+        .map(|(name, bytes)| {
+            let bytes = if *name == "native-command-program-artifact" {
+                guard_command::native_command_program::packaged_command_program_bytes()
+            } else {
+                bytes
+            };
+            RuleComponentDigest {
+                name,
+                sha256: sha256_hex(bytes),
+            }
         })
         .collect();
 
