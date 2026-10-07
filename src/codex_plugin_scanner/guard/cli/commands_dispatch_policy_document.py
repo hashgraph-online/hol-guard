@@ -223,7 +223,7 @@ def _run_guard_policy_document_command(
             source = recover_committed_business_source(store, document, approval_gate_grant=grant)
             _write_payload(
                 "policy recover-business-source",
-                {"digest": source.source_digest, "message": "Recovered the committed business source installation."},
+                {"digest": source.source_digest, "message": "Recovered the business policy installation."},
                 as_json=as_json,
                 output_stream=output_stream,
             )

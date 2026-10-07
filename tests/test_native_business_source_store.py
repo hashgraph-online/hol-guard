@@ -62,6 +62,35 @@ def _key(store):
     return derive_native_policy_verifier_key(material[0])
 
 
+def test_old_current_fence_consumer_cannot_receive_installation_key(tmp_path, native_mcp_probe, monkeypatch):
+    from types import SimpleNamespace
+
+    store = GuardStore(tmp_path / "old-fence-home")
+    native_mcp_probe(store.guard_home)
+    monkeypatch.setattr(
+        owner,
+        "_consumer",
+        lambda *args, **kwargs: SimpleNamespace(
+            capabilities=SimpleNamespace(features=("native-business-source-current-fence-v1",))
+        ),
+    )
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda **kwargs: pytest.fail("key crossed old fence")
+    )
+    with (
+        pytest.raises(NativePolicySnapshotError, match="native_business_source_current_fence_unavailable"),
+        owner.approved_business_source_mutation(
+            store,
+            document(),
+            mode="replace",
+            now="2026-10-06T00:00:00Z",
+            approval_gate_grant=None,
+        ),
+    ):
+        pytest.fail("old fence admitted installation")
+    assert not (store.guard_home / "native-runtime" / owner.ANCHOR_FILE_NAME).exists()
+
+
 def test_exact_approved_source_database_and_retained_marker_agree(tmp_path: Path, native_mcp_probe):
     store = GuardStore(tmp_path / "source-home")
     native_mcp_probe(store.guard_home)

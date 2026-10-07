@@ -190,3 +190,24 @@ fn shared_source_lease_prevents_mutation_through_decision_lifetime() {
     fs2::FileExt::unlock(&lock).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn first_legacy_decision_materializes_lease_before_first_source_activation() {
+    let root = test_root("first-business-source-lease");
+    let key = install_test_key(&root, 82);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let snapshot = signed_snapshot(1, &key, &root);
+    let lock_path = root.join("extension-control-authority.lock");
+    assert!(!lock_path.exists());
+    let lease = store.command_authority_lease(&snapshot).unwrap();
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .unwrap();
+    assert!(fs2::FileExt::try_lock_exclusive(&lock).is_err());
+    drop(lease);
+    fs2::FileExt::try_lock_exclusive(&lock).unwrap();
+    fs2::FileExt::unlock(&lock).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}

@@ -54,9 +54,10 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 SOURCE_FILE_NAME = "business-source-authority.v1.json"
+PREPARED_SOURCE_FILE_NAME = "business-source-prepared.v1.json"
 ANCHOR_FILE_NAME = "business-source-anchor.v1.json"
 INSTALLATION_STATE_KEY = "business_source_installation_v1"
-CURRENT_FENCE_CAPABILITY = "native-business-source-current-fence-v1"
+CURRENT_FENCE_CAPABILITY = "native-business-source-current-fence-v2"
 _UNSPECIFIED_CURRENT = object()
 
 
@@ -171,6 +172,8 @@ def read_installed_business_source(
             deadline,
         )
         if result is None:
+            if read_private_state(store.guard_home, PREPARED_SOURCE_FILE_NAME, MAX_RECORD_BYTES) is not None:
+                raise _error("native_business_source_recovery_required")
             _refuse_native_business_floor_without_source(store, verifier_key)
         _remaining(deadline)
         return result
@@ -203,6 +206,7 @@ def approved_business_source_mutation(
     approval_gate_grant: ApprovalGateGrant | None,
     deadline_monotonic: float | None = None,
     expected_current_digest: str | None | object = _UNSPECIFIED_CURRENT,
+    reject_already_installed: bool = False,
 ) -> Iterator[BusinessSourceMutation]:
     """Own the complete mutation lease; callers begin/commit SQL inside it.
 
@@ -229,13 +233,21 @@ def approved_business_source_mutation(
         retained = read_retained_business_source_anchor(store)
         marker = read_private_state(store.guard_home, ANCHOR_FILE_NAME, MAX_ANCHOR_BYTES)
         record = read_private_state(store.guard_home, SOURCE_FILE_NAME, MAX_RECORD_BYTES)
+        prepared = read_private_state(store.guard_home, PREPARED_SOURCE_FILE_NAME, MAX_RECORD_BYTES)
         witness = _database_witness(store)
-        fresh = all(value is None for value in (retained, marker, record, witness))
+        fresh = all(value is None for value in (retained, marker, record, witness, prepared))
         material = store._policy_integrity_secret_material(create=fresh)
         if material is None or type(material[0]) is not bytes or len(material[0]) != 32:
             raise _error("native_business_source_installation_key_unavailable")
         key = derive_native_policy_verifier_key(material[0])
         prior = _verify_installed(record, marker, retained, witness, key, deadline)
+        if reject_already_installed and prior is not None:
+            from .policy_document import policy_document_digest
+
+            if prior.source_digest == policy_document_digest(document):
+                raise _error("native_business_source_already_installed")
+        if prepared is not None and (prior is None or prepared != prior.record_bytes):
+            raise _error("native_business_source_recovery_required")
         if prior is None:
             _refuse_native_business_floor_without_source(store, key)
         if expected_current_digest is not _UNSPECIFIED_CURRENT:
@@ -269,6 +281,9 @@ def approved_business_source_mutation(
             approval_gate_grant,
             datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         )
+        # Signed complete candidate is durable before retiring the active source.
+        # A failed import can be explicitly resumed with fresh exact approval.
+        _write_private(store, PREPARED_SOURCE_FILE_NAME, source.record_bytes, MAX_RECORD_BYTES, deadline)
         _write_private(store, ANCHOR_FILE_NAME, closed.anchor_bytes, MAX_ANCHOR_BYTES, deadline)
         write_retained_business_source_anchor(store, closed.anchor_bytes)
         _write_private(store, SOURCE_FILE_NAME, source.record_bytes, MAX_RECORD_BYTES, deadline)

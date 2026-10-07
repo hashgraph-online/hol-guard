@@ -50,10 +50,18 @@ def _read(copy: SecretStore, reference: str) -> str | None:
 
 
 def read_retained_business_source_anchor(store: GuardStore) -> bytes | None:
-    values = tuple(_read(copy, _ref(store)) for copy in _copies(store))
+    values = read_retained_business_source_anchor_copies(store)
     if any(value != values[0] for value in values):
         raise NativePolicySnapshotError("native_business_source_retention_conflict")
-    return None if values[0] is None else values[0].encode("utf-8")
+    return values[0]
+
+
+def read_retained_business_source_anchor_copies(store: GuardStore) -> tuple[bytes | None, ...]:
+    """Recovery must authenticate every copy; unavailable copies still refuse."""
+    return tuple(
+        None if value is None else value.encode("utf-8")
+        for value in (_read(copy, _ref(store)) for copy in _copies(store))
+    )
 
 
 def write_retained_business_source_anchor(store: GuardStore, wire: bytes) -> None:

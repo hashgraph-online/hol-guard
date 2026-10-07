@@ -62,7 +62,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-business-policy-document-compile-v1".into(),
         "native-business-source-codec-v1".into(),
         "native-business-source-anchor-codec-v1".into(),
-        "native-business-source-current-fence-v1".into(),
+        "native-business-source-current-fence-v2".into(),
         "hook-envelope-v2".into(),
         "git-execution-context-v1".into(),
         "native-resident-client-v1".into(),

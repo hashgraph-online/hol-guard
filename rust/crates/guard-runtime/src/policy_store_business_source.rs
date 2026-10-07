@@ -24,18 +24,26 @@ impl PolicySnapshotStore {
         let marker_path = self.state_base.join(MARKER_FILE);
         let private_root = crate::resident_state::private_root_for_state_base(&self.state_base)?;
         let lock_path = private_root.join("extension-control-authority.lock");
+        super::policy_store_validation::validate_private_directory(&private_root)?;
         // Only a genuinely absent marker permits an unarmed legacy policy.
         // Dangling links, inaccessible state and malformed files stay closed.
         match std::fs::symlink_metadata(&marker_path) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                if std::fs::symlink_metadata(&lock_path)
-                    .is_err_and(|lock_error| lock_error.kind() == std::io::ErrorKind::NotFound)
+                // Even the first legacy decision must materialize and retain
+                // the common lease before first activation can close a marker.
+                if snapshot.business_policy.is_none() && snapshot.command_extensions.is_none() {
+                    // CREATE_NEW never repairs/truncates an existing lock. A
+                    // creation race proceeds through the strict reader below.
+                    match crate::resident_state::private_file(&lock_path, true, &private_root) {
+                        Ok(file) => drop(file),
+                        Err(_) if std::fs::symlink_metadata(&lock_path).is_ok() => {}
+                        Err(_) => return Err("native_business_source_authority_invalid".to_owned()),
+                    }
+                } else if snapshot.business_policy.is_some()
+                    && std::fs::symlink_metadata(&lock_path)
+                        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
                 {
-                    return if snapshot.business_policy.is_none() {
-                        Ok(None)
-                    } else {
-                        Err("native_business_source_authority_missing".to_owned())
-                    };
+                    return Err("native_business_source_authority_missing".to_owned());
                 }
             }
             Err(_) => return Err("native_business_source_authority_invalid".to_owned()),

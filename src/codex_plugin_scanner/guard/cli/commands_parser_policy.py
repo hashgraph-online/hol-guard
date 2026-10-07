@@ -79,7 +79,7 @@ def _configure_guard_policy_parsers(
     policy_export_parser.add_argument("--json", action="store_true")
 
     recovery_parser = policy_subparsers.add_parser(
-        "recover-business-source", help="Finish an intact, SQL-committed business source with fresh approval"
+        "recover-business-source", help="Resume an interrupted business policy installation with fresh approval"
     )
     recovery_parser.add_argument("file", help="The exact document from the interrupted installation")
     _add_guard_common_args(recovery_parser)

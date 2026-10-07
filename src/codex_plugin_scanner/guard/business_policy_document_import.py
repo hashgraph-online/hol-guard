@@ -10,6 +10,7 @@ from .native_business_document_compile import compile_business_policy_document
 from .native_business_source_retention import read_retained_business_source_anchor
 from .native_business_source_store import (
     ANCHOR_FILE_NAME,
+    PREPARED_SOURCE_FILE_NAME,
     SOURCE_FILE_NAME,
     BusinessSourceMutation,
     _database_witness,
@@ -71,6 +72,7 @@ def read_business_source_for_store(store: GuardStore) -> KeyAuthenticatedBusines
 
         if (
             read_private_state(store.guard_home, SOURCE_FILE_NAME, MAX_RECORD_BYTES) is not None
+            or read_private_state(store.guard_home, PREPARED_SOURCE_FILE_NAME, MAX_RECORD_BYTES) is not None
             or read_private_state(store.guard_home, ANCHOR_FILE_NAME, MAX_ANCHOR_BYTES) is not None
             or (
                 store._policy_integrity_secret_store is not None
