@@ -55,7 +55,7 @@ impl ResolvedGoogleWorkerInput {
             // Keep exact address/domain facts bound; repeating an identical
             // mailbox across To/Cc/Bcc counts it once below.
             let identity_binding = binding(
-                &self.directory.namespace_key,
+                &self.directory.identity_key,
                 b"hol-guard.google-resolved-mailbox.v1\0",
                 &[recipient.principal_binding(), recipient.address()],
             );

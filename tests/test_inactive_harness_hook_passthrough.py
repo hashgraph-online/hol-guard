@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 from codex_plugin_scanner.guard.daemon.hook_worker_responses import prepare_native_hook_policy
+from codex_plugin_scanner.guard.store import GuardStore
 
 _PRE_TOOL_PAYLOAD: dict[str, object] = {
     "hook_event_name": "PreToolUse",
@@ -48,7 +53,9 @@ def _daemon(
         return installs
 
     return SimpleNamespace(
-        store=SimpleNamespace(get_managed_install=getter, list_managed_installs=lister),
+        store=SimpleNamespace(
+            get_managed_install=getter, list_managed_installs=lister, connection_scope=nullcontext
+        ),
         hook_worker=SimpleNamespace(
             prepare_workspace_policy=lambda *_args, **_kwargs: prepared,
             metrics=SimpleNamespace(record_route=lambda *_args, **_kwargs: None),
@@ -68,7 +75,7 @@ def test_inactive_codex_hook_does_not_fail_closed_on_native_policy() -> None:
         return None
 
     daemon = SimpleNamespace(
-        store=SimpleNamespace(get_managed_install=getter),
+        store=SimpleNamespace(get_managed_install=getter, connection_scope=nullcontext),
         hook_worker=SimpleNamespace(
             prepare_workspace_policy=lambda *_args, **_kwargs: None,
             metrics=SimpleNamespace(record_route=lambda *_args, **_kwargs: None),
@@ -165,7 +172,7 @@ def test_managed_install_lookup_error_stays_fail_closed() -> None:
         raise RuntimeError("managed install store unavailable")
 
     daemon = SimpleNamespace(
-        store=SimpleNamespace(get_managed_install=getter),
+        store=SimpleNamespace(get_managed_install=getter, connection_scope=nullcontext),
         hook_worker=SimpleNamespace(
             prepare_workspace_policy=lambda *_args, **_kwargs: None,
             metrics=SimpleNamespace(record_route=lambda *_args, **_kwargs: None),
@@ -196,7 +203,7 @@ def test_inactive_claude_alias_passthrough_uses_canonical_managed_key() -> None:
         return None
 
     daemon = SimpleNamespace(
-        store=SimpleNamespace(get_managed_install=getter),
+        store=SimpleNamespace(get_managed_install=getter, connection_scope=nullcontext),
         hook_worker=SimpleNamespace(
             prepare_workspace_policy=lambda *_args, **_kwargs: None,
             metrics=SimpleNamespace(record_route=lambda *_args, **_kwargs: None),
@@ -216,3 +223,50 @@ def test_inactive_claude_alias_passthrough_uses_canonical_managed_key() -> None:
     assert admitted is False
     assert handler.payload is not None
     assert handler.payload.get("reason_code") == "harness_not_managed"
+
+
+def test_managed_harness_reads_observe_commits_between_reads_and_later_hooks(tmp_path: Path, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    writer = GuardStore(guard_home, prime_policy_integrity=False)
+    daemon = _daemon(managed=None)
+    daemon.store = store
+    getter = store.get_managed_install
+    mutation_done = False
+
+    def get_then_activate_other(harness: str) -> dict[str, object] | None:
+        nonlocal mutation_done
+        managed = getter(harness)
+        if not mutation_done:
+            mutation_done = True
+            # A different authority writer commits after the absent-row read.
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                executor.submit(writer.set_managed_install, "cursor", True, None, {}, "first").result(timeout=5)
+        return managed
+
+    monkeypatch.setattr(store, "get_managed_install", get_then_activate_other)
+    if os.name != "nt":
+        os.chmod(guard_home, 0o755)
+        os.chmod(store.path, 0o644)
+    handler = _Handler()
+    admitted = prepare_native_hook_policy(handler, daemon, dict(_PRE_TOOL_PAYLOAD), {}, "codex", None, 0.0)
+    assert admitted is False
+    assert handler.payload is not None
+    assert handler.payload.get("reason_code") == "harness_not_managed"
+    if os.name != "nt":
+        assert guard_home.stat().st_mode & 0o777 == 0o700
+        assert store.path.stat().st_mode & 0o777 == 0o600
+
+    writer.set_managed_install("codex", True, None, {}, "second")
+    active_handler = _Handler()
+    admitted = prepare_native_hook_policy(active_handler, daemon, dict(_PRE_TOOL_PAYLOAD), {}, "codex", None, 0.0)
+    assert admitted is False
+    assert active_handler.payload is not None
+    assert active_handler.payload.get("reason_code") == "native_policy_not_ready"
+
+    writer.set_managed_install("codex", False, None, {}, "third")
+    inactive_handler = _Handler()
+    admitted = prepare_native_hook_policy(inactive_handler, daemon, dict(_PRE_TOOL_PAYLOAD), {}, "codex", None, 0.0)
+    assert admitted is False
+    assert inactive_handler.payload is not None
+    assert inactive_handler.payload.get("reason_code") == "harness_not_managed"

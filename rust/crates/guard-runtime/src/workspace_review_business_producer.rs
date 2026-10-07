@@ -12,6 +12,10 @@ mod journal;
 #[path = "workspace_review_business_budget.rs"]
 mod budget;
 
+#[allow(dead_code)] // No authenticated worker route is published yet.
+#[path = "workspace_review_business_dispatch.rs"]
+mod dispatch;
+
 // This owned value is never serialized, cloned, or published through an RPC.
 // A consumed approval is not dispatch permission until budgets and current
 // worker policy have also been enforced by the future registered worker.
@@ -20,6 +24,8 @@ pub(crate) struct ClaimedBusinessReview<T> {
     input: T,
     owned: PreparedBusinessInputV1,
     journal: journal::Journal,
+    lease: dispatch::Lease,
+    verified: super::super::workspace_review_decision::VerifiedWorkspaceReviewDecision,
 }
 type ClaimedGoogleBusinessRequest = ClaimedBusinessReview<PreparedGoogleBusinessRequest>;
 
@@ -76,21 +82,25 @@ fn claim_refreshed_review<T>(
     if !current(&refreshed) || input_binding(&refreshed) != binding {
         return Err("native_business_resolution_changed".into());
     }
-    let (_, owned, journal) =
+    let (verified, owned, (journal, lease)) =
         super::super::workspace_review_decision::claim_owned_business_request_with(
             store,
             request_id,
             decision,
-            |owned| {
+            |owned, observed_at_ms| {
                 if owned.binding() != binding {
                     return Err("native_business_claim_input_changed".into());
                 }
-                journal::Journal::claimed_unlocked(store, request_id, owned.binding())
+                let lease = dispatch::Lease::capture(store, decision, observed_at_ms)?;
+                let journal =
+                    journal::Journal::claimed_unlocked(store, request_id, owned.binding())?;
+                Ok((journal, lease))
             },
         )?;
     if owned.binding() != binding {
         return Err("native_business_claim_input_changed".into());
     }
+    let lease = lease.seal_clock(verified.observed_at_ms)?;
     if !current(&refreshed) {
         return Err("native_business_claim_expired_after_consume".into());
     }
@@ -98,6 +108,8 @@ fn claim_refreshed_review<T>(
         input: refreshed,
         owned,
         journal,
+        lease,
+        verified,
     })
 }
 

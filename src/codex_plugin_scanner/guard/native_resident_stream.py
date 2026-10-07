@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import stat
 import struct
 import subprocess
 import tempfile
@@ -130,9 +131,10 @@ class _PersistentNativeClient:
             with suppress(Exception):
                 if non_production_diagnostic_enabled():
                     logger.warning("native_client_timed_out phase=%s", phase)
-                    for line in self._read_diagnostic_tail().splitlines()[-64:]:
-                        if _NATIVE_DIAGNOSTIC_LINE.fullmatch(line):
-                            logger.warning("%s", line.decode("ascii"))
+                    for source in (self._read_diagnostic_tail(), self._read_managed_diagnostics()):
+                        for line in source.splitlines()[-64:]:
+                            if _NATIVE_DIAGNOSTIC_LINE.fullmatch(line):
+                                logger.warning("%s", line.decode("ascii"))
 
     def _read_diagnostic_tail(self) -> bytes:
         output = self._diagnostic_output
@@ -142,6 +144,58 @@ class _PersistentNativeClient:
                 output.seek(max(0, output.tell() - _MAX_DIAGNOSTIC_BYTES))
                 return output.read(_MAX_DIAGNOSTIC_BYTES)
         return self._diagnostic_tail
+
+    def _read_managed_diagnostics(self) -> bytes:
+        """Read bounded shared evidence without creating or repairing state."""
+        state_dir = _existing_state_dir(self._state_dir)
+        path = state_dir / "managed-resident-phases.v1.log"
+        with suppress(Exception):
+            if os.name == "nt":
+                from . import native_policy_snapshot
+
+                if native_policy_snapshot._windows_path_has_reparse_component(path):
+                    return b""
+                return native_policy_snapshot._windows_read_snapshot_bytes(
+                    path, maximum_bytes=_MAX_DIAGNOSTIC_BYTES
+                ) or b""
+            flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+            directory = os.open(state_dir, flags | os.O_DIRECTORY)
+            try:
+                metadata = os.fstat(directory)
+                binding = state_dir.lstat()
+                if (
+                    not stat.S_ISDIR(metadata.st_mode)
+                    or (metadata.st_dev, metadata.st_ino) != (binding.st_dev, binding.st_ino)
+                    or metadata.st_uid != os.geteuid()
+                    or metadata.st_mode & 0o077
+                ):
+                    return b""
+                descriptor = os.open(path.name, flags, dir_fd=directory)
+                try:
+                    metadata = os.fstat(descriptor)
+                    binding = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+                    if (
+                        not stat.S_ISREG(metadata.st_mode)
+                        or (metadata.st_dev, metadata.st_ino) != (binding.st_dev, binding.st_ino)
+                        or metadata.st_nlink != 1
+                        or metadata.st_uid != os.geteuid()
+                        or metadata.st_mode & 0o077
+                        or not 0 < metadata.st_size <= _MAX_DIAGNOSTIC_BYTES
+                    ):
+                        return b""
+                    payload = bytearray()
+                    while len(payload) <= _MAX_DIAGNOSTIC_BYTES:
+                        chunk = os.read(descriptor, _MAX_DIAGNOSTIC_BYTES + 1 - len(payload))
+                        if not chunk:
+                            break
+                        payload.extend(chunk)
+                    if len(payload) <= _MAX_DIAGNOSTIC_BYTES:
+                        return bytes(payload)
+                finally:
+                    os.close(descriptor)
+            finally:
+                os.close(directory)
+        return b""
 
     def _close_diagnostic_output(self) -> None:
         output = self._diagnostic_output

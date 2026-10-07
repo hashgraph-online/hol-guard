@@ -99,176 +99,213 @@ def test_archive_traversal_is_rejected_even_with_matching_digests(snapshot):
         bundle.verify_bundle(output, SHA)
 
 
-@pytest.mark.parametrize("draft", [True, False])
-def test_existing_matching_snapshot_is_verified_without_overwrite(snapshot, monkeypatch, draft):
-    _, output = snapshot
-    calls = []
+class PublisherRemote:
+    def __init__(self, output):
+        self.output = output
+        self.release = None
+        self.calls = []
+        self.uploads = []
+        self.downloads = []
+        self.created = False
+        self.published = False
+        self.tag_exists = False
+        self.api_error = self.ref_error = self.commit_error = None
+        self.commit_sha = SHA
+        self.bad_download = False
 
-    def github(*args):
-        calls.append(args)
-        if args[0] == "api":
-            if "/commits/" in args[1]:
-                return json.dumps({"sha": SHA})
-            if draft and "/releases/tags/" in args[1]:
+    def set_release(self, draft, names):
+        self.release = {"id": 123, "tag_name": "extension-artifacts-" + SHA,
+                        "draft": draft, "target_commitish": SHA, "prerelease": True,
+                        "assets": [{"id": 100 + i, "name": name} for i, name in enumerate(names)]}
+        self.tag_exists = True
+
+    def github(self, *args):
+        self.calls.append(args)
+        assert args[0] == "api"
+        endpoint = args[1]
+        if self.api_error:
+            raise RuntimeError(self.api_error)
+        method = args[args.index("--method") + 1] if "--method" in args else "GET"
+        if method == "POST":
+            assert endpoint == f"repos/{publisher.REPOSITORY}/releases"
+            assert "draft=true" in args and "make_latest=false" in args
+            assert "target_commitish=" + SHA in args
+            self.set_release(True, [])
+            self.tag_exists = False
+            self.created = True
+            return json.dumps(self.release)
+        if method == "PATCH":
+            assert endpoint.endswith("/releases/123")
+            assert "draft=false" in args and "make_latest=false" in args
+            assert set(self.downloads) == {bundle.ARCHIVE, bundle.MANIFEST}
+            self.release["draft"] = False
+            self.published = self.tag_exists = True
+            return json.dumps(self.release)
+        if "/git/ref/tags/" in endpoint:
+            if self.ref_error or not self.tag_exists:
+                raise RuntimeError(self.ref_error or "HTTP 404")
+            return json.dumps({"object": {"sha": SHA, "type": "commit"}})
+        if "/commits/" in endpoint:
+            if self.commit_error or not self.tag_exists:
+                raise RuntimeError(self.commit_error or "No commit found for SHA (HTTP 422)")
+            return json.dumps({"sha": self.commit_sha})
+        if "/releases/tags/" in endpoint:
+            if self.release is None or self.release["draft"]:
                 raise RuntimeError("HTTP 404")
-            release = {
-                "tag_name": "extension-artifacts-" + SHA,
-                "draft": draft,
-                "target_commitish": SHA,
-                "prerelease": True,
-                "assets": [{"name": n} for n in (bundle.ARCHIVE, bundle.MANIFEST)],
-            }
-            return json.dumps([[release]] if "--paginate" in args else release)
-        if args[1] == "download":
-            name = args[args.index("--pattern") + 1]
-            destination = Path(args[args.index("--dir") + 1])
-            (destination / name).write_bytes((output / name).read_bytes())
-        return ""
+            return json.dumps(self.release)
+        assert "--paginate" in args
+        # A newly created draft remains invisible to both tag and list queries.
+        return json.dumps([[self.release]] if self.release and not self.created else [[]])
 
-    monkeypatch.setattr(publisher, "github", github)
-    publisher.publish(output, SHA)
-    assert not any("upload" in call or "create" in call for call in calls)
-    assert any("edit" in call for call in calls) is draft
+    def upload(self, release_id, path):
+        assert release_id == 123 and self.release["draft"]
+        assert path.name not in {a["name"] for a in self.release["assets"]}
+        self.uploads.append(path.name)
+        asset = {"id": 100 + len(self.release["assets"]), "name": path.name}
+        self.release["assets"].append(asset)
+        return asset
+
+    def download(self, asset, destination):
+        assert asset["id"] > 0
+        self.downloads.append(asset["name"])
+        destination.write_bytes(
+            b"wrong existing asset" if self.bad_download else (self.output / asset["name"]).read_bytes()
+        )
+
+
+@pytest.fixture
+def remote(snapshot, monkeypatch):
+    state = PublisherRemote(snapshot[1])
+    monkeypatch.setattr(publisher, "github", state.github)
+    monkeypatch.setattr(publisher, "upload_asset", state.upload)
+    monkeypatch.setattr(publisher, "download_asset", state.download)
+    return state
+
+
+@pytest.mark.parametrize("draft", [True, False])
+def test_existing_matching_snapshot_is_verified_without_overwrite(snapshot, remote, draft):
+    remote.set_release(draft, [bundle.ARCHIVE, bundle.MANIFEST])
+    publisher.publish(snapshot[1], SHA)
+    assert not remote.created and not remote.uploads
+    assert set(remote.downloads) == {bundle.ARCHIVE, bundle.MANIFEST}
+    assert remote.published is draft
 
 
 @pytest.mark.parametrize("matching", [True, False])
-def test_partial_draft_can_resume_but_mismatching_assets_cannot_be_replaced(snapshot, monkeypatch, matching):
-    _, output = snapshot
-    calls = []
-
-    def github(*args):
-        calls.append(args)
-        if args[0] == "api":
-            return (
-                json.dumps({"sha": SHA})
-                if "/commits/" in args[1]
-                else json.dumps(
-                    {"draft": True, "target_commitish": SHA, "prerelease": True, "assets": [{"name": bundle.ARCHIVE}]}
-                )
-            )
-        if args[1] == "download":
-            destination = Path(args[args.index("--dir") + 1])
-            name = args[args.index("--pattern") + 1]
-            (destination / name).write_bytes((output / name).read_bytes() if matching else b"wrong existing asset")
-        return ""
-
-    monkeypatch.setattr(publisher, "github", github)
+def test_partial_draft_can_resume_but_mismatching_assets_cannot_be_replaced(snapshot, remote, matching):
+    remote.set_release(True, [bundle.ARCHIVE])
+    remote.bad_download = not matching
     if matching:
-        publisher.publish(output, SHA)
-        uploads = [call for call in calls if "upload" in call]
-        assert len(uploads) == 1 and str(output / bundle.MANIFEST) in uploads[0]
-        assert any("edit" in call for call in calls)
-        assert len([call for call in calls if "download" in call]) == 2
+        publisher.publish(snapshot[1], SHA)
+        assert remote.uploads == [bundle.MANIFEST]
+        assert remote.published and len(remote.downloads) == 2
     else:
         with pytest.raises(ValueError, match="refusing to overwrite"):
-            publisher.publish(output, SHA)
-        assert not any("upload" in call or "edit" in call for call in calls)
+            publisher.publish(snapshot[1], SHA)
+        assert not remote.uploads and not remote.published
 
 
-def test_new_snapshot_stays_draft_until_downloaded_assets_verify(snapshot, monkeypatch):
-    _, output = snapshot
-    calls = []
-    created = False
-    published = False
+def test_new_snapshot_uses_create_response_until_downloaded_assets_verify(snapshot, remote):
+    publisher.publish(snapshot[1], SHA)
+    assert remote.created and remote.published
+    assert set(remote.uploads) == {bundle.ARCHIVE, bundle.MANIFEST}
+    assert len([c for c in remote.calls if "/commits/" in c[1]]) == 1
+    created = next(i for i, c in enumerate(remote.calls) if "POST" in c)
+    assert not any("/releases/tags/" in c[1] or "--paginate" in c for c in remote.calls[created + 1:])
 
-    def github(*args):
-        nonlocal created, published
-        calls.append(args)
-        if args[0] == "api":
-            if "/git/ref/tags/" in args[1] and not published:
-                raise RuntimeError("HTTP 404")
-            if "/commits/" in args[1]:
-                if not published:
-                    raise RuntimeError("No commit found for SHA (HTTP 422)")
-                return json.dumps({"sha": SHA})
-            if not created:
-                if "/releases/tags/" in args[1]:
-                    raise RuntimeError("HTTP 404")
-                return json.dumps([[]])
-            if "/releases/tags/" in args[1]:
-                raise RuntimeError("HTTP 404")
-            return json.dumps(
-                [
-                    [
-                        {
-                            "tag_name": "extension-artifacts-" + SHA,
-                            "draft": True,
-                            "prerelease": True,
-                            "target_commitish": SHA,
-                            "assets": [],
-                        }
-                    ]
-                ]
-            )
-        if args[1] == "create":
-            assert "--draft" in args and "--latest=false" in args
-            created = True
-        if args[1] == "download":
-            name = args[args.index("--pattern") + 1]
-            (Path(args[args.index("--dir") + 1]) / name).write_bytes((output / name).read_bytes())
-        if args[1] == "edit":
-            assert len([c for c in calls if "download" in c]) == 2
-            published = True
-        return ""
 
-    monkeypatch.setattr(publisher, "github", github)
-    publisher.publish(output, SHA)
-    assert published
-    assert not any("--clobber" in call for call in calls)
-    assert len([call for call in calls if call[0] == "api" and "/commits/" in call[1]]) == 1
+def test_corrupt_new_upload_keeps_verified_draft_unpublished(snapshot, remote):
+    remote.bad_download = True
+    with pytest.raises(ValueError, match="uploaded snapshot differs"):
+        publisher.publish(snapshot[1], SHA)
+    assert remote.created and remote.uploads and remote.downloads
+    assert remote.release["draft"] is True and not remote.published
 
 
 @pytest.mark.parametrize("draft,status", [(False, 404), (True, 403), (True, 503)])
-def test_tag_lookup_failures_are_only_tolerated_for_missing_draft_tags(snapshot, monkeypatch, draft, status):
-    _, output = snapshot
-    calls = []
-
-    def github(*args):
-        calls.append(args)
-        if "/git/ref/tags/" in args[1]:
-            raise RuntimeError(f"HTTP {status}")
-        return json.dumps({"draft": draft, "target_commitish": SHA, "prerelease": True, "assets": []})
-
-    monkeypatch.setattr(publisher, "github", github)
+def test_tag_lookup_failures_are_only_tolerated_for_missing_draft_tags(snapshot, remote, draft, status):
+    remote.set_release(draft, [])
+    remote.ref_error = f"HTTP {status}"
     with pytest.raises(RuntimeError, match=str(status)):
-        publisher.publish(output, SHA)
-    assert not any(call[0] == "release" for call in calls)
+        publisher.publish(snapshot[1], SHA)
+    assert not remote.uploads and not remote.downloads and not remote.published
 
 
 @pytest.mark.parametrize("commit_result", ["HTTP 404", "HTTP 503", "different-sha"])
-def test_existing_draft_tag_must_resolve_to_its_verified_source(snapshot, monkeypatch, commit_result):
-    _, output = snapshot
-    calls = []
-
-    def github(*args):
-        calls.append(args)
-        if "/git/ref/tags/" in args[1]:
-            return json.dumps({"object": {"sha": SHA, "type": "commit"}})
-        if "/commits/" in args[1]:
-            if commit_result.startswith("HTTP"):
-                raise RuntimeError(commit_result)
-            return json.dumps({"sha": "b" * 40})
-        return json.dumps({"draft": True, "target_commitish": SHA, "prerelease": True, "assets": []})
-
-    monkeypatch.setattr(publisher, "github", github)
+def test_existing_draft_tag_must_resolve_to_its_verified_source(snapshot, remote, commit_result):
+    remote.set_release(True, [])
+    if commit_result.startswith("HTTP"):
+        remote.commit_error = commit_result
+    else:
+        remote.commit_sha = "b" * 40
     error = RuntimeError if commit_result.startswith("HTTP") else ValueError
     with pytest.raises(error):
-        publisher.publish(output, SHA)
-    assert not any(call[0] == "release" for call in calls)
+        publisher.publish(snapshot[1], SHA)
+    assert not remote.uploads and not remote.downloads and not remote.published
 
 
-def test_api_outage_does_not_create_a_replacement_release(snapshot, monkeypatch):
-    _, output = snapshot
+def test_api_outage_does_not_create_a_replacement_release(snapshot, remote):
+    remote.api_error = "HTTP 503"
+    with pytest.raises(RuntimeError, match="503"):
+        publisher.publish(snapshot[1], SHA)
+    assert len(remote.calls) == 1 and not remote.created
+
+
+def test_duplicate_release_assets_are_rejected_before_io(snapshot, remote):
+    remote.set_release(True, [bundle.ARCHIVE, bundle.ARCHIVE])
+    with pytest.raises(ValueError, match="duplicate"):
+        publisher.publish(snapshot[1], SHA)
+    assert not remote.downloads and not remote.uploads
+
+
+@pytest.mark.parametrize("identity", [None, True, -1, "123"])
+def test_release_identity_must_be_a_positive_integer(identity):
+    with pytest.raises(ValueError, match="identity"):
+        publisher.github_id(identity)
+
+
+def test_upload_targets_fixed_host_without_redirecting_credentials(tmp_path, monkeypatch):
+    import io
+    path = tmp_path / bundle.ARCHIVE
+    path.write_bytes(b"verified bytes")
+    monkeypatch.setenv("GH_TOKEN", "synthetic-test-token")
     calls = []
 
-    def github(*args):
-        calls.append(args)
-        raise RuntimeError("HTTP 503")
+    class Opener:
+        def open(self, request, timeout):
+            calls.append(request)
+            assert request.full_url == f"https://uploads.github.com/repos/{publisher.REPOSITORY}/releases/123/assets?name={bundle.ARCHIVE}"
+            assert request.get_header("Authorization") == "Bearer synthetic-test-token"
+            assert request.data == b"verified bytes" and timeout == 120
+            return io.BytesIO(json.dumps({"id": 456, "name": path.name}).encode())
 
-    monkeypatch.setattr(publisher, "github", github)
-    with pytest.raises(RuntimeError, match="503"):
-        publisher.publish(output, SHA)
+    def opener(handler):
+        assert isinstance(handler, publisher.RejectRedirects)
+        assert handler.redirect_request(None, None, 302, "", {}, "https://other.example") is None
+        return Opener()
+
+    monkeypatch.setattr(publisher.urllib.request, "build_opener", opener)
+    assert publisher.upload_asset(123, path)["id"] == 456
     assert len(calls) == 1
+
+
+def test_asset_download_preserves_binary_bytes_and_uses_numeric_id(tmp_path, monkeypatch):
+    output = tmp_path / "download.zip"
+
+    def run(args, **kwargs):
+        assert args == [
+            "gh", "api", f"repos/{publisher.REPOSITORY}/releases/assets/456",
+            "--header", "Accept: application/octet-stream",
+        ]
+        assert kwargs["timeout"] == 120
+        kwargs["stdout"].write(b"binary\xff\x00")
+        return publisher.subprocess.CompletedProcess(args, 0, stderr=b"")
+
+    monkeypatch.setattr(publisher.subprocess, "run", run)
+    publisher.download_asset({"id": 456}, output)
+    assert output.read_bytes() == b"binary\xff\x00"
+    with pytest.raises(FileExistsError):
+        publisher.download_asset({"id": 456}, output)
 
 
 def test_publication_is_postmerge_and_never_writes_a_branch():

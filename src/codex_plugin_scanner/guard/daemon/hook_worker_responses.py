@@ -88,18 +88,17 @@ def _hook_harness_is_unmanaged(daemon_server: Any, harness: str) -> bool:
         return False
     canonical = _canonical_managed_harness(harness)
     try:
-        managed = getter(canonical)
-    except Exception:
-        return False
-    if isinstance(managed, dict) and managed.get("active") is False:
-        return True
-    if managed is not None:
-        return False
-    lister = getattr(store, "list_managed_installs", None)
-    if not callable(lister):
-        return False
-    try:
-        installs = lister()
+        # Reuse setup only for this hook; each read keeps its own transaction.
+        with store.connection_scope():
+            managed = getter(canonical)
+            if isinstance(managed, dict) and managed.get("active") is False:
+                return True
+            if managed is not None:
+                return False
+            lister = getattr(store, "list_managed_installs", None)
+            if not callable(lister):
+                return False
+            installs = lister()
     except Exception:
         return False
     if not isinstance(installs, list):
