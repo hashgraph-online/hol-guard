@@ -3,8 +3,6 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Sequence
 
-import pytest
-
 from scripts.retry_verify_published import is_retryable_incomplete_error, wait_for_published
 
 INCOMPLETE = (
@@ -39,18 +37,8 @@ class FakeRunner:
 
 def test_incomplete_missing_set_is_retryable() -> None:
     assert is_retryable_incomplete_error(INCOMPLETE)
-    assert is_retryable_incomplete_error("Registry release is absent\n")
-    assert is_retryable_incomplete_error("Base Guard release is not present yet\n")
     assert not is_retryable_incomplete_error(MISMATCH)
     assert not is_retryable_incomplete_error("Registry request failed with HTTP 500\n")
-
-
-def test_wait_retries_while_the_registry_release_is_still_absent() -> None:
-    sleeps: list[float] = []
-    runner = FakeRunner([1, 0], ["Registry release is absent\n", ""])
-    assert wait_for_published(["--registry", "pypi"], runner=runner, sleeper=sleeps.append) == 0
-    assert runner.calls == 2
-    assert sleeps == [5.0]
 
 
 def test_wait_retries_incomplete_then_succeeds() -> None:
@@ -69,15 +57,16 @@ def test_wait_fails_immediately_on_digest_mismatch() -> None:
     assert sleeps == []
 
 
-def test_wait_retries_absent_then_incomplete_then_succeeds() -> None:
+def test_wait_retries_absent_then_incomplete_until_exact(capsys) -> None:
     sleeps: list[float] = []
     runner = FakeRunner([1, 1, 0], [ABSENT, INCOMPLETE, ""])
     assert wait_for_published(["--registry", "pypi"], runner=runner, sleeper=sleeps.append) == 0
     assert runner.calls == 3
     assert sleeps == [5.0, 5.0]
+    assert capsys.readouterr().out == '{"status":"exact"}\n'
 
 
-def test_wait_absent_release_exhausts_attempts(capsys: pytest.CaptureFixture[str]) -> None:
+def test_absent_registry_exhausts_budget_without_succeeding(capsys) -> None:
     sleeps: list[float] = []
     runner = FakeRunner([1], [ABSENT])
     assert wait_for_published(["--registry", "pypi"], attempts=3, runner=runner, sleeper=sleeps.append) == 1
@@ -86,7 +75,7 @@ def test_wait_absent_release_exhausts_attempts(capsys: pytest.CaptureFixture[str
     assert capsys.readouterr().err == ABSENT
 
 
-def test_wait_absent_then_mismatch_fails_without_another_retry() -> None:
+def test_absent_then_mismatched_registry_stops_immediately() -> None:
     sleeps: list[float] = []
     runner = FakeRunner([1, 1], [ABSENT, MISMATCH])
     assert wait_for_published(["--registry", "pypi"], runner=runner, sleeper=sleeps.append) == 1

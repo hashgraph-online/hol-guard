@@ -3,6 +3,28 @@ name: Native wheel CI
 on:
   pull_request:
     branches: [main, release/3.2]
+    paths:
+      - "rust/**"
+      - "ci/native_runtime/**"
+      - "contracts/extensions/**"
+      - "contributions/**"
+      - "src/codex_plugin_scanner/guard/*native*.py"
+      - "src/codex_plugin_scanner/guard/runtime_transition*.py"
+      - "src/codex_plugin_scanner/guard/adapters/*native*.py"
+      - "scripts/ci/**"
+      - "scripts/build_command_projection_hook.py"
+      - "scripts/build_native_command_program.py"
+      - "scripts/build_native_hol_guard_wheel.py"
+      - "scripts/bench_guard_native_installed_slo.py"
+      - "scripts/stress_guard_daemon.py"
+      - "scripts/sync_repo_version.py"
+      - ".github/workflows/native-wheel-ci.yml"
+      - ".github/actions/native-regression/**"
+      - ".github/actions/setup-rust/**"
+      - ".github/actions/stage-command-projections/**"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "uv.lock"
   push:
     branches: [main]
   schedule:
@@ -11,6 +33,9 @@ on:
 
 permissions:
   contents: read
+
+env:
+  UV_HTTP_TIMEOUT: "120"
 
 concurrency:
   group: native-wheel-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
@@ -62,11 +87,10 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           targets: ${{ matrix.target == 'x86_64-apple-darwin' && matrix.target || '' }}
-      - name: Build pure Python wheel
-        run: uv build --wheel --out-dir pure-dist
       - name: Build and assemble version-matched native wheel
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+          NATIVE_PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
           PLATFORM_TAG: ${{ matrix.platform_tag }}
           TARGET: ${{ matrix.target }}
@@ -109,9 +133,11 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: ./.github/actions/stage-command-projections
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - name: Run wheel-builder contracts
-        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py tests/test_native_source_compiler.py
+        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py
+          ci/native_runtime/test_native_wheel_compression.py tests/test_native_source_compiler.py
           --tb=short
   linux-build:
     runs-on: ubuntu-latest
@@ -130,7 +156,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: ./.github/actions/setup-rust
         with:
           targets: x86_64-unknown-linux-musl
@@ -138,8 +164,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
-      - name: Build pure Python wheel
-        run: uv build --wheel --out-dir pure-dist
       - name: Build static native runtime
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
@@ -158,30 +182,26 @@ jobs:
           fi
           "$runtime" self-test --json
       - name: Prove declarative compilation and fixtures without Python
-        run: |
-          cargo test --manifest-path rust/Cargo.toml --locked --release --target x86_64-unknown-linux-musl -p guard-command --test native_command_source_cli
-          cargo build --manifest-path rust/Cargo.toml --locked --release --target x86_64-unknown-linux-musl -p guard-command --bin guard-command-source
-          mkdir source-compiler-context
-          cp rust/target/x86_64-unknown-linux-musl/release/guard-command-source source-compiler-context/
-          cp ci/native_runtime/source-compiler.Dockerfile source-compiler-context/Dockerfile
-          docker build --network none --tag guard-source-compiler:ci source-compiler-context
-          jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
-            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
-          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -i guard-source-compiler:ci compile < source-build.json > source-compiled.json
-          jq --slurpfile build source-build.json '. + {build:$build[0]}' rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json > source-fixtures.json
-          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -i guard-source-compiler:ci test < source-fixtures.json > source-fixture-results.json
+        run: bash scripts/ci/prove-native-source-compiler-linux.sh
       - name: Verify native command program is current
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
+          HOL_GUARD_PACKAGE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION
           arguments=(--compiler rust/target/x86_64-unknown-linux-musl/release/guard-command-source)
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
           fi
           uv run --no-sync python scripts/ci/verify_native_command_program.py "${arguments[@]}"
+          rust/target/x86_64-unknown-linux-musl/release/guard-command-source compile < source-build.json > source-compiled.json
       - name: Assemble and install native wheel
         env:
           SOURCE_SHA: ${{ github.sha }}
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/x86_64-unknown-linux-musl/release/guard-command-source
         run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          uv build --wheel --out-dir pure-dist
           runtime="rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime"
           RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
           uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
@@ -226,10 +246,15 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: hol-guard-native-build-linux-x64
+      - name: Detect pending artifact regeneration
+        run: |
+          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo true)" = "true" ]; then
+            echo "HOL_DEFER_ARTIFACT_FRESHNESS=1" >> "$GITHUB_ENV"
+          fi
       - name: Install this run's wheel and run installed proofs
         run: |
           chmod 0755 rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime rust/target/x86_64-unknown-linux-musl/release/guard-command-source
@@ -239,6 +264,7 @@ jobs:
           .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
           .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
           .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_prompt.py --expected-source-sha "$(git rev-parse HEAD)" --json installed-native-prompt.json
       - name: Measure installed adapter-to-decision SLOs
         env:
           NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
@@ -295,6 +321,7 @@ jobs:
             native-default-auto.json
             installed-pi-output.json
             installed-native-extensions.json
+            installed-native-prompt.json
             native-installed-slo.json
             native-soak.json
             native-stress-smoke.json
@@ -335,10 +362,8 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: ./.github/actions/setup-rust
-      - name: Build pure Python wheel
-        run: uv build --wheel --out-dir pure-dist
       - name: Build native runtime
         shell: pwsh
         env:
@@ -353,7 +378,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prove native source compiler output
         shell: pwsh
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
+          $version = uv run --no-sync python scripts/sync_repo_version.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:HOL_GUARD_PACKAGE_VERSION = $version.Trim()
           $arguments = @("--compiler", "rust/target/release/guard-command-source.exe")
           if ("${{ github.event_name }}" -eq "pull_request") {
             $arguments += @("--changed-from", "${{ github.event.pull_request.base.sha }}")
@@ -378,8 +408,11 @@ jobs:
         shell: pwsh
         env:
           SOURCE_SHA: ${{ github.sha }}
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source.exe
         run: |
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv build --wheel --out-dir pure-dist
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $runtime = "rust\target\release\hol-guard-runtime.exe"
           $sourceCompiler = "rust\target\release\guard-command-source.exe"
@@ -430,10 +463,19 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: hol-guard-native-build-windows-x64
+      - name: Detect pending artifact regeneration
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_BASE_REF) {
+            $defer = python scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>$null
+            if ($LASTEXITCODE -ne 0 -or $defer -eq "true") {
+              "HOL_DEFER_ARTIFACT_FRESHNESS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+            }
+          }
       - name: Install this run's wheel and run installed proofs
         shell: pwsh
         run: |
@@ -485,6 +527,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_extensions.py --json installed-native-extensions.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_prompt.py --expected-source-sha (git rev-parse HEAD) --json installed-native-prompt.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_command_control_lock.py --json installed-command-control-lock.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -495,6 +539,7 @@ jobs:
             native-dist/*.whl
             native-default-auto.json
             installed-native-extensions.json
+            installed-native-prompt.json
             installed-command-control-lock.json
           if-no-files-found: error
     needs: windows-build
@@ -556,6 +601,12 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
+          save-cache: false
+          cache-suffix: native-ci-v1
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          prune-cache: false
       - name: Install locked proof dependencies
         env:
           NATIVE_PROOF: ${{ matrix.proof }}
@@ -564,7 +615,12 @@ jobs:
         with:
           name: hol-guard-native-wheel-${{ matrix.target }}
       - name: Install the platform wheel built by this run
-        run: uv pip install --python .venv/bin/python --no-deps native-dist/*.whl
+        run: uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
+      - name: Detect pending artifact regeneration
+        run: |
+          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo true)" = "true" ]; then
+            echo "HOL_DEFER_ARTIFACT_FRESHNESS=1" >> "$GITHUB_ENV"
+          fi
       - name: Prove installed native default routes
         if: matrix.proof == 'default'
         run: |
@@ -580,6 +636,7 @@ jobs:
         run: |
           source scripts/ci/native-proof-environment.sh
           .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_prompt.py --expected-source-sha "$(git rev-parse HEAD)" --json installed-native-prompt.json
       - name: Measure installed adapter-to-decision SLOs
         if: matrix.proof == 'performance'
         env:
@@ -703,6 +760,7 @@ jobs:
             native-default-auto.json
             installed-pi-output.json
             installed-native-extensions.json
+            installed-native-prompt.json
             native-installed-slo.json
             native-installed-slo-attempt-*.json
             native-installed-slo-attempt-*.json.stderr

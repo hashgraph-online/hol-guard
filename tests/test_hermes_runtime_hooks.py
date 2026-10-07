@@ -252,6 +252,7 @@ def test_guard_pretool_hook_registered_requires_fail_closed() -> None:
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_pretool_call_records_runtime_receipt(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

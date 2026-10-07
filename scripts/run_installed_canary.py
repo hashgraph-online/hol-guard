@@ -18,7 +18,12 @@ from importlib.metadata import distribution
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from scripts.installed_canary_proof import InstalledCanaryError, load_subject, verify_install
+from scripts.installed_canary_proof import (
+    InstalledCanaryError,
+    add_installed_canary_arguments,
+    load_subject,
+    verify_install,
+)
 
 if TYPE_CHECKING:
     from tests.guard_command_corpus_oracle_types import OracleRecord
@@ -27,7 +32,7 @@ _FROZEN_MANIFEST_SHA256 = "9cb33472d122058e8ede6ede57d55d0ebf29b832f8b4eb5321a23
 # These counts belong to the source-bound 51k corpus validated by the manifest above.
 _FROZEN_CORPUS_CASE_COUNT = 51_000
 _FROZEN_NATIVE_REJECTION_COUNT = 27_084
-_FROZEN_ORACLE_ABOVE_COUNT = 11_558
+_FROZEN_ORACLE_ABOVE_COUNT = 10_541
 
 
 def _sha256(path: Path) -> str:
@@ -96,15 +101,23 @@ def _validate_corpus_bindings(repo_root: Path) -> dict[str, object]:
     }
 
 
+def _child_python_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    # Python's -X cache prefix is not inherited by subprocess interpreters.
+    if sys.pycache_prefix is not None:
+        environment["PYTHONPYCACHEPREFIX"] = str(Path(sys.pycache_prefix).absolute())
+    return environment
+
+
 def _run_corpus(repo_root: Path) -> dict[str, object]:
     bindings = _validate_corpus_bindings(repo_root)
-    native_root = Path(distribution("hol-guard").locate_file("codex_plugin_scanner/_native"))
+    native_root = Path(str(distribution("hol-guard").locate_file("codex_plugin_scanner/_native")))
     suffix = ".exe" if sys.platform == "win32" else ""
     runtime = native_root / f"hol-guard-runtime{suffix}"
     compiler = native_root / f"guard-command-source{suffix}"
     if not runtime.is_file() or not compiler.is_file():
         raise InstalledCanaryError("Installed Guard package is missing native corpus binaries")
-    environment = os.environ.copy()
+    environment = _child_python_environment()
     environment["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
     environment["HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"] = str(compiler)
     started = time.perf_counter()
@@ -177,6 +190,7 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         guard_home = root / "guard-home"
+        guard_home.mkdir()
         workspace = root / "workspace"
         workspace.mkdir()
         initialized = subprocess.run(
@@ -196,6 +210,13 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             "cwd": str(workspace),
             "source_scope": "project",
         }
+        # A bundled runtime can initialize a fresh home's policy. Exercise an
+        # explicit fail-safe outage rather than relying on source-only absence.
+        hook_env = _child_python_environment()
+        hook_env["HOL_GUARD_NATIVE"] = "off"
+        hook_env["PYTHONPATH"] = ""
+        hook_env.pop("HOL_GUARD_PYTHON_ORACLE", None)
+        hook_env.pop("HOL_GUARD_NATIVE_DIAGNOSTIC", None)
         completed = subprocess.run(
             [
                 sys.executable,
@@ -217,13 +238,29 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             capture_output=True,
             check=False,
             cwd=workspace,
+            env=hook_env,
             encoding="utf-8",
             timeout=30,
         )
-        if completed.returncode != 0:
+        # A correctly-disabled harness emits a deny payload AND a fail-closed
+        # nonzero rc (the generic/CLI contract for `policy_action:"block"`).
+        # rc=0 would read the denial as allow to a shell harness — the exact
+        # fail-open regression the verdict-derived rc fix removes.
+        if completed.returncode == 0:
             raise InstalledCanaryError(
-                f"Installed no-post-proof hook returned {completed.returncode}, expected prompt-free continuation"
+                "Installed no-post-proof hook returned 0 despite emitting a block payload; "
+                "fail-closed rc is required so the deny is not read as allow"
             )
+        response = json.loads(completed.stdout)
+        hook_output = response.get("hookSpecificOutput") if isinstance(response, dict) else None
+        if (
+            not isinstance(response, dict)
+            or response.get("reason_code") != "native_hook_disabled"
+            or response.get("policy_action") != "block"
+            or not isinstance(hook_output, dict)
+            or hook_output.get("permissionDecision") != "deny"
+        ):
+            raise InstalledCanaryError("No-post-proof harness did not deny explicitly disabled native review")
         store = GuardStore(guard_home, prime_policy_integrity=False)
         with closing(sqlite3.connect(store.path)) as connection:
             row = cast(
@@ -236,7 +273,7 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
                     """
                 ).fetchone(),
             )
-        expected = (harness, "pre", "allowed_unconfirmed", "pre_hook", "warn", "policy", 0)
+        expected = (harness, "pre", "prevented", "pre_hook", "block", "policy", 0)
         if row is None or tuple(row) != expected:
             raise InstalledCanaryError(
                 f"Installed no-post-proof hook persisted unexpected activity evidence: {tuple(row) if row else None!r}"
@@ -302,11 +339,7 @@ def _dashboard_smoke() -> dict[str, object]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    _ = parser.add_argument("--subject", type=Path, required=True)
-    _ = parser.add_argument("--version", required=True)
-    _ = parser.add_argument("--source-sha", required=True)
-    _ = parser.add_argument("--repo-root", type=Path, required=True)
-    _ = parser.add_argument("--output", type=Path, required=True)
+    add_installed_canary_arguments(parser)
     return parser
 
 

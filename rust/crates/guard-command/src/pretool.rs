@@ -3,16 +3,44 @@ use guard_secure_fs::sensitive_path_family;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-mod safe_reads;
-mod search;
+/// Caller roots have explicit names; individual proofs still verify them on disk.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PathContext<'a> {
+    pub home_dir: Option<&'a str>,
+    pub cwd: Option<&'a str>,
+}
 
-use search::safe_search_arguments;
+mod git_config;
+mod git_helper_context;
+mod git_probe;
+mod git_routes;
+mod git_worktree;
+pub(crate) use git_routes::git_route_within_workspace;
+mod pure_expression;
+mod read_paths;
+mod restricted_tests;
+mod safe_reads;
+mod safe_scalar;
+mod safe_writes;
+mod search;
+mod search_scope;
+mod search_scope_filter;
+mod search_scope_glob;
+mod search_scope_ignore;
+mod segment_proof;
+mod shell_script;
+mod stdin_filters;
+mod worktree_add;
+mod worktree_writes;
 
 pub mod generic;
 
+pub use generic::bounded_task_metadata_output;
 pub use generic::evaluate_pre_tool_envelope;
+pub use generic::evaluate_pre_tool_envelope_with_context;
+pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
-pub use generic::evaluate_pre_tool_envelope_with_source;
+pub(crate) use segment_proof::benign_command_segments;
 
 fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)
@@ -72,6 +100,8 @@ pub(super) fn sensitive_command(value: &str) -> bool {
         "~/.pypirc",
         "/.netrc",
         "~/.netrc",
+        ".authrc",
+        ".envrc",
         "/.env",
         "~/.env",
         "id_rsa",
@@ -107,7 +137,7 @@ fn sensitive_path_argument_with_credentials(value: &str, include_credential_name
         normalized.rsplit_once(':').map_or("", |(_, tail)| tail),
     ];
     candidates.iter().any(|candidate| {
-        let relative = candidate.trim_start_matches("./");
+        let relative = candidate.strip_prefix("./").unwrap_or(candidate);
         sensitive_path_family(Path::new(relative)).is_some()
             || (include_credential_names
                 && (guard_secure_fs::credential_named_path(Path::new(relative))
@@ -124,7 +154,11 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
     })
 }
 
-fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool {
+fn safe_git_arguments(
+    arguments: &[String],
+    allow_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
     // Git magic pathspec semantics are not proven by this classifier; retain review.
     if arguments
         .iter()
@@ -132,6 +166,11 @@ fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool 
     {
         return false;
     }
+    let Some(arguments) =
+        crate::command_compatibility::git_inspection_arguments(arguments, context)
+    else {
+        return false;
+    };
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };
@@ -170,30 +209,6 @@ fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool 
         &["--ext-diff", "--textconv", "--output", "-o"],
         &["--output=", "--exec-path="],
     )
-}
-
-fn git_helper_context_required(model: &CanonicalCommandV1) -> bool {
-    exact_safe_command(model, true)
-        && model.segments.iter().any(|segment| {
-            segment.executable.as_deref().is_some_and(|executable| {
-                executable_basename(executable) == "git"
-                    && segment.arguments.first().is_some_and(|subcommand| {
-                        let option_end = segment
-                            .arguments
-                            .iter()
-                            .position(|argument| argument == "--")
-                            .unwrap_or(segment.arguments.len());
-                        let active_options = &segment.arguments[1..option_end];
-                        matches!(subcommand.as_str(), "diff" | "log" | "show")
-                            && !(active_options
-                                .iter()
-                                .any(|argument| argument == "--no-ext-diff")
-                                && active_options
-                                    .iter()
-                                    .any(|argument| argument == "--no-textconv"))
-                    })
-            })
-        })
 }
 
 fn destructive_command(value: &str) -> bool {
@@ -235,18 +250,41 @@ fn exfiltration_command(value: &str) -> bool {
 }
 
 fn safe_gh_arguments(arguments: &[String]) -> bool {
-    match arguments {
-        [auth, status] if auth == "auth" && status == "status" => true,
-        [auth, status, flag]
-            if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h") =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(arguments, [auth, status, flag]
+        if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h"))
+        || crate::command_compatibility::github_arguments_are_read_only(arguments)
+}
+
+pub(crate) fn safe_directory_target(target: &str) -> bool {
+    let tilde_head = target
+        .strip_prefix('~')
+        .map(|rest| rest.split('/').next().unwrap_or(""));
+    let directory_history = tilde_head.is_some_and(|head| {
+        head.starts_with(['+', '-'])
+            || (!head.is_empty() && head.bytes().all(|byte| byte.is_ascii_digit()))
+    });
+    crate::is_plain_cd_target(target)
+        && !directory_history
+        && !target.contains(['*', '?', '[', ']', '\\'])
+        && !sensitive_command(target)
+        && !normalized_haystack(target)
+            .split('/')
+            .any(|component| matches!(component, ".ssh" | ".aws" | ".kube" | ".gnupg" | ".docker"))
 }
 
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
+    exact_safe_command_with_context(
+        model,
+        allow_git_helper_context,
+        crate::pretool::PathContext::default(),
+    )
+}
+
+fn exact_safe_command_with_context(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
         || model.segments.is_empty()
@@ -254,34 +292,42 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
     {
         return false;
     }
+    if segment_proof::exact_safe_cwd_compound(model, context) {
+        return true;
+    }
     model.segments.iter().all(|segment| {
-        let Some(executable) = segment.executable.as_deref() else {
-            return false;
-        };
-        let basename = executable_basename(executable);
-        if sensitive_command(&segment.text)
-            || (!matches!(basename, "rg" | "grep")
-                && segment
-                    .arguments
-                    .iter()
-                    .any(|argument| sensitive_path_argument(argument)))
-            || !segment.environment_names.is_empty()
-            || executable.contains(['/', '\\'])
-        {
-            return false;
-        }
-        match basename {
-            "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" | "stat" => true,
-            "date" => safe_reads::safe_date_arguments(&segment.arguments),
-            "ls" => safe_reads::safe_listing_arguments(&segment.arguments),
-            "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments),
-            "head" | "tail" => safe_reads::safe_head_tail_arguments(&segment.arguments),
-            "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
-            "gh" => safe_gh_arguments(&segment.arguments),
-            "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),
-            _ => false,
-        }
+        segment_proof::exact_safe_segment_with_context(
+            model,
+            segment,
+            allow_git_helper_context,
+            context,
+        )
     })
+}
+
+fn exact_safe_search_command(model: &CanonicalCommandV1) -> bool {
+    exact_safe_command(model, false)
+        && model.segments.iter().all(|segment| {
+            segment
+                .executable
+                .as_deref()
+                .is_some_and(|executable| matches!(executable_basename(executable), "rg" | "grep"))
+        })
+}
+
+pub(super) fn sensitive_command_input(value: &str) -> bool {
+    if !sensitive_command(value) {
+        return false;
+    }
+    let request = CommandModelRequestV1 {
+        command: value.to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+    };
+    // Only parsed, bounded search data may shed the raw keyword signal.
+    // Structured paths, prompts, URLs and arbitrary executable text keep it.
+    !parse_command(&request).is_ok_and(|model| exact_safe_search_command(&model))
 }
 
 fn exact_destructive_tool_introspection(model: &CanonicalCommandV1) -> bool {
@@ -304,8 +350,50 @@ fn exact_destructive_tool_introspection(model: &CanonicalCommandV1) -> bool {
 }
 
 pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecisionV1, String> {
+    evaluate_pre_tool_with_context(request, None, None)
+}
+
+pub(super) fn evaluate_pre_tool_with_context(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> Result<PreToolDecisionV1, String> {
+    evaluate_pre_tool_with_execution_context(request, home_dir, cwd, None, None)
+}
+
+pub(super) fn evaluate_pre_tool_with_execution_context(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    deadline: Option<std::time::Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
+    let context = crate::pretool::PathContext { home_dir, cwd };
+    if shell_script::contains_credential_post(&model, context) {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_secret_exfiltration",
+            "HOL Guard blocked a local script that combines credential access with outbound posting.",
+        ));
+    }
+    if exact_safe_command_with_context(&model, false, context)
+        && model.segments.iter().all(|segment| {
+            segment
+                .executable
+                .as_deref()
+                .is_some_and(|executable| matches!(executable_basename(executable), "rg" | "grep"))
+        })
+    {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this bounded source search explicitly benign.",
+        ));
+    }
     if exact_destructive_tool_introspection(&model) {
         return Ok(pretool_decision(
             model,
@@ -314,7 +402,15 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "The Rust command authority proved this command only inspects tool metadata.",
         ));
     }
-    if destructive_command(normalized) {
+    let destructive_remote_sync = model.segments.iter().any(|segment| {
+        segment.executable.as_deref().is_some_and(|executable| {
+            matches!(executable_basename(executable), "gh" | "gh.exe")
+        }) && matches!(segment.arguments.as_slice(), [repo, sync, ..] if repo == "repo" && sync == "sync")
+            && segment.arguments.iter().take_while(|arg| arg.as_str() != "--")
+                .any(|arg| arg == "--force")
+            && !segment.arguments.iter().any(|arg| matches!(arg.as_str(), "--help" | "-h"))
+    });
+    if destructive_command(normalized) || destructive_remote_sync {
         return Ok(pretool_decision(
             model,
             "block",
@@ -330,7 +426,11 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard blocked a command that combines sensitive data access with network transfer.",
         ));
     }
-    if !model.wrapper_chain.is_empty() {
+    if model
+        .wrapper_chain
+        .iter()
+        .any(|wrapper| wrapper != "timeout")
+    {
         return Ok(pretool_decision(
             model,
             "require-reapproval",
@@ -338,7 +438,15 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard requires fresh approval for the privileged execution context.",
         ));
     }
-    if exact_safe_command(&model, false) {
+    if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_worktree_add",
+            "The Rust command authority proved this bounded worktree creation has a fresh contained destination, a local ref, and no executable Git routes.",
+        ));
+    }
+    if exact_safe_command_with_context(&model, false, context) {
         return Ok(pretool_decision(
             model,
             "allow",
@@ -362,7 +470,20 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard requires review because this command overrides executable resolution.",
         ));
     }
-    if git_helper_context_required(&model) {
+    if git_helper_context::git_helper_context_required(&model) {
+        if git_helper_context::git_helpers_proven_inert(
+            &model,
+            context,
+            deadline,
+            execution_environment,
+        ) {
+            return Ok(pretool_decision(
+                model,
+                "allow",
+                "native_exact_safe_command",
+                "The Rust command authority verified that the effective Git configuration defines no diff, textconv, pager, or filter helper for this read.",
+            ));
+        }
         return Ok(pretool_decision(
             model,
             "review",

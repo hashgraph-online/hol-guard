@@ -22,7 +22,7 @@ fn policy() -> EffectiveNativePolicyV3 {
     }
 }
 
-fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
+pub(super) fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
     let effective_policy = policy();
     let mut result = PolicySnapshotV3 {
         schema: POLICY_SNAPSHOT_SCHEMA.into(),
@@ -42,6 +42,7 @@ fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
         },
         effective_policy,
         command_extensions: None,
+        business_policy: None,
         issued_at_ms: 100,
         expires_at_ms: 1_000,
         integrity: SnapshotIntegrityV3 {

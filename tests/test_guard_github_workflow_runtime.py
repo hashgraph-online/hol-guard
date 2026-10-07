@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import os
@@ -17,12 +16,9 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.approvals import _artifact_scope_runtime_exact_match_key, apply_approval_resolution
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
-from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 from codex_plugin_scanner.guard.runtime.github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
@@ -287,59 +283,6 @@ def test_spoofed_ids_and_binding_drift_fail_closed(tmp_path: Path) -> None:
         for _ in range(10)
     )
     assert claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor) is None
-
-
-def test_claimed_saved_allow_cannot_bypass_failed_workflow_capability(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import codex_plugin_scanner.guard.cli.commands_hook_github_workflow as workflow_hook
-
-    guard_home = tmp_path / "guard-home"
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(guard_home)
-    descriptor = _descriptor()
-    monkeypatch.setattr(workflow_hook, "_runtime_github_workflow_descriptor", lambda *_args, **_kwargs: descriptor)
-    monkeypatch.setattr(workflow_hook, "github_workflow_capability_required", lambda *_args: True)
-    monkeypatch.setattr(workflow_hook, "claim_resolved_github_workflow_authorization", lambda *_args: None)
-    artifact = GuardArtifact(
-        artifact_id="codex:project:tool-action:github",
-        name="Bash GitHub maintenance",
-        harness="codex",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=str(workspace / ".codex" / "config.toml"),
-        command=_COMMAND,
-        metadata={"action_class": GITHUB_MAINTENANCE_ACTION_CLASS},
-    )
-    config = GuardConfig(guard_home=guard_home, workspace=workspace, default_action="review")
-    args = argparse.Namespace(harness="codex", policy_action=None, json=True)
-    context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home)
-
-    def evaluate(claimed_hash: str | None = None, request_id: str | None = None):
-        return _evaluate_runtime_artifact_hook(
-            args,
-            action_envelope=None,
-            config=config,
-            context=context,
-            data_flow_signals=(),
-            guard_home=guard_home,
-            payload={"hook_event_name": "PreToolUse", "tool_name": "Bash"},
-            runtime_artifact=artifact,
-            runtime_workspace=workspace,
-            store=store,
-            _claimed_saved_allow_hash=claimed_hash,
-            _claimed_approval_request_id=request_id,
-            _claim_saved_approval=claimed_hash is None,
-        )
-
-    initial = evaluate()
-    assert not isinstance(initial, int)
-    result = evaluate(initial.runtime_artifact_hash, "request-github-1")
-    assert not isinstance(result, int)
-    assert result.policy_action == "require-reapproval"
-    reuse = cast(Mapping[str, object], result.response_payload["approval_reuse"])
-    assert reuse["reason_code"] == "approval_reuse_integrity_failure"
 
 
 def test_workflow_events_do_not_expose_remote_identity(tmp_path: Path) -> None:

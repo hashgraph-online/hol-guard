@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.codex_hook_runtime_trust import TrustedCodexHook
 from tests.codex_daemon_hook_bridge_fixtures import _bridge_config
 
 
-def test_unavailable_prompt_warns_but_actions_require_review() -> None:
+def test_unavailable_prompt_warns_but_all_actions_require_review() -> None:
     assert bridge._unavailable_response("UserPromptSubmit", "review failed") == {
         "continue": True,
         "systemMessage": "review failed",
@@ -37,8 +37,7 @@ def test_unavailable_prompt_warns_but_actions_require_review() -> None:
         "review failed",
         json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/app.ts"}}),
     )
-    assert local_read["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
-    assert local_read["continue"] is True
+    assert local_read == pretool
     recovery = bridge._unavailable_response(
         "PreToolUse",
         "review failed",
@@ -50,8 +49,7 @@ def test_unavailable_prompt_warns_but_actions_require_review() -> None:
             }
         ),
     )
-    assert recovery["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
-    assert recovery["continue"] is True
+    assert recovery == pretool
 
 
 @pytest.mark.parametrize("event", ["PreToolUse", "PermissionRequest"])

@@ -191,20 +191,20 @@ def test_pretool_graph_gate_rejects_unguarded_server_legacy_escape(tmp_path: Pat
     assert any("server execute path" in failure for failure in failures)
 
 
-def test_pretool_graph_gate_rejects_unknown_event_compatibility_escape(tmp_path: Path) -> None:
+def test_pretool_graph_gate_rejects_resident_python_cli_escape(tmp_path: Path) -> None:
     _copy_pretool_graph_sources(tmp_path)
     entrypoint = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py"
     source = entrypoint.read_text(encoding="utf-8")
-    marker = "        _native_mode_requires_rust()\n"
+    marker = "        worker_payload = worker.review_http_payload(\n"
     assert marker in source
     entrypoint.write_text(
-        source.replace(marker, "        False\n", 1),
+        source.replace(marker, "        worker_payload = _run_guard_hook_command(\n", 1),
         encoding="utf-8",
     )
 
     failures = MODULE._graph_failures(tmp_path)
 
-    assert any("unknown events" in failure for failure in failures)
+    assert any("resident entrypoint can still reach the Python CLI" in failure for failure in failures)
 
 
 def test_pretool_graph_gate_rejects_cli_normalization_before_native(tmp_path: Path) -> None:
@@ -230,13 +230,30 @@ def test_authority_workflow_is_always_selected() -> None:
     assert "fetch-depth: 0" in source
 
 
-def test_native_wheel_workflow_is_always_selected() -> None:
+def test_native_wheel_workflow_selects_protected_native_changes() -> None:
     source = (ROOT / ".github" / "workflows" / "native-wheel-ci.yml").read_text(encoding="utf-8")
     trigger = source.split("permissions:", maxsplit=1)[0]
 
     assert "pull_request:\n    branches: [main, release/3.2]" in trigger
-    assert "paths:" not in trigger
+    assert "paths:" in trigger
     assert "paths-ignore:" not in trigger
+    for path in (
+        "rust/**",
+        "ci/native_runtime/**",
+        "contracts/extensions/**",
+        "contributions/**",
+        "src/codex_plugin_scanner/guard/*native*.py",
+        "src/codex_plugin_scanner/guard/runtime_transition*.py",
+        "src/codex_plugin_scanner/guard/adapters/*native*.py",
+        "scripts/ci/**",
+        "scripts/build_command_projection_hook.py",
+        "scripts/build_native_command_program.py",
+        "scripts/build_native_hol_guard_wheel.py",
+        ".github/actions/stage-command-projections/**",
+        "pyproject.toml",
+        "uv.lock",
+    ):
+        assert f'- "{path}"' in trigger
     assert "HOL_GUARD_HOOK_FAST_PATH" in source
     assert "probe_native_default_auto.py --json native-default-auto.json" in source
 

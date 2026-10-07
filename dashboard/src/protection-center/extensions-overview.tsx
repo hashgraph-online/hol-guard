@@ -6,9 +6,10 @@ import {
   extensionStateLabel,
 } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
-import { connectorWorkspaceItems, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
+import { connectorWorkspaceItems, refreshCodexHostInventory, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
+import { CodexHostConnectors } from "./codex-host-connectors";
 import { AddCustomExtensionButton } from "./local-clis-panel";
 import { CustomExtensionsSection } from "./custom-extensions-section";
 import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
@@ -76,7 +77,7 @@ function ConnectorDiscoveryControl(props: {
   if (props.discovering) {
     return (
       <p role="status" className="px-1 text-xs text-brand-dark/60">
-        Checking host configuration for connectors…
+        Checking host connections…
       </p>
     );
   }
@@ -110,6 +111,7 @@ export function ExtensionsOverview(props: {
   catalogExtensions: ExtensionCatalogItem[];
   effective: EffectiveExtensionControls;
   localCliItems: LocalCliItem[];
+  hostInventory?: import("../codex-host-inventory").CodexHostInventory;
   localCliError: string | null;
   localCliNotice: string | null;
   mutationError: string | null;
@@ -129,6 +131,7 @@ export function ExtensionsOverview(props: {
   const reloadConnections = useRef(props.onReloadConnections);
   reloadConnections.current = props.onReloadConnections;
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [hostDiscoveryError, setHostDiscoveryError] = useState<string | null>(null);
   const [discovering, setDiscovering] = useState(false);
   const [discoveryAttempt, setDiscoveryAttempt] = useState(0);
   useEffect(() => {
@@ -137,14 +140,34 @@ export function ExtensionsOverview(props: {
     const controller = new AbortController();
     setDiscovering(true);
     setDiscoveryError(null);
-    void refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(async () => {
-      if (!controller.signal.aborted) await reloadConnections.current();
-    }).catch(() => {
-      if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
-    }).finally(() => {
+    setHostDiscoveryError(null);
+    const reload = async () => { if (!controller.signal.aborted) await reloadConnections.current(); };
+    const configured = refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0)
+      .then(reload).catch(() => {
+        if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
+      });
+    let hostRunning = false;
+    const refreshHost = async (force: boolean) => {
+      if (hostRunning || controller.signal.aborted) return;
+      hostRunning = true;
+      try {
+        await refreshCodexHostInventory(controller.signal, force);
+        if (!controller.signal.aborted) setHostDiscoveryError(null);
+      } catch {
+        if (!controller.signal.aborted) setHostDiscoveryError("Could not read Codex app inventory. Known connections remain available.");
+      } finally {
+        await reload();
+        hostRunning = false;
+      }
+    };
+    const host = refreshHost(discoveryAttempt > 0);
+    const hostTimer = window.setInterval(() => {
+      if (!document.hidden) void refreshHost(true);
+    }, 25_000);
+    void Promise.all([configured, host]).finally(() => {
       if (!controller.signal.aborted) setDiscovering(false);
     });
-    return () => { controller.abort(); discoveryStarted.current = false; };
+    return () => { window.clearInterval(hostTimer); controller.abort(); discoveryStarted.current = false; };
   }, [props.active, discoveryAttempt]);
   const [filters, setFilters] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
@@ -270,7 +293,7 @@ export function ExtensionsOverview(props: {
               {props.active ? (
                 <ConnectorDiscoveryControl
                   discovering={discovering}
-                  error={discoveryError}
+                  error={[discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null}
                   onRetry={() => setDiscoveryAttempt((attempt) => attempt + 1)}
                 />
               ) : null}
@@ -302,6 +325,7 @@ export function ExtensionsOverview(props: {
           />
 
           <LocalSkillsWorkspace />
+          <CodexHostConnectors inventory={props.hostInventory} />
           <section className="mt-10" aria-labelledby="all-tools-heading">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>

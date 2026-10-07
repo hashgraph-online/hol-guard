@@ -11,11 +11,17 @@ pub(crate) struct AdmittedPolicySnapshot {
     pub(super) compiled: CompiledEffectivePolicy,
     pub(crate) command_extensions:
         Option<guard_command::native_command_controls::CompiledNativeCommandControls>,
+    pub(super) business_policy: Option<super::policy_enforcement_business::CompiledBusinessPolicy>,
 }
 
 impl AdmittedPolicySnapshot {
     pub(crate) fn new(snapshot: PolicySnapshotV3) -> Result<Self, String> {
         let compiled = CompiledEffectivePolicy::new(&snapshot.effective_policy)?;
+        let business_policy = snapshot
+            .business_policy
+            .as_ref()
+            .map(super::policy_enforcement_business::CompiledBusinessPolicy::new)
+            .transpose()?;
         let command_extensions = snapshot
             .command_extensions
             .as_ref()
@@ -26,6 +32,7 @@ impl AdmittedPolicySnapshot {
             snapshot,
             compiled,
             command_extensions,
+            business_policy,
         })
     }
 

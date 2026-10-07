@@ -4,6 +4,8 @@ import importlib.util
 import io
 import json
 import socket
+import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -96,6 +98,39 @@ def test_generated_client_canonicalizes_copilot_permission_events(
     assert module._event_name(json.dumps({"hook_event_name": event_name})) == "PermissionRequest"
 
 
+def test_generated_client_stamps_outer_environment_before_daemon_forwarding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    monkeypatch.setenv("PATH", "/frozen/outer/bin")
+    monkeypatch.setenv("HOME", "/frozen/outer/home")
+    monkeypatch.setenv("GIT_PAGER", "cat")
+    monkeypatch.setenv("PAGER", "")
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "true")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "frozen-caller-secret-not-serialized")
+
+    forwarded = module._stamp_hook_input(
+        json.dumps(
+            {
+                "hook_event_name": "PreToolUse",
+                "guard_execution_environment": {"path": "/model-supplied"},
+            }
+        )
+    )
+    payload = json.loads(forwarded)
+    context = payload["guard_execution_environment"]
+    assert context["path"] == "/frozen/outer/bin"
+    assert context["home"] == "/frozen/outer/home"
+    assert context["git_pager_disabled"] is True
+    assert context["pager_disabled"] is True
+    assert context["git_config_no_system"] is True
+    assert context["path"] != "/model-supplied"
+    assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
+    assert context["environment_digest"]
+    assert "frozen-caller-secret-not-serialized" not in forwarded
+
+
 @pytest.mark.parametrize(
     "event_name",
     [
@@ -114,6 +149,65 @@ def test_generated_client_keeps_empty_grok_observe_response(tmp_path: Path, even
     assert json.loads(stdout) == {}
     assert stderr == ""
     assert code == 0
+
+
+@pytest.mark.parametrize("event_name", ["SessionStart", "UserPromptSubmit", "PreToolUse"])
+def test_generated_client_runs_under_macos_system_python(tmp_path: Path, event_name: str) -> None:
+    if sys.platform != "darwin" or not Path("/usr/bin/python3").is_file():
+        pytest.skip("macOS system Python compatibility")
+    module = _load_script(tmp_path, harness="grok")
+    completed = subprocess.run(
+        ["/usr/bin/python3", "-I", module.__file__],
+        input=json.dumps({"hook_event_name": event_name}),
+        text=True,
+        capture_output=True,
+        timeout=5,
+    )
+    response = json.loads(completed.stdout)
+    assert "Traceback" not in completed.stderr
+    if event_name == "PreToolUse":
+        assert response["decision"] == "deny"
+    elif event_name == "UserPromptSubmit":
+        assert response["decision"] == "block"
+    else:
+        assert response == {}
+        assert completed.returncode == 0
+
+
+@pytest.mark.parametrize("events", [("post_tool_use", "PreToolUse"), ("pre_tool_use", "PostToolUse")])
+def test_generated_grok_client_denies_conflicting_pretool_labels(tmp_path: Path, events) -> None:
+    module = _load_script(tmp_path, harness="grok")
+    system_python = sys.platform == "darwin" and Path("/usr/bin/python3").is_file()
+    interpreter = "/usr/bin/python3" if system_python else sys.executable
+    completed = subprocess.run(
+        [interpreter, "-I", module.__file__],
+        input=json.dumps({"hookEventName": events[0], "hook_event_name": events[1]}),
+        text=True,
+        capture_output=True,
+        timeout=5,
+    )
+    assert json.loads(completed.stdout)["decision"] == "deny"
+    assert "conflict" in completed.stdout
+
+
+@pytest.mark.parametrize("event_name", ["SessionStart", "UserPromptSubmit", "PreToolUse"])
+def test_generated_grok_observer_has_short_transport_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    event_name: str,
+) -> None:
+    module = _load_script(tmp_path, harness="grok", timeout_seconds=85)
+    monkeypatch.setattr(module, "_daemon_auth", lambda: ("127.0.0.1", 9, "fixture"))
+    budgets = []
+
+    def unavailable(*args, **kwargs):
+        budgets.append(kwargs["timeout"])
+        return None
+
+    monkeypatch.setattr(module, "_http_json", unavailable)
+    assert module._post_hook(json.dumps({"hook_event_name": event_name})) is None
+    expected = {"SessionStart": 1.0, "UserPromptSubmit": 10.0, "PreToolUse": 5.0}
+    assert budgets == pytest.approx([expected[event_name]], abs=0.01)
 
 
 def test_generated_client_copies_grok_approval_metadata(tmp_path: Path) -> None:
@@ -182,7 +276,7 @@ def test_generated_client_defaults_missing_policy_action_closed(tmp_path: Path) 
         ("zcode", "PreToolUse", None, 2),
         ("kimi", "PreToolUse", None, 2),
         ("devin", "PreToolUse", None, 2),
-        ("grok", "PostToolUse", "allow", 0),
+        ("grok", "PostToolUse", None, 0),
         ("copilot", "permissionRequestV2", None, 0),
     ],
 )
@@ -198,6 +292,8 @@ def test_generated_client_unavailable_payload_matches_harness(
         module._event_name(json.dumps({"hook_event_name": event_name})), "down"
     )
     assert exit_code == code
+    if harness == "grok" and event_name == "PostToolUse":
+        assert payload == {}
     if decision is not None:
         assert payload["decision"] == decision
     if harness == "copilot" and event_name == "permissionRequestV2":
@@ -206,14 +302,27 @@ def test_generated_client_unavailable_payload_matches_harness(
         assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_generated_client_watch_mode_continues(tmp_path: Path) -> None:
+@pytest.mark.parametrize("harness", ("claude-code", "codex", "copilot", "grok"))
+def test_generated_client_prompt_unavailability_matches_host_contract(tmp_path: Path, harness: str) -> None:
+    module = _load_script(tmp_path, harness=harness)
+    payload, code = module._failure_payload("UserPromptSubmit", "Native prompt review unavailable.")
+    assert code == 0
+    if harness == "copilot":
+        assert payload["behavior"] == "deny"
+    else:
+        assert payload["decision"] == "block"
+        if harness == "codex":
+            assert payload["continue"] is False
+
+
+def test_generated_client_unacknowledged_watch_cannot_allow_pretool(tmp_path: Path) -> None:
     module = _load_script(tmp_path, harness="grok")
     config = Path(module.GUARD_HOME) / "config.toml"
     config.write_text('protection_posture = "watch"\nmode = "observe"\n', encoding="utf-8")
     config.chmod(0o600)
     payload, code = module._failure_payload("PreToolUse", "down")
     assert code == 0
-    assert payload == {"decision": "allow"}
+    assert payload == {"decision": "deny", "reason": "down"}
 
 
 def test_generated_client_rejects_symlinked_daemon_token(tmp_path: Path) -> None:
@@ -263,7 +372,7 @@ def test_generated_client_main_uses_unavailable_matrix(tmp_path: Path, monkeypat
     stdout = io.StringIO()
     monkeypatch.setattr(module.sys, "stdout", stdout)
     assert module.main() == 0
-    assert json.loads(stdout.getvalue())["decision"] == "allow"
+    assert json.loads(stdout.getvalue()) == {}
 
 
 def test_generated_zcode_review_pretool_exits_zero_with_ask(tmp_path: Path) -> None:

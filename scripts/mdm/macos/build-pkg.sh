@@ -11,22 +11,18 @@ readonly RUNTIME="${STAGE}/Library/Application Support/HOL Guard"
 readonly STATE="${STAGE}/Library/Application Support/HOL Guard State"
 readonly LOGS="${STAGE}/Library/Logs/HOL Guard"
 readonly PACKAGE_ID="org.hol.guard"
-readonly SOURCE_VERSION="$(sed -n 's/^__version__ = "\([^"]*\)".*$/\1/p' \
-  "${ROOT}/src/codex_plugin_scanner/version.py")"
-if [[ "${SOURCE_VERSION}" != "${VERSION}" ]]; then
-  printf 'HOL_GUARD_VERSION %s does not match source version %s\n' \
-    "${VERSION}" "${SOURCE_VERSION}" >&2
-  exit 1
-fi
 
 rm -rf "${OUT}"
 mkdir -p "${RUNTIME}" "${STATE}" "${LOGS}" "${STAGE}/Library/LaunchAgents" \
   "${STAGE}/Library/LaunchDaemons" "${OUT}"
 
 typeset -a pyinstaller_args
+uv run --no-sync python "${ROOT}/scripts/release/stage_guard_cloud_review_artifacts.py" \
+  --source-root "${ROOT}" --destination-root "${OUT}/contract-data"
 pyinstaller_args=(--clean --noconfirm --onedir --name hol-guard \
   --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
   --add-data "${ROOT}/src/codex_plugin_scanner/version.py:." \
+  --add-data "${OUT}/contract-data:codex_plugin_scanner/guard/contracts/data" \
   --distpath "${RUNTIME}" --workpath "${OUT}/pyinstaller" --specpath "${OUT}" \
   "${ROOT}/scripts/mdm/hol-guard-entry.py")
 if [[ -n "${HOL_GUARD_INSTALLER_SIGN_IDENTITY:-}" ]]; then

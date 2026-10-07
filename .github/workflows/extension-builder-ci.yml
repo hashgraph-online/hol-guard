@@ -18,6 +18,9 @@ on:
       - docs/guard/extensions/**
       - scripts/export_extension_directory.py
       - scripts/prepare_extension_contribution.py
+      - scripts/ci/pr_merge_base.py
+      - tests/test_ci_pr_merge_base.py
+      - scripts/build_native_command_program.py
       - scripts/render_command_extension_directory.py
       - scripts/notify_merged_extension_claimants.py
       - scripts/refresh_extension_artifacts.py
@@ -75,6 +78,8 @@ jobs:
           - os: macos-15
             python: "3.13"
     steps:
+      # The default PR checkout is GitHub's merge ref, not a contributor head.
+      # Prepare shared outputs here so authors do not need to keep rebasing main.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
@@ -82,18 +87,35 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python }}
+      - name: Record checkout and resolve contribution comparison base
+        id: contribution-base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_MERGE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p builder-evidence
+          printf 'merge=%s\nhead=%s\n' "$PR_MERGE_SHA" "$PR_HEAD_SHA" > builder-evidence/checkout.txt
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base=$(python scripts/ci/pr_merge_base.py --head "$PR_HEAD_SHA" --merge "$PR_MERGE_SHA")
+            echo "sha=$base" >> "$GITHUB_OUTPUT"
+          fi
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
           save-cache: false
           cache-dependency-glob: uv.lock
+      - name: Stage external contribution trust defaults
+        # Do this before editable package resources and Rust embed the trust map.
+        # Existing reviewed classes are preserved; missing ids are external/opt-in.
+        run: python scripts/refresh_extension_artifacts.py --trust-only
       - name: Install the locked development environment
         run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
+      - uses: ./.github/actions/setup-rust
       - name: Build native command evaluators
         run: |
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
           compiler="$GITHUB_WORKSPACE/rust/target/release/guard-command-source"
           runtime="$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime"
           if [[ "$RUNNER_OS" == "Windows" ]]; then compiler="${compiler}.exe"; fi
@@ -102,6 +124,19 @@ jobs:
           echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
+      - name: Prepare and verify current extension projections
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMPARISON_BASE: ${{ steps.contribution-base.outputs.sha }}
+        run: |
+          arguments=(--compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            arguments+=(--changed-from "$COMPARISON_BASE")
+          fi
+          uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
+          uv run --no-sync python scripts/render_command_extension_directory.py
+          uv run --no-sync python scripts/prepare_extension_contribution.py --check "${arguments[@]}"
+          uv run --no-sync python scripts/render_command_extension_directory.py --check
       - name: Run builder and contribution trust tests
         run: |
           mkdir -p builder-evidence
@@ -109,40 +144,15 @@ jobs:
             tests/test_guard_extension_directory*.py \
             tests/test_guard_extension_claim_notice.py \
             tests/test_prepare_extension_contribution.py \
+            tests/test_ci_pr_merge_base.py \
+            tests/test_extension_builder_ci_preparation.py \
             tests/test_guard_extension_contribution.py \
             tests/test_guard_extension_trust.py \
             tests/test_guard_mcp_server_contribution.py \
             --junitxml=builder-evidence/tests.xml --tb=short
-      - name: Verify native public directory projections
-        run: |
-          detect=(--flag)
-          arguments=(--compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            detect+=(--changed-from "${{ github.event.pull_request.base.sha }}")
-            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
-          fi
-          pending=$(uv run --no-sync python scripts/ci/detect_pending_extension_regen.py "${detect[@]}")
-          if [[ "$pending" == "true" ]]; then
-            if git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- \
-                contracts/extensions/command-catalog.v1.json \
-                contracts/extensions/native-command-program.v1.json \
-                contracts/extensions/trust-class-map.v1.json \
-                contracts/extensions/native-command-control-authority.v1.fixtures.json \
-                src/codex_plugin_scanner/guard/contracts/data/extensions \
-                ':(glob)src/codex_plugin_scanner/guard/extension_builder/*.v1.json' \
-                ':(exclude)src/codex_plugin_scanner/guard/extension_builder/*.schema.json' \
-                contracts/managed-controls | grep -q .; then
-              echo "generated projections are maintainer-owned; remove them from this PR" >&2
-              exit 1
-            fi
-            uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
-            uv run --no-sync python scripts/render_command_extension_directory.py
-            git checkout -- . && git clean -fdq -- contracts src docs
-          else
-            uv run --no-sync python scripts/prepare_extension_contribution.py --check "${arguments[@]}"
-            uv run --no-sync python scripts/render_command_extension_directory.py --check
-          fi
       - name: Build and install a wheel outside the checkout
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: ${{ env.HOL_GUARD_NATIVE_SOURCE_COMPILER }}
         run: |
           uv build --wheel --out-dir "$RUNNER_TEMP/extension-builder-dist"
           uv export --frozen --no-dev --no-emit-project --format requirements-txt \

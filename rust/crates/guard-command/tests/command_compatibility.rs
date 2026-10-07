@@ -90,9 +90,9 @@ fn frozen_independent_capability_and_admission_vectors() {
 
 #[test]
 fn audited_inventory_is_exactly_the_null_matcher_catalog_subset() {
-    let program: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../contracts/extensions/native-command-program.v1.json"
-    ))
+    let program: serde_json::Value = serde_json::from_slice(
+        guard_command::native_command_program::packaged_command_program_bytes(),
+    )
     .unwrap();
     let actual: BTreeSet<&str> = compatibility_rule_ids().iter().copied().collect();
     let expected: BTreeSet<&str> = program["rules"]
@@ -102,7 +102,7 @@ fn audited_inventory_is_exactly_the_null_matcher_catalog_subset() {
         .filter(|rule| rule["matcher"].is_null())
         .map(|rule| rule["rule_id"].as_str().unwrap())
         .collect();
-    assert_eq!(actual.len(), 42);
+    assert_eq!(actual.len(), 43);
     assert_eq!(actual, expected);
 }
 
@@ -177,9 +177,9 @@ fn github_api_query_suffix_preserves_merge_authorization() {
     assert_eq!(observed.rule_matches.len(), 1);
     assert_eq!(observed.rule_matches[0].rule_id, "command.github.merge");
     assert!(observed.permission_matches.is_empty());
-    let program: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../contracts/extensions/native-command-program.v1.json"
-    ))
+    let program: serde_json::Value = serde_json::from_slice(
+        guard_command::native_command_program::packaged_command_program_bytes(),
+    )
     .unwrap();
     let merge = program["rules"]
         .as_array()

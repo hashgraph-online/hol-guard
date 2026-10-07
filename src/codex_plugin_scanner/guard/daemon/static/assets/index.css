@@ -1131,6 +1131,10 @@
     max-height: calc(var(--spacing) * 48);
   }
 
+  .max-h-80 {
+    max-height: calc(var(--spacing) * 80);
+  }
+
   .max-h-96 {
     max-height: calc(var(--spacing) * 96);
   }
@@ -1911,6 +1915,16 @@
     border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));
   }
 
+  :where(.divide-brand-dark\/10 > :not(:last-child)) {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    :where(.divide-brand-dark\/10 > :not(:last-child)) {
+      border-color: color-mix(in oklab, var(--brand-dark) 10%, transparent);
+    }
+  }
+
   :where(.divide-slate-100 > :not(:last-child)) {
     border-color: var(--color-slate-100);
   }
@@ -2331,6 +2345,16 @@
     }
   }
 
+  .border-brand-dark\/10 {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-dark\/10 {
+      border-color: color-mix(in oklab, var(--brand-dark) 10%, transparent);
+    }
+  }
+
   .border-brand-dark\/15 {
     border-color: var(--brand-dark);
   }
@@ -2338,6 +2362,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .border-brand-dark\/15 {
       border-color: color-mix(in oklab, var(--brand-dark) 15%, transparent);
+    }
+  }
+
+  .border-brand-dark\/20 {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-dark\/20 {
+      border-color: color-mix(in oklab, var(--brand-dark) 20%, transparent);
     }
   }
 
@@ -5487,6 +5521,19 @@
     }
   }
 
+  .focus-within\:outline-2:focus-within {
+    outline-style: var(--tw-outline-style);
+    outline-width: 2px;
+  }
+
+  .focus-within\:outline-offset-2:focus-within {
+    outline-offset: 2px;
+  }
+
+  .focus-within\:outline-brand-blue:focus-within {
+    outline-color: var(--brand-blue);
+  }
+
   @media (hover: hover) {
     .hover\:border-amber-300:hover {
       border-color: var(--color-amber-300);
@@ -6220,6 +6267,10 @@
     }
   }
 
+  .aria-disabled\:opacity-50[aria-disabled="true"] {
+    opacity: .5;
+  }
+
   .aria-expanded\:border-brand-blue[aria-expanded="true"] {
     border-color: var(--brand-blue);
   }
@@ -6363,10 +6414,6 @@
       width: calc(var(--spacing) * 44);
     }
 
-    .sm\:w-64 {
-      width: calc(var(--spacing) * 64);
-    }
-
     .sm\:w-auto {
       width: auto;
     }
@@ -6493,6 +6540,10 @@
 
     .sm\:gap-y-3 {
       row-gap: calc(var(--spacing) * 3);
+    }
+
+    .sm\:self-end {
+      align-self: flex-end;
     }
 
     .sm\:truncate {

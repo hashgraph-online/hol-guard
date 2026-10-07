@@ -68,14 +68,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub GraphQL grammar records owned unknown uncertainty",
+      "basis": "inherited GitHub GraphQL grammar records owned unknown uncertainty. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
         "decision_plane_floor": "block",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.github.unknown"
@@ -180,14 +180,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "dd sink is exactly parsed; inherited domain classifier records owned destructive-shell uncertainty; selected solely by immutable generator variant modulo four",
+      "basis": "dd sink is exactly parsed; inherited domain classifier records owned destructive-shell uncertainty; selected solely by immutable generator variant modulo four. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.shell-mutations.destructive-shell"
@@ -578,7 +578,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git branch attribution plus cd context",
+      "basis": "Non-inspection Git operations retain their existing review floor; they do not use the execution-helper configuration proof.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
@@ -600,14 +600,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git diff attribution plus cd context",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -622,14 +622,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git log attribution plus cd context",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -644,14 +644,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git show attribution plus cd context",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -688,14 +688,16 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub remote read permission retains contextual review",
+      "basis": "closed GitHub read grammar permits routine native reads; independent contextual oracle remains review",
       "expected": {
+        "decision": "allow",
         "decision_plane_floor": "review",
         "evaluation_error": null,
+        "explicitly_benign": true,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "allow",
+        "native_reason": "native_exact_safe_command",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -710,14 +712,16 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub remote read permission retains contextual review",
+      "basis": "closed GitHub read grammar permits routine native reads; independent contextual oracle remains review",
       "expected": {
+        "decision": "allow",
         "decision_plane_floor": "review",
         "evaluation_error": null,
+        "explicitly_benign": true,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "allow",
+        "native_reason": "native_exact_safe_command",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -732,14 +736,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub grammar rejects GraphQL and dynamic-looking dollar tokens despite exact shell quoting",
+      "basis": "inherited GitHub grammar rejects GraphQL and dynamic-looking dollar tokens despite exact shell quoting. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.github.unknown"
@@ -778,7 +782,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "Reviewed exact git rev-parse --show-toplevel grammar removes unrelated compatibility owners; native execution remains review with no allow proof.",
+      "basis": "Non-inspection Git operations retain their existing review floor; they do not use the execution-helper configuration proof.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
@@ -800,14 +804,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git status attribution plus cd context",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -866,14 +870,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Docker compatibility grammar has no exact Compose classification",
+      "basis": "inherited Docker compatibility grammar has no exact Compose classification. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.container-runtime.docker-sensitive"
@@ -890,14 +894,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Docker compatibility grammar has no exact inspect/template classification",
+      "basis": "inherited Docker compatibility grammar has no exact inspect/template classification. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.container-runtime.docker-sensitive"
@@ -1068,14 +1072,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git status attribution with bounded wc consumer",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -1244,14 +1248,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git apply fallback attributes all fifteen compatibility owners as uncertain",
+      "basis": "inherited Git apply fallback attributes all sixteen compatibility owners as uncertain. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
-        "decision_plane_floor": "block",
+        "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "block",
-        "native_reason": "native_command_extension_uncertain",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": [
           "command.git.blame",
@@ -1268,7 +1272,8 @@
           "command.git.reflog",
           "command.git.remote",
           "command.git.show",
-          "command.git.status"
+          "command.git.status",
+          "command.git.worktree"
         ]
       },
       "group_id": "workflow:workspace-patch-write:patch-apply|all",
@@ -1282,7 +1287,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "Reviewed git apply --check literal relative patch path removes unrelated compatibility owners; independent patch-read and workspace proofs and native review remain required.",
+      "basis": "Non-inspection Git operations retain their existing review floor; they do not use the execution-helper configuration proof.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
@@ -1329,9 +1334,9 @@
         "baseline_git_blob": "4cc8d7ccdaa97ad49cb7a4e0bdae6dee04930431",
         "baseline_sha256": "12d74f5afa697c20ecb2af2b9539b1de2a38a812efba6ee13a37446579889255",
         "byte_identical": false,
-        "candidate_git_blob": "4a7ba531300a7d9938f3922a744520a27dadcd28",
-        "candidate_sha256": "7815628c58822adc116167578845b94ccb498a620be32270811248d1d074f91d",
-        "reviewed_change": "Admit only parser-recorded sudo wrappers; other wrapper/context uncertainty is unchanged."
+        "candidate_git_blob": "abb31f97086a2bec60034be58968c4a4cc95a8a8",
+        "candidate_sha256": "af71644220c1325db525ce11098ed0e538dbc035c7a654d6a451601bb0dbfc52",
+        "reviewed_change": "Accept bounded timeout wrapper evidence for inner-command attribution; apply every catalog rule and preserve wrapper review."
       },
       "rust/crates/guard-command/src/command_compatibility/domains.rs": {
         "baseline_git_blob": "9b3e5b7dfa3c418ac4710fdfc143adf6a54f23d8",
@@ -1354,9 +1359,10 @@
       "rust/crates/guard-command/src/command_compatibility/github.rs": {
         "baseline_git_blob": "0f7c32c741bb0fee2ff9fcf98b58246033b4cac9",
         "baseline_sha256": "6794dc442c50c98f991edce4e4539bbf3e2fa5f681e0af4f208a2058e4c85cc4",
-        "byte_identical": true,
-        "candidate_git_blob": "0f7c32c741bb0fee2ff9fcf98b58246033b4cac9",
-        "candidate_sha256": "6794dc442c50c98f991edce4e4539bbf3e2fa5f681e0af4f208a2058e4c85cc4"
+        "byte_identical": false,
+        "candidate_git_blob": "333abbcbec71dce8ebf6c295201210c4f551da14",
+        "candidate_sha256": "7b56f833213c716cc8b0eecc9f90847068013f8df8ce7023278164944fa810a7",
+        "reviewed_change": "Reuse closed GitHub read capabilities for benign admission; reject browser-opening and token-revealing flags and retain local-read and remote-read permission checks for authenticated status."
       },
       "rust/crates/guard-command/src/command_compatibility/github_api.rs": {
         "baseline_git_blob": "905bb6ac282939b95d2842fc136087b4a5cf463f",
@@ -1367,8 +1373,8 @@
       },
       "rust/crates/guard-command/src/command_compatibility/interpreter.rs": {
         "byte_identical": false,
-        "candidate_git_blob": "6a670366ba38be2818005dd820da8252f28043df",
-        "candidate_sha256": "fbef078baff4a8bf861a9f8014170c1001e2a41e5cfc954001e3821dc621590f",
+        "candidate_git_blob": "24a6effdc58bf80a1c6b8c0eef6b53f16aecd4bd",
+        "candidate_sha256": "edd32cb3f61333420ceccb3f99a3881b2e1732342a8b89808aaeff7dcd102f2d",
         "reviewed_change": "Closed interpreter literal/public-environment/Artisan forms avoid invented secret ownership; unmodeled programs retain uncertainty."
       },
       "rust/crates/guard-command/src/command_option_parsing.rs": {
@@ -1392,9 +1398,9 @@
       },
       "rust/crates/guard-command/src/parser_wrappers.rs": {
         "byte_identical": false,
-        "candidate_git_blob": "0cf34d2c73b704d00f51d159bf370dac8a06ed79",
-        "candidate_sha256": "2a2e194250f179601774d7620b4bf9d35b899ad0d40218e20a495344726f1cc4",
-        "reviewed_change": "Bound sudo options and encoded stdin shell forms preserve raw source and wrapper evidence; unknown execution modes remain uncertain."
+        "candidate_git_blob": "4cc84046b5252b23adddfbe2ecb5b8f6b43910da",
+        "candidate_sha256": "2ffe9d2f322995d621bfea2b4b61ceb8a742c6b61000487de0acfe1b90761a48",
+        "reviewed_change": "Bound sudo and integer-duration timeout extraction; retain raw source and wrapper evidence, reject unsupported options, nesting and execution modes."
       }
     }
   },
@@ -1403,7 +1409,7 @@
   "totals": {
     "below_original_oracle": 0,
     "cases": 51000,
-    "equal_to_original_oracle": 39442,
+    "equal_to_original_oracle": 40459,
     "groups": 58,
     "improved_bounded_git_cases": 50,
     "improved_bounded_git_sources": 2,
@@ -1411,6 +1417,6 @@
     "improved_upstream_benign_sources": 3,
     "native_evaluation_errors": 27084,
     "sources": 52,
-    "stronger_than_original_oracle": 11558
+    "stronger_than_original_oracle": 10541
   }
 }

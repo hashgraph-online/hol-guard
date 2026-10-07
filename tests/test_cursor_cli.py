@@ -18,6 +18,8 @@ from codex_plugin_scanner.guard.cli.install_commands import apply_managed_instal
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 def _context(tmp_path: Path) -> HarnessContext:
     home = tmp_path / "home"

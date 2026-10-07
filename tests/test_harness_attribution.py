@@ -8,7 +8,6 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.harness_attribution import (
     cursor_hook_query_extras,
     cursor_runtime_detected,
@@ -16,6 +15,7 @@ from codex_plugin_scanner.guard.runtime.harness_attribution import (
     resolve_environment_harness,
     resolve_runtime_hook_harness,
 )
+from tests.conftest import guard_commands_module
 
 
 def test_cursor_runtime_detected_from_cursor_env() -> None:
@@ -86,10 +86,12 @@ def test_claude_hook_http_url_includes_cursor_runtime_harness(monkeypatch: pytes
     assert f"workspace={tmp_path / 'workspace'}" in url.replace("%2F", "/")
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_records_cursor_harness_for_cursor_env(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
 ) -> None:
     from tests.test_guard_runtime import _build_guard_fixture, _run_guard_hook
 
@@ -115,6 +117,6 @@ def test_guard_hook_records_cursor_harness_for_cursor_env(
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 2  # canonical: detected cursor harness, _RC_BLOCK_IS_TWO
     assert isinstance(payload, dict)
     assert payload["harness"] == "cursor"

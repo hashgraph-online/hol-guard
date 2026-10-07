@@ -16,6 +16,8 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import run_mcp_catalog
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
+
 
 def _finished(pool: McpDiscoveryJobs, job_id: str) -> dict[str, object]:
     deadline = time.monotonic() + 3
@@ -107,6 +109,35 @@ def test_cancel_before_start_launches_nothing(tmp_path: Path):
     result = run_mcp_catalog([sys.executable, "-c", f"open({str(marker)!r}, 'w').close()"], cancel=cancel)
     assert result.reason == "cancelled"
     assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "mcp_launch_failed",
+        "mcp_transport_failed",
+        "mcp_initialize_failed",
+        "mcp_protocol_unsupported",
+        "mcp_capability_rejected",
+    ],
+)
+def test_refresh_job_preserves_safe_probe_failure_codes(tmp_path, monkeypatch, code):
+    store = GuardStore(tmp_path / "home")
+    identity = UnlistedCliIdentity("local-cli.mcp-test", "Fixture", "executable", "c" * 64, "Fixture", None)
+    store.record_local_cli_observation(identity, seen_at="2026-09-27T12:00:00Z", surface="mcp")
+    service = LocalCliApiService(store=store)
+    monkeypatch.setattr(
+        service, "recognize", lambda *_args, **_kwargs: {"help_status": "failed", "discovery_error": code}
+    )
+    before = store.list_local_cli_items()
+    try:
+        job = service.refresh_job({"cli_id": identity.cli_id, "confirm_process_start": True})
+        result = _finished(service._discovery_jobs, str(job["job_id"]))
+        assert result["state"] == "failed"
+        assert result["error"] == code
+        assert store.list_local_cli_items() == before
+    finally:
+        assert service._discovery_jobs.close()
 
 
 def test_refresh_api_requires_process_consent_and_cancel_does_not_mutate_grants(tmp_path: Path, monkeypatch):
@@ -255,9 +286,7 @@ def test_cancel_stalled_real_probe_leaves_unrelated_process_alive(tmp_path: Path
         for pid in pids:
             deadline = time.monotonic() + 2
             while time.monotonic() < deadline:
-                try:
-                    os.kill(pid, 0)
-                except ProcessLookupError:
+                if not _owned_pid_is_running(pid):
                     break
                 time.sleep(0.01)
             else:
@@ -267,3 +296,38 @@ def test_cancel_stalled_real_probe_leaves_unrelated_process_alive(tmp_path: Path
         thread.join(3)
         unrelated.terminate()
         unrelated.wait(3)
+
+
+def _owned_pid_is_running(pid: int) -> bool:
+    if sys.platform == "linux":
+        try:
+            # kill(pid, 0) also succeeds for terminated zombies awaiting init
+            # reaping. Those cannot execute; an active descendant still fails.
+            state = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()[0]
+        except FileNotFoundError:
+            return False
+        except (OSError, IndexError):
+            return True  # Missing state evidence cannot prove termination.
+        return state not in {"Z", "X"}
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux procfs distinguishes terminated zombies")
+def test_owned_pid_liveness_rejects_running_child_but_accepts_terminated_zombie():
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert _owned_pid_is_running(child.pid)
+        child.kill()
+        deadline = time.monotonic() + 3
+        while _owned_pid_is_running(child.pid) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        # Deliberately inspect before wait() so the child is not yet reaped.
+        assert Path(f"/proc/{child.pid}/stat").read_text().rsplit(") ", 1)[1].split()[0] == "Z"
+        assert not _owned_pid_is_running(child.pid)
+    finally:
+        child.kill()
+        child.wait(3)

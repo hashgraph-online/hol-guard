@@ -55,6 +55,7 @@ _COMMON_HANDLERS = {
     "uninstall": "_run_guard_uninstall_command",
     "package-shims": "_run_guard_package_shims_command",
     "contained-write": "_run_guard_contained_write_command",
+    "execute-contained-test": "_run_guard_execute_contained_test_command",
     "run": "_run_guard_run_command",
     "run-shim": "_run_guard_run_command",
     "diff": "_run_guard_diff_command",
@@ -141,6 +142,7 @@ def run_guard_command(
     output_stream: TextIO | None = None,
 ) -> int:
     "Execute a Guard subcommand."
+
     if args.guard_command == "extensions":
         from .extension_builder_commands import run_extension_builder_command
 
@@ -155,18 +157,31 @@ def run_guard_command(
         )
 
     home_override = getattr(args, "home", None)
+    home_dir = Path(home_override).expanduser().resolve() if home_override else Path.home().resolve()
+    home_override_explicit = bool(home_override)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
-    workspace = _resolve_guard_workspace(args, guard_home=guard_home)
+    # Detection runs before the consumer/protect entry points that bind the
+    # digest home, so bind at the router: every enforcement subcommand below
+    # resolves its context-digest calls against this deployment's resident.
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(guard_home)
+    workspace = _resolve_guard_workspace(
+        args,
+        guard_home=guard_home,
+        home_dir=home_dir,
+        home_override_explicit=home_override_explicit,
+    )
     executable_overrides: dict[str, str] = {}
     grok_executable = getattr(args, "grok_executable", None)
     if isinstance(grok_executable, str) and grok_executable.strip():
         executable_overrides["grok"] = grok_executable.strip()
     context = HarnessContext(
-        home_dir=Path(home_override).expanduser().resolve() if home_override else Path.home().resolve(),
+        home_dir=home_dir,
         workspace_dir=workspace,
         guard_home=guard_home,
         executable_overrides=executable_overrides,
-        home_override_explicit=bool(home_override),
+        home_override_explicit=home_override_explicit,
         workspace_override_explicit=bool(getattr(args, "workspace", None)),
     )
     if args.guard_command == "doctor" and bool(getattr(args, "incident", False)):

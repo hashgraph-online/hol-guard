@@ -1,0 +1,5 @@
+{
+  "extension": "command.search.elasticsearch",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "trusted-library"
+}

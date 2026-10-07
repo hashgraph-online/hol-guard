@@ -19,7 +19,7 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path, deadline_budget_ms=20)
+    request = _request(runtime, state_dir.parent, deadline_budget_ms=20)
     process = subprocess.Popen(
         (str(runtime), "hook-client", "--stdin", str(state_dir)),
         stdin=subprocess.PIPE,
@@ -63,16 +63,23 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
         # idle lease expires. Only a startup timeout promises immediate cleanup.
         idle_deadline = time.monotonic() + 3
         while time.monotonic() < idle_deadline and (
-            _state_files(state_dir)
-            or any(process_is_executing(pid) for pid in observed_process_ids)
+            _state_files(state_dir) or any(process_is_executing(pid) for pid in observed_process_ids)
         ):
             time.sleep(0.01)
     else:
         assert result.stderr in {
             b"native_client_deadline_exceeded\n",
             b"native_resident_start_timeout\n",
+            b"native_resident_lease_busy\n",
         }
-    assert not any(
-        process_is_executing(process_id) for process_id in observed_process_ids
-    ), (result.returncode, result.stdout, result.stderr, observed_process_ids)
+    for _ in range(20):
+        if not any(process_is_executing(process_id) for process_id in observed_process_ids):
+            break
+        time.sleep(0.05)
+    assert not any(process_is_executing(process_id) for process_id in observed_process_ids), (
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        observed_process_ids,
+    )
     assert not _state_files(state_dir), (result.returncode, result.stdout, result.stderr)

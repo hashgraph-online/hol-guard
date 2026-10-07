@@ -54,6 +54,7 @@ fn command(segments: &[OracleSegment]) -> CanonicalCommandV1 {
         uncertainty_reason: None,
         path_overridden: false,
         parser_profile: "common-cli-oracle".to_owned(),
+        security_identity: String::new(),
     }
 }
 

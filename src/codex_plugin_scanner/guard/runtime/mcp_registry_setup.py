@@ -1,4 +1,4 @@
-"""Reviewed Codex remote MCP setup through the installed host CLI."""
+"""Reviewed Codex MCP setup through its version-checked configuration API."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ import json
 import os
 import re
 import shutil
-import subprocess
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from urllib.parse import urlsplit
 
+from .codex_mcp_setup import CodexMcpSetupReceipt, install_reviewed_codex_mcp
 from .mcp_registry import search_mcp_registry
 
 _NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
@@ -86,56 +86,21 @@ def reviewed_codex_setup_candidate(payload: dict[str, object]) -> dict[str, str]
     }
 
 
-def install_codex_remote_mcp(candidate: Mapping[str, object]) -> str:
+def install_codex_remote_mcp(
+    candidate: Mapping[str, object],
+    *,
+    on_installed: Callable[[CodexMcpSetupReceipt], None] | None = None,
+    on_version_chain: Callable[[str, list[tuple[str, str]]], None] | None = None,
+) -> str:
     executable = shutil.which("codex")
     if executable is None:
         raise ValueError("codex_host_unavailable")
     name, endpoint = candidate.get("setup_name"), candidate.get("endpoint")
     if not isinstance(name, str) or not isinstance(endpoint, str):
         raise ValueError("invalid_codex_setup_selection")
-    try:
-        existing = subprocess.run(
-            [executable, "mcp", "get", "--json", name],
-            capture_output=True,
-            timeout=8,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise ValueError("codex_host_unavailable") from error
-    if existing.returncode == 0:
-        raise ValueError("codex_connection_already_exists")
-    # CLI failure for any other reason is not evidence that the name is free.
-    missing = f"No MCP server named '{name}' found.".encode()
-    if existing.returncode != 1 or missing not in existing.stderr[:1000]:
-        raise ValueError("codex_host_unavailable")
-    try:
-        added = subprocess.run(
-            [executable, "mcp", "add", name, "--url", endpoint],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise ValueError("codex_setup_outcome_uncertain") from error
-    if added.returncode != 0:
-        raise ValueError("codex_setup_outcome_uncertain")
-    try:
-        verified = subprocess.run(
-            [executable, "mcp", "get", "--json", name],
-            capture_output=True,
-            timeout=8,
-            check=False,
-        )
-        response = json.loads(verified.stdout[:32_769]) if len(verified.stdout) <= 32_768 else None
-    except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError) as error:
-        raise ValueError("codex_setup_outcome_uncertain") from error
-    if not isinstance(response, dict):
-        raise ValueError("codex_setup_outcome_uncertain")
-    transport = response.get("transport")
-    observed_url = response.get("url") or (transport.get("url") if isinstance(transport, dict) else None)
-    if verified.returncode != 0 or observed_url != endpoint:
-        raise ValueError("codex_setup_outcome_uncertain")
-    return name
+    return install_reviewed_codex_mcp(
+        executable, name, {"url": endpoint}, on_installed=on_installed, on_version_chain=on_version_chain
+    )
 
 
 def reviewed_codex_package_candidate(payload: dict[str, object]) -> dict[str, object]:
@@ -210,8 +175,13 @@ def reviewed_codex_package_candidate(payload: dict[str, object]) -> dict[str, ob
     }
 
 
-def install_codex_package_mcp(candidate: Mapping[str, object]) -> str:
-    """Configure a reviewed pinned recipe in Codex; Codex owns first launch."""
+def install_codex_package_mcp(
+    candidate: Mapping[str, object],
+    *,
+    on_installed: Callable[[CodexMcpSetupReceipt], None] | None = None,
+    on_version_chain: Callable[[str, list[tuple[str, str]]], None] | None = None,
+) -> str:
+    """Configure a reviewed pinned recipe; Codex owns first launch and auth."""
     executable = shutil.which("codex")
     if executable is None:
         raise ValueError("codex_host_unavailable")
@@ -224,38 +194,10 @@ def install_codex_package_mcp(candidate: Mapping[str, object]) -> str:
         or not all(isinstance(argument, str) for argument in arguments)
     ):
         raise ValueError("invalid_codex_package_selection")
-    try:
-        existing = subprocess.run(
-            [executable, "mcp", "get", "--json", name], capture_output=True, timeout=8, check=False
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise ValueError("codex_host_unavailable") from error
-    if existing.returncode == 0:
-        raise ValueError("codex_connection_already_exists")
-    if existing.returncode != 1 or f"No MCP server named '{name}' found.".encode() not in existing.stderr[:1000]:
-        raise ValueError("codex_host_unavailable")
-    try:
-        added = subprocess.run(
-            [executable, "mcp", "add", name, "--", command, *arguments],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise ValueError("codex_setup_outcome_uncertain") from error
-    if added.returncode != 0:
-        raise ValueError("codex_setup_outcome_uncertain")
-    try:
-        verified = subprocess.run(
-            [executable, "mcp", "get", "--json", name], capture_output=True, timeout=8, check=False
-        )
-        response = json.loads(verified.stdout[:32_769]) if len(verified.stdout) <= 32_768 else None
-    except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError) as error:
-        raise ValueError("codex_setup_outcome_uncertain") from error
-    if not isinstance(response, dict) or verified.returncode != 0:
-        raise ValueError("codex_setup_outcome_uncertain")
-    transport = response.get("transport")
-    observed = transport if isinstance(transport, dict) else response
-    if observed.get("command") != command or observed.get("args") != arguments:
-        raise ValueError("codex_setup_outcome_uncertain")
-    return name
+    return install_reviewed_codex_mcp(
+        executable,
+        name,
+        {"command": command, "args": arguments},
+        on_installed=on_installed,
+        on_version_chain=on_version_chain,
+    )

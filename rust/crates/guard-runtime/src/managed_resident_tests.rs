@@ -3,6 +3,7 @@ use super::*;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn generation_parser_rejects_zero_and_non_numeric() {
@@ -22,6 +23,150 @@ fn client_deadline_is_bounded() {
         client_timeout(br#"{"deadline_budget_ms":250}"#),
         Duration::from_millis(250)
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn startup_wait_honors_remaining_caller_budget() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-startup-budget-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    let lock = crate::resident_state::acquire_startup_lock(&root)
+        .unwrap()
+        .unwrap();
+    let caller_budget = Duration::from_secs(2);
+    let scheduling_allowance = Duration::from_millis(500);
+    let started = Instant::now();
+    let result = client_request(&root, b"{}", caller_budget);
+    let elapsed = started.elapsed();
+    drop(lock);
+    fs::remove_dir_all(&root).unwrap();
+
+    assert!(matches!(
+        result.unwrap_err().as_str(),
+        "native_resident_start_in_progress" | "native_client_deadline_exceeded"
+    ));
+    assert!(
+        elapsed >= Duration::from_millis(1_500),
+        "premature startup failure: {elapsed:?}"
+    );
+    assert!(
+        elapsed < caller_budget + scheduling_allowance,
+        "startup exceeded the caller deadline: {elapsed:?}"
+    );
+}
+
+#[test]
+fn zero_client_timeout_rejects_before_state_mutation() {
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-zero-timeout-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock must be after the Unix epoch")
+            .as_nanos()
+    ));
+
+    assert_eq!(
+        client_request(&root, br"{}", Duration::ZERO),
+        Err("native_client_deadline_exceeded".to_owned())
+    );
+    assert!(!root.exists());
+}
+
+#[test]
+fn expired_client_deadline_rejects_before_request_setup() {
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-expired-deadline-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock must be after the Unix epoch")
+            .as_nanos()
+    ));
+    fs::create_dir(&root).expect("test state directory should be created");
+    let client_lease = lease::acquire(&root).expect("test lease should be acquired");
+
+    let result = client_request_with_deadline(
+        &root,
+        br"{}",
+        Instant::now() - Duration::from_millis(1),
+        &client_lease,
+    );
+    assert_eq!(result, Err("native_client_deadline_exceeded".to_owned()));
+
+    drop(client_lease);
+    fs::remove_dir_all(root).expect("test state directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn client_request_cannot_spawn_while_update_barrier_is_held() {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-update-barrier-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&root).expect("test state directory should be created");
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    let lock_path = root.join(crate::resident_update_lock::RESIDENT_UPDATE_LOCK_FILE_NAME);
+    let digest = runtime_digest().unwrap();
+    let mut update_file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(&lock_path)
+        .unwrap();
+    update_file
+        .write_all(format!("{digest}\n").as_bytes())
+        .unwrap();
+    update_file.sync_all().unwrap();
+    fs::set_permissions(&lock_path, fs::Permissions::from_mode(0o600)).unwrap();
+    fs2::FileExt::try_lock_exclusive(&update_file).unwrap();
+    let client_lease = lease::acquire(&root).expect("test lease should be acquired");
+
+    let result = client_request_with_deadline(
+        &root,
+        br"{}",
+        Instant::now() + Duration::from_secs(1),
+        &client_lease,
+    );
+    assert_eq!(result, Err("native_resident_update_in_progress".to_owned()));
+    let spawned_scope = fs::read_dir(&root)
+        .unwrap()
+        .filter_map(Result::ok)
+        .any(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("resident-v3-")
+        });
+    assert!(
+        !spawned_scope,
+        "blocked request must not create resident state"
+    );
+
+    drop(client_lease);
+    fs2::FileExt::unlock(&update_file).unwrap();
+    drop(update_file);
+    fs::remove_dir_all(root).expect("test state directory should be removable");
 }
 
 #[test]
@@ -56,9 +201,6 @@ fn client_stream_frames_are_bounded_and_big_endian() {
 
 #[test]
 fn client_leases_keep_shared_resident_alive_until_last_client_closes() {
-    use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-client-lease-{}-{}",
         std::process::id(),
@@ -96,11 +238,80 @@ fn client_leases_keep_shared_resident_alive_until_last_client_closes() {
     fs::remove_dir_all(root).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn retire_clients_for_update_terminates_exact_process() {
+    use std::path::PathBuf;
+    use std::process::{Command, Stdio};
+
+    if let Some(root) = std::env::var_os("HOL_GUARD_LEASE_RETIRE_CHILD") {
+        let root = PathBuf::from(root);
+        let _lease = lease::acquire(&root).expect("child lease should be acquired");
+        fs::write(root.join("child-ready"), []).expect("child readiness marker should be written");
+        // Outlive the parent's retirement budget; a normal fixture exit is not proof of retirement.
+        std::thread::sleep(Duration::from_secs(120));
+        return;
+    }
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-lease-retire-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    let test_name = "managed_resident::tests::retire_clients_for_update_terminates_exact_process";
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .arg("--exact")
+        .arg(test_name)
+        .arg("--nocapture")
+        .env("HOL_GUARD_LEASE_RETIRE_CHILD", &root)
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    for _ in 0..6_000 {
+        if root.join("child-ready").is_file() || child.try_wait().unwrap().is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    if !root.join("child-ready").is_file() {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = fs::remove_dir_all(&root);
+        panic!("child did not acquire a lease");
+    }
+    let digest = runtime_digest().unwrap();
+    // This correctness test authenticates the entire test executable. LLVM
+    // coverage makes that unoptimized binary much larger than the shipped
+    // runtime, so fingerprinting must not consume the fixture's stop budget.
+    // Production stop deadlines remain unchanged in stop_managed.
+    let retirement =
+        lease::retire_clients_for_update(&root, &digest, Instant::now() + Duration::from_secs(60));
+    if let Err(error) = retirement {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = fs::remove_dir_all(&root);
+        panic!("authenticated client retirement should succeed: {error}");
+    }
+    let status = child.wait().unwrap();
+    assert!(!status.success(), "retired client should not exit normally");
+    let remaining_leases = fs::read_dir(root.join("resident-client-leases.v1"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_name().to_string_lossy().ends_with(".lease"));
+    assert!(
+        !remaining_leases,
+        "retired lease should be removed by identity"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn stale_lease_cleanup_requires_a_dead_process_identity() {
-    use std::fs;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-stale-lease-{}-{}",
         std::process::id(),
@@ -283,128 +494,5 @@ fn stale_transport_retry_allowlist_preserves_auth_and_integrity_failures() {
     ));
 }
 
-#[cfg(unix)]
-#[test]
-fn managed_owner_lock_is_exclusive_for_resident_lifetime() {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let root = std::env::temp_dir().join(format!(
-        "hol-guard-managed-owner-lock-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir(&root).unwrap();
-    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-
-    let first = acquire_managed_owner_lock(&root).unwrap();
-    assert!(matches!(
-        acquire_managed_owner_lock(&root),
-        Err(error) if error == "native_resident_owner_busy"
-    ));
-    let marker = root.join(MANAGED_OWNER_LOCK_FILE_NAME);
-    let displaced = root.join("managed-resident-owner.v1.lock.displaced");
-    fs::rename(&marker, &displaced).unwrap();
-    fs::write(&marker, []).unwrap();
-    fs::set_permissions(&marker, fs::Permissions::from_mode(0o600)).unwrap();
-    assert!(matches!(
-        acquire_managed_owner_lock(&root),
-        Err(error) if error == "native_resident_owner_busy"
-    ));
-    drop(first);
-    let second = acquire_managed_owner_lock(&root).unwrap();
-    drop(second);
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[cfg(unix)]
-#[test]
-fn managed_owner_lock_rejects_second_process() {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
-    use std::process::{Command, Stdio};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    if let Some(root) = std::env::var_os("HOL_GUARD_OWNER_LOCK_CHILD") {
-        let root = PathBuf::from(root);
-        let _lock = acquire_managed_owner_lock(&root).unwrap();
-        fs::write(root.join("child-ready"), []).unwrap();
-        std::thread::sleep(Duration::from_secs(5));
-        return;
-    }
-
-    let root = std::env::temp_dir().join(format!(
-        "hol-guard-managed-owner-lock-process-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir(&root).unwrap();
-    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-    let marker = root.join("child-ready");
-    let mut child = Command::new(std::env::current_exe().unwrap())
-        .arg("managed_owner_lock_rejects_second_process")
-        .arg("--nocapture")
-        .env(
-            "HOL_GUARD_OWNER_LOCK_CHILD",
-            root.to_string_lossy().as_ref(),
-        )
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-
-    let mut child_ready = false;
-    for _ in 0..200 {
-        if marker.exists() {
-            child_ready = true;
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    let result = if child_ready {
-        acquire_managed_owner_lock(&root)
-    } else {
-        Err("child_not_ready".to_owned())
-    };
-    let _ = child.kill();
-    let _ = child.wait();
-    let _ = fs::remove_dir_all(&root);
-
-    assert!(child_ready, "child process did not acquire the owner lock");
-    assert!(matches!(
-        result,
-        Err(error) if error == "native_resident_owner_busy"
-    ));
-}
-
-#[cfg(windows)]
-#[test]
-fn managed_owner_lock_allows_overlapping_private_directory_binds() {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let home = std::env::temp_dir().join(format!(
-        "hol-guard-managed-owner-bind-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir(&home).unwrap();
-    let root = home.join("native-runtime");
-    fs::create_dir(&root).unwrap();
-    let lock = acquire_managed_owner_lock(&root).unwrap();
-    crate::resident_state::bind_windows_existing_directory(&root, &home).unwrap();
-    crate::resident_state::ensure_private_directory_under(&root.join("child"), &home, true)
-        .unwrap();
-    drop(lock);
-    fs::remove_dir_all(home).unwrap();
-}
+#[path = "managed_resident_owner_lock_tests.rs"]
+mod owner_lock_tests; // includes managed_owner_lock_rejects_second_process contention proof

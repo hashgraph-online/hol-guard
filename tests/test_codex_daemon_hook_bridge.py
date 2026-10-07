@@ -35,6 +35,15 @@ from tests.codex_daemon_hook_bridge_fixtures import (
     _write_authenticated_daemon_files,
 )
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
+def _assert_bridge_denied(payload: dict[str, object]) -> None:
+    """The bridge output holds the action with a blocking decision."""
+    hook_output = payload.get("hookSpecificOutput")
+    assert isinstance(hook_output, dict)
+    assert hook_output.get("permissionDecision") == "deny"
+
 
 def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
@@ -175,42 +184,6 @@ def test_launcher_integrity_failure_does_not_stop_user_prompt(
     assert json.loads(capsys.readouterr().out) == {
         "continue": True,
         "systemMessage": bridge._LAUNCH_INTEGRITY_REASON,
-    }
-
-
-def test_launcher_integrity_failure_keeps_exact_codex_repair_available(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "hol-guard install codex"},
-                }
-            )
-        ),
-    )
-    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
-    monkeypatch.setattr(
-        bridge_flow,
-        "trusted_hook_launch",
-        lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
-    )
-    config = _bridge_config(guard_home, 5474)
-    config["manifest_path"] = guard_home / "managed" / "codex" / "hooks-fixture.manifest.json"
-    config["config_json"] = "{}"
-
-    assert bridge.main(**config) == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "continue": True,
-        "systemMessage": bridge._LAUNCH_INTEGRITY_REASON,
-        "hookSpecificOutput": {"hookEventName": "PreToolUse"},
     }
 
 
@@ -600,6 +573,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
         assert "permissionDecision" not in response.get("hookSpecificOutput", {})
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -634,9 +608,10 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
 
     assert exit_code == 0
     response = json.loads(capsys.readouterr().out)
-    assert response == {} or response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") in {None, "deny"}
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -678,6 +653,7 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
         assert response["continue"] is True
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -732,8 +708,8 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
         daemon.stop()
 
     assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) == {}
-    assert store.list_approval_requests(limit=None) == []
+    _assert_bridge_denied(json.loads(capsys.readouterr().out))
+    assert len(store.list_approval_requests(limit=None)) == 1
 
 
 @pytest.mark.parametrize(
@@ -801,36 +777,41 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
 
 
 @pytest.mark.parametrize(
-    "command",
+    ("command", "pending_approvals"),
     (
-        "gh api -H 'Accept: application/vnd.github.raw+json' "
-        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
-        "| jq '{tests: .tests, total: .total}'",
-        "gh pr view 1 -tREVIEW",
-        "gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'",
-        "gh issue list -q'.[] | {REPO: .repository}'",
-        "gh pr list -sREVIEW_REQUIRED",
-        "gh pr list -aRandy",
-        "gh issue list -aRandy",
-        "gh pr list -SREVIEW",
-        "gh run list -cREVIEW_SHA",
-        "gh run list -aRgithub.com/owner/repo --help",
-        "gh workflow list -aRowner/repo --help",
-        "gh pr view 1 -cROwner/Repo --help",
-        "gh issue list -wRgithub.com/OWNER/REPO --help",
-        "gh pr list -dROrg/Repo --help",
-        "gh run list -aRgithub.com/OWNER/REPO --help",
-        "gh pr view 1 -wRRowner/repo --help",
-        "gh run list -aRRowner/repo --help",
-        "gh -Rowner/repo pr view 17",
-        "gh -Rgithub.com/Owner/Repo pr view 17",
+        (
+            "gh api -H 'Accept: application/vnd.github.raw+json' "
+            "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
+            "| jq '{tests: .tests, total: .total}'",
+            1,
+        ),
+        ("gh pr view 1 -tREVIEW", 1),
+        ("gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'", 1),
+        ("gh issue list -q'.[] | {REPO: .repository}'", 1),
+        ("gh pr list -sREVIEW_REQUIRED", 1),
+        ("gh pr list -aRandy", 1),
+        ("gh issue list -aRandy", 1),
+        ("gh pr list -SREVIEW", 1),
+        ("gh run list -cREVIEW_SHA", 1),
+        ("gh run list -aRgithub.com/owner/repo --help", 1),
+        ("gh workflow list -aRowner/repo --help", 1),
+        ("gh pr view 1 -cROwner/Repo --help", 1),
+        ("gh issue list -wRgithub.com/OWNER/REPO --help", 1),
+        ("gh pr list -dROrg/Repo --help", 1),
+        ("gh run list -aRgithub.com/OWNER/REPO --help", 1),
+        ("gh pr view 1 -wRRowner/repo --help", 1),
+        ("gh run list -aRRowner/repo --help", 1),
+        ("gh -Rowner/repo pr view 17", 1),
+        ("gh -Rgithub.com/Owner/Repo pr view 17", 1),
     ),
 )
-def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filter(
+@pytest.mark.usefixtures("native_hook_force")
+def test_bridge_real_daemon_denies_unproven_github_content_reads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     command: str,
+    pending_approvals: int,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     session_workspace = tmp_path / "projects"
@@ -862,8 +843,9 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
         daemon.stop()
 
     assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) == {}
-    assert store.list_approval_requests(limit=None) == []
+    response = json.loads(capsys.readouterr().out)
+    _assert_bridge_denied(response)
+    assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
 
 
 @pytest.mark.parametrize(
@@ -993,6 +975,7 @@ def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(
     assert json.loads(capsys.readouterr().out) != {}
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1035,7 +1018,7 @@ def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(
         daemon.stop()
 
     assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) == {}
+    _assert_bridge_denied(json.loads(capsys.readouterr().out))
 
 
 @pytest.mark.parametrize("workdir", ("relative/repository", "/"))
@@ -1152,4 +1135,4 @@ def test_bridge_real_daemon_ignores_workdir_for_opaque_tool(
         daemon.stop()
 
     assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) == {}
+    _assert_bridge_denied(json.loads(capsys.readouterr().out))

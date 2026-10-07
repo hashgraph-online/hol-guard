@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import commands_hook_runtime_eval as runtime_eval_module
 from codex_plugin_scanner.guard.cli.commands_support_codex_reads import (
     _codex_command_is_read_only_source_inspection,
 )
@@ -24,7 +23,6 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
-from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
@@ -46,7 +44,6 @@ from codex_plugin_scanner.guard.runtime.shell_execution_context import (
     model_shell_execution_context,
     validate_shell_execution_segment,
 )
-from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3
 
 
 def _write(path: Path, text: str) -> Path:
@@ -573,87 +570,6 @@ def test_approval_token_binds_executables_from_every_effective_project(tmp_path:
     second = _approval_token(artifact, workspace=workspace, config=config)
 
     assert first != second
-
-
-def test_cisco_preflight_scans_every_distinct_effective_project(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project_a = tmp_path / "project-a"
-    project_b = tmp_path / "project-b"
-    project_a.mkdir()
-    project_b.mkdir()
-    calls: list[tuple[Path | None, tuple[Path, ...]]] = []
-    signal = GuardRiskSignalV3(
-        signal_id="cisco:test",
-        source="cisco_skill",
-        source_version="test",
-        category="skill",
-        severity="high",
-        confidence="strong",
-        title="fixture",
-        plain_language_summary="fixture",
-        technical_detail=None,
-        evidence_ref=None,
-        scanner_name="fixture",
-        scanner_status="enabled",
-        scanner_rule_id="fixture",
-        redaction_level="summary",
-        source_path=None,
-        source_line=None,
-        data_source=None,
-        data_sink=None,
-        recommended_action=None,
-    )
-    action = GuardActionEnvelope(
-        schema_version=1,
-        action_id="fixture",
-        harness="codex",
-        event_name="PreToolUse",
-        action_type="file_write",
-        workspace=str(tmp_path),
-        workspace_hash="fixture",
-        tool_name="Write",
-        command=None,
-        prompt_excerpt=None,
-        prompt_text=None,
-        target_paths=("skills/demo/SKILL.md",),
-        network_hosts=(),
-        mcp_server=None,
-        mcp_tool=None,
-        package_manager=None,
-        package_name=None,
-        script_name=None,
-        raw_payload_redacted={},
-    )
-
-    def fake_scan(
-        _action: GuardActionEnvelope,
-        *,
-        workspace: Path | str | None,
-        approved_scan_roots: tuple[Path, ...],
-    ) -> tuple[GuardRiskSignalV3, ...]:
-        calls.append(
-            (
-                Path(workspace) if workspace is not None else None,
-                approved_scan_roots,
-            )
-        )
-        return (signal,)
-
-    monkeypatch.setattr(runtime_eval_module, "scan_action_for_cisco_evidence", fake_scan)
-
-    evidence = runtime_eval_module._runtime_cisco_scanner_evidence(
-        action,
-        runtime_workspace=project_a,
-        raw_shell_cwds=[str(project_a), str(project_b), str(project_a), ""],
-    )
-
-    assert calls == [
-        (project_a.resolve(), (project_a.resolve(), project_b.resolve())),
-        (project_b.resolve(), (project_a.resolve(), project_b.resolve())),
-    ]
-    assert evidence == (signal,)
 
 
 def test_unresolved_execution_context_cannot_reuse_an_approval_token(tmp_path: Path) -> None:

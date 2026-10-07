@@ -11,18 +11,22 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
-    _PUBLISH_RETRY_MAX_SECONDS,
     _PUBLISH_RETRY_SECONDS,
     _PUBLISH_TIMEOUT_SECONDS,
     _RENEWAL_JITTER_MAX_SECONDS,
     _RENEWAL_LEAD_SECONDS,
-    _REQUIRED_PUBLISH_FEATURES,
+    POLICY_SNAPSHOT_UNAVAILABLE_ERRORS,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
 from .native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
-from .native_policy_snapshot_publisher_transport import _decode_ack_v3, _publish_snapshot_v3
+from .native_policy_snapshot_publisher_transport import (
+    _decode_ack_v3 as _decode_ack_v3,
+)
+from .native_policy_snapshot_publisher_transport import (
+    _publish_snapshot_v3 as _publish_snapshot_v3,
+)
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 
 if TYPE_CHECKING:
@@ -47,7 +51,60 @@ def _same_resident_paths(left, right) -> bool:
     return {path for path, _mtime, _size in left} == {path for path, _mtime, _size in right}
 
 
-class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
+def provision_native_verifier_key_for_store(store: GuardStore) -> None:
+    """Provision the resident verifier key for a store's Guard home.
+
+    The Rust resident refuses to serve until this owner-private derived key
+    exists.  Publishers provision it at ``start()``; standalone native
+    decision callers must establish the same prerequisite or every request
+    fails closed on ``native_resident_start_timeout``.
+    """
+
+    material_getter = getattr(store, "_policy_integrity_secret_material", None)
+    if not callable(material_getter):
+        raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
+    material: object = None
+    master_key: bytes | None = None
+    try:
+        material = material_getter(create=True)
+        if (
+            not isinstance(material, tuple)
+            or len(material) != 2
+            or not isinstance(material[0], bytes)
+            or not isinstance(material[1], str)
+        ):
+            raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
+        master_key = material[0]
+        provision_native_policy_verifier_key(Path(store.guard_home), master_key)
+    finally:
+        # Keep the master key only for the derivation call.  The derived
+        # verifier is the only value written to native runtime state.
+        master_key = None
+        material = None
+
+
+def ensure_native_launch_resident_verifier(store: GuardStore) -> None:
+    """Provision the resident verifier key before any native launch RPC.
+
+    Production hook entry provisions this through the policy snapshot
+    publisher at worker start.  A proxy constructed standalone (the CLI MCP
+    and stdio proxy entrypoints) never starts that publisher, so it must
+    establish the same one-time prerequisite itself before touching a native
+    launch/session RPC — otherwise the resident either refuses to serve, or if
+    some other process already provisioned a *different* key for this guard
+    home, authentic approvals signed with this store's key would never verify.
+    Unlike the best-effort pre-tool floor helper, launch-environment resolution
+    and resident session startup have no Python fallback, so a failure here must
+    raise rather than proceed.
+    """
+
+    # The provisioner is idempotent for a matching key and validates any
+    # existing file (regular, private, content-equal to this store's derived
+    # key), so always run it rather than short-circuiting on mere existence.
+    provision_native_verifier_key_for_store(store)
+
+
+class NativePolicySnapshotPublisher(NativePolicySnapshotPublicationMixin, NativePolicySnapshotPublisherInputs):
     """Asynchronously publish an authenticated snapshot and expose its barrier."""
 
     def __init__(
@@ -73,6 +130,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._started = False
         self._thread: threading.Thread | None = None
         self._snapshot: dict[str, object] | None = None
+        self._last_runtime_status: Any | None = None
+        self._resident_startup_required = True
         self._acked = False
         self._epoch = 0
         self._last_error: str | None = None
@@ -122,28 +181,71 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             self._thread.start()
         self.request_publish()
 
-    def close(self, *, timeout_seconds: float = 1.0) -> None:
-        with self._condition:
-            if self._closed:
-                return
-            self._closed = True
+    def close(self, *, timeout_seconds: float = 1.0, deadline_monotonic: float | None = None) -> bool:
+        return self.close_contained(timeout_seconds=timeout_seconds, deadline_monotonic=deadline_monotonic)
+
+    def close_contained(self, *, timeout_seconds: float = 1.0, deadline_monotonic: float | None = None) -> bool:
+        """Retain publication ownership until the publisher thread exits."""
+        deadline = self._monotonic_clock() + max(0.0, timeout_seconds)
+        if deadline_monotonic is not None:
+            deadline = min(deadline, deadline_monotonic)
+
+        def remaining() -> float:
+            return max(0.0, deadline - self._monotonic_clock())
+
+        # Retire before waiting for a contended condition. A failed bounded
+        # close must not permit another publication or a new start.
+        self._closed = True
+        self._publish_event.set()
+        if not self._condition.acquire(timeout=remaining()):
+            return False
+        try:
             self._acked = False
             self._condition.notify_all()
-        self._publish_event.set()
+        finally:
+            self._condition.release()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=max(0.0, timeout_seconds))
+            thread.join(timeout=remaining())
+        if thread is not None and thread.is_alive():
+            # Keep the registry and thread handles until a recovery close
+            # confirms retirement; callers must retain the isolated home.
+            return False
         api = _snapshot_api()
-        with api._PUBLISHER_LOCK:
+        if not api._PUBLISHER_LOCK.acquire(timeout=remaining()):
+            return False
+        try:
             publishers = api._PUBLISHERS.get(api._publisher_key(self.guard_home))
             if publishers is not None:
                 publishers.discard(self)
                 if not publishers:
                     api._PUBLISHERS.pop(api._publisher_key(self.guard_home), None)
+            self._thread = None
+            return True
+        finally:
+            api._PUBLISHER_LOCK.release()
 
     def request_publish(self) -> None:
         with self._condition:
             if self._closed:
+                return
+            self._epoch += 1
+            self._acked = False
+            self._last_error = None
+            self._renewal_due_monotonic = None
+            self._renewal_after_generation = None
+            self._retry_not_before_monotonic = None
+            self._failure_count = 0
+            self._condition.notify_all()
+        self._publish_event.set()
+
+    def request_control_binding_refresh(self, rejected_generation: int | None) -> None:
+        """Coalesce rejected admission refreshes without withdrawing a newer ACK."""
+        with self._condition:
+            if self._closed or not self._acked:
+                return
+            generation = self._snapshot.get("generation") if self._snapshot is not None else None
+            if rejected_generation is not None and isinstance(generation, int) and generation > rejected_generation:
                 return
             self._epoch += 1
             self._acked = False
@@ -185,7 +287,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             self.request_publish()
 
     def _accept_resident_fingerprint(self, fingerprint) -> None:
-        """Refresh Watch after resident metadata changes without hiding a policy edit.
+        """Handle resident metadata changes without hiding a policy edit.
 
         Resident mtime churn and a config change can land in one poll. Keeping
         the old observe snapshot in that case would let hooks run under Watch
@@ -197,6 +299,9 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             self._input_fingerprint = fingerprint
             return
         same_resident = _same_resident_paths(self._input_fingerprint[1], fingerprint[1])
+        if not same_resident:
+            with self._condition:
+                self._resident_startup_required = True
         previous_inputs = dict(self._input_fingerprint[0])
         current_inputs = dict(fingerprint[0])
         changed_paths = {
@@ -209,6 +314,13 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             self.request_publish()
             return
         if same_resident:
+            with self._condition:
+                if self._acked and self._snapshot is not None and self._snapshot.get("mode") == "enforce":
+                    # Metadata churn is not a new policy or resident generation.
+                    # Requests still carry the acknowledged generation and digest;
+                    # Rust rejects stale bindings independently on every review.
+                    # Revoking here makes ordinary hook traffic pause every harness.
+                    return
             self._republish_preserving_watch()
             return
         self.request_publish()
@@ -233,27 +345,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         return True
 
     def _provision_verifier_key(self) -> None:
-        material_getter = getattr(self.store, "_policy_integrity_secret_material", None)
-        if not callable(material_getter):
-            raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
-        material: object = None
-        master_key: bytes | None = None
-        try:
-            material = material_getter(create=True)
-            if (
-                not isinstance(material, tuple)
-                or len(material) != 2
-                or not isinstance(material[0], bytes)
-                or not isinstance(material[1], str)
-            ):
-                raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
-            master_key = material[0]
-            provision_native_policy_verifier_key(self.guard_home, master_key)
-        finally:
-            # Keep the master key only for the derivation call.  The derived
-            # verifier is the only value written to native runtime state.
-            master_key = None
-            material = None
+        provision_native_verifier_key_for_store(self.store)
 
     def _mark_expired_locked(self) -> None:
         snapshot = self._snapshot
@@ -334,6 +426,19 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 binding["command_extensions_bound"] = True
             return binding
 
+    def current_runtime_status(self) -> Any | None:
+        """Return the verified runtime status bound to the acknowledged snapshot."""
+
+        with self._condition:
+            self._mark_expired_locked()
+            if not self._acked or self._snapshot is None or self._closed:
+                return None
+            status = self._last_runtime_status
+            identity = getattr(status, "identity", None)
+            if identity is None or self._snapshot.get("runtime_identity") != getattr(identity, "sha256", None):
+                return None
+            return status
+
     def local_cli_publication_receipt(self, revision: int) -> dict[str, object] | None:
         """Bind control-plane status to an ACK for this exact saved revision."""
         with self._condition:
@@ -374,279 +479,13 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 self._mark_expired_locked()
                 if self._acked and self._snapshot is not None:
                     return True
+                # Known unavailable authority wakes the caller promptly. Keep
+                # bounded retries for lost ACKs and resident recovery.
+                if self._last_error in POLICY_SNAPSHOT_UNAVAILABLE_ERRORS:
+                    return False
                 remaining = deadline - self._monotonic_clock()
                 if remaining <= 0:
                     break
                 self._condition.wait(timeout=remaining)
             self._mark_expired_locked()
             return self._acked and self._snapshot is not None and not self._closed
-
-    def _run(self) -> None:
-        while True:
-            with self._condition:
-                if self._closed:
-                    return
-                self._mark_expired_locked()
-            fingerprint = self._current_input_fingerprint()
-            if self._input_fingerprint is None:
-                self._input_fingerprint = fingerprint
-            elif fingerprint[1] != self._input_fingerprint[1]:
-                self._accept_resident_fingerprint(fingerprint)
-            elif fingerprint[0] != self._input_fingerprint[0]:
-                previous_inputs = dict(self._input_fingerprint[0])
-                current_inputs = dict(fingerprint[0])
-                changed_paths = {
-                    path
-                    for path in previous_inputs.keys() | current_inputs.keys()
-                    if previous_inputs.get(path) != current_inputs.get(path)
-                }
-                self._input_fingerprint = fingerprint
-                if self._policy_input_changed(changed_paths):
-                    self._republish_preserving_watch()
-            if self._monotonic_clock() >= self._reconcile_due_monotonic:
-                self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
-                if self._policy_input_changed():
-                    self._republish_preserving_watch()
-            with self._condition:
-                if self._closed:
-                    return
-                self._mark_expired_locked()
-                now = self._monotonic_clock()
-                wait_seconds = self._poll_interval_seconds
-                if self._retry_not_before_monotonic is not None:
-                    wait_seconds = min(
-                        wait_seconds,
-                        max(0.0, self._retry_not_before_monotonic - now),
-                    )
-                if self._acked and self._renewal_due_monotonic is not None:
-                    wait_seconds = min(
-                        wait_seconds,
-                        max(0.0, self._renewal_due_monotonic - now),
-                    )
-            self._publish_event.wait(timeout=wait_seconds)
-            self._publish_event.clear()
-            with self._condition:
-                if self._closed:
-                    return
-                self._mark_expired_locked()
-                now = self._monotonic_clock()
-                if self._acked and self._renewal_due_monotonic is not None and now >= self._renewal_due_monotonic:
-                    snapshot = self._snapshot
-                    generation = snapshot.get("generation") if snapshot is not None else None
-                    self._renewal_due_monotonic = None
-                    self._renewal_after_generation = (
-                        generation if isinstance(generation, int) and generation > 0 else None
-                    )
-                    self._retry_not_before_monotonic = now
-                    self._failure_count = 0
-                should_publish = (
-                    not self._closed
-                    and (not self._acked or self._renewal_after_generation is not None)
-                    and (self._retry_not_before_monotonic is None or now >= self._retry_not_before_monotonic)
-                )
-                renewal_after_generation = self._renewal_after_generation
-            if should_publish:
-                self._publish_once(renew_after_generation=renewal_after_generation)
-
-    def _record_error(self, error: str) -> None:
-        safe = error.strip().lower()
-        if not safe or len(safe) > 128 or not all(character.isalnum() or character in "_-=,:?" for character in safe):
-            safe = "native_policy_snapshot_publish_failed"
-        with self._condition:
-            self._last_error = safe
-            expires = self._snapshot.get("expires_at_ms") if self._snapshot else None
-            if not (self._acked and isinstance(expires, int) and expires > int(self._wall_clock() * 1_000)):
-                self._acked = False
-            self._failure_count += 1
-            delay = min(
-                _PUBLISH_RETRY_MAX_SECONDS,
-                self._poll_interval_seconds * (2 ** min(self._failure_count - 1, 5)),
-            )
-            retry_seed = hashlib.sha256(f"{self._failure_count}:{safe}".encode("ascii")).digest()
-            retry_fraction = int.from_bytes(retry_seed[:2], "big") / float(1 << 16)
-            self._retry_not_before_monotonic = (
-                self._monotonic_clock()
-                + delay
-                + min(
-                    0.1,
-                    self._poll_interval_seconds * 0.25,
-                )
-                * retry_fraction
-            )
-            self._condition.notify_all()
-
-    def _publish_once(self, *, renew_after_generation: int | None = None) -> None:
-        with self._condition:
-            if self._closed:
-                return
-            if renew_after_generation is None:
-                renew_after_generation = self._renewal_after_generation
-            publish_epoch = self._epoch
-        try:
-            # A cold verified read may itself migrate authenticated catalog
-            # state and close the mutation barrier. Recapture once before IPC;
-            # accepting its previous epoch would also hide concurrent changes.
-            for _ in range(2):
-                with self._condition:
-                    publish_epoch = self._epoch
-                local_cli_revision = self._current_local_cli_revision()
-                provider_reader = getattr(self.store, "read_mcp_provider_authority_hash", None)
-                provider_authority_hash = provider_reader() if callable(provider_reader) else None
-                context = self._publication_context()
-                if context is None:
-                    return
-                with self._condition:
-                    if self._closed:
-                        return
-                    if self._epoch == publish_epoch:
-                        break
-                context = None
-            else:
-                return
-            identity, capabilities, master_key, config, command_extensions, client = context
-            resident_fingerprint_before = self._current_input_fingerprint()[1]
-            try:
-                snapshot, resident_generation = _publish_snapshot_v3(
-                    publisher=self,
-                    identity=identity,
-                    capabilities=capabilities,
-                    config=config,
-                    command_extensions=command_extensions,
-                    master_key=master_key,
-                    client=client,
-                    renew_after_generation=renew_after_generation,
-                )
-            finally:
-                # The master is only an ephemeral input to derivation/signing;
-                # never retain it in publisher state or an exception context.
-                master_key = None
-            resident_fingerprint = self._current_input_fingerprint()[1]
-            resident_directory_fingerprint = self._resident_directory_fingerprint()
-            # A separate process may commit authority while the resident is
-            # acknowledging this candidate. Re-read verified authority outside
-            # the hook barrier and reject an ACK for the earlier controls.
-            if self._compiled_command_extensions() != command_extensions and snapshot.get("mode") != "observe":
-                with self._condition:
-                    self._acked = False
-                raise NativePolicySnapshotError("native_command_control_binding_changed")
-            if self._current_local_cli_revision() != local_cli_revision:
-                with self._condition:
-                    self._acked = False
-                raise NativePolicySnapshotError("native_local_cli_revision_changed")
-            if callable(provider_reader) and provider_reader() != provider_authority_hash:
-                with self._condition:
-                    self._acked = False
-                raise NativePolicySnapshotError("native_provider_catalog_changed")
-            with self._condition:
-                # A mutation may have invalidated the barrier while this
-                # request was in flight. Do not let an older ACK make that
-                # newer policy appear ready.
-                if self._closed or self._epoch != publish_epoch:
-                    return
-                # Bind the ACK to the resident observed before publication,
-                # after publication, and at the barrier commit point.
-                resident_fingerprint_confirmed = self._confirm_resident_fingerprint(
-                    resident_fingerprint_before,
-                    resident_fingerprint,
-                    resident_generation,
-                    resident_directory_fingerprint,
-                )
-                if (
-                    resident_fingerprint_confirmed is None
-                    and snapshot.get("mode") == "observe"
-                    and _same_resident_paths(resident_fingerprint_before, resident_fingerprint)
-                    and self._resident_fingerprint_matches_generation(resident_fingerprint, resident_generation)
-                ):
-                    # Hook reviews touch resident generation files while this
-                    # publish is in flight. Watch still matches the resident
-                    # that acknowledged the snapshot; do not drop it and pause.
-                    resident_fingerprint_confirmed = resident_fingerprint
-                if resident_fingerprint_confirmed is None:
-                    self._acked = False
-                    raise NativePolicySnapshotError("native_policy_snapshot_resident_changed")
-                # The first client request may create the resident generation
-                # state files. Treat those files as the state of this ACK,
-                # otherwise the observer loop immediately mistakes its own
-                # startup for a resident restart and withdraws the barrier
-                # under a concurrent hook. Keep the policy-input half from
-                # before publication so a config change observed during the
-                # request still forces a republish on the next poll.
-                if self._input_fingerprint is not None:
-                    self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint_confirmed)
-                self._snapshot = snapshot
-                self._published_config_digest = cast(str, snapshot["config_digest"])
-                self._published_local_cli_revision = local_cli_revision
-                self._published_policy_fingerprint = (
-                    cast(str, snapshot["config_digest"]),
-                    cast(str, snapshot["mode"]),
-                    _digest_v3(command_extensions),
-                )
-                self._observed_policy_fingerprint = self._published_policy_fingerprint
-                self._acked = True
-                self._last_error = None
-                self._renewal_after_generation = None
-                self._failure_count = 0
-                self._retry_not_before_monotonic = None
-                self._schedule_renewal_locked(snapshot)
-                self._condition.notify_all()
-        except NativePolicySnapshotError as error:
-            self._record_error(str(error))
-        except (OSError, RuntimeError, TypeError, ValueError, AttributeError, sqlite3.Error) as error:
-            self._record_error(type(error).__name__)
-
-    def _publication_context(
-        self,
-    ) -> tuple[Any, Any, bytes, Mapping[str, object], Mapping[str, object], Callable[..., bytes | None]] | None:
-        status_provider = self._status_provider
-        if status_provider is None:
-            from .native_runtime import native_runtime_status
-
-            status_provider = native_runtime_status
-        status = status_provider()
-        if getattr(status, "mode", None) not in {"auto", "force", "shadow"}:
-            self._record_error("native_policy_snapshot_native_disabled")
-            return None
-        identity = getattr(status, "identity", None)
-        capabilities = getattr(status, "capabilities", None)
-        if (
-            not getattr(status, "available", False)
-            or not getattr(status, "compatible", False)
-            or identity is None
-            or capabilities is None
-        ):
-            self._record_error("native_policy_snapshot_runtime_unavailable")
-            return None
-        if not _REQUIRED_PUBLISH_FEATURES.issubset(set(getattr(capabilities, "features", ()))):
-            with self._condition:
-                self._acked = False
-            self._record_error("native_policy_snapshot_protocol_unsupported")
-            return None
-        material_getter = getattr(self.store, "_policy_integrity_secret_material", None)
-        if not callable(material_getter):
-            self._record_error("native_policy_snapshot_integrity_key_unavailable")
-            return None
-        material: object = None
-        try:
-            material = material_getter(create=True)
-            if (
-                not isinstance(material, tuple)
-                or len(material) != 2
-                or not isinstance(material[0], bytes)
-                or not isinstance(material[1], str)
-            ):
-                self._record_error("native_policy_snapshot_integrity_key_unavailable")
-                return None
-            config = self._compiled_effective_policy()
-            command_extensions = self._compiled_command_extensions()
-            client = self._client_request
-            if client is None:
-                from .native_resident_client import native_resident_client_request
-
-                client = native_resident_client_request
-            return identity, capabilities, material[0], config, command_extensions, client
-        finally:
-            material = None
-
-    @staticmethod
-    def _decode_ack(output: bytes | None) -> dict[str, object] | None:
-        return _decode_ack_v3(output)

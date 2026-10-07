@@ -1,15 +1,21 @@
-"""Measure Guard catalog scale with disposable data and a mocked native ACK.
+"""Measure rich catalogs and bounded permission publication with disposable data.
 
 Run with ``uv run --no-sync python scripts/benchmark_mcp_catalog_scale.py [connections]``.
-Each connection advertises 100 tools. No installed Guard state is read or written.
+Each connection advertises 100 tools; ten have explicit choices by default.
+Pass --native with explicit built runtime/compiler paths to verify a real ACK.
+No installed Guard state is read or written.
 """
 
+import argparse
+import json
 import math
+import os
 import platform
 import statistics
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
@@ -22,14 +28,18 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     evaluate_tool_call,
 )
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+    POLICY_SNAPSHOT_MAX_BYTES,
+    POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS,
+)
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
-from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tests.native_policy_snapshot_test_fixtures import _ack, _status
 
 
 def p95(samples: list[float]) -> float:
@@ -37,35 +47,66 @@ def p95(samples: list[float]) -> float:
     return ordered[math.ceil(len(ordered) * 0.95) - 1]
 
 
-with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch:
+@contextmanager
+def isolated_environment(root: Path):
+    names = ("HOME", "CODEX_HOME", "HOL_GUARD_HOME", "HOL_GUARD_NATIVE")
+    previous = {name: os.environ.get(name) for name in names}
+    home = root / "home"
+    home.mkdir()
+    os.environ.update(HOME=str(home), CODEX_HOME=str(root / "codex"), HOL_GUARD_HOME=str(root / "guard-home"))
+    if options.native:
+        os.environ["HOL_GUARD_NATIVE"] = "force"
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("connections", type=int, nargs="?", default=100)
+parser.add_argument("--permissions-per-connection", type=int, default=10)
+parser.add_argument("--native", action="store_true")
+options = parser.parse_args()
+assert 1 <= options.connections <= 100
+assert 1 <= options.permissions_per_connection <= 100
+if options.connections * options.permissions_per_connection > POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS:
+    parser.error(
+        f"Selected permissions exceed the native publication limit ({POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS}); "
+        "reduce --permissions-per-connection. Each rich catalog still contains 100 tools."
+    )
+if options.native and not all(
+    os.environ.get(name) for name in ("HOL_GUARD_NATIVE_BINARY", "HOL_GUARD_NATIVE_SOURCE_COMPILER")
+):
+    parser.error("--native requires explicit HOL_GUARD_NATIVE_BINARY and HOL_GUARD_NATIVE_SOURCE_COMPILER paths")
+
+
+with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch, isolated_environment(Path(scratch)):
     root = Path(scratch)
-    store = GuardStore(root / "guard-home")
-    connection_count = int(sys.argv[1]) if len(sys.argv) > 1 else 100
-    assert 1 <= connection_count <= 100
+    store = GuardStore(root / "guard-home", prime_policy_integrity=False)
+    store._policy_integrity_secret_material = lambda *, create: (b"m" * 32, "fixture")
+    connection_count = options.connections
     names = tuple(f"tool_{index:03}" for index in range(100))
-    commands = (
-        *(LocalCliCommand(name, name, name, "Fixture tool") for name in names),
-        LocalCliCommand("other", "Other tools", "fixture ...", "Unknown tools need review"),
-    )
-    catalog = McpCatalogResult(
-        tuple({"name": name, "inputSchema": {"type": "object"}} for name in names),
-        complete=True,
-        pages=1,
-        protocol_version="2026-07-28",
-    )
     seen_at = utc_now()
     servers = []
     setup_start = time.perf_counter()
     for index in range(connection_count):
-        server = build_mcp_server_identity(
-            config_path="", command="npx", args=("-y", f"@fixture/server-{index:03}"), transport="stdio"
+        observed = [observed_mcp_tool("codex", f"mcp__fixture_{index:03}__{name}") for name in names]
+        assert all(tool is not None for tool in observed)
+        tools = [tool for tool in observed if tool is not None]
+        server, identity = tools[0].server_identity, tools[0].identity
+        commands = (
+            *(LocalCliCommand(tool.command_id, tool.name, tool.qualified_name, "Fixture tool") for tool in tools),
+            LocalCliCommand("other", "Other tools", "fixture ...", "Unknown tools need review"),
         )
-        identity = UnlistedCliIdentity(
-            cli_id=f"local-cli.scale-{index:03}",
-            name=f"Fixture connector {index:03}",
-            kind="executable",
-            identity_hash=server.identity_hash,
-            example_label=f"fixture-{index:03}",
+        catalog = McpCatalogResult(
+            tuple({"name": tool.qualified_name, "inputSchema": {"type": "object"}} for tool in tools),
+            complete=True,
+            pages=1,
+            protocol_version="2026-07-28",
         )
         servers.append(server)
         store.record_local_cli_observation(
@@ -89,7 +130,10 @@ with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch:
             state="allowed",
             expected_revision=store.read_local_cli_revision(),
             updated_at=seen_at,
-            command_states={name: "allow" if tool_index % 2 == 0 else "block" for tool_index, name in enumerate(names)},
+            command_states={
+                tool.command_id: "allow" if tool_index % 2 == 0 else "block"
+                for tool_index, tool in enumerate(tools[: options.permissions_per_connection])
+            },
         )
     setup_seconds = time.perf_counter() - setup_start
 
@@ -110,28 +154,45 @@ with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch:
         known_count += count
     assert known_count == connection_count * 100
 
-    store._policy_integrity_secret_material = lambda *, create: (b"m" * 32, "fixture")
-    publisher = NativePolicySnapshotPublisher(
-        store=store, status_provider=_status, client_request=lambda **kwargs: _ack(kwargs["payload"])
-    )
+    provision_native_verifier_key_for_store(store)
+    if options.native:
+        publisher = NativePolicySnapshotPublisher(store=store)
+    else:
+        from tests.native_policy_snapshot_test_fixtures import _ack, _status
+
+        publisher = NativePolicySnapshotPublisher(
+            store=store, status_provider=_status, client_request=lambda **kwargs: _ack(kwargs["payload"])
+        )
     try:
         started = time.perf_counter()
         publisher._publish_once()
         publish_ms = (time.perf_counter() - started) * 1000
-        assert publisher.is_ready()
+        assert publisher.is_ready(), publisher.last_error
+        snapshot = publisher._snapshot
+        assert snapshot is not None
+        snapshot_bytes = len(json.dumps(snapshot, separators=(",", ":")).encode())
+        assert snapshot_bytes <= POLICY_SNAPSHOT_MAX_BYTES
+        actions = snapshot["effective_policy"]["mcp_tool_actions"]
+        assert len(actions) == connection_count * options.permissions_per_connection
+        expected_blocks = connection_count * (options.permissions_per_connection // 2)
+        expected_allows = connection_count * ((options.permissions_per_connection + 1) // 2)
+        assert sum(action == "block" for action in actions.values()) == expected_blocks
+        assert sum(action == "allow" for action in actions.values()) == expected_allows
     finally:
         publisher.close()
+        if options.native:
+            assert close_native_residents(store.guard_home), "Owned native runtime did not stop"
 
     config = GuardConfig(guard_home=store.guard_home, workspace=root / "workspace", mode="prompt")
     artifact = build_tool_call_artifact(
         harness="codex",
-        server_name="server-000",
-        tool_name="tool_000",
+        server_name="fixture_000",
+        tool_name="mcp__fixture_000__tool_000",
         source_scope="project",
         config_path=".mcp.json",
         transport="stdio",
         server_identity=servers[0],
-        tool_definition={"name": "tool_000", "inputSchema": {"type": "object"}},
+        tool_definition={"name": "mcp__fixture_000__tool_000", "inputSchema": {"type": "object"}},
     )
     arguments = {}
     artifact_hash = build_tool_call_hash(artifact, arguments, workspace=root, config=config)
@@ -154,6 +215,10 @@ with tempfile.TemporaryDirectory(prefix="guard-mcp-scale-") as scratch:
             "machine": platform.machine(),
             "connections": len(items),
             "tools": connection_count * 100,
+            "native_ack": "real" if options.native else "mocked",
+            "native_permission_entries": len(actions),
+            "native_permission_limit": POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS,
+            "native_snapshot_bytes": snapshot_bytes,
             "setup_s": round(setup_seconds, 3),
             "api_list_median_ms": round(statistics.median(list_times), 2),
             "api_list_p95_ms": round(p95(list_times), 2),

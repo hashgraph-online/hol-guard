@@ -18,13 +18,16 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 
 SHARD_COUNT = 128
-# The planner and each dependent shard have separate five-minute watchdogs.
-# Include one minute for polling and scheduling overhead; this bound does not
-# delay successful producers or define the CI performance target.
-_DEFAULT_TIMEOUT_SECONDS = 660.0
-_REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+# coverage-plan (5 min) + coverage (10 min) + one minute of polling slack
+_DEFAULT_TIMEOUT_SECONDS = 960.0
+REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _SHARD_NAME = re.compile(r"coverage \(3\.12, (0|[1-9][0-9]*)\)")
 _PENDING_STATUSES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})
+_PREREQUISITE_LABELS = {
+    "plan": "Change planner",
+    "coverage-plan": "Python coverage-plan",
+    "native-command-evaluators": "Native command evaluators",
+}
 _MAX_JOBS = 1000
 _MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 FetchJson = Callable[[str, float], object]
@@ -42,7 +45,7 @@ class _SchedulingRaceError(ShardWaitError):
     """Pagination changed while GitHub was creating the coverage matrix."""
 
 
-class _TransientApiError(ShardWaitError):
+class TransientApiError(ShardWaitError):
     """A transport failure may be retried without trusting partial results."""
 
 
@@ -75,16 +78,16 @@ def github_json(path: str, timeout_seconds: float) -> object:
         return json.loads(raw)
     except urllib.error.HTTPError as error:
         if error.code in {408, 429, 500, 502, 503, 504}:
-            raise _TransientApiError(f"GitHub jobs API returned HTTP {error.code}") from None
+            raise TransientApiError(f"GitHub jobs API returned HTTP {error.code}") from None
         raise ShardWaitError(f"GitHub jobs API returned HTTP {error.code}") from None
     except ssl.SSLCertVerificationError:
         raise ShardWaitError("GitHub jobs API TLS verification failed") from None
     except urllib.error.URLError as error:
         if isinstance(error.reason, ssl.SSLCertVerificationError):
             raise ShardWaitError("GitHub jobs API TLS verification failed") from None
-        raise _TransientApiError("GitHub jobs API request failed") from None
+        raise TransientApiError("GitHub jobs API request failed") from None
     except (OSError, http.client.IncompleteRead):
-        raise _TransientApiError("GitHub jobs API request failed") from None
+        raise TransientApiError("GitHub jobs API request failed") from None
     except (UnicodeError, json.JSONDecodeError):
         raise ShardWaitError("GitHub jobs API returned invalid JSON") from None
 
@@ -137,11 +140,15 @@ def _snapshot(
     fetch_json: FetchJson,
     deadline: float,
     clock: Callable[[], float],
+    execution_validator: Callable[[Mapping[str, object], str], None] = _require_current_execution,
+    plan_skippable: bool = False,
 ) -> tuple[str, ...]:
+    """Validate the full inventory before classifying a deferred matrix error."""
     states = ["absent"] * SHARD_COUNT
     jobs_by_id: dict[int, dict[str, object]] = {}
     seen_shards: set[int] = set()
-    plan_seen = False
+    seen_prerequisites: set[str] = set()
+    invalid_shard_name_seen = False
     total_count = 0
     for page in range(1, _MAX_JOBS // 100 + 1):
         remaining = deadline - clock()
@@ -176,22 +183,29 @@ def _snapshot(
                     # Scheduling shifts offset pages even after matrix expansion.
                     # Retry the whole snapshot; duplicates cannot fill missing shards.
                     raise _SchedulingRaceError("GitHub jobs API paginated a changing job list")
-                if not plan_seen and not seen_shards:
+                if "coverage-plan" not in seen_prerequisites and not seen_shards:
                     raise _SchedulingRaceError("GitHub jobs API paginated a changing job list")
                 raise ShardWaitError("GitHub jobs API returned a duplicate job")
             jobs_by_id[job_id] = job
-            if name == "coverage-plan":
-                if plan_seen:
-                    raise ShardWaitError("GitHub jobs API returned duplicate coverage-plan jobs")
-                plan_seen = True
-                _job_state(job, "Python coverage-plan")
+            if name in _PREREQUISITE_LABELS:
+                if name in seen_prerequisites:
+                    raise ShardWaitError(f"GitHub jobs API returned duplicate {name} jobs")
+                seen_prerequisites.add(name)
+                # The change planner only runs on pull_request events; on push it
+                # is legitimately skipped, which is not a coverage blocker. On a
+                # pull_request a non-success plan still fails the barrier.
+                if plan_skippable and name == "plan" and job.get("status") == "completed" and job.get("conclusion") == "skipped":
+                    continue
+                _job_state(job, _PREREQUISITE_LABELS[name])
             if not name.startswith("coverage (3.12,"):
                 continue
             match = _SHARD_NAME.fullmatch(name)
             if match is None or int(match[1]) >= SHARD_COUNT:
-                if not plan_seen and not seen_shards:
-                    raise _SchedulingRaceError("GitHub jobs API exposed an unexpanded coverage matrix")
-                raise ShardWaitError("GitHub jobs API returned an invalid Python coverage shard index")
+                # A skipped matrix may appear before its failed prerequisite,
+                # even on an earlier API page. Read the bounded snapshot before
+                # reporting the placeholder so the actual blocker is retained.
+                invalid_shard_name_seen = True
+                continue
             index = int(match[1])
             if index in seen_shards:
                 raise ShardWaitError(f"GitHub jobs API returned duplicate Python coverage shard {index}")
@@ -199,11 +213,19 @@ def _snapshot(
             label = f"Python coverage shard {index}"
             states[index] = _job_state(job, label)
             if states[index] == "success":
-                _require_current_execution(job, label)
+                execution_validator(job, label)
         if len(jobs_by_id) == total_count:
+            if invalid_shard_name_seen:
+                # Native compilation may finish before planning expands coverage.
+                # Classify using the final snapshot, not prerequisite arrival order.
+                if "coverage-plan" not in seen_prerequisites and not seen_shards:
+                    raise _SchedulingRaceError("GitHub jobs API exposed an unexpanded coverage matrix")
+                raise ShardWaitError("GitHub jobs API returned an invalid Python coverage shard index")
             return tuple(states)
-        if len(jobs) != 100 or len(jobs_by_id) > total_count:
-            raise ShardWaitError("GitHub jobs API returned an incomplete job list")
+        if len(jobs_by_id) > total_count:
+            raise TransientApiError("GitHub jobs API returned an incomplete job list")
+        if len(jobs) != 100:
+            raise TransientApiError("GitHub jobs API returned an incomplete job list")
     raise ShardWaitError("GitHub jobs API exceeded its pagination limit")
 
 
@@ -218,9 +240,11 @@ def wait_for_shards(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     log: Callable[[str], None] = _progress,
+    execution_validator: Callable[[Mapping[str, object], str], None] = _require_current_execution,
+    plan_skippable: bool = False,
 ) -> None:
     """Accept every expected successful shard, scoped to the current run attempt."""
-    if _REPOSITORY.fullmatch(repository) is None or any(part in {".", ".."} for part in repository.split("/")):
+    if REPOSITORY_PATTERN.fullmatch(repository) is None or any(part in {".", ".."} for part in repository.split("/")):
         raise ShardWaitError("Invalid GITHUB_REPOSITORY")
     if any(type(value) is not int or value <= 0 for value in (run_id, attempt)):
         raise ShardWaitError("Workflow run and attempt IDs must be positive integers")
@@ -234,13 +258,22 @@ def wait_for_shards(
     log(f"Waiting for {SHARD_COUNT} Python coverage shards in run {run_id}, attempt {attempt}")
     while True:
         try:
-            states = _snapshot(repository, run_id, attempt, fetch_json=fetch_json, deadline=deadline, clock=clock)
+            states = _snapshot(
+                repository,
+                run_id,
+                attempt,
+                fetch_json=fetch_json,
+                deadline=deadline,
+                clock=clock,
+                execution_validator=execution_validator,
+                plan_skippable=plan_skippable,
+            )
         except _SchedulingRaceError:
             if clock() >= deadline:
                 raise ShardWaitError("Timed out waiting for Python coverage shard jobs") from None
             sleep(min(poll_seconds, max(0.0, deadline - clock())))
             continue
-        except _TransientApiError:
+        except TransientApiError:
             api_failures += 1
             remaining = deadline - clock()
             if remaining <= 0:

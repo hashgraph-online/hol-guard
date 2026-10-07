@@ -228,6 +228,77 @@ _NON_SECRET_DIAGNOSTIC_KEYS = frozenset({"authority_error", "authority_error_mes
 _SAFE_POLICY_LITERALS = frozenset(
     {"allow", "warn", "review", "block", "require-reapproval", "sandbox-required", "strict", "balanced", "custom"}
 )
+_SENSITIVE_ASSIGNMENT_TOKENS = ("token", "secret", "password", "credential")
+_SENSITIVE_API_KEY_FORMS = ("apikey", "api_key", "api-key")
+
+
+def _is_assignment_key_character(char: str) -> bool:
+    return char.isascii() and (char.isalnum() or char in "_-")
+
+
+def _sensitive_assignment_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(token in lowered for token in _SENSITIVE_ASSIGNMENT_TOKENS) or any(
+        form in lowered for form in _SENSITIVE_API_KEY_FORMS
+    )
+
+
+def _redact_sensitive_assignments(text: str) -> str:
+    """Redact key=value secrets with a single forward scan."""
+
+    pieces: list[str] = []
+    copied_until = 0
+    search_from = 0
+    missing_quote_from: dict[str, int] = {}
+    while True:
+        equals = text.find("=", search_from)
+        if equals < 0:
+            break
+
+        key_start = equals
+        while key_start > 0 and _is_assignment_key_character(text[key_start - 1]):
+            key_start -= 1
+        key = text[key_start:equals]
+        if not key or not _sensitive_assignment_key(key):
+            search_from = equals + 1
+            continue
+
+        value_start = equals + 1
+        if value_start >= len(text):
+            search_from = value_start
+            continue
+
+        value_end = value_start
+        quote = text[value_start] if text[value_start] in {"'", '"'} else ""
+        if quote:
+            limit = missing_quote_from.get(quote)
+            closing = -1 if limit is not None and value_start + 1 >= limit else text.find(quote, value_start + 1)
+            if closing < 0:
+                missing_quote_from[quote] = min(limit or len(text), value_start + 1)
+                while value_end < len(text) and text[value_end] != "&" and not text[value_end].isspace():
+                    value_end += 1
+            else:
+                value_end = closing + 1
+        else:
+            while value_end < len(text) and text[value_end] != "&" and not text[value_end].isspace():
+                value_end += 1
+
+        if value_end <= value_start:
+            search_from = value_start
+            continue
+
+        pieces.append(text[copied_until:key_start])
+        pieces.append(text[key_start : equals + 1])
+        pieces.append("*****")
+        copied_until = value_end
+        search_from = value_end
+
+    if not pieces:
+        return text
+    pieces.append(text[copied_until:])
+    return "".join(pieces)
+
+
 _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
@@ -242,12 +313,6 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?im)\b(?:_authToken|npm[_ -]?token)\s*[:=]\s*[^\s]+"), "npm token redacted"),
     (re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s]+", re.IGNORECASE), "*****"),
-    (
-        re.compile(
-            r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)(?:'[^']*'|\"[^\"]*\"|[^&\s]+)"
-        ),
-        r"\1*****",
-    ),
 )
 _TRUST_SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     item for item in _SENSITIVE_STRING_PATTERNS if item[0].pattern != r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"
@@ -317,6 +382,7 @@ def _redact_payload(value: object, *, key: str | None = None, command: str | Non
         )
         for pattern, replacement in patterns:
             redacted = pattern.sub(replacement, redacted)
+        redacted = _redact_sensitive_assignments(redacted)
         return redact_local_path(redacted)
     return value
 
@@ -562,6 +628,9 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     reason = classification.get("reason")
     if isinstance(reason, str) and reason:
         console.print(Panel(Text(reason), title="Why", border_style=border_style))
+    recovery = classification.get("recovery")
+    if isinstance(recovery, str) and recovery:
+        console.print(Panel(Text(recovery), title="Next step", border_style=border_style))
     if extensions:
         alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
         if alternatives:
@@ -644,6 +713,9 @@ def _plain_text_command_inspection(payload: PayloadDict) -> str:
         f"Reason: {classification.get('reason') or ''}",
         "Policy: Not evaluated; this inspection creates no approvals or receipts.",
     ]
+    recovery = classification.get("recovery")
+    if isinstance(recovery, str) and recovery:
+        lines.append(f"Recovery: {recovery}")
     if extensions:
         lines.insert(3, f"Extension: {extensions[0].get('extension_id') or 'unknown'}")
     if rules:
@@ -850,9 +922,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
         name, protection_off = _protection_status_copy(payload, "protected")
-        protection_line = (
-            f"[bold red]protection mode: {name} (off)[/bold red]" if protection_off else f"protection mode: {name}"
-        )
+        protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
         console.print(
             Panel.fit(
                 f"[bold]HOL Guard doctor[/bold]\n{protection_line}\n{len(tables)} local tables checked",
@@ -915,7 +985,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         name, protection_off = _protection_status_copy(payload, "")
         if name:
             value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
-            summary.add_row("Protection mode", value)
+            summary.add_row("Protection", value)
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:
             warning_text = "\n".join(
@@ -2773,8 +2843,7 @@ def _build_approval_table(items: list[dict[str, object]], *, title: str | None) 
 def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
     body = Table.grid(padding=(0, 1))
     body.add_row("Command", _command_text(runtime_probe.get("command")))
-    body.add_row("Check succeeded", _bool_label(bool(runtime_probe.get("ok"))))
-    body.add_row("Scope", "Passive check; no Guard evaluation verified")
+    body.add_row("Succeeded", _bool_label(bool(runtime_probe.get("ok"))))
     if runtime_probe.get("return_code") is not None:
         body.add_row("Return code", str(runtime_probe.get("return_code")))
     if runtime_probe.get("reported_artifacts") is not None:
@@ -2785,7 +2854,7 @@ def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
         stdout = _clean_terminal_output(str(runtime_probe.get("stdout")))
         preview = "\n".join(stdout.splitlines()[:6])
         body.add_row("stdout", preview)
-    return Panel(body, title="Passive probe", border_style="magenta")
+    return Panel(body, title="Runtime probe", border_style="magenta")
 
 
 def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:

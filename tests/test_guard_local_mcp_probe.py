@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime import local_mcp_stdio as stdio_module
+import pytest
+
 from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     MAX_LOCAL_CLI_COMMANDS,
     OTHER_COMMAND_ID,
     slug_local_cli_command_id,
 )
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import (
+    McpProbeError,
     _tools_from_payload,
     is_package_mcp_launcher,
     is_strict_package_mcp_launcher,
@@ -25,6 +28,41 @@ from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
     probe_env,
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
+
+
+@pytest.mark.parametrize(
+    ("reason", "code"),
+    [
+        ("invalid_launch", "mcp_launch_failed"),
+        ("transport_failed", "mcp_transport_failed"),
+        ("initialize_failed", "mcp_initialize_failed"),
+        ("invalid_initialize", "mcp_initialize_failed"),
+        ("invalid_discovery", "mcp_initialize_failed"),
+        ("unsupported_protocol", "mcp_protocol_unsupported"),
+        ("discovery_rejected", "mcp_capability_rejected"),
+        ("PRIVATE_PROVIDER_OUTPUT", "discovery_failed"),
+        (None, "discovery_failed"),
+        ("", "discovery_failed"),
+    ],
+)
+def test_bound_probe_failure_is_finite_and_unbound_detection_stays_compatible(tmp_path, monkeypatch, reason, code):
+    from codex_plugin_scanner.guard.runtime import local_mcp_probe as probe_module
+
+    monkeypatch.setattr(probe_module, "run_mcp_catalog", lambda *_args, **_kwargs: McpCatalogResult(reason=reason))
+    command = f'{sys.executable} -c "pass"'
+    assert probe_stdio_mcp_server(command, cwd=tmp_path, home_dir=tmp_path) is None
+    with pytest.raises(McpProbeError) as caught:
+        probe_stdio_mcp_server(command, cwd=tmp_path, home_dir=tmp_path, report_failure=True)
+    assert caught.value.code == code
+    assert str(caught.value) == code
+
+
+def test_bound_probe_reports_missing_executable(tmp_path):
+    executable = tmp_path / "missing-mcp-server"
+    with pytest.raises(McpProbeError, match="mcp_launch_failed"):
+        probe_stdio_mcp_server(str(executable), cwd=tmp_path, home_dir=tmp_path, report_failure=True)
 
 
 def test_full_hundred_tool_catalog_keeps_every_tool_and_other_boundary() -> None:
@@ -262,10 +300,11 @@ def test_live_stdio_probe_lists_tools_from_large_payload(tmp_path: Path) -> None
     assert "Other tools" in names
 
 
-def test_legacy_output_limit_reports_failed_inventory(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(stdio_module, "MCP_PROBE_OUTPUT_LIMIT", 64_000)
+def test_legacy_output_limit_reports_failed_inventory(tmp_path: Path) -> None:
     server = tmp_path / "fat-mcp.py"
-    _write_framed_server(server, tools=_large_tools())
+    tools = _large_tools()
+    tools[0]["description"] = "x" * MCP_PROBE_OUTPUT_LIMIT
+    _write_framed_server(server, tools=tools)
     probed = probe_stdio_mcp_server(f"python3 {server}", cwd=tmp_path, home_dir=tmp_path, timeout=2.0)
     assert probed is not None
     assert probed.status == "failed"

@@ -331,7 +331,7 @@ export function ReviewDecisionCard(props: {
   }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
 
   const handleModalSubmit = useCallback(() => {
-    if (pendingAction === null) {
+    if (pendingAction === null || submitting !== null) {
       return;
     }
     if (pendingContractKey !== decisionContractKey) {
@@ -341,7 +341,7 @@ export function ReviewDecisionCard(props: {
       return;
     }
     void handleResolve(pendingAction);
-  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey]);
+  }, [decisionContractKey, handleResolve, pendingAction, pendingContractKey, submitting]);
 
   const handleModalCancel = useCallback(() => {
     setPendingAction(null);
@@ -628,6 +628,7 @@ export function ReviewDecisionCard(props: {
           onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
           onUseCooldownChange={handleUseCooldownChange}
           onSubmit={handleModalSubmit}
+          busy={submitting !== null}
           onCancel={handleModalCancel}
           submitLabel={pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel}
         />

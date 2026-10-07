@@ -4,6 +4,8 @@ on:
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
+      - tests/test_desktop_core_feed_queue.py
+      - tests/test_core_feed_publication_handoff.py
       - tests/test_desktop_core_alpha_feed_macos_signing.py
       - tests/test_stage_native_runtime_for_desktop_core.py
       - tests/test_verify_*.py
@@ -35,15 +37,8 @@ on:
       core_version:
         description: Optional exact published stable Core version to backfill
         type: string
-  workflow_run:
-    workflows: ["Publish to PyPI"]
-    types: [completed]
-    branches: [main]
 permissions:
   contents: read
-concurrency:
-  group: desktop-core-stable-feed
-  cancel-in-progress: false
 jobs:
   validate:
     name: Validate workflow
@@ -64,12 +59,15 @@ jobs:
       - name: Install Actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
       - name: Validate workflow syntax
-        run: '"$(go env GOPATH)/bin/actionlint" .github/workflows/desktop-core-alpha-feed.yml'
+        # Actionlint 1.7.11 lacks the documented queue key; retain all other diagnostics.
+        run: '"$(go env GOPATH)/bin/actionlint" -ignore ''^unexpected key "queue" for "concurrency" section\.'' .github/workflows/desktop-core-alpha-feed.yml'
   publish-macos-arm64:
     name: Publish signed macOS arm64 Core sidecar
-    if: >-
-      github.event_name != 'pull_request' &&
-      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    concurrency:
+      group: desktop-core-stable-feed
+      cancel-in-progress: false
+      queue: max
+    if: github.event_name != 'pull_request'
     needs: validate
     runs-on: macos-15
     timeout-minutes: 90
@@ -311,6 +309,13 @@ jobs:
               *) echo "Version stamping changed an unexpected Core file: $changed_path" >&2; exit 1 ;;
             esac
           done < <(git -C "$SOURCE" diff --name-only)
+          SOURCE_COMPILER="$RUNNER_TEMP/guard-command-source"
+          unzip -p "$RUNNER_TEMP/attested-macos-arm64.whl" \
+            codex_plugin_scanner/_native/guard-command-source > "$SOURCE_COMPILER"
+          chmod 0755 "$SOURCE_COMPILER"
+          test -x "$SOURCE_COMPILER"
+          python3 -I "$SOURCE/scripts/build_native_command_program.py" \
+            --compiler "$SOURCE_COMPILER"
           python3 -I scripts/release/stage_guard_cloud_review_artifacts.py \
             --source-root "$SOURCE"
           mkdir -p "$RUNNER_TEMP/native-runtime"
@@ -323,6 +328,11 @@ jobs:
           NATIVE_MANIFEST="$RUNNER_TEMP/native-runtime/runtime-manifest.json"
           test -f "$NATIVE_RUNTIME"
           test -f "$NATIVE_MANIFEST"
+          # Freeze the attested package data, not stale projections in the tag.
+          WHEELS=("$RUNNER_TEMP/core-trust-assets/hol_guard-${CORE_VERSION}-"*-macosx_*_arm64.whl)
+          test "${#WHEELS[@]}" -eq 1
+          cmp "${WHEELS[0]}" "$RUNNER_TEMP/attested-macos-arm64.whl"
+          uv pip install --python "$SOURCE/.venv/bin/python" --no-deps --force-reinstall "${WHEELS[0]}"
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$NATIVE_RUNTIME"
           codesign --verify --deep --strict --verbose=2 "$NATIVE_RUNTIME"
           python3 -I scripts/release/stage_native_runtime_for_desktop_core.py \

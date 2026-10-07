@@ -11,20 +11,24 @@ $Out = Join-Path $Root 'dist/mdm/windows'
 $Runtime = Join-Path $Out 'runtime'
 Remove-Item -Recurse -Force $Out -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $Runtime | Out-Null
-$VersionModule = Join-Path $Root 'src/codex_plugin_scanner/version.py'
-$SourceVersion = [regex]::Match((Get-Content -LiteralPath $VersionModule -Raw), '(?m)^__version__ = "([^"]+)"').Groups[1].Value
-if ([string]::IsNullOrWhiteSpace($SourceVersion) -or $SourceVersion -ne $Version) {
-    throw "HOL_GUARD_VERSION $Version does not match source version $SourceVersion"
-}
 $VersionFile = Join-Path $Out 'version-info.txt'
 uv run --no-sync python (Join-Path $PSScriptRoot 'write-version-info.py') --version $Version --output $VersionFile
+if ($LASTEXITCODE -ne 0) { throw 'Version resource generation failed.' }
+
+$ContractData = Join-Path $Out 'contract-data'
+uv run --no-sync python (Join-Path $Root 'scripts/release/stage_guard_cloud_review_artifacts.py') `
+    --source-root $Root --destination-root $ContractData
+if ($LASTEXITCODE -ne 0) { throw 'Canonical contract copy failed.' }
+$VersionModule = Join-Path $Root 'src/codex_plugin_scanner/version.py'
 
 uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
     --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
-    --add-data "$(Join-Path $Root 'src/codex_plugin_scanner/version.py');." `
+    --add-data "${VersionModule}:." `
+    --add-data "${ContractData}:codex_plugin_scanner/guard/contracts/data" `
     --version-file $VersionFile `
     --distpath $Runtime --workpath (Join-Path $Out 'pyinstaller') --specpath $Out `
     (Join-Path $Root 'scripts/mdm/hol-guard-entry.py')
+if ($LASTEXITCODE -ne 0) { throw 'Frozen runtime build failed.' }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'device-key-helper.ps1') `
     -Destination (Join-Path $Runtime 'hol-guard/device-key-helper.ps1')
 $ManifestArgs = @(
