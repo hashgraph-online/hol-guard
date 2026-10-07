@@ -213,15 +213,32 @@ def isolated_daemon_start_command(
     return (python_executable, "-I", "-c", bootstrap)
 
 
-def isolated_hook_environment(environment: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Keep only OS, user-home, locale, temp, PATH, Codex, and native-mode state."""
+def desktop_hook_proxy_context(environment: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Retain only the signed Desktop proxy selectors across hook boundaries."""
 
     source = os.environ if environment is None else environment
+    if source.get("HOL_GUARD_DESKTOP") != "1":
+        return {}
+    proxy = source.get("HOL_GUARD_DESKTOP_HOOK_PROXY", "")
+    if not proxy or "\x00" in proxy or not Path(proxy).is_absolute():
+        return {}
     return {
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": proxy,
+    }
+
+
+def isolated_hook_environment(environment: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Keep OS, user-home, locale, temp, PATH, Codex, native, and signed proxy state."""
+
+    source = os.environ if environment is None else environment
+    result = {
         name: value
         for name, value in source.items()
         if name.upper() in _HOOK_ENVIRONMENT_KEYS or name.upper().startswith("LC_")
     }
+    result.update(desktop_hook_proxy_context(source))
+    return result
 
 
 def private_hook_runtime_cwd(manifest_path: Path) -> Path:
@@ -320,14 +337,18 @@ def run_isolated_hook_process(
     is captured before process creation so startup and stream cleanup consume
     the caller's existing budget instead of receiving a new minimum timeout.
     """
-    if _HOOK_PROCESS_CONTAINMENT_FAILED.is_set() and not _retry_quarantined_hook_processes():
-        return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     if deadline_monotonic is None:
         if timeout_seconds is None:
             return BoundedHookProcessResult(None, "", False, False)
         deadline = time.monotonic() + max(0.0, timeout_seconds)
     else:
         deadline = deadline_monotonic
+    if time.monotonic() >= deadline:
+        return BoundedHookProcessResult(
+            None, "", False, True, containment_failed=_HOOK_PROCESS_CONTAINMENT_FAILED.is_set()
+        )
+    if _HOOK_PROCESS_CONTAINMENT_FAILED.is_set() and not _retry_quarantined_hook_processes():
+        return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     try:
         process, windows_job, liveness_write_fd = _spawn_hook_process(
             command,

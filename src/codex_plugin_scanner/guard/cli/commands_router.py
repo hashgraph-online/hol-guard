@@ -55,6 +55,7 @@ _COMMON_HANDLERS = {
     "uninstall": "_run_guard_uninstall_command",
     "package-shims": "_run_guard_package_shims_command",
     "contained-write": "_run_guard_contained_write_command",
+    "execute-contained-test": "_run_guard_execute_contained_test_command",
     "run": "_run_guard_run_command",
     "run-shim": "_run_guard_run_command",
     "diff": "_run_guard_diff_command",
@@ -159,6 +160,12 @@ def run_guard_command(
     home_dir = Path(home_override).expanduser().resolve() if home_override else Path.home().resolve()
     home_override_explicit = bool(home_override)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
+    # Detection runs before the consumer/protect entry points that bind the
+    # digest home, so bind at the router: every enforcement subcommand below
+    # resolves its context-digest calls against this deployment's resident.
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(guard_home)
     workspace = _resolve_guard_workspace(
         args,
         guard_home=guard_home,

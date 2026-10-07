@@ -44,4 +44,5 @@ tests/test_guard_shell_secret_read_floors.py
 tests/test_hermes_runtime_hooks.py
 tests/test_environment_secret_dump.py
 tests/test_native_command_test_support_paths.py
+tests/test_guard_mcp_fresh_approval.py
 --tb=short

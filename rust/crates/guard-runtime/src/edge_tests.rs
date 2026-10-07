@@ -2,6 +2,53 @@ use super::*;
 
 static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+#[test]
+fn execution_environment_binds_identity_without_rejecting_unrelated_hooks() {
+    let mut request = envelope(
+        "PreToolUse",
+        serde_json::json!({"tool_name":"bash", "command":"git status --short"}),
+    );
+    let original_request = request_identity(&request).unwrap().1;
+    let original_intent = execution_intent_digest(&request).unwrap();
+    request.source.execution_environment = Some(guard_contracts::GuardExecutionEnvironmentV1 {
+        path: "/usr/bin:/bin".into(),
+        environment_names: vec!["PATH".into()],
+        environment_digest: "a".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: false,
+    });
+    assert!(validate_envelope_shape(&request).is_ok());
+    assert_ne!(original_request, request_identity(&request).unwrap().1);
+    assert_ne!(original_intent, execution_intent_digest(&request).unwrap());
+    let intent = execution_intent_digest(&request).unwrap();
+    request
+        .source
+        .execution_environment
+        .as_mut()
+        .unwrap()
+        .environment_digest = "b".repeat(64);
+    assert_ne!(intent, execution_intent_digest(&request).unwrap());
+    request.source.execution_environment.as_mut().unwrap().path = "x".repeat(MAX_PATH_BYTES + 1);
+    assert!(validate_envelope_shape(&request).is_ok());
+    assert!(!request
+        .source
+        .execution_environment
+        .as_ref()
+        .unwrap()
+        .has_valid_shape());
+    // Core source paths still enforce the transport contract's strict bound.
+    request.source.home_dir = "x".repeat(MAX_PATH_BYTES + 1);
+
+    assert_eq!(
+        validate_envelope_shape(&request).unwrap_err(),
+        "native_hook_source_metadata_invalid"
+    );
+    std::fs::remove_dir_all(&request.source.guard_home).unwrap();
+}
+
 fn write_fixture_file(path: &std::path::Path, bytes: &[u8]) {
     #[cfg(windows)]
     {
@@ -57,6 +104,7 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
             home_dir: "/home/test".to_owned(),
             guard_home: guard_home.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     }
 }
@@ -64,7 +112,7 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
 fn evaluate_isolated(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
     let guard_home = std::path::PathBuf::from(&envelope.source.guard_home);
     let result = validate_envelope_shape(&envelope)
-        .and_then(|_| evaluate_validated_envelope(envelope, None));
+        .and_then(|_| evaluate_validated_envelope(envelope, None, None));
     std::fs::remove_dir_all(guard_home).expect("remove edge generation fixture");
     result
 }
@@ -95,6 +143,25 @@ fn normalizes_harness_event_and_extracts_pretool_command() {
     let encoded = serde_json::to_value(result.receipt).unwrap();
     assert!(encoded.get("raw_payload").is_none());
     assert!(encoded.get("command").is_none());
+}
+
+#[test]
+fn directory_change_allow_reaches_host_hook_receipts() {
+    for harness in ["zcode", "claude-code"] {
+        let mut request = envelope(
+            "PreToolUse",
+            serde_json::json!({
+                "tool_name": "Bash",
+                "tool_input": {"command": "cd ~/CascadeProjects/project"}
+            }),
+        );
+        request.harness = harness.to_owned();
+        let bytes = evaluate_isolated(request).unwrap();
+        let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result.result["minimum_action"], "allow", "{harness}");
+        assert_eq!(result.receipt.decision, "allow", "{harness}");
+        assert_eq!(result.receipt.authority, "rust");
+    }
 }
 
 #[test]
@@ -260,7 +327,6 @@ fn request_digest_binds_source_cwd() {
         request_identity(&changed).unwrap().1
     );
 }
-
 #[test]
 fn rejects_malformed_source_reference_before_review() {
     let error = evaluate_isolated(envelope(
@@ -365,25 +431,8 @@ fn evaluates_generic_pretool_for_supported_harness_aliases() {
     }
 }
 
-#[test]
-fn unknown_and_ambiguous_pretool_payloads_never_receive_an_allow_floor() {
-    let unknown = evaluate_isolated(envelope(
-        "PreToolUse",
-        serde_json::json!({"toolName": "future_tool", "opaque": true}),
-    ))
-    .unwrap();
-    let unknown_result: GuardHookEdgeResultV2 = serde_json::from_slice(&unknown).unwrap();
-    assert_eq!(unknown_result.result["minimum_action"], "review");
+#[path = "edge_payload_tests.rs"]
+mod payload_tests;
 
-    let ambiguous = evaluate_isolated(envelope(
-        "PreToolUse",
-        serde_json::json!({"command": "pwd", "cmd": "whoami"}),
-    ))
-    .unwrap();
-    let ambiguous_result: GuardHookEdgeResultV2 = serde_json::from_slice(&ambiguous).unwrap();
-    assert_eq!(ambiguous_result.result["minimum_action"], "block");
-    assert_eq!(
-        ambiguous_result.result["reason_code"],
-        "native_pre_tool_ambiguous_payload"
-    );
-}
+#[path = "edge_request_identity_tests.rs"]
+mod request_identity_tests;

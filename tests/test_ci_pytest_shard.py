@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -9,6 +11,7 @@ import pytest
 import yaml
 
 from scripts.ci.build_pytest_shard_plan import SCHEDULING_ONLY_NODE_IDS
+from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_shard.py"
@@ -36,6 +39,12 @@ def test_ci_shards_cover_every_test_file_once_and_deterministically() -> None:
 
 
 def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> str:
+    """Inspect the expanded steps of the requested CI job."""
+    document = yaml.safe_load(workflow)
+    if any(
+        step.get("uses", "").startswith("./.github/actions/ci-job-") for step in document["jobs"][job_name]["steps"]
+    ):
+        return yaml.safe_dump(expand_ci_job_actions(document)["jobs"][job_name], sort_keys=False, width=100_000)
     section = workflow.split(f"  {job_name}:\n", maxsplit=1)[1]
     if next_job_name is not None:
         section = section.split(f"\n  {next_job_name}:", maxsplit=1)[0]
@@ -43,10 +52,12 @@ def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> st
 
 
 def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -> None:
+    """Verify CI workflow cancels stale runs and uses precomputed affinity shards."""
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    payload = yaml.safe_load(workflow)
+    payload = expand_ci_job_actions(yaml.safe_load(workflow))
     jobs = payload["jobs"]
-    plan_action = yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text())
+    workflow_env = payload.get("env", {})
+    plan_action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))
     plan_steps = plan_action["runs"]["steps"]
     collector = next(step["run"] for step in plan_steps if "build_pytest_shard_plan.py" in step.get("run", ""))
     assert "cancel-in-progress: true" in workflow
@@ -59,7 +70,17 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert payload["env"]["CI_PYTHON_VERSION"] == "3.12.14"
     assert "test-plan" not in jobs
     assert "tests" not in jobs
-    assert "needs" not in jobs["coverage-plan"]
+    assert jobs["coverage-plan"]["needs"] == "native-command-evaluators"
+    for name in ("coverage-plan", "compatibility", "cisco-full", "cross-platform", "windows-updater"):
+        needs = jobs[name]["needs"]
+        assert "native-command-evaluators" in (needs if isinstance(needs, list) else [needs])
+        resources = [
+            step
+            for step in jobs[name]["steps"]
+            if step.get("with", {}).get("name") == "pytest-native-command-projections"
+        ]
+        assert len(resources) == 1
+        assert "if" not in resources[0]
     native_steps = jobs["native-command-evaluators"]["steps"]
     verify_index = next(
         index for index, step in enumerate(native_steps) if "verify_native_command_program.py" in step.get("run", "")
@@ -83,14 +104,22 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]
-        assert set(execution_job["needs"]) == {planner, "native-command-evaluators"}
-        assert execution_job["strategy"]["matrix"]["shard-index"] == list(range(count))
+        assert set(execution_job["needs"]) == {planner, "plan", "native-command-evaluators"}
+        # Coverage consumes the planner-emitted shard indices via a dynamic matrix
+        # rather than a static literal range, so assert the expression references
+        # the coverage-plan output and that the planner emits the expected count.
+        raw_index = execution_job["strategy"]["matrix"]["shard-index"]
+        assert "fromJSON" in str(raw_index) and "coverage-plan.outputs.shard-indices" in str(raw_index)
         for job in (plan_job, execution_job):
             setup = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/setup-ci-python")
             assert setup["with"]["python-version"] == "${{ env." + env_name + " }}"
         plan = next(step for step in plan_job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
         assert plan["with"]["python-version"] == version
-        assert plan["with"]["shard-count"] == str(count)
+        # shard-count is a `${{ env.NAME }}` reference into the workflow env block.
+        raw_count = str(plan["with"]["shard-count"])
+        env_ref = re.fullmatch(r"\$\{\{\s*env\.([A-Z0-9_]+)\s*\}\}", raw_count)
+        resolved = int(workflow_env[env_ref.group(1)]) if env_ref else int(raw_count)
+        assert resolved == count
         download = next(
             step for step in execution_job["steps"] if step.get("uses", "").startswith("actions/download-artifact@")
         )
@@ -112,16 +141,24 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         assert '"@$shard_file"' in commands
 
     coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
-    scheduling_job = _workflow_job(workflow, "scheduling-sensitive", "compatibility")
+    scheduling_job = "\n".join(step.get("run", "") for step in jobs["scheduling-sensitive"]["steps"])
     assert "--cov --cov-branch --cov-report=" in coverage_job
+    assert 'github.event_name }}" != "pull_request"' in coverage_job
+    assert "coverage_args=(--cov --cov-branch --cov-report=)" in coverage_job
+    coverage_upload = next(
+        step for step in jobs["coverage"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"
+    )
+    assert coverage_upload["if"] == "always() && github.event_name != 'pull_request'"
     assert "COVERAGE_CORE" not in coverage_job
     assert "-p pytest_coverage_core" not in coverage_job
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
     assert set(jobs["compatibility"]["strategy"]["matrix"]["python-version"]) == {"3.10", "3.11", "3.13", "3.14"}
+    selected = shlex.split(scheduling_job)
     for node in SCHEDULING_ONLY_NODE_IDS:
-        assert f"--deselect {node}" in coverage_job or f"--deselect '{node}'" in coverage_job
-        assert node in scheduling_job
-    assert coverage_job.count("--deselect ") == len(SCHEDULING_ONLY_NODE_IDS)
+        assert node in selected or node.split("[", 1)[0] in selected or node.split("::", 1)[0] in selected
+    redundant_deselections = re.findall(r"--deselect '?([^'\s]+)'?", coverage_job)
+    assert set(redundant_deselections) <= SCHEDULING_ONLY_NODE_IDS
+    assert coverage_job.count("--deselect ") == len(set(redundant_deselections))
     assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
     assert jobs["scheduling-sensitive"]["strategy"]["matrix"]["python-version"] == ["3.12.14", "3.14.7"]
     timing_setup = next(
@@ -133,9 +170,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "--cov" not in scheduling_job
 
     candidate = jobs["duration-manifest-candidate"]
-    assert candidate["needs"] == "coverage"
+    assert candidate["needs"] == ["coverage", "coverage-plan"]
     assert candidate["if"] == "needs.coverage.result == 'success'"
-    assert 'if [ "${#reports[@]}" -ne 128 ];' in "\n".join(step.get("run", "") for step in candidate["steps"])
+    assert 'if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ];' in "\n".join(
+        step.get("run", "") for step in candidate["steps"]
+    )
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
@@ -150,6 +189,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         "coverage",
         "compatibility",
         "scheduling-sensitive",
+        "native-workspace",
+        "plan",
     }
 
     cache_consumers = (
@@ -169,7 +210,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
 )
 @pytest.mark.parametrize("result", ["failure", "skipped", "cancelled"])
 def test_required_python_gate_rejects_incomplete_coverage_or_timing_proofs(failed_dependency: str, result: str) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    """Verify required Python gate rejects incomplete coverage or timing proofs."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
     step = workflow["jobs"]["ci-python-312"]["steps"][0]
     env = dict(os.environ, **dict.fromkeys(step["env"], "success"))
     env[failed_dependency] = result
@@ -199,3 +241,33 @@ def test_sonar_scope_includes_native_rust_workspace() -> None:
     assert "tests/**" in properties["sonar.cpd.exclusions"]
     assert "rust/**/tests/**" in properties["sonar.cpd.exclusions"]
     assert "rust/**/*_tests.rs" in properties["sonar.cpd.exclusions"]
+
+
+def test_native_preflight_stops_known_contract_failures_before_shard_fanout() -> None:
+    document = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    producer = document["jobs"]["native-command-evaluators"]
+    steps = producer["steps"]
+    rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    assert "rustfmt" in rust["with"]["components"].split()
+    formatting = next(i for i, step in enumerate(steps) if "cargo fmt" in step.get("run", ""))
+    compilation = next(i for i, step in enumerate(steps) if "cargo build" in step.get("run", ""))
+    preflight = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Check native contract groups before pytest fan-out"
+    )
+    uploads = [i for i, step in enumerate(steps) if step.get("uses", "").startswith("actions/upload-artifact@")]
+    assert formatting < compilation < preflight < min(uploads)
+    for index in (formatting, preflight):
+        assert "if" not in steps[index]
+        assert not steps[index].get("continue-on-error", False)
+    check = steps[preflight]
+    assert "test_native_contract_validates_every_authored_signature_without_rewriting_evidence" in check["run"]
+    assert "test_install_writes_managed_extension_that_denies_on_hook_errors" in check["run"]
+    assert "test_managed_extension_fails_safe_on_ambiguous_success_payloads" in check["run"]
+    assert "test_pi_legacy_source_contract" not in check["run"]
+    assert "--ignore" not in check["run"] and "--deselect" not in check["run"]
+    assert check["env"]["HOL_GUARD_NATIVE_REGRESSION"] == "1"
+    assert document["jobs"]["coverage-plan"]["needs"] == "native-command-evaluators"
+    assert (
+        document["jobs"]["coverage"]["strategy"]["matrix"]["shard-index"]
+        == "${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}"
+    )

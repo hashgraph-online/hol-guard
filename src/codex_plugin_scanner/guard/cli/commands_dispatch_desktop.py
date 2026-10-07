@@ -569,6 +569,39 @@ def _run_guard_desktop_command(
     output_stream: TextIO | None = None,
 ) -> int:
     del workspace, input_text
+    if getattr(args, "desktop_command", None) == "qualify-owned":
+        from .desktop_owned_qualification import run_desktop_owned_qualification
+
+        if context is None or store is None:
+            raise RuntimeError("Guard owned qualification requires local Guard context")
+        return run_desktop_owned_qualification(
+            args,
+            context=context,
+            store=store,
+            output_stream=output_stream or sys.stdout,
+        )
+    if getattr(args, "desktop_command", None) in {
+        "transition-status",
+        "transition-recover",
+        "transition-activate",
+        "transition-finalize",
+    }:
+        from .desktop_runtime_transition import run_desktop_runtime_transition
+
+        if context is None or store is None:
+            raise RuntimeError("Guard transition requires local Guard context")
+        return run_desktop_runtime_transition(
+            args,
+            context=context,
+            store=store,
+            output_stream=output_stream or sys.stdout,
+        )
+    if getattr(args, "desktop_command", None) == "qualify":
+        from .desktop_qualification import run_desktop_qualification
+
+        if context is None or store is None:
+            raise RuntimeError("Guard candidate qualification requires local Guard context")
+        return run_desktop_qualification(args, context=context, store=store, output_stream=output_stream or sys.stdout)
     if getattr(args, "desktop_command", None) == "dashboard-update":
         from ..daemon.dashboard_update_runner import main as dashboard_update_main
 

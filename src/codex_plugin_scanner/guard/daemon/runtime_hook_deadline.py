@@ -10,9 +10,10 @@ from typing import Final
 
 _MIN_BUDGET_SECONDS: Final = 0.1
 _MAX_BUDGET_SECONDS: Final = 4.0
+_MAX_EXPLICIT_BUDGET_SECONDS: Final = 10.0
 _DEFAULT_BUDGET_SECONDS: Final = 4.0
 _TRANSPORT_RESERVE_SECONDS: Final = 0.25
-_SERIALIZATION_RESERVE_SECONDS: Final = 0.15
+_SERIALIZATION_RESERVE_SECONDS: Final = 0.05
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,21 +30,29 @@ class RuntimeHookDeadline:
         remaining_seconds: object,
         *,
         monotonic: Callable[[], float] = time.monotonic,
+        maximum_budget_seconds: float = _MAX_BUDGET_SECONDS,
     ) -> RuntimeHookDeadline:
         budget = max(
             _MIN_BUDGET_SECONDS,
-            cls.clamp_budget(remaining_seconds) - _TRANSPORT_RESERVE_SECONDS,
+            cls.clamp_budget(remaining_seconds, maximum_budget_seconds=maximum_budget_seconds)
+            - _TRANSPORT_RESERVE_SECONDS,
         )
         return cls(expires_at=monotonic() + budget)
 
     @staticmethod
-    def clamp_budget(remaining_seconds: object) -> float:
+    def clamp_budget(remaining_seconds: object, *, maximum_budget_seconds: float = _MAX_BUDGET_SECONDS) -> float:
+        if (
+            isinstance(maximum_budget_seconds, bool)
+            or not math.isfinite(maximum_budget_seconds)
+            or not _MIN_BUDGET_SECONDS <= maximum_budget_seconds <= _MAX_EXPLICIT_BUDGET_SECONDS
+        ):
+            raise ValueError("maximum hook budget must be between 0.1 and 10 seconds")
         if isinstance(remaining_seconds, bool) or not isinstance(remaining_seconds, (int, float)):
-            return _DEFAULT_BUDGET_SECONDS
+            return min(_DEFAULT_BUDGET_SECONDS, maximum_budget_seconds)
         value = float(remaining_seconds)
         if not math.isfinite(value):
-            return _DEFAULT_BUDGET_SECONDS
-        return min(_MAX_BUDGET_SECONDS, max(_MIN_BUDGET_SECONDS, value))
+            return min(_DEFAULT_BUDGET_SECONDS, maximum_budget_seconds)
+        return min(maximum_budget_seconds, max(_MIN_BUDGET_SECONDS, value))
 
     def remaining(self, *, monotonic: Callable[[], float] = time.monotonic) -> float:
         return max(0.0, self.expires_at - monotonic())

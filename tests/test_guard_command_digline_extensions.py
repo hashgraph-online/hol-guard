@@ -141,7 +141,7 @@ def test_enabled_digline_writes_and_spending_reach_review(tmp_path: Path) -> Non
         assert evaluation.native_minimum_action == "review", command
 
 
-def test_enabled_digline_module_invocations_stay_blocked(tmp_path: Path) -> None:
+def test_enabled_digline_module_invocations_require_review(tmp_path: Path) -> None:
     for command, action_class, rule_id in DIGLINE_MODULE_BLOCK_CASES:
         evaluation = real_native_command_evaluation(
             command,
@@ -156,7 +156,7 @@ def test_enabled_digline_module_invocations_stay_blocked(tmp_path: Path) -> None
         }
         assert rule_id in matched, command
         assert any(item.match.action_class == action_class for item in evaluation.evaluation.matches), command
-        assert evaluation.native_minimum_action == "block", command
+        assert evaluation.native_minimum_action == "review", command
 
 
 def test_enabled_digline_declared_uncertain_forms_stay_uncertain(tmp_path: Path) -> None:

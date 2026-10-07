@@ -36,6 +36,7 @@ _GROK_TOOL_ALIASES: dict[str, str] = {
 _GROK_EVENT_NAMES: dict[str, str] = {
     "pretooluse": "PreToolUse",
     "userpromptsubmit": "UserPromptSubmit",
+    "userpromptsubmitted": "UserPromptSubmit",
     "posttooluse": "PostToolUse",
     "posttoolusefailure": "PostToolUse",
     "sessionstart": "SessionStart",
@@ -47,11 +48,10 @@ _GROK_EVENT_NAMES: dict[str, str] = {
     "permissiondenied": "PermissionDenied",
 }
 
-# Grok treats these events as observe-only. A deny JSON is ignored, so Guard
-# must not claim they are an enforcement boundary.
+# These lifecycle events cannot reject a prompt or tool action.
+# UserPromptSubmit is a gate: Grok honors decision:block, not decision:deny.
 _OBSERVE_ONLY_EVENTS = frozenset(
     {
-        "UserPromptSubmit",
         "SessionStart",
         "SessionEnd",
         "SubagentStart",
@@ -195,10 +195,12 @@ def grok_hook_response_from_guard(
     """Translate Guard policy action into Grok hook stdout JSON."""
 
     if is_grok_observe_only_event(event_name):
-        # UserPromptSubmit honors only "block". "allow" is logged as an
-        # unknown decision and shown as a hook failure. Session and
-        # subagent observe events ignore stdout; an empty object is success.
+        # Passive callbacks do not authorize a prompt or tool action.
         return {}
+    if _canonical_grok_event_name(event_name or "") == "UserPromptSubmit":
+        if recording_only or policy_action in {"allow", "warn"}:
+            return {}
+        return {"decision": "block", "reason": reason.strip() or "Blocked by HOL Guard."}
     if recording_only:
         return {"decision": "allow"}
     if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:

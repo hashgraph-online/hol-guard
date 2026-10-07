@@ -13,7 +13,7 @@ from .approval_scope_support import request_scope_contract_payload, supported_re
 from .decision_boundaries import canonical_approval_surfaces
 from .models import GuardApprovalRequest
 from .runtime.action_identity import normalize_command_identity
-from .runtime.browser_mcp_intent import _classify_operation
+from .runtime.browser_mcp_intent import classify_browser_operation
 
 MAX_APPROVAL_PAGE_LIMIT = 200
 APPROVAL_QUEUE_PREVIEW_MAX_LENGTH = 512
@@ -66,7 +66,12 @@ def _browser_launch_target_for_display(value: object) -> tuple[object, str | Non
     if len(parts) != 3 or parts[2] != "unknown":
         return value, None
     server_name, operation, _unknown = parts
-    intent = _classify_operation(operation, server_name)
+    try:
+        intent = classify_browser_operation(operation, server_name)
+    except ValueError:
+        # Display-only label repair; a native outage must not break rendering
+        # stored approvals. The decision path stays fail-closed.
+        return value, None
     if intent is None:
         return value, None
 

@@ -1,15 +1,8 @@
-"""Queue native PreToolUse review pauses on the local approval center.
-
-Rust remains the semantic authority. This helper only records a resolvable
-request so the user can allow or deny an already-decided review. Native-mode
-approval reuse is bound to Rust-owned request evidence. Commands that can
-execute mutable local code are not eligible for Python-side retry reuse.
-"""
+"""Queue native PreToolUse pauses while Rust remains the semantic authority."""
 
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import logging
 import re
@@ -17,13 +10,19 @@ import shlex
 import sqlite3
 import uuid
 from collections.abc import Mapping
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..models import GuardApprovalRequest, format_local_http_origin
+from ..native_decision_receipt import validate_native_decision_receipt
 from ..runtime.actions import normalize_harness_payload
-from .hook_native_review_binding import native_review_policy_binding
+from .hook_native_review_binding import (
+    native_review_claimed_allow,
+    native_review_matching_allow,
+    native_review_policy_binding,
+)
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
@@ -103,8 +102,6 @@ def pause_native_pre_tool_for_approval(
     claimed_saved_allow_hash: str | None = None,
     claimed_approval_request_id: str | None = None,
 ) -> dict[str, object]:
-    """Pause a native review result and attach any queued approval metadata."""
-
     try:
         native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
     except ValueError:
@@ -126,10 +123,10 @@ def pause_native_pre_tool_for_approval(
         native_receipt,
         workspace,
     )
-    if claimed_saved_allow_hash is not None and _native_review_claimed_allow(
+    if claimed_saved_allow_hash is not None and native_review_claimed_allow(
         store,
         harness=harness,
-        tool_name=tool_name,
+        artifact_id=_native_review_artifact_id(harness, tool_name),
         workspace=workspace,
         identity=identity,
         claimed_saved_allow_hash=claimed_saved_allow_hash,
@@ -143,10 +140,11 @@ def pause_native_pre_tool_for_approval(
         response = harness_json_from_native_pre_tool(harness, allowed)
         response["approval_reuse_status"] = "accepted"
         return response
-    if claim_saved_approval and _native_review_matching_allow(
+    if claim_saved_approval and native_review_matching_allow(
         store,
         harness=harness,
         tool_name=tool_name,
+        artifact_id=_native_review_artifact_id(harness, tool_name),
         launch_target=launch_target,
         workspace=workspace,
         identity=identity,
@@ -158,6 +156,41 @@ def pause_native_pre_tool_for_approval(
         response = harness_json_from_native_pre_tool(harness, allowed)
         response["approval_reuse_status"] = "accepted"
         return response
+    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+    from ..config import load_guard_config
+
+    try:
+        ask = asks_for_approval(load_guard_config(guard_home, workspace=workspace))
+    except (OSError, RuntimeError, TypeError, ValueError):
+        ask = False
+    if not ask:
+        # The agent stays on the silent block. The inbox row is a separate record.
+        queued = queue_native_pre_tool_review(
+            store,
+            harness=harness,
+            payload=payload,
+            native_result=native_result,
+            native_receipt=native_receipt,
+            workspace=workspace,
+            guard_home=guard_home,
+            home_dir=home_dir,
+        )
+        if queued is None:
+            _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
+        else:
+            _record_silent_native_review_event(store, queued)
+        blocked = dict(native_result)
+        blocked.update(
+            decision="deny",
+            minimum_action="block",
+            policy_action="block",
+            reason=safe_alternative_reason(str(native_result.get("reason") or "HOL Guard blocked this action.")),
+        )
+        response = harness_json_from_native_pre_tool(harness, blocked)
+        response["prompted"] = False
+        response["blocked_request_mode"] = "safe-alternative"
+        return response
+
     queued = queue_native_pre_tool_review(
         store,
         harness=harness,
@@ -187,6 +220,35 @@ def pause_native_pre_tool_for_approval(
     return response
 
 
+def _record_silent_native_review_event(store: object, queued: Mapping[str, object]) -> None:
+    """Write the local creation event for a silent inbox row. Do not mark a prompt as shown."""
+
+    add_event = getattr(store, "add_event", None)
+    if not callable(add_event):
+        return
+    created_at = queued.get("created_at")
+    timestamp = created_at if isinstance(created_at, str) and created_at else datetime.now(tz=timezone.utc).isoformat()
+    try:
+        add_event(
+            "approval.created",
+            {
+                "request_id": queued.get("request_id"),
+                "harness": queued.get("harness"),
+                "artifact_id": queued.get("artifact_id"),
+                "artifact_name": queued.get("artifact_name"),
+                "artifact_type": queued.get("artifact_type"),
+                "policy_action": queued.get("policy_action"),
+                "recommended_scope": queued.get("recommended_scope"),
+                "source_scope": queued.get("source_scope"),
+                "workspace": queued.get("workspace"),
+                "publisher": queued.get("publisher"),
+            },
+            timestamp,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        _LOGGER.warning("Silent review inbox row saved without approval.created (%s)", type(error).__name__)
+
+
 def queue_native_pre_tool_review(
     store: object,
     *,
@@ -198,8 +260,6 @@ def queue_native_pre_tool_review(
     guard_home: Path,
     home_dir: Path | None = None,
 ) -> dict[str, object] | None:
-    """Persist one native review as an approval-center request."""
-
     try:
         native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
     except ValueError:
@@ -220,6 +280,7 @@ def queue_native_pre_tool_review(
         action_envelope = _native_review_action_envelope(
             harness=harness,
             payload=payload,
+            native_receipt=native_receipt,
             workspace=workspace,
             home_dir=home_dir,
         )
@@ -272,12 +333,7 @@ def record_claude_permission_notice_for_native_review(
     workspace: Path | None,
     guard_home: Path,
 ) -> None:
-    """Persist the Claude permission-prompt notice for a queued native review.
-
-    Presentation only: this records the same session notice the CLI review path
-    writes so a later ``permission_prompt`` Notification can route Claude to the
-    HOL Guard approval question.
-    """
+    """Persist the Claude permission-prompt notice for a queued native review."""
     from ..cli.commands_support_hook_state import _record_claude_permission_notice
     from ..models import GuardArtifact
 
@@ -306,15 +362,7 @@ def record_claude_permission_notice_for_native_review(
 
 
 def _command_reuse_is_payload_bound(command: str) -> bool:
-    """Allow retry reuse only when mutable local code cannot hide behind argv.
-
-    This is intentionally narrower than command classification. It does not
-    decide whether a command is safe; Rust already made that decision. It only
-    decides whether the Rust request digest plus exact command shape is enough
-    identity for a one-use retry. Script/interpreter/package invocations require
-    native source-bound identity and are not reusable through this compatibility
-    store.
-    """
+    """Allow retry reuse only when mutable local code cannot hide behind argv."""
 
     if any(marker in command for marker in ("`", "$(", "${", "\n", "\r")):
         return False
@@ -437,116 +485,31 @@ def _native_review_binding(
     return f"{identity}:{domain}"
 
 
-def _native_review_matching_allow(
-    store: object,
-    *,
-    harness: str,
-    tool_name: str,
-    launch_target: str,
-    workspace: Path | None,
-    identity: str | None,
-) -> bool:
-    consume = getattr(store, "consume_native_review_approval", None)
-    if not callable(consume) or identity is None or not launch_target:
-        return False
-    try:
-        return (
-            consume(
-                harness=harness,
-                artifact_id=_native_review_artifact_id(harness, tool_name),
-                artifact_name=tool_name,
-                artifact_hash=identity,
-                launch_target=launch_target,
-                workspace=str(workspace) if workspace is not None else None,
-                now=datetime.now(tz=timezone.utc).isoformat(),
-            )
-            is True
-        )
-    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-        return False
-
-
-def _native_review_claimed_allow(
-    store: object,
-    *,
-    harness: str,
-    tool_name: str,
-    workspace: Path | None,
-    identity: str | None,
-    claimed_saved_allow_hash: str,
-    claimed_approval_request_id: str | None,
-    claim_saved_approval: bool,
-) -> bool:
-    """Settle a review from a MAC'd once-approval bound to this exact request.
-
-    The claimed hash must equal the freshly recomputed ``native-review-v4``
-    binding, so the approval can only authorize the identical request,
-    decision, and policy domain. The once-approval row itself is verified for
-    integrity, expiry, and the claimed request id before it may settle.
-    ``claim_saved_approval=False`` revalidates without spending the one-shot.
-    """
-
-    if identity is None or not hmac.compare_digest(identity, claimed_saved_allow_hash):
-        return False
-    peek = getattr(store, "peek_local_once_approval", None)
-    if not callable(peek):
-        return False
-    try:
-        decision = peek(
-            harness=harness,
-            artifact_id=_native_review_artifact_id(harness, tool_name),
-            artifact_hash=identity,
-            workspace=str(workspace) if workspace is not None else None,
-            publisher=None,
-            now=datetime.now(tz=timezone.utc).isoformat(),
-        )
-    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-        return False
-    if not isinstance(decision, Mapping) or decision.get("action") != "allow":
-        return False
-    if claimed_approval_request_id is not None and decision.get("request_id") != claimed_approval_request_id:
-        return False
-    if not claim_saved_approval:
-        return True
-    approval_id = decision.get("approval_id")
-    claim = getattr(store, "claim_local_once_approval", None)
-    if not isinstance(approval_id, str) or not callable(claim):
-        return False
-    try:
-        return (
-            claim(
-                approval_id,
-                claimed_at=datetime.now(tz=timezone.utc).isoformat(),
-                expected_decision=decision,
-            )
-            is True
-        )
-    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-        return False
-
-
 def _native_review_action_envelope(
     *,
     harness: str,
     payload: Mapping[str, object],
+    native_receipt: Mapping[str, object] | None = None,
     workspace: Path | None,
     home_dir: Path | None,
 ) -> dict[str, object] | None:
-    """Store the canonical redacted envelope live revalidation compares.
-
-    The envelope must come from the shared harness normalizer: the live
-    decision endpoint recomputes ``stable_action_hash`` from the hook input and
-    rejects approvals whose stored envelope was built by a different mapping.
-    """
+    """Store the canonical redacted envelope used by live revalidation."""
 
     try:
-        return (
+        envelope = (
             normalize_harness_payload(harness, "PreToolUse", dict(payload), workspace=workspace, home_dir=home_dir)
             .with_pre_execution_result("review")
             .to_dict()
         )
     except ValueError:
         return None
+    validated = validate_native_decision_receipt(native_receipt)
+    if validated is None or "origin_authentication" not in validated:
+        return envelope
+    # Keep only the validated aggregate receipt. Never carry raw hook input
+    # through the presentation envelope, and do not alias nested mappings.
+    envelope["native_origin_receipt"] = deepcopy(validated)
+    return envelope
 
 
 def _native_review_approval_center_url(store: object) -> str:

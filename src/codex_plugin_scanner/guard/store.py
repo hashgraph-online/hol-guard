@@ -27,6 +27,7 @@ from .store_connection_schema import StoreConnectionSchemaMixin
 from .store_continuation import StoreContinuationMixin
 from .store_custom_extension_continuity import StoreCustomExtensionContinuityMixin
 from .store_event_receipts import StoreEventReceiptsMixin
+from .store_exact_cloud_local_once import StoreExactCloudLocalOnceMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
 from .store_managed_controls_status import StoreManagedControlsStatusMixin
 from .store_local_cli import StoreLocalCliMixin
@@ -36,8 +37,10 @@ from .store_exact_cloud_review import StoreExactCloudReviewMixin
 from .store_inventory import StoreInventoryMixin
 from .store_policy_document import StorePolicyDocumentMixin
 from .store_review_event_outbox import StoreReviewEventOutboxMixin
+from .store_review_event_sequence_recovery import StoreReviewEventSequenceRecoveryMixin
 from .store_review_policy_memory import StoreReviewPolicyMemoryMixin
 from .store_native_decision_receipts import StoreNativeDecisionReceiptsMixin
+from .store_native_workspace_review import StoreNativeWorkspaceReviewMixin
 from .store_oauth import StoreOAuthConnectMixin
 from .store_portable_project_memory import StorePortableProjectMemoryMixin
 from .store_policy import StorePolicyMixin
@@ -89,8 +92,11 @@ class GuardStore(
     StoreApprovalsMixin,
     StoreExactCloudReviewMixin,
     StoreReviewEventOutboxMixin,
+    StoreExactCloudLocalOnceMixin,
+    StoreReviewEventSequenceRecoveryMixin,
     StoreEventReceiptsMixin,
     StoreNativeDecisionReceiptsMixin,
+    StoreNativeWorkspaceReviewMixin,
     StoreOAuthConnectMixin,
     StoreSessionsMixin,
     StoreEvidenceMixin,

@@ -43,6 +43,7 @@ from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeveri
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity_maintenance import CommandActivityMaintenanceResult
 from codex_plugin_scanner.guard.store_command_activity_rollups import COMMAND_ACTIVITY_ROLLUP_DIMENSIONS
+from tests.coverage_ci import under_coverage_scale
 
 _NOW = datetime(2026, 7, 18, 20, 0, tzinfo=timezone.utc)
 
@@ -310,8 +311,10 @@ def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_
         analytics = store.command_activity_analytics(analytics_query, as_of=analytics_as_of)
         aggregate_timings.append(time.perf_counter() - started)
         assert analytics["commands_checked"] == 100_000
-    assert max(aggregate_timings) < 0.05, (
-        f"command activity aggregate took {max(aggregate_timings) * 1000:.1f}ms, expected < 50ms"
+    aggregate_budget_seconds = 0.05 * under_coverage_scale(4.0)
+    assert max(aggregate_timings) < aggregate_budget_seconds, (
+        f"command activity aggregate took {max(aggregate_timings) * 1000:.1f}ms, "
+        f"expected < {aggregate_budget_seconds * 1000:.0f}ms"
     )
     with sqlite3.connect(store.path) as connection:
         assert connection.execute("select sum(total) from command_activity_daily_totals").fetchone() == (100_000,)
