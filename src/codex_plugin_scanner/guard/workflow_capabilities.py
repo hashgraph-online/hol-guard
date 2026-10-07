@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Final, cast
 
+from .workflow_capability_serialization import validate_serializable_contract
+
 WORKFLOW_CAPABILITY_SCHEMA: Final = "hol-guard.workflow-capability.v1"
 WORKFLOW_CAPABILITY_ENVELOPE_SCHEMA: Final = "hol-guard.workflow-capability-envelope.v1"
 WORKFLOW_CAPABILITY_RECEIPT_SCHEMA: Final = "hol-guard.workflow-capability-receipt.v1"
@@ -426,6 +428,7 @@ def workflow_capability_claim_sha256(signed: SignedWorkflowCapability) -> str:
 def _validated_claim(claim: WorkflowCapabilityClaim) -> WorkflowCapabilityClaim:
     if type(claim) is not WorkflowCapabilityClaim:
         raise WorkflowCapabilityError("invalid_capability_claim")
+    validate_serializable_contract(claim)
     payload = json.loads(json.dumps(asdict(claim), sort_keys=True, separators=(",", ":")))
     return WorkflowCapabilityClaim.from_dict(payload)
 
@@ -433,6 +436,7 @@ def _validated_claim(claim: WorkflowCapabilityClaim) -> WorkflowCapabilityClaim:
 def _validated_receipt(receipt: WorkflowCapabilityReceipt) -> WorkflowCapabilityReceipt:
     if type(receipt) is not WorkflowCapabilityReceipt:
         raise WorkflowCapabilityError("invalid_capability_receipt")
+    validate_serializable_contract(receipt)
     payload = json.loads(json.dumps(asdict(receipt), sort_keys=True, separators=(",", ":")))
     return WorkflowCapabilityReceipt.from_dict(payload)
 

@@ -54,11 +54,20 @@ pub(super) fn evaluate_with_bundle(
         });
         let policy_target =
             target_for_resolved_npm_policy_match(target, resolved_npm_version.as_deref());
-        let matched_rule = matching_policy_rule(bundle_response, &policy_target);
+        let matched_rule = matching_policy_rule(
+            bundle_response,
+            &policy_target,
+            &artifact.harness,
+            package_match
+                .as_ref()
+                .and_then(|package| package.get("normalizedSeverity"))
+                .and_then(Value::as_str),
+            now_timestamp,
+        );
         if let Some(rule) = matched_rule {
             let decision =
                 normalize_bundle_action(rule.get("action").and_then(Value::as_str).unwrap_or(""));
-            let policy = policy_package_result(&policy_target, &decision, &rule);
+            let policy = policy_package_result(&policy_target, &decision, rule);
             let package_result =
                 bind_resolved_npm_policy_result(policy, resolved_npm_version.as_deref());
             packages.push(package_result);

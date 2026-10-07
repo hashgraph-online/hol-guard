@@ -117,6 +117,18 @@ pub(super) fn bundle_package_result(
     );
     reason.insert("severity".to_string(), Value::String("medium".into()));
     let mut pkg = package_target_result(target, decision, vec![reason], None);
+    for (key, src) in [
+        ("sourceIdentity", "source_identity"),
+        ("sourceRepository", "source_repository"),
+        ("sourceRevisionKind", "source_revision_kind"),
+    ] {
+        pkg.insert(
+            key.to_string(),
+            optional_string(target.get(src))
+                .map(Value::String)
+                .unwrap_or(Value::Null),
+        );
+    }
     if let Some(fix) = optional_string_map(package_match, "recommendedFixVersion") {
         if !fix.is_empty() {
             pkg.insert("recommendedFixVersion".to_string(), Value::String(fix));

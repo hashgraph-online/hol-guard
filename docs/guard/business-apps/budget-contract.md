@@ -10,6 +10,12 @@ refuse. Absence preserves the earlier policy wire shape.
 Per-request minimum volume selectors are forbidden in cumulative budgets, so
 chunking cannot make individual actions fall outside a declared limit.
 
+Complete GuardPolicy documents carry these declarations in `spec.budgets`.
+The native compiler retains them in the signed binding and source digest;
+changing an allowance changes the reviewed source identity. YAML formatting
+preserves declarations. The legacy local-row compiler refuses budget-bearing
+documents rather than dropping limits, including when their rules are disabled.
+
 This source contract does not implement cumulative enforcement. A native
 business policy containing budgets blocks business actions and refuses review
 production with `native_business_budget_executor_unavailable` until durable

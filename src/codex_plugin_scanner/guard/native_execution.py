@@ -1,14 +1,15 @@
 """Resident bridge for contained-execution + shim-admin + MCP-probe ops (RTM-020).
 
-Mirrors :mod:`native_package_authority` exactly: each ``*_native`` helper
-sends one ``_resident_request`` envelope and returns the decoded payload dict,
-or ``None`` on transport failure / missing feature. Callers fall back to the
-Python body when ``None`` is returned.
+Each helper sends a native request and decodes its response. A missing or
+malformed response returns ``None``; enforcement callers must treat that as
+unavailable authority, not permission to substitute Python decisions.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import threading
 import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -36,6 +37,30 @@ _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _CONTAINED_EXECUTION_FEATURE = "contained-execution-v1"
 _SHIM_ADMIN_FEATURE = "shim-admin-v1"
 _MCP_STDIO_PROBE_FEATURE = "mcp-stdio-probe-v1"
+_MCP_STDIO_SESSION_FEATURE = "mcp-stdio-session-v1"
+_MCP_STDIO_SESSION_OPEN_SCHEMA = "guard-mcp-stdio-session-open-request.v1"
+_MCP_STDIO_SESSION_IO_SCHEMA = "guard-mcp-stdio-session-io-request.v1"
+_MCP_STDIO_SESSION_RESULT_SCHEMA = "guard-mcp-stdio-session-result.v1"
+
+
+def _native_session_feature_available() -> bool:
+    status = native_runtime_status()
+    if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
+        return False
+    features = set(status.capabilities.features)
+    return _RESIDENT_PROTOCOL_FEATURE in features and _MCP_STDIO_SESSION_FEATURE in features
+
+
+# Terminal/vocab statuses each session op may legitimately return. A reported
+# "error"/"exited"/"eof" is a terminal native answer — the caller must see it
+# rather than get None and silently fall back to a Python subprocess.
+_MCP_SESSION_ACCEPTED_STATUS = {
+    "mcp_stdio_session_open": frozenset({"opened", "exited", "error"}),
+    "mcp_stdio_session_send": frozenset({"sent", "error"}),
+    "mcp_stdio_session_recv": frozenset({"event", "running", "timeout", "eof", "exited", "error"}),
+    "mcp_stdio_session_close": frozenset({"closed", "error"}),
+    "mcp_stdio_session_cancel": frozenset({"cancelled", "error"}),
+}
 _PROMPT_ANALYZE_FEATURE = "prompt-analyze-v1"
 
 
@@ -50,6 +75,7 @@ def _resident_request(
     guard_home: Path,
     timeout_seconds: float,
     required_feature: str,
+    response_schema: str | None = None,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops."""
     status = native_runtime_status()
@@ -59,7 +85,11 @@ def _resident_request(
     if _RESIDENT_PROTOCOL_FEATURE not in features or required_feature not in features:
         return None
 
-    envelope = {"operation": operation, "request": request}
+    envelope = {
+        "operation": operation,
+        "request": request,
+        "deadline_budget_ms": max(1, int(timeout_seconds * 1000)),
+    }
     try:
         payload = json.dumps(envelope).encode("utf-8")
     except (TypeError, ValueError):
@@ -84,13 +114,31 @@ def _resident_request(
         return None
     if not isinstance(decoded, dict):
         return None
-    if operation == "prompt_analyze":
-        # This versioned Rust result has no status field. Requiring status=ok
-        # discarded every successful native reply and hid the failed cutover.
-        if decoded.get("schema") != "guard-prompt-analyze-result.v1" or set(decoded) != {"schema", "result"}:
-            return None
-    elif decoded.get("status") != "ok":
+    if response_schema is not None and decoded.get("schema") != response_schema:
+        native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
         return None
+    result_schema = {
+        "prompt_analyze": "guard-prompt-analyze-result.v1",
+        "mcp_stdio_probe": "guard-mcp-stdio-probe-result.v1",
+    }.get(operation)
+    if result_schema is not None:
+        # These versioned Rust replies have no status field. Do not discard
+        # valid native results or reinterpret them through a Python fallback.
+        if decoded.get("schema") != result_schema or set(decoded) != {"schema", "result"}:
+            return None
+    else:
+        # Session/terminal ops report success under their own status, not
+        # "ok". Requiring "ok" dropped every successful mcp_stdio_session_open
+        # ("opened") / recv ("event") / close ("closed") and forced a silent
+        # Python fallback the resident should own.
+        accepted = _MCP_SESSION_ACCEPTED_STATUS.get(operation)
+        if operation == "policy_decision_lookup":
+            accepted = frozenset({"ok", "error"})
+        if accepted is not None:
+            if decoded.get("status") not in accepted:
+                return None
+        elif decoded.get("status") != "ok":
+            return None
     native_record_resident_success(status.identity.sha256, guard_home)
     return decoded
 
@@ -373,9 +421,9 @@ def mcp_stdio_probe_native(
     home_dir: Path | None = None,
     extra_env: Mapping[str, str] | None = None,
     timeout_seconds: float = 6.0,
-    report_failure: bool = True,
     connection_identity_hash: str | None = None,
     guard_home: Path,
+    cancel: threading.Event | None = None,
 ) -> dict[str, object] | None:
     request: dict[str, object] = {
         "schema": "guard-mcp-stdio-probe-request.v1",
@@ -385,17 +433,44 @@ def mcp_stdio_probe_native(
         "home_dir": str(home_dir) if home_dir else None,
         "extra_env": dict(extra_env) if extra_env else None,
         "timeout_seconds": timeout_seconds,
-        "report_failure": report_failure,
         "connection_identity_hash": connection_identity_hash,
         "guard_home": str(guard_home),
     }
-    decoded = _resident_request(
-        operation="mcp_stdio_probe",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=timeout_seconds + 2.0,
-        required_feature=_MCP_STDIO_PROBE_FEATURE,
-    )
+    done = threading.Event()
+    watcher: threading.Thread | None = None
+    if cancel is not None:
+
+        def deliver_cancellation() -> None:
+            while not done.is_set():
+                if not cancel.wait(0.05):
+                    continue
+                response = _resident_request(
+                    operation="mcp_stdio_cancel",
+                    request={"request_id": request["request_id"]},
+                    guard_home=guard_home,
+                    timeout_seconds=1.0,
+                    required_feature=_MCP_STDIO_PROBE_FEATURE,
+                )
+                if response is None or response.get("cancelled") is True:
+                    return
+                if done.wait(0.05):
+                    return
+
+        watcher = threading.Thread(target=deliver_cancellation, daemon=True)
+        watcher.start()
+    try:
+        decoded = _resident_request(
+            operation="mcp_stdio_probe",
+            request=request,
+            guard_home=guard_home,
+            timeout_seconds=timeout_seconds + 2.0,
+            required_feature=_MCP_STDIO_PROBE_FEATURE,
+            response_schema="guard-mcp-stdio-probe-result.v1",
+        )
+    finally:
+        done.set()
+        if watcher is not None:
+            watcher.join(1.1)
     if decoded is None:
         return None
     result = decoded.get("result")
@@ -676,3 +751,102 @@ def prompt_analyze_native(
     if decoded is None:
         return None
     return decoded.get("result")
+
+
+def mcp_stdio_session_open_native(
+    argv: Sequence[str],
+    *,
+    session_id: str,
+    home_dir: Path | None = None,
+    cwd: Path | None = None,
+    extra_env: Mapping[str, str] | None = None,
+    guard_home: Path,
+    timeout_seconds: float = 10.0,
+) -> dict[str, object] | None:
+    request: dict[str, object] = {
+        "schema": _MCP_STDIO_SESSION_OPEN_SCHEMA,
+        "session_id": session_id,
+        "owner_pid": os.getpid(),
+        "argv": list(argv),
+        "extra_env": dict(extra_env) if extra_env else None,
+        "home_dir": str(home_dir) if home_dir else None,
+        "cwd": str(cwd) if cwd else None,
+    }
+    decoded = _resident_request(
+        operation="mcp_stdio_session_open",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=timeout_seconds,
+        required_feature=_MCP_STDIO_SESSION_FEATURE,
+        response_schema=_MCP_STDIO_SESSION_RESULT_SCHEMA,
+    )
+    if decoded is None:
+        return None
+    return decoded
+
+
+def mcp_stdio_session_send_native(
+    session_id: str,
+    message: Mapping[str, object],
+    *,
+    guard_home: Path,
+    timeout_seconds: float = 10.0,
+) -> dict[str, object] | None:
+    request: dict[str, object] = {
+        "schema": _MCP_STDIO_SESSION_IO_SCHEMA,
+        "session_id": session_id,
+        "message": dict(message),
+    }
+    return _resident_request(
+        operation="mcp_stdio_session_send",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=timeout_seconds,
+        required_feature=_MCP_STDIO_SESSION_FEATURE,
+        response_schema=_MCP_STDIO_SESSION_RESULT_SCHEMA,
+    )
+
+
+def mcp_stdio_session_recv_native(
+    session_id: str,
+    *,
+    guard_home: Path,
+    timeout_seconds: float = 30.0,
+    await_request_id: object = None,
+    poll_only: bool = False,
+) -> dict[str, object] | None:
+    request: dict[str, object] = {
+        "schema": _MCP_STDIO_SESSION_IO_SCHEMA,
+        "session_id": session_id,
+        "timeout_ms": int(timeout_seconds * 1000),
+        "await_request_id": await_request_id,
+        "poll_only": poll_only,
+    }
+    return _resident_request(
+        operation="mcp_stdio_session_recv",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=timeout_seconds if poll_only else timeout_seconds + 2.0,
+        required_feature=_MCP_STDIO_SESSION_FEATURE,
+        response_schema=_MCP_STDIO_SESSION_RESULT_SCHEMA,
+    )
+
+
+def mcp_stdio_session_close_native(
+    session_id: str,
+    *,
+    guard_home: Path,
+    timeout_seconds: float = 5.0,
+) -> dict[str, object] | None:
+    request: dict[str, object] = {
+        "schema": _MCP_STDIO_SESSION_IO_SCHEMA,
+        "session_id": session_id,
+    }
+    return _resident_request(
+        operation="mcp_stdio_session_close",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=timeout_seconds,
+        required_feature=_MCP_STDIO_SESSION_FEATURE,
+        response_schema=_MCP_STDIO_SESSION_RESULT_SCHEMA,
+    )

@@ -2,6 +2,68 @@ use super::*;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
+#[test]
+fn independently_opened_stores_share_durable_usage_after_reopen() {
+    let fixture = Fixture::new("business-budget-independent-stores");
+    let mut budget = declaration("account");
+    budget["maximumActions"] = json!(1);
+    install(&fixture, json!([budget]));
+    let identity = fixture.store.current_snapshot().unwrap().runtime_identity;
+    let left_store = PolicySnapshotStore::new(&fixture.root, &identity).unwrap();
+    let right_store = PolicySnapshotStore::new(&fixture.root, &identity).unwrap();
+    let now = time(&fixture);
+    let barrier = std::sync::Barrier::new(2);
+    let results = std::thread::scope(|scope| {
+        let run = |store: &PolicySnapshotStore, id: &str| {
+            barrier.wait();
+            reserve_at(store, id, &prepared(), &actor(), now)
+        };
+        let left_ref = &left_store;
+        let right_ref = &right_store;
+        let left = scope.spawn(move || run(left_ref, "budget-independent-left"));
+        let right = scope.spawn(move || run(right_ref, "budget-independent-right"));
+        [left.join().unwrap(), right.join().unwrap()]
+    });
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    for error in results.iter().filter_map(|result| result.as_ref().err()) {
+        assert!(matches!(
+            error.as_str(),
+            "native_business_budget_exceeded" | "native_approval_authority_busy"
+        ));
+    }
+    // A busy race refusal alone does not prove an already-open store sees usage.
+    for (store, id) in [(&left_store, "left"), (&right_store, "right")] {
+        assert_eq!(
+            reserve_at(
+                store,
+                &format!("budget-open-retry-{id}"),
+                &prepared(),
+                &actor(),
+                now + 1
+            )
+            .err()
+            .unwrap(),
+            "native_business_budget_exceeded"
+        );
+    }
+    drop(left_store);
+    drop(right_store);
+    let reopened = PolicySnapshotStore::new(&fixture.root, &identity).unwrap();
+    assert_eq!(
+        reserve_at(
+            &reopened,
+            "budget-independent-reopened",
+            &prepared(),
+            &actor(),
+            now + 1,
+        )
+        .err()
+        .unwrap(),
+        "native_business_budget_exceeded"
+    );
+    assert_eq!(load(&fixture.root).unwrap().0.events.len(), 1);
+}
+
 struct Children(Vec<Child>);
 impl Drop for Children {
     fn drop(&mut self) {
@@ -87,8 +149,8 @@ fn independent_processes_share_one_allowance() {
                 .spawn()
                 .unwrap(),
         );
-    }
-    for id in ["left", "right"] {
+        // Store initialization also acquires authority locks. Finish opening
+        // each handle before racing reservations, the operation under test.
         wait_for(&fixture.root.join(format!("ready-{id}")));
     }
     std::fs::write(fixture.root.join("start-process-reservations"), b"start").unwrap();

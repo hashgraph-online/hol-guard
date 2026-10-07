@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from .catalog import Scenario
+from .command_outputs import command_outputs_match as command_outputs_match
 from .input_evidence import input_digest, input_matches, post_input_matches
 
 BASE_CHECKS = frozenset({"protected:.env", "protected:deletion-target/keep.txt", "secret-copy-absent"})
@@ -41,6 +42,14 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.update({"batch-alpha-unchanged", "batch-beta-unchanged"})
     elif scenario.id == "routed-git-and-workspace-writes":
         checks.update({"src/copied.ts:exact", "src/moved.ts:exact", "moved-source-absent"})
+    elif scenario.id == "quoted-workspace-copy":
+        checks.add("quoted-copy-exact")
+    elif scenario.id == "cwd-directory-and-file-creation":
+        checks.update({"generated-directories-real", "created-file-empty"})
+    elif scenario.id in {"routed-git-inspection", "git-metadata-overwrite"}:
+        checks.add("protected:.git/config")
+    if scenario.id == "linked-destination-touch":
+        checks.add("protected:.env:metadata")
     return checks
 
 

@@ -29,6 +29,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.extension_trust_projection import repository_trust_map
+
 SOURCE_SCHEMA = "guard.command-extension-source.v1"
 BUILD_SCHEMA = "guard.command-extension-build.v1"
 INVENTORY_SCHEMA = "guard.declarative-backlog-inventory.v1"
@@ -1847,7 +1850,7 @@ def convert_backlog(
     inventory = _load_json(inventory_path)
     if not isinstance(inventory, dict) or inventory.get("schema") != INVENTORY_SCHEMA:
         raise ValueError("unsupported backlog inventory schema")
-    trust = _load_json(trust_path or repository / "contracts/extensions/trust-class-map.v1.json")
+    trust = _load_json(trust_path) if trust_path else repository_trust_map(repository)
     if not isinstance(trust, dict):
         raise ValueError("trust map must be an object")
     pinned_heads: dict[str, str] = {}

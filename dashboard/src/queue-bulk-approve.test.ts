@@ -1,4 +1,7 @@
 import type { GuardActionEnvelope, GuardApprovalRequest } from "./guard-types";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { isBulkApprovableGroup, isReadOnlyQueueGroup, type QueueGroup } from "./queue-state";
 import {
   buildBulkApproveConsequenceCopy,
   summarizeBulkApproveSelection,
@@ -8,6 +11,8 @@ import {
   buildBulkGateCredentials,
   isBulkApproveGateReady,
   validateBulkApproveCredentials,
+  QueueBulkGatePrompt,
+  QueueBulkStickyBar,
 } from "./queue-bulk-approve-flow";
 
 function assert(condition: boolean, message: string): void {
@@ -67,6 +72,42 @@ const secondRequest: GuardApprovalRequest = {
   request_id: "req-2",
   action_envelope_json: { ...fileReadEnvelope, target_paths: ["README.md"] },
 };
+
+const issueWriteGroup: QueueGroup = {
+  primary: {
+    ...BASE_REQUEST,
+    harness: "opencode",
+    artifact_name: "gitea:issue_write",
+    artifact_type: "mcp",
+    action_envelope_json: {
+      ...fileReadEnvelope,
+      action_type: "mcp_tool",
+      tool_name: "issue_write",
+      mcp_tool: "issue_write",
+      target_paths: [],
+    },
+  },
+  duplicateCount: 0,
+  duplicateIds: [],
+};
+assert(isBulkApprovableGroup(issueWriteGroup), "issue_write retains existing one-shot bulk eligibility");
+assert(!isReadOnlyQueueGroup(issueWriteGroup), "issue_write is not a file read");
+for (const count of [1, 2]) {
+  const prompt = renderToStaticMarkup(createElement(QueueBulkGatePrompt, {
+    visible: true, eligibleActionCount: count, settingsHref: "/settings",
+  }));
+  const bar = renderToStaticMarkup(createElement(QueueBulkStickyBar, {
+    visible: true, selectedGroupCount: 1, selectedActionCount: count,
+    riskTier: "elevated", riskTone: "amber", gateReady: false,
+    onStartReview: () => {}, onClearSelection: () => {},
+  }));
+  assert(prompt.includes(`Approve ${count} action${count === 1 ? "" : "s"} at once`),
+    "non-read bulk eligibility renders an accurate action count");
+  assert(!/\breads?\b|read-only/.test(prompt + bar), "non-read approval is never advertised as a read");
+  assert(prompt.includes("Enable Ask for proof with a configured approval password"),
+    "gate copy explains both enabling proof and configuring a password");
+  assert(prompt.includes("never remembers future actions"), "one-shot semantics remain visible");
+}
 
 const summary = summarizeBulkApproveSelection([
   { primary: BASE_REQUEST, duplicateCount: 0 },

@@ -86,6 +86,21 @@ def _daemon(*, prepared: dict[str, object] | None) -> SimpleNamespace:
     )
 
 
+def test_unmanaged_readiness_does_not_prepare_native_policy(monkeypatch) -> None:
+    monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
+    server = _daemon(prepared=None)
+    server.store = SimpleNamespace(get_managed_install=lambda _harness: {"active": False})
+    handler = _FakeHandler(server)
+    handler._handle_hook_readiness({}, "", default_harness="grok")
+    assert handler.responses == [
+        (
+            {"ready": True, "native_required": False, "workspace_acknowledged": False, "worker_ready": True},
+            200,
+        )
+    ]
+    assert server.hook_process_runner.calls == []
+
+
 def test_workspace_readiness_waits_for_delayed_native_ack(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
     workspace = tmp_path / "workspace"
@@ -144,7 +159,7 @@ def test_pi_source_prepares_workspace_before_timed_tool_review(tmp_path: Path) -
     session_start = source.index('pi.on("session_start", async (_event, ctx) => {')
     tool_call = source.index('pi.on("tool_call", async (event, ctx) => {')
     readiness_request = source.index("/v1/hooks/omp/readiness")
-    tool_readiness = source.index("ensureGuardWorkspaceReady(snapshot.cwd, false)", tool_call)
+    tool_readiness = source.index("toolWorkspaceReadiness(snapshot.cwd, hookDeadlineAt)", tool_call)
     semantic_review = source.index("const response = await runGuard(", tool_call)
 
     assert readiness_request < agent_start
@@ -254,7 +269,8 @@ console.log(JSON.stringify({
     assert output["afterRestartTool"]["ready"] is True
     assert output["contextChangedSetup"]["ready"] is True
     assert output["contextChangedTool"]["ready"] is True
-    assert output["inFlightTool"]["ready"] is True
+    assert output["inFlightTool"]["ready"] is False
+    assert output["inFlightTool"]["reasonCode"] == "daemon_changed_during_workspace_setup"
     assert output["readinessCalls"] == 5
 
 
@@ -271,8 +287,14 @@ console.log(JSON.stringify({
     ],
 )
 def test_pi_readiness_recovers_missing_endpoint_once_within_setup_budget(
-    tmp_path: Path, statuses: list[int], recovery_delay: int, recovery_success: bool,
-    ready: bool, attempts: int, requests: int, cancel_calls: int
+    tmp_path: Path,
+    statuses: list[int],
+    recovery_delay: int,
+    recovery_success: bool,
+    ready: bool,
+    attempts: int,
+    requests: int,
+    cancel_calls: int,
 ) -> None:
     source = managed_extension_source(
         guard_home=tmp_path / "guard-home",
@@ -319,7 +341,10 @@ globalThis.fetch = async (url, options) => {
     )
     result = subprocess.run(
         ["node", "--input-type=module", "-e", javascript],
-        check=True, capture_output=True, text=True, timeout=30,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     output = json.loads(result.stdout)
     assert output["result"]["ready"] is ready
@@ -363,7 +388,10 @@ globalThis.fetch = async () => ({status: 404, ok: false, body: {cancel() { retur
     )
     result = subprocess.run(
         ["node", "--input-type=module", "-e", javascript],
-        check=True, capture_output=True, text=True, timeout=30,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     output = json.loads(result.stdout)
     assert output["result"]["ready"] is False

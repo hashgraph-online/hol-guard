@@ -24,20 +24,17 @@ if TYPE_CHECKING:
 else:  # pragma: no cover - runtime compatibility
     tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
-from packaging.specifiers import InvalidSpecifier as InvalidSpecifier
-from packaging.specifiers import SpecifierSet as SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ..action_lattice import normalize_guard_action_result
 from ..config import load_guard_config, resolve_risk_action
 from ..models import GuardAction, GuardArtifact
-from ..native_archive_inspection import inspect_archive_native as inspect_archive_native
 from ..package_firewall_entitlement import resolve_package_firewall_entitlement
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
-from .js_semver import highest_js_version_for_selector as highest_js_version_for_selector
+from . import supply_chain_package_services as package_services
 from .js_semver import version_matches_js_selector
 from .lockfile_evaluation_support import (
     collect_lockfile_parse_results,
@@ -72,9 +69,6 @@ from .restricted_archive_download import (
     canonical_external_https_archive_source,
     is_external_https_archive_source,
 )
-from .restricted_archive_download import RestrictedArchiveDownloadResult as RestrictedArchiveDownloadResult
-from .restricted_archive_download import RestrictedArchiveFailure as RestrictedArchiveFailure
-from .restricted_archive_download import download_restricted_archive as download_restricted_archive
 from .runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncEndpointUntrustedError,
@@ -105,43 +99,16 @@ from .supply_chain_package_identity import (
     PackageIdentityError,
     canonical_package_identity,
     normalize_ecosystem,
-    normalize_qualified_package_name,
     parse_package_identity,
 )
-
-# Retained cloud/registry/archive services live in supply_chain_package_services;
-# re-exported here so existing callers and monkeypatch seams keep working.
 from .supply_chain_package_services import (
-    _build_request_payload,
-    _normalized_supply_chain_evaluate_url,
-    _registry_resolved_target_version,
-    _scan_external_tarball,
-    _workspace_fingerprint,
+    _normalize_package_name,
+    _optional_string,
+    _stable_hash,
+    _string_tuple,
 )
-from .supply_chain_package_services import _download_external_tarball as _download_external_tarball
-from .supply_chain_package_services import (
-    _external_archive_request_timeout_result as _external_archive_request_timeout_result,
-)
-from .supply_chain_package_services import _lockfile_context as _lockfile_context
-from .supply_chain_package_services import (
-    _normalized_pypi_requested_range as _normalized_pypi_requested_range,
-)
-from .supply_chain_package_services import (
-    _npm_registry_resolved_version as _npm_registry_resolved_version,
-)
-from .supply_chain_package_services import (
-    _pypi_caret_specifier as _pypi_caret_specifier,
-)
-from .supply_chain_package_services import (
-    _pypi_registry_resolved_version as _pypi_registry_resolved_version,
-)
-from .supply_chain_package_services import (
-    _pypi_tilde_specifier as _pypi_tilde_specifier,
-)
-from .supply_chain_package_services import _registry_package_name as _registry_package_name
 from .supply_chain_support import ecosystem_support_metadata
 from .workspace_path_guard import (
-    read_bytes_within_workspace,
     read_text_within_workspace,
     resolve_path_within_workspace,
 )
@@ -568,7 +535,9 @@ def _evaluate_package_request_artifact_uncached(
             bundle_response = None
             bundle_meta = None
     workspace_fingerprint = (
-        _workspace_fingerprint(workspace_id, workspace_dir=workspace_dir, artifact=artifact, bundle_meta=bundle_meta)
+        package_services._workspace_fingerprint(
+            workspace_id, workspace_dir=workspace_dir, artifact=artifact, bundle_meta=bundle_meta
+        )
         if workspace_id is not None
         else None
     )
@@ -1350,13 +1319,14 @@ def _evaluate_with_cloud(
             ),
             None,
         )
-    evaluate_url = _normalized_supply_chain_evaluate_url(sync_url, workspace_id)
-    request_payload = _build_request_payload(
+    evaluate_url = package_services._normalized_supply_chain_evaluate_url(sync_url, workspace_id)
+    request_payload = package_services._build_request_payload(
         artifact=artifact,
         targets=targets,
         workspace_dir=workspace_dir,
         workspace_fingerprint=workspace_fingerprint,
         policy_version=bundle_meta["policy_hash"] if bundle_meta is not None else "local:none",
+        parse_text_result=_parse_lockfile_text_result,
     )
     request_data = json.dumps(request_payload).encode("utf-8")
 
@@ -3161,7 +3131,7 @@ def _fallback_package_results(
                     or (
                         verify_registry_identity
                         and (requested_range := _optional_string(target.get("range"))) is not None
-                        and _registry_resolved_target_version(
+                        and package_services._registry_resolved_target_version(
                             target=target,
                             requested_range=requested_range,
                         )
@@ -3669,7 +3639,7 @@ def _external_tarball_dependency_result(
             ),
             None,
         )
-    scan, retained_download = _scan_external_tarball(
+    scan, retained_download = package_services._scan_external_tarball(
         source_url,
         retain_download=retain_download,
         request_deadline=request_deadline,
@@ -4259,7 +4229,9 @@ def _resolved_target_version(
     exact_version = _exact_version(requested_range)
     if exact_version is not None:
         return exact_version
-    registry_version = _registry_resolved_target_version(target=target, requested_range=requested_range)
+    registry_version = package_services._registry_resolved_target_version(
+        target=target, requested_range=requested_range
+    )
     if registry_version is not None:
         return registry_version
     return None
@@ -4528,22 +4500,6 @@ def _normalize_bundle_action(value: str) -> str:
     return "monitor"
 
 
-def _hash_paths(workspace_dir: Path | None, raw_paths: object) -> list[str]:
-    if workspace_dir is None or not isinstance(raw_paths, list):
-        return []
-    hashes: list[str] = []
-    for item in raw_paths:
-        payload = read_bytes_within_workspace(workspace_dir, str(item))
-        if payload is None:
-            continue
-        hashes.append(stable_digest_hex(payload))
-    return hashes
-
-
-def _stable_hash(value: object) -> str:
-    return stable_digest_hex(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-
-
 def _dict_items(value: object) -> tuple[dict[str, object], ...]:
     if not isinstance(value, (list, tuple)):
         return ()
@@ -4554,12 +4510,6 @@ def _first_dict_item(value: object) -> dict[str, object] | None:
     for item in _dict_items(value):
         return item
     return None
-
-
-def _string_tuple(value: object) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
-        return ()
-    return tuple(item for item in value if isinstance(item, str))
 
 
 def _split_namespace_name(value: str, *, ecosystem: str) -> tuple[str | None, str]:
@@ -4600,12 +4550,6 @@ def _requested_specifier_is_range(value: str | None, *, ecosystem: str) -> bool:
     if ecosystem not in _DIST_TAG_RANGE_ECOSYSTEMS:
         return False
     return re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*", normalized) is not None
-
-
-def _optional_string(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
 
 
 def _decision_rank(value: str) -> int:
@@ -4659,13 +4603,6 @@ def _package_display_name(package: dict[str, object]) -> str:
     namespace = _optional_string(package.get("namespace"))
     name = _optional_string(package.get("name")) or "package"
     return f"{namespace}/{name}" if namespace is not None else name
-
-
-def _normalize_package_name(ecosystem: str, package_name: str) -> str:
-    try:
-        return normalize_qualified_package_name(ecosystem, package_name)
-    except PackageIdentityError:
-        return package_name.strip()
 
 
 def _target_candidate_names(target: dict[str, object]) -> tuple[str, ...]:

@@ -10,6 +10,7 @@
     "@oh-my-pi/pi-coding-agent": "18.1.18"
   },
   "overrides": {
+    "sharp": "0.35.5",
     "@earendil-works/pi-coding-agent": {
       "brace-expansion": "5.0.12"
     }

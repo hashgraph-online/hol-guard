@@ -165,13 +165,22 @@ pub(super) fn homebrew_package_monitor_result(
     target: &Map<String, Value>,
 ) -> Map<String, Value> {
     let command = optional_string(target.get("redacted_command")).unwrap_or_default();
-    let signals = deps
-        .risk
-        .detect_supply_chain_risk(&command, None)
-        .unwrap_or_default();
+    let signals = match deps.risk.detect_supply_chain_risk(&command, None) {
+        Ok(signals) => signals,
+        Err(_) => {
+            return heuristic_package_result(
+                target,
+                "block",
+                "supply_chain_risk_evaluation_failed",
+                "Guard could not complete the package supply-chain risk evaluation.",
+                "high",
+            );
+        }
+    };
     if !signals.is_empty() {
         let strongest = signals
             .iter()
+            .rev()
             .max_by_key(|s| {
                 severity_rank_value(
                     optional_string(s.get("severity"))
@@ -179,8 +188,7 @@ pub(super) fn homebrew_package_monitor_result(
                         .unwrap_or("unknown"),
                 )
             })
-            .cloned()
-            .unwrap_or_default();
+            .expect("nonempty risk signals");
         return heuristic_package_result(
             target,
             "warn",
@@ -207,13 +215,22 @@ pub(super) fn unsupported_ecosystem_result(
     target: &Map<String, Value>,
 ) -> Map<String, Value> {
     let command = optional_string(target.get("redacted_command")).unwrap_or_default();
-    let signals = deps
-        .risk
-        .detect_supply_chain_risk(&command, None)
-        .unwrap_or_default();
+    let signals = match deps.risk.detect_supply_chain_risk(&command, None) {
+        Ok(signals) => signals,
+        Err(_) => {
+            return heuristic_package_result(
+                target,
+                "block",
+                "supply_chain_risk_evaluation_failed",
+                "Guard could not complete the package supply-chain risk evaluation.",
+                "high",
+            );
+        }
+    };
     if !signals.is_empty() {
         let strongest = signals
             .iter()
+            .rev()
             .max_by_key(|s| {
                 severity_rank_value(
                     optional_string(s.get("severity"))
@@ -221,8 +238,7 @@ pub(super) fn unsupported_ecosystem_result(
                         .unwrap_or("unknown"),
                 )
             })
-            .cloned()
-            .unwrap_or_default();
+            .expect("nonempty risk signals");
         let severity =
             optional_string(strongest.get("severity")).unwrap_or_else(|| "medium".to_string());
         let decision = if severity == "critical" || severity == "high" {

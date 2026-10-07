@@ -1,6 +1,12 @@
-use super::super::super::tests::{input, Fixture};
+use super::super::super::tests::{input, write, Fixture};
 use super::super::{claim_refreshed_review, persist_prepared_review};
 use super::*;
+use guard_policy_snapshot::business_source_anchor::{
+    sign_business_source_anchor, BusinessSourcePhase,
+};
+use guard_policy_snapshot::business_source_authority::{
+    sign_business_source, verify_business_source,
+};
 use guard_policy_snapshot::{integrity_mac, policy_digest};
 use serde_json::json;
 use std::cell::Cell;
@@ -133,7 +139,19 @@ fn changed_policy_after_claim_refuses_before_attempt_or_transport() {
     let time = c.lease.claimed_at_ms;
     let mut snapshot = f.store.current_snapshot().unwrap();
     snapshot.generation += 1;
-    snapshot.business_policy.as_mut().unwrap().rules[0].action = "block".into();
+    let mut document = f.source_document.as_ref().unwrap().clone();
+    document["metadata"]["revision"] = json!(snapshot.generation);
+    document["spec"]["rules"][0]["effect"] = json!("block");
+    let record = sign_business_source(&document, snapshot.generation, &f.key).unwrap();
+    let source = verify_business_source(&record, &f.key).unwrap();
+    snapshot.business_policy = Some(source.compiled().binding().clone());
+    let marker =
+        sign_business_source_anchor(&source, BusinessSourcePhase::Committed, &f.key).unwrap();
+    write(
+        &f.root,
+        &f.root.join("business-source-anchor.v1.json"),
+        &serde_json::from_slice(&marker).unwrap(),
+    );
     snapshot.policy_digest = policy_digest(&snapshot).unwrap();
     snapshot.integrity.mac = integrity_mac(&snapshot, &f.key).unwrap();
     f.store

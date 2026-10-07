@@ -284,20 +284,28 @@ fn stale_provider_evidence_and_default_off_policy_cannot_publish_a_review() {
         .root
         .join("workspace-review-requests/business-expired.json")
         .exists());
+    // An armed business source cannot be silently removed by a signed push.
     let mut snapshot = fixture.snapshot.clone();
     snapshot.generation += 1;
     snapshot.business_policy = None;
     snapshot.policy_digest = policy_digest(&snapshot).unwrap();
     snapshot.integrity.mac = integrity_mac(&snapshot, &fixture.key).unwrap();
-    fixture
-        .store
-        .push(&json!({"schema":"guard-policy-snapshot-push.v1","snapshot":snapshot}))
-        .unwrap();
-    assert!(
-        persist_prepared_review(&fixture.store, "business-default-off", &prepared, || true)
-            .is_err()
+    assert_eq!(
+        fixture
+            .store
+            .push(&json!({"schema":"guard-policy-snapshot-push.v1","snapshot":snapshot}))
+            .unwrap_err(),
+        "native_business_policy_removal_requires_authority"
     );
-    assert!(!fixture
+    let default_off = Fixture::without_business_policy("business-producer-default-off");
+    assert!(persist_prepared_review(
+        &default_off.store,
+        "business-default-off",
+        &prepared,
+        || true
+    )
+    .is_err());
+    assert!(!default_off
         .root
         .join("workspace-review-requests/business-default-off.json")
         .exists());
@@ -305,19 +313,8 @@ fn stale_provider_evidence_and_default_off_policy_cannot_publish_a_review() {
 
 #[test]
 fn signed_business_block_floor_cannot_publish_a_review() {
-    let fixture = Fixture::new("business-producer-unresolved");
+    let fixture = Fixture::with_effect("business-producer-unresolved", "block");
     let prepared = prepare(input(b"body", &[])).unwrap();
-    let mut snapshot = fixture.snapshot.clone();
-    snapshot.generation += 1;
-    let mut policy = serde_json::to_value(snapshot.business_policy.as_ref().unwrap()).unwrap();
-    policy["rules"][0]["action"] = json!("block");
-    snapshot.business_policy = Some(serde_json::from_value(policy).unwrap());
-    snapshot.policy_digest = policy_digest(&snapshot).unwrap();
-    snapshot.integrity.mac = integrity_mac(&snapshot, &fixture.key).unwrap();
-    fixture
-        .store
-        .push(&json!({"schema":"guard-policy-snapshot-push.v1","snapshot":snapshot}))
-        .unwrap();
     assert_eq!(
         persist_prepared_review(&fixture.store, "business-unresolved", &prepared, || true)
             .unwrap_err(),

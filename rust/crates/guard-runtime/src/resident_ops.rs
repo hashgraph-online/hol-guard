@@ -25,6 +25,7 @@ pub(crate) fn evaluate_resident_bytes(
         Some(
             "workspace_review_authority_enroll"
                 | "workspace_review_context"
+                | "workspace_review_local_summary"
                 | "workspace_review_decision"
         )
     ) {
@@ -65,7 +66,7 @@ pub(crate) fn evaluate_resident_bytes(
     {
         crate::oneshot::validate_request_policy_snapshot(&value)?;
     }
-    let request: ResidentRequestV1 = serde_json::from_value(value)
+    let request: ResidentRequestV1 = crate::strict_json::from_value(value)
         .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
     match request {
         ResidentRequestV1::Edge(request) => {
@@ -140,6 +141,15 @@ pub(crate) fn evaluate_resident_bytes(
                     )?;
                 encode_response(&context)
             }
+            ResidentOperationV1::WorkspaceReviewLocalSummary(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let summary = crate::policy_store::workspace_review_local_summary::build(
+                    policy_store,
+                    &request.request_id,
+                )?;
+                encode_response(&summary)
+            }
             ResidentOperationV1::WorkspaceReviewDecision(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
@@ -191,8 +201,17 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::SupplyChainEval(request) => {
                 crate::package_authority_op::evaluate_supply_chain_eval(&request)
             }
+            ResidentOperationV1::ApplyStoredPackagePolicy(request) => {
+                crate::package_authority_op::evaluate_apply_stored_package_policy(&request)
+            }
             ResidentOperationV1::PackageAuthorityDecide(request) => {
                 crate::package_authority_op::evaluate_package_authority_decide(&request)
+            }
+            ResidentOperationV1::PolicyDecisionLookup(request) => {
+                crate::policy_decision_lookup_op::evaluate_policy_decision_lookup_request(&request)
+            }
+            ResidentOperationV1::PackageAdvisoryIds(request) => {
+                crate::package_authority_op::evaluate_package_advisory_ids(&request)
             }
             #[cfg(unix)]
             ResidentOperationV1::ContainedNodeExecute(request) => {
@@ -223,6 +242,21 @@ pub(crate) fn evaluate_resident_bytes(
             }
             ResidentOperationV1::McpStdioProbe(request) => {
                 crate::mcp_probe_op::evaluate_mcp_stdio_probe(&request)
+            }
+            ResidentOperationV1::McpStdioCancel(request) => {
+                crate::mcp_probe_op::cancel_mcp_stdio_probe(&request.request_id)
+            }
+            ResidentOperationV1::McpStdioSessionOpen(request) => {
+                crate::mcp_stdio_session_op::session_open(&request)
+            }
+            ResidentOperationV1::McpStdioSessionSend(request) => {
+                crate::mcp_stdio_session_op::session_send(&request)
+            }
+            ResidentOperationV1::McpStdioSessionRecv(request) => {
+                crate::mcp_stdio_session_op::session_recv(&request)
+            }
+            ResidentOperationV1::McpStdioSessionClose(request) => {
+                crate::mcp_stdio_session_op::session_close(&request)
             }
             ResidentOperationV1::PromptAnalyze(request) => {
                 crate::prompt_analyze_op::evaluate_prompt_analyze(&request)

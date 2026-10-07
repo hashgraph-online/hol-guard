@@ -31,7 +31,7 @@ maintainer checks across supported AI plugin ecosystems.
 Command source files under `contributions/command-sources/` own extension metadata, permissions,
 rules, and typed matcher trees. Rust validates and compiles them into descriptors, the catalog,
 and the native program. Use the Extension Builder to write the source, portable fixture, reviewed
-external trust-map entry, and deterministic projections together; do not hand-edit generated
+external trust binding, and deterministic projections together; do not hand-edit generated
 artifacts. Existing Python detector modules are retained for migration or reference coverage; do
 not copy their registration pattern to add an extension.
 
@@ -44,7 +44,10 @@ not copy their registration pattern to add an extension.
 3. Open a PR using the **Command extension** template. Ready PRs receive Gitar's managed label,
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
-The canonical source, portable fixture, and external trust entry are contributor-owned inputs.
+The canonical source, portable fixture, and per-extension trust binding are contributor-owned inputs.
+The shared `contracts/extensions/trust-class-map.v1.json` is ignored build output. Rust builds
+derive it from the bindings; package builds generate and verify the shipped aggregate. Never
+commit the aggregate or hand-merge it when adding an extension.
 The command catalog, native program, descriptors and public directory remain maintainer-published
 at their existing paths. Keep their generated changes out of contribution PRs. CI compiles the
 current sources and validates matching projections on both PRs and main; the publication workflow
@@ -141,7 +144,7 @@ cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-ta
 ```
 
 Command source changes need native fixture evaluation and generated-artifact checks. Contributors
-submit the source, its portable fixture, and the reviewed trust-map entry; maintainers run the
+submit the source, its portable fixture, and the reviewed per-extension trust binding; maintainers run the
 documented preparation command to synchronize descriptors and public catalogs. Follow the
 [extension validation steps](docs/guard/extensions/contributing.md#local-validation); a passing
 Python reference test alone does not establish native behavior.

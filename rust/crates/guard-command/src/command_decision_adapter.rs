@@ -169,10 +169,15 @@ pub fn extension_evidence_batch(
             return Err("unsupported legacy command floor");
         };
         if !observation.uncertainty_reasons.is_empty() {
-            let floors: Vec<GuardAction> = observation
-                .uncertainty_reasons
-                .iter()
-                .map(|item| item.floor())
+            // An unattributed match may belong to this rule, so it inherits
+            // the rule's own floor as well.
+            let floors: Vec<GuardAction> = std::iter::once(floor)
+                .chain(
+                    observation
+                        .uncertainty_reasons
+                        .iter()
+                        .map(|item| item.floor()),
+                )
                 .collect();
             let item = ExtensionEvidence {
                 identity: rule_identity(observation),

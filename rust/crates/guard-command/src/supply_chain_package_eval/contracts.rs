@@ -69,7 +69,8 @@ pub(super) static LOCAL_APPROVAL_REQUEST_URL_RE: LazyLock<Regex> = LazyLock::new
 
 #[allow(dead_code)]
 pub(super) static NAMED_SOURCE_SEPARATOR_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\s+(?:from|via|using|through)\s+").expect("NAMED_SOURCE_SEPARATOR_RE")
+    Regex::new(r"(?i)@(?:https?|git\+|github|gitlab|bitbucket|file):")
+        .expect("NAMED_SOURCE_SEPARATOR_RE")
 });
 
 #[allow(dead_code)]

@@ -335,19 +335,18 @@ def _worker_failures(root: Path) -> list[str]:
         )
     )
     failures.extend(required_tokens(native_hook, ("native_pre_tool_unavailable",)))
-    native_edge_review = function_node(native_hook, "_review_native_edge", class_name="HookWorkerNativeMixin")
-    review_calls = function_calls(native_edge_review)
-    delegated_snapshot = False
-    if "review_native_edge" in review_calls:
-        review_module = native_hook.with_name("hook_worker_native_review.py")
-        delegated_review = function_node(review_module, "review_native_edge")
-        delegated_once = function_node(review_module, "_review_native_edge_once")
-        delegated_snapshot = (
-            "_review_native_edge_once" in function_calls(delegated_review)
-            and "_review_native_edge_with_snapshot" in function_calls(delegated_once)
-        )
-    if "_review_native_edge_with_snapshot" not in review_calls and not delegated_snapshot:
-        failures.append("HookWorkerNativeMixin._review_native_edge does not enter the snapshot-bound native edge")
+    native_review = root / "src/codex_plugin_scanner/guard/daemon/hook_worker_native_review.py"
+    review_chain = (
+        (native_hook, "_review_native_edge", "HookWorkerNativeMixin", "review_native_edge"),
+        (native_review, "review_native_edge", None, "_review_native_edge_once"),
+        (native_review, "_review_native_edge_once", None, "_review_native_edge_with_snapshot"),
+    )
+    # Follow the extracted bounded-review helper instead of requiring the old
+    # direct call. Every link must still reach the snapshot-bound native edge.
+    for path, name, class_name, callee in review_chain:
+        node = function_node(path, name, class_name=class_name)
+        if callee not in function_calls(node):
+            failures.append(f"{class_name or 'module'}.{name} does not invoke {callee}")
     native_edge_snapshot = function_node(
         native_hook, "_review_native_edge_with_snapshot", class_name="HookWorkerNativeMixin"
     )
