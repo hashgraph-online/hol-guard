@@ -5,6 +5,24 @@ use super::*;
 use guard_google_identity::directory::PreparedGoogleBusinessRequest;
 use serde_json::json;
 
+#[path = "workspace_review_business_journal.rs"]
+mod journal;
+
+#[allow(dead_code)] // Reservation/actor integration does not enable a worker route.
+#[path = "workspace_review_business_budget.rs"]
+mod budget;
+
+// This owned value is never serialized, cloned, or published through an RPC.
+// A consumed approval is not dispatch permission until budgets and current
+// worker policy have also been enforced by the future registered worker.
+#[allow(dead_code)]
+pub(crate) struct ClaimedBusinessReview<T> {
+    input: T,
+    owned: PreparedBusinessInputV1,
+    journal: journal::Journal,
+}
+type ClaimedGoogleBusinessRequest = ClaimedBusinessReview<PreparedGoogleBusinessRequest>;
+
 // The managed worker route is deliberately not published as a generic resident
 // RPC. These types are kept private until its authenticated route is connected.
 #[allow(dead_code)]
@@ -25,28 +43,62 @@ impl OwnedGoogleBusinessReview {
         self,
         store: &super::super::PolicySnapshotStore,
         decision: &[u8],
-    ) -> Result<(PreparedGoogleBusinessRequest, PreparedBusinessInputV1), String> {
+    ) -> Result<ClaimedGoogleBusinessRequest, String> {
         let binding = self.input.prepared_input().binding().to_owned();
         let refreshed = self
             .input
             .refresh()
             .map_err(|_| "native_business_resolution_unavailable".to_owned())?;
-        if !refreshed.is_current() || refreshed.prepared_input().binding() != binding {
-            return Err("native_business_resolution_changed".into());
-        }
-        let (_, owned) = super::super::workspace_review_decision::claim_owned_business_request(
+        claim_refreshed_review(
             store,
             &self.request_id,
             decision,
-        )?;
-        if owned.binding() != binding {
-            return Err("native_business_claim_input_changed".into());
-        }
-        if !refreshed.is_current() {
-            return Err("native_business_claim_expired_after_consume".into());
-        }
-        Ok((refreshed, owned))
+            &binding,
+            refreshed,
+            PreparedGoogleBusinessRequest::is_current,
+            |input| input.prepared_input().binding(),
+        )
     }
+}
+
+// Shared production boundary after the purpose-bound provider refresh. Tests
+// use native frozen inputs here, not exported/fake OAuth credentials. This
+// helper never constructs provider evidence or bypasses native signed claims.
+fn claim_refreshed_review<T>(
+    store: &super::super::PolicySnapshotStore,
+    request_id: &str,
+    decision: &[u8],
+    binding: &str,
+    refreshed: T,
+    current: impl Fn(&T) -> bool,
+    input_binding: impl Fn(&T) -> &str,
+) -> Result<ClaimedBusinessReview<T>, String> {
+    if !current(&refreshed) || input_binding(&refreshed) != binding {
+        return Err("native_business_resolution_changed".into());
+    }
+    let (_, owned, journal) =
+        super::super::workspace_review_decision::claim_owned_business_request_with(
+            store,
+            request_id,
+            decision,
+            |owned| {
+                if owned.binding() != binding {
+                    return Err("native_business_claim_input_changed".into());
+                }
+                journal::Journal::claimed_unlocked(store, request_id, owned.binding())
+            },
+        )?;
+    if owned.binding() != binding {
+        return Err("native_business_claim_input_changed".into());
+    }
+    if !current(&refreshed) {
+        return Err("native_business_claim_expired_after_consume".into());
+    }
+    Ok(ClaimedBusinessReview {
+        input: refreshed,
+        owned,
+        journal,
+    })
 }
 
 #[allow(dead_code)]

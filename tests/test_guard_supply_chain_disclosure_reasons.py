@@ -442,8 +442,6 @@ def test_unidentified_package_reason_absent_for_unsupported_ecosystem(tmp_path: 
         now="2026-05-19T00:00:00Z",
     )
     assert all(reason["code"] != "unidentified_package" for package in result.packages for reason in package["reasons"])
-
-
 def test_unknown_package_result_directly_skips_unidentified_for_unsupported() -> None:
     """Directly test _unknown_package_result does not emit unidentified_package for unsupported ecosystem."""
     from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import _unknown_package_result
@@ -491,5 +489,3 @@ def test_known_package_does_not_emit_unidentified_package(
         now="2026-05-19T00:00:00Z",
     )
     assert all(reason["code"] != "unidentified_package" for package in result.packages for reason in package["reasons"])
-
-
