@@ -9,13 +9,31 @@ pub(super) fn unwrap_sudo(
     let mut wrappers = Vec::new();
     while tokens
         .get(index)
-        .is_some_and(|token| executable_basename(token) == "sudo")
+        .is_some_and(|token| matches!(executable_basename(token), "sudo" | "timeout"))
     {
         if wrappers.len() == 4 {
             return Err("command_wrapper_limit_exceeded");
         }
-        wrappers.push("sudo".to_owned());
+        let wrapper = executable_basename(&tokens[index]);
+        wrappers.push(wrapper.to_owned());
         index += 1;
+        if wrapper == "timeout" {
+            if tokens.get(index).is_some_and(|value| value == "--") {
+                index += 1;
+            }
+            if !tokens.get(index).is_some_and(|value| timeout(value)) {
+                return Err("transparent_wrapper_not_yet_supported");
+            }
+            index += 1;
+            let Some(command) = tokens.get(index) else {
+                return Err("transparent_wrapper_not_yet_supported");
+            };
+            if command.is_empty() || command.starts_with('-') || assignment_name(command).is_some()
+            {
+                return Err("transparent_wrapper_not_yet_supported");
+            }
+            continue;
+        }
         while let Some(option) = tokens.get(index) {
             match option.as_str() {
                 "--" => {
@@ -55,6 +73,23 @@ fn timeout(value: &str) -> bool {
     !value.is_empty() && value.len() <= 10 && value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
+pub(super) fn is_file_shell_invocation(executable: Option<&str>, arguments: &[String]) -> bool {
+    if !executable.is_some_and(|value| matches!(executable_basename(value), "sh" | "bash" | "zsh"))
+    {
+        return false;
+    }
+    let arguments = if arguments.first().is_some_and(|value| value == "--") {
+        &arguments[1..]
+    } else {
+        arguments
+    };
+    // This represents the interpreter invocation, not the script's contents.
+    // It keeps native execution review; shell options and inline code stay opaque.
+    arguments.first().is_some_and(|script| {
+        !script.starts_with('-') && script.ends_with(".sh") && script.len() > 3
+    })
+}
+
 pub(super) fn is_encoded_stdin_shell(
     executable: Option<&str>,
     arguments: &[String],
@@ -91,6 +126,33 @@ mod tests {
             extraction_provenance: "guard-shell".to_owned(),
         })
         .unwrap()
+    }
+
+    #[test]
+    fn file_shell_invocation_is_not_a_transparent_wrapper() {
+        for command in [
+            "bash ./preflight.sh fixture",
+            "sh -- './pre flight.sh'",
+            "zsh ./fixtures/preflight.sh",
+        ] {
+            let model = parse(command);
+            assert_eq!(model.confidence, "exact", "{command}");
+            assert_eq!(model.segments.len(), 1);
+            assert!(model.wrapper_chain.is_empty());
+            assert!(matches!(
+                model.segments[0].executable.as_deref(),
+                Some("bash" | "sh" | "zsh")
+            ));
+        }
+        for command in [
+            "bash -c 'cat .env'",
+            "bash -s",
+            "bash -e ./preflight.sh",
+            "sh --",
+            "bash .sh",
+        ] {
+            assert_eq!(parse(command).confidence, "uncertain", "{command}");
+        }
     }
 
     #[test]

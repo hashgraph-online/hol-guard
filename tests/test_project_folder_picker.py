@@ -39,7 +39,9 @@ def test_folder_picker_reports_busy_and_missing_linux_dialog(monkeypatch: pytest
     def runner(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
         with pytest.raises(ProjectFolderPickerBusyError):
             choose_project_folder(
-                runner=lambda *_a, **_k: subprocess.CompletedProcess(args=["picker"], returncode=0, stdout="/workspace/other"),
+                runner=lambda *_a, **_k: subprocess.CompletedProcess(
+                    args=["picker"], returncode=0, stdout="/workspace/other"
+                ),
                 platform_name="darwin",
             )
         return subprocess.CompletedProcess(args=["picker"], returncode=0, stdout="/workspace/app\n", stderr="")

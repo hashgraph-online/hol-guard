@@ -71,8 +71,14 @@ jobs:
         with:
           bun-version: "1.3.14"
 
+      - uses: ./.github/actions/setup-rust
+      - name: Build source compiler
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+
       - name: Build exact wheel and isolated installed interpreter
         shell: bash
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
         run: |
           set -euo pipefail
           uv sync --frozen --extra dev --python 3.12

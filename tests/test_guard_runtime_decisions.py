@@ -168,7 +168,7 @@ def test_decision_from_legacy_policy_action_maps_all_actions() -> None:
         "warn": ("warn", "HOL Guard noticed risk signals, but policy allows the harness to continue."),
         "review": ("ask", "HOL Guard needs your approval before this action can run."),
         "sandbox-required": ("ask", "HOL Guard wants this action reviewed and run in a sandboxed path."),
-        "require-reapproval": ("ask", "HOL Guard needs a fresh approval because this action changed."),
+        "require-reapproval": ("ask", "HOL Guard needs a fresh approval before this action can run."),
         "block": ("block", "HOL Guard blocked this action."),
     }
 
@@ -184,6 +184,32 @@ def test_decision_from_legacy_policy_action_maps_all_actions() -> None:
         assert decision.reason == "test-reason"
         assert decision.confidence == "strong"
         assert decision.signals == (_signal(),)
+
+
+def test_rejected_mcp_approval_copy_does_not_invent_argument_changes() -> None:
+    from codex_plugin_scanner.guard.cli.commands_support_prompts import _should_use_decision_v2_harness_message
+    from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision, resolve_tool_call_policy_action
+
+    rejected = ToolCallDecision(
+        action="review",
+        source="policy",
+        signals=(),
+        summary="Prior approval could not be claimed.",
+        approval_reuse_status="rejected",
+        approval_reuse_reason_code="approval_reuse_claim_failed",
+    )
+    action = resolve_tool_call_policy_action(rejected)
+    decision = decision_from_legacy_policy_action(action, reason="approval_reuse_claim_failed")
+    assert decision.guard_action == "require-reapproval"
+    assert decision.action == "ask"
+    assert decision.reason == "approval_reuse_claim_failed"
+    assert decision.harness_message == "HOL Guard needs a fresh approval before this action can run."
+    assert "changed" not in decision.user_body
+    # Keep the existing preference for a specific native reason over generic copy.
+    assert not _should_use_decision_v2_harness_message({}, decision.harness_message)
+    assert not _should_use_decision_v2_harness_message(
+        {}, "HOL Guard needs a fresh approval because this action changed."
+    )
 
 
 def test_sandbox_required_copy_never_advertises_an_approval_bypass() -> None:

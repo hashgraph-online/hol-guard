@@ -26,9 +26,7 @@ from codex_plugin_scanner.guard.native_archive_inspection import inspect_archive
 from codex_plugin_scanner.guard.store_base import _acquire_advisory_file_lock
 
 
-def _worker_request(
-    archive_path: Path, digest: str, state_dir: Path, timeout_ms: int = 2000
-) -> bytes:
+def _worker_request(archive_path: Path, digest: str, state_dir: Path, timeout_ms: int = 2000) -> bytes:
     state_dir.mkdir(parents=True, exist_ok=True)
     return json.dumps(
         {
@@ -102,9 +100,7 @@ def test_archive_inspector_accepts_clean_digest_bound_archive(
     assert result.sha256 == digest
 
 
-def test_archive_inspector_fails_closed_when_state_dir_is_a_file(
-    native_hook_force: Path, tmp_path: Path
-) -> None:
+def test_archive_inspector_fails_closed_when_state_dir_is_a_file(native_hook_force: Path, tmp_path: Path) -> None:
     """A state_dir that collides with a regular file cannot host the lease —
     the adapter must report incomplete rather than raising OSError."""
     package_json = json.dumps({"name": "safe-package", "version": "1.0.0"}).encode()
@@ -672,9 +668,7 @@ def test_archive_inspector_enforces_file_count_and_nested_archive_limits(
     )
 
     file_count_result = _inspect(archive_path, expected_sha256=digest, state_dir=state_dir, max_files=1)
-    nesting_result = _inspect(
-        archive_path, expected_sha256=digest, state_dir=state_dir, max_nested_archives=0
-    )
+    nesting_result = _inspect(archive_path, expected_sha256=digest, state_dir=state_dir, max_nested_archives=0)
 
     assert file_count_result.status == "blocked"
     assert file_count_result.code == "tarball_file_count_limit"
@@ -741,7 +735,11 @@ def test_archive_inspector_rejects_invalid_policy(native_hook_force: Path, state
     assert bad_timeout.code == "external_archive_inspection_policy_invalid"
 
 
-def test_archive_inspector_reports_native_unavailable(state_dir: Path, tmp_path: Path) -> None:
+def test_archive_inspector_reports_native_unavailable(state_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The negative capability gate only fires when the native runtime is absent;
+    # under `HOL_GUARD_NATIVE=force` (CI native regression) the worker is
+    # authoritative and would return `clean`, so pin the runtime off here.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
     archive_path, digest = _archive_path(tmp_path, [("package/readme.txt", b"safe")])
 
     result = _inspect(archive_path, expected_sha256=digest, state_dir=state_dir)

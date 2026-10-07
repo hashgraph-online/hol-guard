@@ -49,6 +49,10 @@ from ..local_supply_chain import (
     _package_policy_override_evaluation,
 )
 from ..models import GuardAction
+from ..native_package_authority import (
+    apply_stored_package_policy_native,
+    evaluation_from_native_payload,
+)
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.approval_reuse import (
@@ -74,6 +78,7 @@ from .commands_hook_github_workflow import (
     github_workflow_approval_evidence,
     prepare_github_workflow_hook_state,
 )
+from .commands_hook_native_edge_floor import _native_edge_floor_action
 from .commands_hook_native_floor import (
     _runtime_package_raw_command,
     apply_local_grant_then_native_floor,
@@ -96,40 +101,6 @@ from .commands_support_runtime_policy import (
 
 def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
     return coerce_guard_action(value) or fallback
-
-
-def _native_edge_floor_action(
-    native_edge_result: Mapping[str, object] | None,
-    event_name: str,
-    *,
-    artifact_default_action: object | None = None,
-) -> GuardAction | None:
-    """Project the typed native edge result onto the composition floor."""
-
-    if not isinstance(native_edge_result, Mapping):
-        return None
-    action = coerce_guard_action(native_edge_result.get("policy_action") or native_edge_result.get("minimum_action"))
-    if event_name != "PostToolUse":
-        # PreToolUse/UserPromptSubmit composition floors come from the
-        # command-level native review (``native_pre_tool_floor``) and the
-        # artifact's own request classes; the envelope edge result is carried
-        # as provenance, not as a second policy floor.
-        return None
-    if action is None and native_edge_result.get("decision") == "deny":
-        action = "block"
-    if action not in {"block", "sandbox-required"}:
-        return action
-    if artifact_default_action == "warn":
-        # Standalone credential-looking output is warn-tier evidence the
-        # artifact classifier already priced (cleared environments, remote
-        # samples, read-only dumps). The edge deny still masks the emitted
-        # output surface; it does not turn the run into a pause.
-        return None
-    # PostToolUse can never undo the finished action; the edge deny is an
-    # output-mask directive carried by the emitted decision surface. The
-    # policy floor flags the run for re-approval so it stays reviewable
-    # instead of terminal.
-    return "require-reapproval"
 
 
 def _requested_policy_action_normalization(
@@ -289,6 +260,41 @@ def _runtime_cisco_scanner_evidence(
     return tuple(evidence)
 
 
+def _apply_stored_package_policy_via_resident(
+    package_evaluation,
+    *,
+    store,
+    guard_home: Path,
+    artifact,
+    artifact_hash: str,
+    workspace_dir: Path,
+    now: str,
+    current_action: object | None,
+    claim_saved_approval: bool,
+):
+    """Route the saved-package-policy claim through the resident.
+
+    The resident is the sole authority for the stored-approval claim. When it
+    is unreachable (``None`` — transport/identity failure) the evaluation is
+    returned unchanged: no saved approval is applied, matching the resident's
+    own no-saved-approval result rather than re-running a Python path.
+    """
+    payload = apply_stored_package_policy_native(
+        package_evaluation.to_dict(),
+        artifact.to_dict(),
+        store_path=store.path,
+        guard_home=guard_home,
+        artifact_hash=artifact_hash,
+        workspace_dir=workspace_dir,
+        now=now,
+        current_action=current_action,
+        claim_saved_approval=claim_saved_approval,
+    )
+    if payload is None:
+        return package_evaluation
+    return evaluation_from_native_payload(payload)
+
+
 def evaluate_native_artifact_hook(
     args: argparse.Namespace,
     *,
@@ -315,6 +321,9 @@ def evaluate_native_artifact_hook(
     native_edge_receipt: Mapping[str, object] | None = None,
     native_recording_only: bool = False,
 ) -> int | NativeArtifactHookState:
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(guard_home)
     payload_map = dict(payload)
     workflow_state = prepare_github_workflow_hook_state(
         runtime_artifact,
@@ -511,6 +520,7 @@ def evaluate_native_artifact_hook(
         native_edge_result,
         event_name,
         artifact_default_action=runtime_artifact.metadata.get("guard_default_action"),
+        artifact_type=runtime_artifact.artifact_type,
     )
     if native_edge_action is not None:
         current_action_inputs.append(native_edge_action)
@@ -1251,6 +1261,23 @@ def evaluate_native_artifact_hook(
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
         decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
         decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
+    elif scanner_raised_to_block:
+        # The scanner escalated a weaker package verdict to a block. Surface the
+        # escalated block copy rather than the generic block copy or the weaker
+        # package copy. The block title mirrors the package evaluator's own
+        # block title in `supply_chain_package_eval._finalize_package_request_evaluation`.
+        decision_v2_payload["user_title"] = "Critical install blocked"
+        if package_evaluation is not None:
+            decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
+            decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
+    if scanner_evidence and policy_action == "block" and scanner_risk_signals:
+        # The Cisco scanner contributed the decisive escalation signal. Surface
+        # the scanner's primary summary as the dashboard detail so the composed
+        # block copy reflects the escalation source rather than the package
+        # verdict's generic block summary. Covers both the Python compose path
+        # (scanner_raised_to_block) and the resident path (the native eval
+        # already escalated, so package_policy_action is itself block).
+        decision_v2_payload["dashboard_primary_detail"] = scanner_risk_signals[0]
     if has_compound_findings:
         action_phrase = {
             "allow": "allowed",

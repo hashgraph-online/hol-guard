@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -15,7 +16,7 @@ from .native_resident_client import (
     record_native_resident_client_failure_code,
 )
 from .native_route_receipt import record_native_hook_result
-from .native_runtime import _isolated_environment, native_runtime_status
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
@@ -66,9 +67,10 @@ _PRE_TOOL_ACTION_OPERATIONS = {
     "browser": {"navigate"},
     "config": {"set"},
     "prompt": {"submit"},
-    "harness": {"start", "stop"},
+    "harness": {"start", "stop", "set", "read"},
     "unknown": {"unknown"},
 }
+_UNCERTAIN_EXTENSION_FLOORS = frozenset({"review", "require-reapproval", "block"})
 _PRE_TOOL_RESULT_KEYS = {
     "schema",
     "version",
@@ -175,7 +177,9 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
         if extensions is None:
             return False
         binding = cast(dict[str, object], extensions["binding"])
-        if binding["uncertainty_count"] and result.get("minimum_action") != "block":
+        if extensions["evaluation_error"] is not None and result.get("minimum_action") != "block":
+            return False
+        if binding["uncertainty_count"] and result.get("minimum_action") not in _UNCERTAIN_EXTENSION_FLOORS:
             return False
     if not _valid_pre_tool_result_fields(result):
         return False
@@ -256,13 +260,19 @@ def _encode_hook_envelope(
     source_ref_external_allowed: bool,
     deadline_budget_ms: int,
     snapshot: Mapping[str, object],
+    execution_context_supported: bool = False,
+    request_id: str | None = None,
 ) -> bytes | None:
+    from .hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+
+    raw_payload = dict(payload)
+    caller_context = raw_payload.pop(HOOK_EXECUTION_ENVIRONMENT_KEY, ...)
     envelope = {
         "schema": "guard-hook-envelope.v2",
-        "request_id": None,
+        "request_id": request_id,
         "harness": harness,
         "event": event,
-        "raw_payload": payload,
+        "raw_payload": raw_payload,
         "deadline_budget_ms": deadline_budget_ms,
         "policy_generation": snapshot["generation"],
         # The resident already authenticated and cached the full snapshot at
@@ -281,6 +291,15 @@ def _encode_hook_envelope(
             "source_ref_external_allowed": source_ref_external_allowed,
         },
     }
+    if execution_context_supported:
+        # Direct CLI calls capture locally; daemon workers explicitly pass
+        # None when caller context is unavailable instead of using daemon env.
+        if caller_context is ...:
+            caller_context = collect_hook_execution_environment()
+        if caller_context is not None:
+            if not isinstance(caller_context, Mapping):
+                return None
+            cast(dict[str, Any], envelope["source"])["execution_environment"] = dict(caller_context)
     try:
         encoded = json.dumps(
             envelope,
@@ -305,9 +324,16 @@ def review_raw_hook_native(
     observe_mode: bool,
     deadline: float | None,
     policy_snapshot: Mapping[str, object] | None = None,
+    runtime_status: NativeRuntimeStatus | None = None,
+    request_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Return a typed Rust edge result, or fail closed without reinterpretation."""
-    status = native_runtime_status()
+    record_native_resident_client_failure_code(None)
+    if request_id is not None and (
+        not isinstance(request_id, str) or re.fullmatch(r"[a-z0-9][a-z0-9_.:-]{0,255}", request_id) is None
+    ):
+        return record_native_hook_result("native_fail_safe", None)
+    status = runtime_status if runtime_status is not None else native_runtime_status()
     event_key = event.strip().lower().replace("_", "").replace("-", "")
     required_features = {_EDGE_FEATURE, _CLIENT_FEATURE}
     if event_key in {
@@ -322,6 +348,8 @@ def review_raw_hook_native(
         "prompt",
     }:
         required_features.add("pre-tool-generic-authority-v1")
+        if event_key not in {"userpromptsubmit", "userpromptsubmitted", "prompt"}:
+            required_features.add("git-execution-context-v1")
     if (
         status.mode not in {"auto", "force"}
         or not status.available
@@ -349,6 +377,8 @@ def review_raw_hook_native(
         source_ref_external_allowed=source_ref_external_allowed,
         deadline_budget_ms=deadline_budget_ms,
         snapshot=snapshot,
+        execution_context_supported="git-execution-context-v1" in status.capabilities.features,
+        request_id=request_id,
     )
     if encoded is None:
         return record_native_hook_result("native_fail_safe", None)
@@ -375,7 +405,7 @@ def review_raw_hook_native(
         decoded = _decode_edge(response_payload)
     except (UnicodeDecodeError, json.JSONDecodeError):
         decoded = None
-    if decoded is None:
+    if decoded is None or (request_id is not None and decoded["receipt"]["request_id"] != request_id):
         native_record_resident_failure(
             status.identity.sha256,
             guard_home,

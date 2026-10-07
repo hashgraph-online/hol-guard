@@ -8,6 +8,7 @@ COPY ${HOL_GUARD_LAB_WHEEL} /opt/wheels/
 RUN python -m pip install --no-cache-dir /opt/wheels/*.whl \
     && rm -rf /opt/wheels
 COPY tests/dockerlabs/command-extension-analytics/installed_server.py /opt/guard-lab/installed_server.py
+COPY tests/dockerlabs/command-extension-analytics/keyring_fixture.py /opt/guard-lab/keyring_fixture.py
 COPY tests/dockerlabs/command-extension-analytics/github-cli-fixture.sh /opt/guard-lab/github-cli-fixture.sh
 COPY tests/dockerlabs/command-extension-analytics/tcp_relay.py /opt/guard-lab/tcp_relay.py
 RUN chmod 0555 /opt/guard-lab/github-cli-fixture.sh
