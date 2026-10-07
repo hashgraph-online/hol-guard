@@ -6680,7 +6680,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             payload,
                             params,
                             default_harness=default_harness,
-                            reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
+                            reason=(
+                                "HOL Guard could not complete local review within the hook deadline. Retry this action."
+                            ),
                             reason_code="daemon_hook_deadline_exhausted",
                             native_authoritative=_native_mode_requires_rust(),
                         )
