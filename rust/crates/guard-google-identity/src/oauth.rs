@@ -16,11 +16,33 @@ use zeroize::Zeroizing;
 const AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const SEND_SCOPE: &str = "https://www.googleapis.com/auth/gmail.send";
+const DIRECTORY_SCOPE: &str = "https://www.googleapis.com/auth/admin.directory.user.readonly";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GrantPurpose {
+    Send,
+    Directory,
+}
+impl GrantPurpose {
+    fn scope(self) -> &'static str {
+        match self {
+            Self::Send => SEND_SCOPE,
+            Self::Directory => DIRECTORY_SCOPE,
+        }
+    }
+}
+#[path = "directory_http.rs"]
+mod directory_http;
+#[path = "send_http.rs"]
+mod send_http;
+#[path = "oauth_start.rs"]
+mod start;
 
 /// Configuration must come from the authenticated worker, not callback/tool
 /// arguments. The client session binding is owned by that worker's authorized
 /// client session and must be re-derived from the authenticated callback session.
 pub struct GoogleSendAuthorization {
+    purpose: GrantPurpose,
     client_id: ClientId,
     redirect: RedirectUrl,
     client_secret: Zeroizing<String>,
@@ -34,6 +56,7 @@ pub struct GoogleSendAuthorization {
 /// Private credential material remains in the worker. No Clone, Debug,
 /// serialization or token getter. A successful callback is not enrollment.
 pub struct GoogleSendCredential {
+    purpose: GrantPurpose,
     access_token: Zeroizing<String>,
     refresh_token: Option<Zeroizing<String>>,
     identity: GoogleIdentityEvidence,
@@ -58,7 +81,10 @@ impl GoogleSendCredential {
     /// Authenticate the exact primary From mailbox without exporting it.
     /// This does not resolve recipients, enroll an account or permit a send.
     pub fn authenticates_sender(&self, sender: &str) -> bool {
-        self.is_current()
+        self.is_current() && self.sender_matches(sender)
+    }
+    pub(crate) fn sender_matches(&self, sender: &str) -> bool {
+        self.purpose == GrantPurpose::Send
             && self
                 .identity
                 .sender
@@ -68,62 +94,6 @@ impl GoogleSendCredential {
 }
 
 impl GoogleSendAuthorization {
-    pub fn begin(
-        challenge: GoogleLoginChallenge,
-        registered_client_secret: String,
-        registered_redirect_uri: String,
-        authenticated_client_session_binding: String,
-    ) -> Result<Self, IdentityError> {
-        let client_secret = Zeroizing::new(registered_client_secret);
-        challenge.check_time(now()?)?;
-        if !bounded_ascii(&client_secret, 4096)
-            || !valid_session_binding(&authenticated_client_session_binding)
-            || registered_redirect_uri.len() > 2048
-        {
-            return Err(IdentityError::Invalid);
-        }
-        let redirect =
-            RedirectUrl::new(registered_redirect_uri).map_err(|_| IdentityError::Invalid)?;
-        let url = redirect.url();
-        if url.scheme() != "https"
-            || url.host_str().is_none()
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.fragment().is_some()
-            || url.query().is_some()
-        {
-            return Err(IdentityError::Invalid);
-        }
-        let client_id = ClientId::new(challenge.client_id.clone());
-        let client = BasicClient::new(client_id.clone())
-            .set_auth_uri(
-                AuthUrl::new(AUTHORIZE_URL.to_owned()).map_err(|_| IdentityError::Invalid)?,
-            )
-            .set_redirect_uri(redirect.clone());
-        let (pkce, verifier) = PkceCodeChallenge::new_random_sha256();
-        let (url, state) = client
-            .authorize_url(CsrfToken::new_random)
-            .add_scope(Scope::new("openid".to_owned()))
-            .add_scope(Scope::new("email".to_owned()))
-            .add_scope(Scope::new(SEND_SCOPE.to_owned()))
-            .set_pkce_challenge(pkce)
-            .add_extra_param("nonce", challenge.nonce())
-            .add_extra_param("access_type", "offline")
-            .add_extra_param("include_granted_scopes", "false")
-            .add_extra_param("prompt", "select_account consent")
-            .url();
-        Ok(Self {
-            client_id,
-            redirect,
-            client_secret,
-            challenge,
-            state: Zeroizing::new(state.into_secret()),
-            verifier: Zeroizing::new(verifier.into_secret()),
-            client_session_binding: authenticated_client_session_binding,
-            authorization_url: Zeroizing::new(url.into()),
-        })
-    }
-
     /// A browser may receive this authorization URL; it contains no client
     /// secret or PKCE verifier. Do not log callback codes or token responses.
     pub fn authorization_url(&self) -> &str {
@@ -231,7 +201,7 @@ impl GoogleSendAuthorization {
             || !response
                 .scopes
                 .iter()
-                .any(|scope| scope.as_str() == SEND_SCOPE)
+                .any(|scope| scope.as_str() == self.purpose.scope())
             || response
                 .refresh_token
                 .as_ref()
@@ -256,6 +226,7 @@ impl GoogleSendAuthorization {
             Instant::now(),
         )?;
         Ok(GoogleSendCredential {
+            purpose: self.purpose,
             access_token: response.access_token,
             refresh_token: response.refresh_token,
             identity,
@@ -451,4 +422,41 @@ mod tests;
 
 #[cfg(test)]
 #[path = "worker_input_tests.rs"]
-mod worker_input_tests;
+pub(crate) mod worker_input_tests;
+
+#[cfg(test)]
+#[path = "outbound_tests.rs"]
+mod outbound_tests;
+
+#[cfg(test)]
+pub(crate) fn directory_test_credential() -> GoogleSendCredential {
+    use serde_json::json;
+    let session = GoogleSendAuthorization::begin_directory(
+        GoogleLoginChallenge::new(
+            "approved-client".into(),
+            vec!["work.example".into()],
+            [7; 32],
+        )
+        .unwrap(),
+        "synthetic-secret".into(),
+        "https://worker.example/callback".into(),
+        tests::binding(),
+    )
+    .unwrap();
+    let state = session.state.to_string();
+    let mut response = tests::response(&tests::claims(&session));
+    response["scope"] = json!(format!("openid email {DIRECTORY_SCOPE}"));
+    session
+        .complete_with(
+            &state,
+            "synthetic-code".into(),
+            &tests::binding(),
+            |_| Ok::<_, ExchangeTransportError>(tests::http_response(&response)),
+            tests::verify,
+        )
+        .unwrap()
+}
+
+#[cfg(test)]
+#[path = "directory_oauth_tests.rs"]
+mod directory_oauth_tests;

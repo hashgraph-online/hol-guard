@@ -42,6 +42,15 @@ _MCP_STDIO_SESSION_OPEN_SCHEMA = "guard-mcp-stdio-session-open-request.v1"
 _MCP_STDIO_SESSION_IO_SCHEMA = "guard-mcp-stdio-session-io-request.v1"
 _MCP_STDIO_SESSION_RESULT_SCHEMA = "guard-mcp-stdio-session-result.v1"
 
+
+def _native_session_feature_available() -> bool:
+    status = native_runtime_status()
+    if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
+        return False
+    features = set(status.capabilities.features)
+    return _RESIDENT_PROTOCOL_FEATURE in features and _MCP_STDIO_SESSION_FEATURE in features
+
+
 # Terminal/vocab statuses each session op may legitimately return. A reported
 # "error"/"exited"/"eof" is a terminal native answer — the caller must see it
 # rather than get None and silently fall back to a Python subprocess.

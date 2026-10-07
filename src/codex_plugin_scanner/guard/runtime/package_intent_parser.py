@@ -138,6 +138,61 @@ class _CommandSegment:
     context_reason_code: str | None
 
 
+def _canonical_command_mapping(canonical_command: object) -> Mapping[str, object] | None:
+    """Project the caller's canonical command onto the native payload shape.
+
+    The native parser takes a mapping, so a structured command is reduced with
+    its own ``to_dict``; anything else that is not already a mapping has no
+    representation to send and is reported as absent.
+    """
+
+    to_dict = getattr(canonical_command, "to_dict", None)
+    if callable(to_dict):
+        payload = to_dict()
+        return payload if isinstance(payload, dict) else None
+    return canonical_command if isinstance(canonical_command, dict) else None
+
+
+def _native_package_intent(
+    command_text: str,
+    *,
+    workspace: Path | None,
+    home_dir: Path | None,
+    guard_home: Path | None,
+    canonical_command: CanonicalCommand | None,
+    environment: Mapping[str, str] | None,
+) -> PackageIntent | None:
+    """Try the resident ``package_intent_parse`` authority.
+
+    Returns ``None`` only for transport failure (feature unsupported, binary
+    unreachable, or no verified executable); the caller then runs the local
+    parser. A decoded-but-malformed payload is rejected to ``None`` so the
+    caller's Python path stays authoritative rather than silently returning
+    garbage intent.
+    """
+
+    try:
+        from ..config import resolve_guard_home
+        from ..native_package_authority import package_intent_parse_native
+
+        payload = package_intent_parse_native(
+            command_text,
+            workspace=workspace,
+            home_dir=home_dir,
+            canonical_command=_canonical_command_mapping(canonical_command),
+            environment=environment,
+            guard_home=guard_home if guard_home is not None else resolve_guard_home(),
+        )
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return PackageIntent.from_dict(payload)
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+
+
 def parse_package_intent(
     command_text: str,
     *,
@@ -145,7 +200,18 @@ def parse_package_intent(
     home_dir: Path | None = None,
     canonical_command: CanonicalCommand | None = None,
     environment: Mapping[str, str] | None = None,
+    guard_home: Path | None = None,
 ) -> PackageIntent | None:
+    native_intent = _native_package_intent(
+        command_text,
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        canonical_command=canonical_command,
+        environment=environment,
+    )
+    if native_intent is not None:
+        return native_intent
     handlers = {
         "npm": _parse_npm_intent,
         "npx": _parse_exec_intent,

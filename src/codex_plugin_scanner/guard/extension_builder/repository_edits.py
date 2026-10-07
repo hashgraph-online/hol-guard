@@ -10,6 +10,7 @@ import ast
 import importlib
 import json
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from .errors import BuilderError
@@ -23,6 +24,7 @@ else:  # pragma: no cover - exercised by the Python 3.10 CI job
     tomllib = importlib.import_module("tomli")
 
 TRUST_PATH = "contracts/extensions/trust-class-map.v1.json"
+BINDINGS_DIR = "contracts/extensions/trust"
 STAGING_PATH = "scripts/release/stage_guard_cloud_review_artifacts.py"
 PYPROJECT_PATH = "pyproject.toml"
 
@@ -55,15 +57,62 @@ def _line_ending(content: str) -> str:
     return "\r\n" if "\r\n" in content else "\n"
 
 
-def edit_trust(content: str, metadata: Metadata) -> str:
-    classes = trust_members(content)
-    if metadata.catalog_id in classes["first-party"] or metadata.catalog_id in classes["trusted-library"]:
-        raise conflict("The builder cannot modify an existing trusted extension or change its trust class.")
-    if metadata.catalog_id in classes["external"]:
-        return content
+def trust_binding_path(metadata: Metadata) -> str:
+    """Return the authored-binding path for this contribution's catalog id."""
+    return f"{BINDINGS_DIR}/{metadata.catalog_id}.v1.json"
+
+
+def trust_binding_content(metadata: Metadata) -> str:
+    """Render the authored per-extension binding for a new external id."""
+    return (
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": metadata.catalog_id,
+                "trustClass": "external",
+            },
+            ensure_ascii=True,
+            indent=2,
+        )
+        + "\n"
+    )
+
+
+def _binding_id(path: str, content: str) -> tuple[str, str]:
     payload = object_value(parse_json(content.encode("utf-8")))
-    object_value(payload["classes"])["external"] = sorted([*classes["external"], metadata.catalog_id])
-    return (json.dumps(payload, ensure_ascii=True, indent=2) + "\n").replace("\n", _line_ending(content))
+    if payload.get("schemaVersion") != "guard.extension-trust-binding.v1":
+        raise conflict(f"The repository trust binding {path} uses an unsupported schema.")
+    extension = payload.get("extension")
+    trust_class = payload.get("trustClass")
+    stem = path.rsplit("/", 1)[-1]
+    if not isinstance(extension, str) or extension != stem[: -len(".v1.json")]:
+        raise conflict(f"The repository trust binding {path} extension does not match its filename.")
+    if not isinstance(trust_class, str) or trust_class not in {"first-party", "trusted-library", "external"}:
+        raise conflict(f"The repository trust binding {path} has an unknown trust class.")
+    return extension, trust_class
+
+
+def project_trust_map(bindings: dict[str, str]) -> str:
+    """Fold authored binding file contents into the aggregate-map JSON.
+
+    ``bindings`` maps each ``trust/<id>.v1.json`` path to its content. Delegates
+    to the runtime folder so the builder's projection is byte-identical to the
+    refresh pipeline's; the committed aggregate is regenerated, never hand-edited.
+    """
+    import tempfile
+
+    from ..runtime.extension_trust import trust_map_from_bindings
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for path, content in bindings.items():
+            _binding_id(path, content)  # surface malformed input as a conflict first
+            (root / path.rsplit("/", 1)[-1]).write_text(content, encoding="utf-8")
+        try:
+            aggregate = trust_map_from_bindings(root)
+        except ValueError as exc:
+            raise conflict(str(exc)) from exc
+    return json.dumps(aggregate, ensure_ascii=True, indent=2) + "\n"
 
 
 def _toml(content: str) -> dict[str, object]:

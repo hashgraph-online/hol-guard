@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
+from .pi_extension_prompt_response_source import PROMPT_RESPONSE_HELPER_SOURCE
 from .pi_extension_source_body_shared_v1 import build_source_body_shared_v1
 
 _STRUCTURED_BLOCKED_REASON_PRELUDE = (
@@ -76,8 +77,7 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  }\n"
         "  return null;\n"
         "}\n"
-        "\n"
-        "function fallbackGuardResponse(\n"
+        "\n" + PROMPT_RESPONSE_HELPER_SOURCE + "function fallbackGuardResponse(\n"
         "  reasonCode: string,\n"
         "  reason: string,\n"
         "): GuardResponse {\n"
@@ -196,7 +196,9 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
         "    try {\n"
         "      const parsed = JSON.parse(raw) as unknown;\n"
-        "      const normalized = normalizeGuardResponse(parsed);\n"
+        "      const normalized = normalizePromptGuardResponse(\n"
+        "        parsed, JSON.parse(serializedPayload).hook_event_name,\n"
+        "      );\n"
         "      if (normalized !== null) {\n"
         "        return { response: normalized, recoveryKind: null };\n"
         "      }\n"
@@ -360,6 +362,10 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  }\n"
         + build_source_body_shared_v1(
             display_name=display_name, blocked_reason_prelude=_STRUCTURED_BLOCKED_REASON_PRELUDE
+        ).replace(
+            "const normalized = normalizeGuardResponse(parsed);",
+            "const normalized = normalizePromptGuardResponse(parsed, payload.hook_event_name);",
+            1,
         )
         + "function reviewedToolResult(content: unknown, details: unknown, isError?: boolean, deadlineAt?: number) {\n"
         "  let body = '';\n"

@@ -27,12 +27,29 @@ def _noodle_payload() -> dict[str, object]:
     return payload
 
 
+def _source_contribution_ids() -> frozenset[str]:
+    """Ids declared by authored command-source inputs, including pending ones."""
+    root = Path(__file__).resolve().parents[1] / "contributions/command-sources"
+    ids: set[str] = set()
+    for path in root.glob("command.*.json"):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        extension = payload.get("extension") if isinstance(payload, dict) else None
+        extension_id = extension.get("extension_id") if isinstance(extension, dict) else None
+        if isinstance(extension_id, str):
+            ids.add(extension_id)
+    return frozenset(ids)
+
 def test_in_tree_contributions_match_reviewed_trust_classes() -> None:
     payloads = load_contribution_payloads()
     ids = {str(item["id"]) for item in payloads}
     assert ids == contribution_ids()
-    expected = ids_for_class("external") | ids_for_class("first-party") | ids_for_class("trusted-library")
-    assert contribution_ids() | mcp_catalog_ids() == expected
+    # Every published contribution and MCP catalog id is covered by a reviewed
+    # trust binding. A binding may also exist for a source-only contribution
+    # still awaiting descriptor generation; such ids bind early as external.
+    published = contribution_ids() | mcp_catalog_ids()
+    bound = ids_for_class("external") | ids_for_class("first-party") | ids_for_class("trusted-library")
+    assert published <= bound
+    assert bound - published <= _source_contribution_ids() | mcp_catalog_ids()
     for payload in payloads:
         validate_contribution(payload, filename=str(payload["id"]))
 

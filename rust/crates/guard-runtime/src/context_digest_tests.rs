@@ -196,6 +196,75 @@ fn opaque_material_cases_match_python_digests() {
 }
 
 #[test]
+fn mcp_arguments_projection_cases_match_python() {
+    for case in corpus()["mcp_arguments_projection_cases"]
+        .as_array()
+        .unwrap()
+    {
+        let arguments = case["arguments"].clone();
+        let arguments = if arguments.is_null() {
+            // `null` in the fixture encodes "no arguments key" — serde maps
+            // absent and `null` to `None`, matching `params.get("arguments")`.
+            None
+        } else {
+            Some(arguments)
+        };
+        let result = evaluate(request_for(ContextDigestKindV1::McpArgumentsProjection {
+            tool_name: case["tool_name"].as_str().unwrap().to_owned(),
+            arguments,
+        }));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.digest.as_deref(),
+            case["digest"].as_str(),
+            "case {}",
+            case["id"]
+        );
+        assert_eq!(
+            result.mcp_launch_target.as_deref(),
+            case["launch_target"].as_str(),
+            "case {}",
+            case["id"]
+        );
+        assert_eq!(
+            result.mcp_serialized_arguments.as_deref(),
+            case["serialized_arguments"].as_str(),
+            "case {}",
+            case["id"]
+        );
+        let expected_safe = if case["safe_arguments"].is_null() {
+            // Wire `null` parses as `None`; Python `_safe_mcp_arguments(None)`
+            // also yields `None`.
+            None
+        } else {
+            Some(&case["safe_arguments"])
+        };
+        assert_eq!(
+            result.mcp_safe_arguments.as_ref(),
+            expected_safe,
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+#[test]
+fn mcp_redact_json_cases_match_python() {
+    for case in corpus()["mcp_redact_json_cases"].as_array().unwrap() {
+        let result = evaluate(request_for(ContextDigestKindV1::McpRedactJson {
+            material: case["material"].clone(),
+        }));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.mcp_redacted_value.as_ref(),
+            Some(&case["redacted"]),
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+#[test]
 fn token_cases_match_python_parse() {
     for case in corpus()["token_cases"].as_array().unwrap() {
         let parsed = parse_context_token(&case["token"]);

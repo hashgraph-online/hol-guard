@@ -228,6 +228,18 @@ pub enum ContextDigestKindV1 {
     OpaqueMaterialDigest {
         material: String,
     },
+    /// MCP call-argument projection: `_safe_mcp_arguments` + the launch-target
+    /// digest + serialized display string, in one round-trip. `arguments` is
+    /// `None` when the JSON-RPC params carry no `arguments` key.
+    McpArgumentsProjection {
+        tool_name: String,
+        #[serde(default)]
+        arguments: Option<Value>,
+    },
+    /// stdio `_redact_json` parity for remote/stdio traffic recording.
+    McpRedactJson {
+        material: Value,
+    },
     /// Select and hash package-manager policy environment values natively.
     PackageEnvironmentPolicy {
         manager: String,
@@ -286,6 +298,68 @@ pub enum ContextDigestKindV1 {
     PackageLauncherToken {
         command_name: String,
         args: Vec<String>,
+    },
+    /// `build_runtime_executable_identity` — resolve + content-bind an
+    /// executable with per-evaluation nonces for unverifiable cases.
+    /// `command: null` models Python's `command is None`.
+    RuntimeExecutableIdentity {
+        command: Option<Value>,
+        search_path: Option<String>,
+        cwd: Option<String>,
+        home_dir: Option<String>,
+        require_executable: bool,
+    },
+    /// `build_runtime_launch_identity` — content-bind executable plus
+    /// code-bearing entrypoints from the real launch cwd.
+    RuntimeLaunchIdentity {
+        command: Option<Value>,
+        #[serde(default)]
+        args: Vec<Value>,
+        structured_command: bool,
+        direct_executable: bool,
+        search_path: Option<String>,
+        cwd: Option<String>,
+        home_dir: Option<String>,
+        #[serde(default)]
+        launch_env: Option<BTreeMap<String, String>>,
+    },
+    /// `runtime_launch_identity_matches` — rebuild the current identity and
+    /// compare verification digests.
+    RuntimeLaunchIdentityMatches {
+        expected_identity: Value,
+        command: Option<Value>,
+        #[serde(default)]
+        args: Vec<Value>,
+        structured_command: bool,
+        direct_executable: bool,
+        search_path: Option<String>,
+        cwd: Option<String>,
+        #[serde(default)]
+        launch_env: Option<BTreeMap<String, String>>,
+    },
+    /// Identity post-processors — `runtime_launch_identity_is_reusable`,
+    /// `resolved_runtime_launch_executable`, `resolved_runtime_launch_argv`.
+    /// `resolved_argv` re-probes shebang bytes, so it runs here where fs is
+    /// legal rather than in Python callers.
+    RuntimeLaunchIdentityProjection {
+        identity: Value,
+        #[serde(default)]
+        args: Vec<String>,
+    },
+    /// MCP tools/list boundary: canonicalize each advertised tool entry
+    /// (name-strip, `input_schema`→`inputSchema`, `output_schema`→`outputSchema`,
+    /// deepcopy) and return the sha256 fingerprint over
+    /// `{state, tools(sorted-by-name), version}` plus the canonicalized page.
+    /// Replaces `_tool_catalog_fingerprint`/`_normalized_tools_catalog_page`.
+    McpToolCatalogFingerprint {
+        /// Ordered `["name", definition]` pairs — a JSON object cannot carry
+        /// duplicate names distinctly, and the page's duplicate-name rejection
+        /// requires seeing every raw entry.
+        entries: Vec<(String, Value)>,
+        /// Catalog lifecycle state (e.g. `"pending"`, `"complete"`).
+        state: String,
+        /// Catalog schema/version token baked into the fingerprint.
+        version: String,
     },
 }
 
@@ -362,4 +436,43 @@ pub struct ContextDigestResultV1 {
     pub mcp_tool_risk: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_tool_policy: Option<McpToolPolicyResultV1>,
+    /// `_launch_target` output — `"{tool} {serialized} [arguments-sha256:X]"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_launch_target: Option<String>,
+    /// `_safe_mcp_arguments` output. Explicit `null` when the request carried
+    /// no `arguments` — Python's `_safe_mcp_arguments(None)` returns `None`,
+    /// so the field must always be present for this kind.
+    #[serde(default)]
+    pub mcp_safe_arguments: Option<Value>,
+    /// Serialized display string for the launch target (canonical JSON of the
+    /// safe arguments, or `""` when arguments were absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_serialized_arguments: Option<String>,
+    /// stdio `_redact_json` output for traffic recording.
+    #[serde(default)]
+    pub mcp_redacted_value: Option<Value>,
+    /// `build_runtime_executable_identity` / `build_runtime_launch_identity`
+    /// output — the full launch-identity object, verbatim Python dict shape.
+    /// These kinds always produce it; `Option` keeps it absent on other kinds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_identity: Option<Value>,
+    /// `runtime_launch_identity_matches` verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_identity_match: Option<bool>,
+    /// `runtime_launch_identity_is_reusable` verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_identity_reusable: Option<bool>,
+    /// `resolved_runtime_launch_executable` result (absent/`null` when
+    /// unpinnable).
+    #[serde(default)]
+    pub runtime_resolved_executable: Option<String>,
+    /// `resolved_runtime_launch_argv` result — always present for the
+    /// projection kind; `null` when the launch is unpinnable.
+    #[serde(default)]
+    pub runtime_resolved_argv: Option<Vec<String>>,
+    /// Canonicalized tool page — `name → entry` map, `null` when the raw
+    /// `tools` payload was malformed (non-dict item, non-str key, blank or
+    /// duplicate name). Explicit `null` mirrors `_normalized_tools_catalog_page`.
+    #[serde(default)]
+    pub tool_catalog: Option<Map<String, Value>>,
 }

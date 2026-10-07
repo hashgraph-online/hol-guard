@@ -992,6 +992,7 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
 def test_package_observe_mode_records_each_authority_without_approval_requests(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
     tool_action: GuardAction,
     package_action: GuardAction,
     expected_tool_queue: list[GuardAction],

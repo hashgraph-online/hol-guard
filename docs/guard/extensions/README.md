@@ -133,6 +133,7 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
+| `command.mcp-asdecided` | Read-only repository requirements, decisions, designs, roadmaps, and prompts for coding agents. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-contribos` | Reviews open-source contribution tools: policy radar, issue briefs, pre-submit checks, review coaching, and contribution records. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-filesystem` | Reviews official filesystem MCP tools. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-instapods` | Reviews sensitive InstaPods pod, billing, command execution, and file-write tools for the official hosted MCP server. | 0 | External opt-in |
@@ -147,8 +148,10 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
+| `command.answerloops` | Reviews answerLoops CLI commands that start a self-hosted instance with Docker Compose or download agent skill files into ./.claude/skills/. Help and usage output are not reviewed. | 2 | External opt-in |
 | `command.appimg` | Conservative operation knowledge compiled from a contributor inventory. | 17 | External opt-in |
 | `command.blitcp` | Reviews blitcp copies that leave the host, elevate privileges, or skip verification. | 4 | External opt-in |
+| `command.blkcp` | Reviews blkcp commands that write directly to raw block devices or bypass safety guards with --force. | 2 | External opt-in |
 | `command.cloudg` | Reviews cloud credential use, security scanner execution, and Terraform file generation through the CloudG CLI. | 3 | External opt-in |
 | `command.cogext` | Reviews the cogext CLI's mutating commitment operations (add, fulfill, fail). Read-only commands (extract, list, get, stats) are not matched and remain automatic. Note: `cogext add` may initialize ~/.cogext on a fresh machine; that side effect is covered structurally because `add` is in the reviewed set. | 3 | External opt-in |
 | `command.cs` | Reviews cs (Claude Sessions) commands that launch Claude Code in another folder, write pin or archive files, or send session text to a model for a recap. Read-only commands (ls, show) are not matched. | 4 | External opt-in |
@@ -160,6 +163,7 @@ Protection model meanings:
 | `command.genclave` | Reviews gEnclave (ge) security enclave operations that mutate credentials, modify access policies, or unlock persistent sessions. | 3 | External opt-in |
 | `command.gitsync` | Reviews gitsync's live mirror sync, server-side webhook rewrites, and service install/uninstall. `check`, `status`, and plain `hooks` do not match any rule here; Guard's default floor still applies to them since gitsync is not on the built-in safe-command list and no rule in this extension matches those subcommands. Every mutating subcommand covered here always requires review, even with --help, -h or --dry-run present, because gitsync's flag parser can silently drop those flags depending on argument order and this matcher engine cannot detect when that happened. | 2 | External opt-in |
 | `command.google-workspace.gog` | Opt-in review of finite pinned gog CLI delivery, sharing, event, export, generic API and identity-override routes. This does not authenticate accounts or mediate provider execution. | 6 | External opt-in |
+| `command.keibidrop` | Reviews kd commands that share a local file with a peer, write a peer's file to local disk, or set which peer identity the session accepts. | 3 | External opt-in |
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
 | `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |

@@ -1515,7 +1515,7 @@ def test_review_returns_immediately_without_prepared_worker_capacity(tmp_path: P
         runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
         runner.close()
 
-    assert elapsed < 0.04
+    assert elapsed < 0.04 * under_coverage_scale(4.0)
     assert result.payload is None
     assert result.reason_code == "daemon_hook_process_not_ready"
 

@@ -186,6 +186,12 @@ def _schema_bytes() -> bytes:
 
 @lru_cache(maxsize=1)
 def _trust_classes() -> dict[str, str]:
+    # Prefer authored per-extension bindings; the packaged aggregate map is a
+    # generated projection kept for frozen/packaged runtimes and release staging.
+    if not _frozen_runtime():
+        bindings = Path(__file__).resolve().parents[4] / "contracts" / "extensions" / "trust"
+        if bindings.is_dir():
+            return _trust_classes_from_bindings(bindings)
     try:
         root = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
         raw = (root / "trust-class-map.v1.json").read_bytes()
@@ -211,6 +217,13 @@ def _trust_classes() -> dict[str, str]:
                 raise ValueError("duplicate extension trust binding")
             result[extension_id] = name
     return result
+
+
+def _trust_classes_from_bindings(bindings: Path) -> dict[str, str]:
+    """Fold authored per-extension trust bindings into an id -> class index."""
+    from .extension_trust import trust_binding_index
+
+    return dict(trust_binding_index(bindings))
 
 
 def _reviewed_trust_class(extension_id: str) -> str:

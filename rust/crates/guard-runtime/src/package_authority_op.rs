@@ -15,12 +15,14 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use guard_command::local_supply_chain::{
-    resolve_package_firewall_entitlement, resolve_package_firewall_entitlement_with_refresh,
-    CommandExecution, GuardConfig, LocalSupplyChainError, PackageFirewallEntitlementApi,
-    PolicyDecisionLookup, RuntimeRunnerApi, SupplyChainStore,
+    apply_stored_package_policy_override, resolve_package_firewall_entitlement,
+    resolve_package_firewall_entitlement_with_refresh, ApprovalContextApi, CommandExecution,
+    GuardConfig, LocalSupplyChainError, PackageEvalApi, PackageFirewallEntitlementApi,
+    PackageIntentParserApi, PackageRequestEvaluation, PathSupportApi, PolicyDecisionLookup,
+    RuntimeRunnerApi, SupplyChainStore,
 };
 use guard_command::package_intent_common::{
-    build_package_request_artifact, resolve_path_within_workspace, GuardArtifact,
+    build_package_request_artifact, resolve_path_within_workspace, GuardArtifact, PackageIntent,
 };
 use guard_command::package_intent_parser::parse_package_intent;
 use guard_command::pep440::{SpecifierSet, Version};
@@ -29,12 +31,14 @@ use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
     ConfigLoaderApi, EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest,
     GuardSyncRunnerApi, JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi,
-    NativeArchiveApi, PackageIdentityApi, RestrictedArchiveApi, RestrictedArchiveDownloadResult,
+    NativeArchiveApi, PackageIdentityApi, RestrictedArchiveApi,
+    RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
     RestrictedArchiveFailure, RiskDetectApi, StoreExtrasApi, SupplyChainBundleApi,
     SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, WorkspaceIoApi,
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{
+    ApplyStoredPackagePolicyRequestV1, ApplyStoredPackagePolicyResultV1,
     PackageAuthorityDecideRequestV1, PackageAuthorityDecideResultV1, PackageIntentParseRequestV1,
     PackageIntentParseResultV1, SupplyChainEvalRequestV1, SupplyChainEvalResultV1,
     PACKAGE_AUTHORITY_REQUEST_SCHEMA, PACKAGE_AUTHORITY_RESULT_SCHEMA,
@@ -580,9 +584,12 @@ fn oauth_credential_state(guard_home: &Path, payload: Option<&Value>) -> String 
 }
 
 /// `_load_oauth_secret_payload` — resolve the scoped secret ref from
-/// `credentials_ref` (falling back to the home-scoped default ref) and read
-/// the JSON secret from the encrypted file store.
-fn load_oauth_secret_payload(guard_home: &Path, payload: &Value) -> Option<Value> {
+/// `credentials_ref` (falling back to the home-scoped default ref), read the
+/// secret from the encrypted file store, and verify it against the record's
+/// `credentials_sha256` (`store_base._secret_matches_hash`, all three accepted
+/// prefixes). Bytes that no longer match the fingerprint they were stored with
+/// are not usable, so the caller degrades instead of trusting them.
+fn load_oauth_secret_raw(guard_home: &Path, payload: &Value) -> Option<String> {
     let resolved_home = resolve_runtime_home(guard_home)?;
     let default_ref = crate::policy_integrity_resolver::build_scoped_secret_ref(
         "guard-oauth-local-credentials",
@@ -597,7 +604,20 @@ fn load_oauth_secret_payload(guard_home: &Path, payload: &Value) -> Option<Value
         .unwrap_or(default_ref);
     let mut store = crate::encrypted_secret_store::EncryptedFileSecretStore::new(&resolved_home);
     let raw = store.get_secret(&secret_ref)?;
-    serde_json::from_str(&raw).ok()
+    let expected = payload
+        .get(crate::oauth_secret_authority::CREDENTIALS_HASH_KEY)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    crate::oauth_secret_authority::verified_secret_matches(&raw, expected)
+        .ok()
+        .filter(|matches| *matches)?;
+    Some(raw)
+}
+
+/// `_load_oauth_secret_payload` — the parsed form of `load_oauth_secret_raw`.
+fn load_oauth_secret_payload(guard_home: &Path, payload: &Value) -> Option<Value> {
+    serde_json::from_str(&load_oauth_secret_raw(guard_home, payload)?).ok()
 }
 
 /// `_build_oauth_local_credentials_result` — a secret payload is usable only
@@ -1282,16 +1302,20 @@ impl SupplyChainStore for ResidentSupplyChainStore {
 // ResidentEvalDeps — concrete `SupplyChainEvalDeps` impls.
 // ---------------------------------------------------------------------------
 
-/// Fails closed — resident has no HTTP transport for guard-sync; eval falls
-/// back to local-only exactly like Python `GuardSyncNotConfiguredError`.
+/// Resident `.runtime.runner` guard-sync seam — owns the OAuth credential
+/// read, DPoP proof signing (ES256/ring), origin-allowlist endpoint
+/// validation, and the ureq-backed HTTPS transport with the Python retry
+/// state machine (`_urlopen_with_sync_retries`). Token refresh is not yet
+/// ported (stage B) — a cached-token-miss surfaces `EvalError::Validation`
+/// (`GuardSyncAuthorizationExpiredError` mirror, fail-closed to `ask`).
 ///
 /// `auth_context_override` is a test-only seam: when the originating Python
 /// process is running under pytest (`PYTEST_CURRENT_TEST` set) and exports
 /// `HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON`, `supply_chain_eval_native` forwards
 /// the parsed dict on the request as `sync_auth_context_override`. Two forms:
 ///   * `{"sync_url": ..., "access_token": ...}` — used verbatim as the auth
-///     context so the resident reaches the (still stubbed) transport and
-///     surfaces `cloud_http_error` rather than silently degrading;
+///     context so the resident reaches the transport and surfaces
+///     `cloud_http_error` rather than silently degrading;
 ///   * `{"error": "authorization_expired"}` — surfaces as
 ///     `EvalError::Validation`, which `evaluate_with_cloud` maps to the
 ///     `cloud_auth_error` fail-closed path (parity with
@@ -1303,57 +1327,236 @@ struct ResidentGuardSyncRunner {
 impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
     fn resolve_guard_sync_auth_context(
         &self,
-        _store: &dyn SupplyChainStore,
+        store: &dyn SupplyChainStore,
         _allow_primary_repair: bool,
-        _force_refresh: bool,
+        force_refresh: bool,
     ) -> EvalResult<Map<String, Value>> {
+        use guard_command::guard_sync_transport as gst;
         if let Some(override_ctx) = &self.auth_context_override {
             if override_ctx.get("error").and_then(Value::as_str) == Some("authorization_expired") {
                 return Err(EvalError::Validation(
                     "guard sync authorization expired (test override)".into(),
                 ));
             }
-            return Ok(override_ctx.clone());
+            let mut ctx = override_ctx.clone();
+            if let Some(sync_url) = ctx.get("sync_url").and_then(Value::as_str) {
+                let issuer = ctx.get("issuer").and_then(Value::as_str);
+                ctx.insert(
+                    "sync_url".to_owned(),
+                    Value::String(
+                        gst::validate_guard_sync_endpoint(sync_url, issuer)
+                            .map_err(EvalError::Validation)?,
+                    ),
+                );
+            }
+            return Ok(ctx);
         }
-        Err(EvalError::NotFound(
-            "guard sync auth context unavailable in resident".into(),
-        ))
+        if let Some(mut env_ctx) = gst::test_sync_auth_context_from_env() {
+            if let Some(sync_url) = env_ctx.get("sync_url").and_then(Value::as_str) {
+                let issuer = env_ctx.get("issuer").and_then(Value::as_str);
+                env_ctx.insert(
+                    "sync_url".to_owned(),
+                    Value::String(
+                        gst::validate_guard_sync_endpoint(sync_url, issuer)
+                            .map_err(EvalError::Validation)?,
+                    ),
+                );
+            }
+            return Ok(env_ctx);
+        }
+        // `_resolve_guard_sync_auth_context` (:4733) — read the stored OAuth
+        // credentials through the scoped secret authority: metadata from the
+        // `oauth_local_credentials` payload, secret material (refresh token,
+        // DPoP key, cached access token) from the verified secret behind
+        // `credentials_ref`. `store_oauth` never inlines the secret, so the
+        // payload alone cannot start a sync. Token refresh (the network leg +
+        // rotation persist) is still the stage-B port: a missing/expired token
+        // surfaces `EvalError::Validation` (the
+        // `GuardSyncAuthorizationExpiredError` mirror) so `_evaluate_with_cloud`
+        // fail-closes to `ask` rather than mislabeling a refresh-needed
+        // credential as `NotFound` ("not configured") and falling back to
+        // local-only evaluation.
+        // The writer replaces the secret before it republishes the record's
+        // fingerprint, so a read landing inside that window can see a valid pair
+        // torn apart and must not turn a healthy credential into a denial. One
+        // re-read settles it; anything else fails closed.
+        let mut attempt = 0_u8;
+        let oauth_credentials = loop {
+            attempt += 1;
+            let payload = match store.get_sync_payload("oauth_local_credentials") {
+                Some(payload) if payload.is_object() => payload,
+                _ => return Err(EvalError::NotFound("Guard is not logged in.".to_owned())),
+            };
+            match crate::oauth_secret_authority::resolve_credentials(&payload, &|_| {
+                load_oauth_secret_raw(store.guard_home(), &payload)
+            }) {
+                Ok(credentials) => break credentials,
+                Err(reason)
+                    if (reason == "credentials_secret_fingerprint_mismatch"
+                        || reason == "credentials_secret_unavailable")
+                        && attempt < 2 =>
+                {
+                    continue;
+                }
+                Err(reason) => return Err(EvalError::Validation(reason)),
+            }
+        };
+        let issuer = oauth_credentials
+            .get("issuer")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty());
+        let client_id = oauth_credentials
+            .get("client_id")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty());
+        let refresh_token = oauth_credentials
+            .get("refresh_token")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty());
+        let (issuer, client_id, refresh_token) = match (issuer, client_id, refresh_token) {
+            (Some(i), Some(c), Some(r)) => (i, c, r),
+            _ => {
+                return Err(EvalError::Validation(
+                    "Guard OAuth credentials are incomplete; reauthorize Guard.".to_owned(),
+                ))
+            }
+        };
+        let dpop_key_material = gst::oauth_dpop_key_material(&oauth_credentials)?;
+        // `(origin, authorize_url, token_endpoint, device_authorize_url,
+        // jwks_url, client_id)` — `token_endpoint` is element 2.
+        let oauth_client_config = gst::resolve_guard_oauth_client_config(issuer).map_err(|e| {
+            EvalError::Validation(format!("Reconnect Guard to Guard Cloud to continue. {e}"))
+        })?;
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or_default();
+        let cached_access_token = if force_refresh {
+            None
+        } else {
+            gst::cached_oauth_access_token(&oauth_credentials, now_unix)
+        };
+        let access_token = match cached_access_token {
+            Some(t) => t,
+            None => {
+                // `runner.py` refresh leg — `_refresh_guard_oauth_access_token`:
+                // circuit-checked, `invalid_grant`-retried, rotation-persisted
+                // under `oauth-refresh.lock`. The reloader hands the loop the
+                // latest stored credential when a peer rotated mid-flight.
+                let store_ref = store;
+                let refreshed = crate::oauth_refresh::refresh_oauth_access_token(
+                    store,
+                    &oauth_credentials,
+                    &oauth_client_config.2,
+                    client_id,
+                    refresh_token,
+                    &dpop_key_material,
+                    &move || {
+                        store_ref
+                            .get_sync_payload("oauth_local_credentials")
+                            .and_then(|payload| {
+                                crate::oauth_secret_authority::resolve_credentials(
+                                    &payload,
+                                    &|_| {
+                                        crate::package_authority_op::load_oauth_secret_raw(
+                                            store_ref.guard_home(),
+                                            &payload,
+                                        )
+                                    },
+                                )
+                                .ok()
+                            })
+                            .and_then(|creds| {
+                                let rt = creds
+                                    .get("refresh_token")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_owned)?;
+                                let mat = gst::oauth_dpop_key_material(&creds).ok()?;
+                                Some((rt, mat))
+                            })
+                    },
+                );
+                match refreshed {
+                    Ok(auth) => auth.access_token,
+                    Err(e) => return Err(e),
+                }
+            }
+        };
+        let sync_url = gst::validate_guard_sync_endpoint(
+            &gst::oauth_sync_url_from_issuer(issuer).map_err(EvalError::Validation)?,
+            Some(issuer),
+        )
+        .map_err(EvalError::Validation)?;
+        let mut ctx = Map::new();
+        ctx.insert("sync_url".to_owned(), Value::String(sync_url));
+        ctx.insert("access_token".to_owned(), Value::String(access_token));
+        ctx.insert(
+            "dpop_key_material".to_owned(),
+            Value::Object(dpop_key_material),
+        );
+        ctx.insert("issuer".to_owned(), Value::String(issuer.to_owned()));
+        Ok(ctx)
     }
-    fn validate_guard_sync_url(&self, sync_url: &str, _issuer: Option<&str>) -> EvalResult<String> {
-        Ok(sync_url.trim_end_matches('/').to_owned())
+    fn validate_guard_sync_url(&self, sync_url: &str, issuer: Option<&str>) -> EvalResult<String> {
+        guard_command::guard_sync_transport::validate_guard_sync_endpoint(sync_url, issuer)
+            .map_err(EvalError::Validation)
     }
     fn guard_sync_request(
         &self,
-        _auth_context: &Value,
+        auth_context: &Value,
         request_url: &str,
         method: &str,
         data: Option<&[u8]>,
-        _extra_headers: Option<&Map<String, Value>>,
+        extra_headers: Option<&Map<String, Value>>,
         dpop_nonce: Option<&str>,
     ) -> EvalResult<GuardSyncRequest> {
-        Ok(GuardSyncRequest {
-            url: request_url.to_owned(),
-            method: method.to_owned(),
-            headers: BTreeMap::new(),
-            body: data.map(|d| d.to_vec()),
-            dpop_nonce: dpop_nonce.map(str::to_owned),
-        })
+        guard_command::guard_sync_transport::guard_sync_request(
+            auth_context,
+            request_url,
+            method,
+            data,
+            extra_headers,
+            dpop_nonce,
+        )
     }
     fn urlopen_json_with_timeout_retry(
         &self,
-        _request: &GuardSyncRequest,
-        _timeout_seconds: u64,
-        _retry_timeout_seconds: u64,
+        request: &GuardSyncRequest,
+        timeout_seconds: u64,
+        retry_timeout_seconds: u64,
     ) -> EvalResult<Map<String, Value>> {
-        Err(EvalError::Internal(
-            "resident guard-sync transport unavailable".into(),
-        ))
+        let payload = guard_command::guard_sync_transport::urlopen_json_with_timeout_retry(
+            request,
+            timeout_seconds as f64,
+            retry_timeout_seconds as f64,
+        )?;
+        match payload {
+            Value::Object(map) => Ok(map),
+            _ => Err(EvalError::Internal(
+                "Guard Cloud sync returned an invalid response payload.".into(),
+            )),
+        }
     }
-    fn is_timeout_error(&self, _error: &(dyn std::error::Error + 'static)) -> bool {
-        false
+    fn is_timeout_error(&self, error: &(dyn std::error::Error + 'static)) -> bool {
+        // `_is_timeout_error` (:4997) — urllib surfaces `TimeoutError`,
+        // `URLError` with a `timeout` reason, and (rarely) `HTTPException`.
+        // The transport folds all of those into `EvalError::Internal` with a
+        // `timeout:` prefix.
+        error
+            .downcast_ref::<EvalError>()
+            .is_some_and(|e| matches!(e, EvalError::Internal(m) if m.starts_with("timeout:")))
     }
     fn normalized_receipts_sync_url(&self, sync_url: &str) -> String {
-        sync_url.to_owned()
+        // `_normalized_receipts_sync_url` (:4927) — trailing `/`s trimmed,
+        // the sync endpoint suffix stripped so error detail + nonce paths
+        // compare origins.
+        let trimmed = sync_url.trim_end_matches('/');
+        let lower = trimmed.to_lowercase();
+        if lower.ends_with("/api/guard/receipts/sync") {
+            trimmed[..trimmed.len() - "/api/guard/receipts/sync".len()].to_owned()
+        } else {
+            trimmed.to_owned()
+        }
     }
 }
 
@@ -1719,27 +1922,49 @@ impl PackageIdentityApi for ResidentPackageIdentity {
     }
 }
 
-/// Restricted-archive seam — no HTTP transport in the resident; return the
-/// policy Failure the Python download produces when the fetch is denied.
+/// Restricted-archive seam — bounded public-HTTPS-only acquisition via the
+/// `guard_command::restricted_archive` policy engine over the ureq-backed
+/// pinned transport.
 struct ResidentRestrictedArchive;
 
 impl RestrictedArchiveApi for ResidentRestrictedArchive {
     fn download_restricted_archive(
         &self,
         source_url: &str,
-        _max_bytes: u64,
-        _max_redirects: u32,
-        _timeout_seconds: f64,
-        _temp_dir: Option<&Path>,
+        max_bytes: u64,
+        max_redirects: u32,
+        timeout_seconds: f64,
+        temp_dir: Option<&Path>,
     ) -> EvalResult<RestrictedArchiveDownloadResult> {
-        Ok(RestrictedArchiveDownloadResult::Failure(
-            RestrictedArchiveFailure {
-                code: "external_archive_transport_unavailable".into(),
-                message: format!(
-                    "Restricted archive download is unavailable in the resident: {source_url}"
-                ),
+        let resolver = guard_command::restricted_archive_transport::SystemDnsResolver;
+        let transport = guard_command::restricted_archive_transport::UreqPinnedTransport;
+        Ok(
+            match guard_command::restricted_archive::download_restricted_archive(
+                source_url,
+                max_bytes,
+                max_redirects,
+                timeout_seconds,
+                temp_dir,
+                &resolver,
+                &transport,
+            ) {
+                guard_command::restricted_archive::RestrictedArchiveDownloadResult::Success(
+                    blob,
+                ) => RestrictedArchiveDownloadResult::Success(EvalRestrictedArchiveDownload {
+                    path: blob.path,
+                    sha256: blob.sha256,
+                    size: blob.size,
+                    source_url: blob.source_url,
+                    final_url: blob.final_url,
+                }),
+                guard_command::restricted_archive::RestrictedArchiveDownloadResult::Failure(
+                    failure,
+                ) => RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
+                    code: failure.code,
+                    message: failure.message,
+                }),
             },
-        ))
+        )
     }
 }
 
@@ -1979,11 +2204,33 @@ struct ResidentRuntimeRunner;
 impl RuntimeRunnerApi for ResidentRuntimeRunner {
     fn resolve_guard_sync_auth_context(
         &self,
-        _store: &dyn SupplyChainStore,
+        store: &dyn SupplyChainStore,
     ) -> Result<Value, LocalSupplyChainError> {
-        Err(LocalSupplyChainError::NotAvailable {
-            message: "guard sync auth context unavailable in resident".into(),
-            retryable: true,
+        // `.runtime.runner` resolve delegates to the same resident
+        // `GuardSyncRunnerApi` — the OAuth credential read + origin gate +
+        // cached-token check live there. `EvalError` → `LocalSupplyChainError`
+        // mapping: `NotFound` = `GuardSyncNotConfiguredError` (non-retryable
+        // not-configured), `Validation` = `GuardSyncAuthorizationExpiredError`
+        // (fail-closed auth-expired; still `retryable` at this seam so the
+        // caller's `with_refresh` loop can retry once before surfacing).
+        ResidentGuardSyncRunner {
+            auth_context_override: None,
+        }
+        .resolve_guard_sync_auth_context(store, false, false)
+        .map(Value::Object)
+        .map_err(|e| match e {
+            EvalError::NotFound(m) => LocalSupplyChainError::NotAvailable {
+                message: m,
+                retryable: false,
+            },
+            EvalError::Validation(m) => LocalSupplyChainError::NotAvailable {
+                message: m,
+                retryable: true,
+            },
+            other => LocalSupplyChainError::NotAvailable {
+                message: other.to_string(),
+                retryable: true,
+            },
         })
     }
     fn sync_local_guard_cloud_proof(
@@ -2006,14 +2253,118 @@ impl RuntimeRunnerApi for ResidentRuntimeRunner {
             retryable: true,
         })
     }
-    fn guard_sync_headers(&self, _auth_context: &Value) -> BTreeMap<String, String> {
-        BTreeMap::new()
+    fn guard_sync_headers(&self, auth_context: &Value) -> BTreeMap<String, String> {
+        // `_guard_sync_headers` (:4783) without a request_url — the bundle
+        // sync path only needs the Bearer + content-type set (no DPoP proof
+        // is bound to a URL/method yet).
+        let mut headers = BTreeMap::new();
+        let access_token = auth_context
+            .get("access_token")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        headers.insert("Authorization".to_owned(), format!("Bearer {access_token}"));
+        headers.insert("Content-Type".to_owned(), "application/json".to_owned());
+        headers.insert("Accept".to_owned(), "application/json".to_owned());
+        headers.insert("User-Agent".to_owned(), "hol-guard-native".to_owned());
+        headers
     }
-    fn check_plan_restriction_403(&self, _status: u16, _body: &str) -> (bool, String) {
-        (false, String::new())
+    fn check_plan_restriction_403(&self, _status: u16, body: &str) -> (bool, String) {
+        // `_check_plan_restriction_403` (:4955) — read the 403 body once,
+        // prefer the `error`/`syncEnabled`/`code` fields, keyword-scan the
+        // combined message+code for plan-restriction signals.
+        const PLAN_403_KEYWORDS: &[&str] = &[
+            "sync_not_available",
+            "plan_restriction",
+            "requires a pro",
+            "requires a team",
+            "upgrade your plan",
+            "upgrade to",
+            "subscription required",
+            "not included in your plan",
+            "guard sync requires",
+        ];
+        let fallback = {
+            let trimmed = body.trim();
+            if trimmed.is_empty() {
+                "HTTP Error 403".to_owned()
+            } else {
+                trimmed.to_owned()
+            }
+        };
+        let Ok(Value::Object(payload)) = serde_json::from_str::<Value>(body) else {
+            return (false, fallback);
+        };
+        let message_str = payload
+            .get("error")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| fallback.clone());
+        if payload.get("syncEnabled").and_then(Value::as_bool) == Some(false) {
+            return (true, message_str);
+        }
+        let error_field = payload
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_lowercase();
+        let code_field = payload
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_lowercase();
+        let combined = format!("{error_field} {code_field}");
+        if PLAN_403_KEYWORDS.iter().any(|kw| combined.contains(kw)) {
+            return (true, message_str);
+        }
+        (false, message_str)
     }
     fn guard_cloud_http_error_details(&self, status: u16, body: &str) -> (String, bool) {
-        (format!("guard cloud HTTP {status}: {body}"), status >= 500)
+        // `_guard_cloud_http_error_details` (:2874) — retryable codes +
+        // `guardError.retryable`/`guardError.code` signals, message preferring
+        // the structured `guardError.message`/`error`/`message` field.
+        let mut retryable = matches!(status, 429 | 503 | 524);
+        let mut message: Option<String> = None;
+        if let Ok(Value::Object(payload)) = serde_json::from_str::<Value>(body) {
+            for key in ["guardError", "error", "message"] {
+                if let Some(s) = payload.get(key).and_then(Value::as_str).map(str::trim) {
+                    if !s.is_empty() {
+                        message = Some(s.to_owned());
+                        break;
+                    }
+                }
+                if let Some(inner) = payload.get(key).and_then(Value::as_object) {
+                    if let Some(s) = inner.get("message").and_then(Value::as_str).map(str::trim) {
+                        if !s.is_empty() {
+                            message = Some(s.to_owned());
+                            break;
+                        }
+                    }
+                }
+            }
+            if let Some(guard_error) = payload.get("guardError").and_then(Value::as_object) {
+                if guard_error.get("retryable").and_then(Value::as_bool) == Some(true) {
+                    retryable = true;
+                }
+                if let Some(code) = guard_error.get("code").and_then(Value::as_str) {
+                    let normalized = code.trim().to_lowercase();
+                    if normalized == "guard_unavailable" || normalized == "guard_cloud_unavailable"
+                    {
+                        retryable = true;
+                    }
+                }
+            }
+        }
+        let message = message.unwrap_or_else(|| {
+            let trimmed = body.trim();
+            if trimmed.is_empty() {
+                format!("HTTP Error {status}")
+            } else {
+                trimmed.to_owned()
+            }
+        });
+        (message, retryable)
     }
     fn sync_url_error_message(&self, error: &str) -> String {
         error.to_owned()
@@ -2235,6 +2586,221 @@ pub(crate) fn evaluate_package_intent_parse(
         payload: Some(payload),
     };
     crate::encode_response(&result)
+}
+
+// ---------------------------------------------------------------------------
+// ApplyStoredPackagePolicy — `_apply_stored_package_policy_override` resident
+// op. The override reads only `store` + `approval_context_api` live; the other
+// seam params are parity placeholders carried through the ported signature.
+// ---------------------------------------------------------------------------
+
+/// `.approval_context` seam backed by the resident context-digest engine.
+struct ResidentApprovalContext;
+
+impl ApprovalContextApi for ResidentApprovalContext {
+    fn parse_approval_context_token(&self, token: &Value) -> Option<Value> {
+        let parsed = crate::context_digest::parse_context_token(token)?;
+        Some(json!({
+            "identity": parsed.identity,
+            "content": parsed.content,
+            "capabilities": parsed.capabilities,
+            "policy": parsed.policy,
+            "sandbox": parsed.sandbox,
+        }))
+    }
+    fn approval_context_tokens_validation_reason(
+        &self,
+        saved_token: &Value,
+        current_token: &Value,
+    ) -> Option<String> {
+        crate::context_digest::validate_context_tokens(saved_token, current_token)
+    }
+    fn build_approval_context_token(
+        &self,
+        identity: &Value,
+        content: &Value,
+        capabilities: &Value,
+        policy: &Value,
+        sandbox: &Value,
+    ) -> String {
+        // `extension_control_digest` is bound by the caller's snapshot; the
+        // override path never builds tokens, so the empty digest is inert.
+        let components = guard_contracts::ContextDigestComponentsV1 {
+            identity: identity.clone(),
+            content: content.clone(),
+            capabilities: capabilities.clone(),
+            policy: policy.clone(),
+            sandbox: sandbox.clone(),
+            extension_control_digest: String::new(),
+        };
+        crate::context_digest::build_context_token(&components).unwrap_or_default()
+    }
+    fn saved_allow_context_validation_reason(
+        &self,
+        decision: &Value,
+        artifact_hash: &str,
+    ) -> Option<String> {
+        if decision.get("action").and_then(Value::as_str) != Some("allow") {
+            return None;
+        }
+        self.approval_context_tokens_validation_reason(
+            decision.get("artifact_hash").unwrap_or(&Value::Null),
+            &Value::String(artifact_hash.to_string()),
+        )
+    }
+}
+
+/// Unused-in-override intent parser; satisfies the trait for the ported sig.
+struct ResidentIntentParser;
+
+impl PackageIntentParserApi for ResidentIntentParser {
+    fn parse_package_intent(
+        &self,
+        command: &str,
+        workspace: &Path,
+        environment: &BTreeMap<String, String>,
+    ) -> Option<PackageIntent> {
+        parse_package_intent(command, Some(workspace), None, None, Some(environment))
+    }
+}
+
+/// Unused-in-override eval seam; the override never re-evaluates the package.
+struct ResidentPackageEval;
+
+impl PackageEvalApi for ResidentPackageEval {
+    fn evaluate_package_request_artifact(
+        &self,
+        _artifact: &GuardArtifact,
+        _store: &dyn SupplyChainStore,
+        _workspace_dir: &Path,
+        _now: &str,
+        _external_archive_network_authorized: bool,
+        _retain_external_archive_blob: bool,
+    ) -> Result<PackageRequestEvaluation, String> {
+        Err("resident_apply_stored_package_policy_no_eval".to_string())
+    }
+    fn supply_chain_user_copy(
+        &self,
+        title: &str,
+        summary: &str,
+        next_step: Option<&str>,
+        dashboard_url: Option<&str>,
+        harness_message: Option<&str>,
+    ) -> Map<String, Value> {
+        let mut copy = Map::new();
+        copy.insert("title".into(), Value::String(title.to_string()));
+        copy.insert("summary".into(), Value::String(summary.to_string()));
+        copy.insert(
+            "next_step".into(),
+            next_step.map_or(Value::Null, |v| Value::String(v.to_string())),
+        );
+        copy.insert(
+            "dashboard_url".into(),
+            dashboard_url.map_or(Value::Null, |v| Value::String(v.to_string())),
+        );
+        copy.insert(
+            "harness_message".into(),
+            harness_message.map_or(Value::Null, |v| Value::String(v.to_string())),
+        );
+        copy
+    }
+}
+
+/// Unused-in-override path seam; the override never reads workspace files.
+struct ResidentPaths;
+
+impl PathSupportApi for ResidentPaths {
+    fn resolve_path_within_allowed_roots(
+        &self,
+        _candidate: &Path,
+        _allowed_roots: &[PathBuf],
+        _require_exists: bool,
+    ) -> Option<PathBuf> {
+        None
+    }
+    fn resolves_within_root(&self, _root: &Path, _candidate: &Path, _require_exists: bool) -> bool {
+        false
+    }
+    fn read_text_within_workspace(
+        &self,
+        workspace_dir: &Path,
+        relative_path: &str,
+    ) -> Option<String> {
+        let resolved = resolve_path_within_workspace(workspace_dir, relative_path)?;
+        if !resolved.is_file() {
+            return None;
+        }
+        std::fs::read_to_string(resolved).ok()
+    }
+    fn read_bytes_within_workspace(
+        &self,
+        workspace_dir: &Path,
+        relative_path: &str,
+    ) -> Option<Vec<u8>> {
+        let resolved = resolve_path_within_workspace(workspace_dir, relative_path)?;
+        if !resolved.is_file() {
+            return None;
+        }
+        std::fs::read(resolved).ok()
+    }
+}
+
+/// `ApplyStoredPackagePolicy` — `_apply_stored_package_policy_override` port.
+pub(crate) fn evaluate_apply_stored_package_policy(
+    request: &ApplyStoredPackagePolicyRequestV1,
+) -> Result<Vec<u8>, String> {
+    let request_sha256 = request_digest(request)?;
+    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
+        return serde_json::to_vec(&err_result(
+            &request.request_id,
+            &request_sha256,
+            "schema_mismatch",
+        ))
+        .map_err(|e| e.to_string());
+    }
+    if let Some(rejected) = reject_empty_resident_paths(
+        &request.request_id,
+        &request_sha256,
+        &request.store_path,
+        &request.guard_home,
+    ) {
+        return rejected;
+    }
+    let store_path = PathBuf::from(&request.store_path);
+    let guard_home = PathBuf::from(&request.guard_home);
+    let store = ResidentSupplyChainStore::new(&store_path, &guard_home);
+    let mut artifact = artifact_from_value(&request.artifact);
+    if let Some(meta) = request.runtime_private_metadata.clone() {
+        artifact.runtime_private_metadata = meta;
+    }
+    let evaluation = PackageRequestEvaluation {
+        value: request.evaluation.clone(),
+    };
+    let workspace_dir = PathBuf::from(&request.workspace_dir);
+    let result = apply_stored_package_policy_override(
+        &evaluation,
+        &store,
+        &artifact,
+        &request.artifact_hash,
+        &workspace_dir,
+        &request.now,
+        None,
+        request.current_action.as_ref(),
+        request.claim_saved_approval,
+        &ResidentIntentParser,
+        &ResidentPackageEval,
+        &ResidentPaths,
+        &ResidentApprovalContext,
+    );
+    let payload = ApplyStoredPackagePolicyResultV1 {
+        schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_string(),
+        request_id: request.request_id.clone(),
+        request_sha256,
+        status: "ok".to_string(),
+        code: "ok".to_string(),
+        payload: Some(result.value),
+    };
+    crate::encode_response(&payload)
 }
 
 /// `SupplyChainEval` — `evaluate_package_request_artifact` port.
@@ -2648,3 +3214,7 @@ mod package_advisory_tests {
         assert!(!fixture.home.join("missing.db").exists());
     }
 }
+
+#[cfg(test)]
+#[path = "apply_stored_package_policy_tests.rs"]
+mod apply_stored_package_policy_tests;

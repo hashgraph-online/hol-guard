@@ -74,7 +74,7 @@ def test_install_refreshes_misdirected_setting_json_install(tmp_path):
     migrated = json.loads(settings.read_text())
     assert migrated["ui"] == {"theme": "dark"}
     commands = [handler["command"] for handler in _managed_handlers(migrated)]
-    assert commands and managed not in commands  # refreshed, not duplicated
+    assert commands and managed not in commands
     assert _managed_handlers(json.loads(config.read_text()))
 
 
@@ -161,7 +161,6 @@ def test_uninstall_restores_each_surface(tmp_path):
     remaining_config = json.loads(config.read_text())
     remaining_settings = json.loads(settings.read_text())
     assert remaining_config["hooks"]["enabled"] is False
-    # True was the recorded prior for setting.json, so it is restored as-is.
     assert remaining_settings["hooks"]["enabled"] is True
 
 
@@ -175,8 +174,7 @@ def test_uninstall_removes_guard_introduced_enabled(tmp_path):
     adapter.uninstall(context)
 
     assert "hooks" not in json.loads(config.read_text())
-    remaining_settings = json.loads(settings.read_text())
-    assert remaining_settings == {"locale": "en"}
+    assert json.loads(settings.read_text()) == {"locale": "en"}
 
 
 def test_uninstall_prunes_both_surfaces(tmp_path):
@@ -202,69 +200,41 @@ def test_uninstall_handles_removed_file_config(tmp_path):
     settings.unlink()
     adapter.uninstall(context)
     assert not settings.exists()
-    # Install scaffolds the mcp/plugins sections; uninstall preserves them.
     assert json.loads(config.read_text()) == {"legacy": True, "mcp": {}, "plugins": {}}
 
 
-def test_install_does_not_enable_disabled_user_hooks_without_managed_entries(tmp_path):
-    """A user's deliberately disabled hooks are never force-enabled."""
-
+def test_install_does_not_enable_disabled_user_handlers(tmp_path):
     context = _ctx(tmp_path)
-    config = _write_cli_config(
-        context.home_dir,
-        {
-            "hooks": {
-                "enabled": False,
-                "events": {"PreToolUse": [{"matcher": "Read", "hooks": [{"type": "command", "command": "echo mine"}]}]},
+    legacy = _write_cli_config(context.home_dir, {})
+    settings = legacy.with_name("setting.json")
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "enabled": False,
+                    "events": {
+                        "PreToolUse": [{"matcher": "Read", "hooks": [{"type": "command", "command": "echo user"}]}],
+                    },
+                }
             }
-        },
+        )
     )
-    before = config.read_bytes()
+    before = settings.read_bytes()
     with pytest.raises(ValueError, match="user hooks are disabled"):
         ZCodeHarnessAdapter().prepare_install(context)
-    assert config.read_bytes() == before
-
-
-def test_install_does_not_enable_disabled_user_hooks(tmp_path):
-    context = _ctx(tmp_path)
-    adapter = ZCodeHarnessAdapter()
-    adapter.install(context)
-    ZCodeHarnessAdapter().uninstall(context)
-    config = _write_cli_config(
-        context.home_dir,
-        {
-            "hooks": {
-                "enabled": False,
-                "events": {
-                    "PreToolUse": [
-                        {
-                            "matcher": "Read",
-                            "hooks": [
-                                {
-                                    "type": "command",
-                                    "command": "echo user hook",
-                                }
-                            ],
-                        }
-                    ]
-                },
-            }
-        },
-    )
-    before = config.read_bytes()
-    with pytest.raises(ValueError, match="user hooks are disabled"):
-        ZCodeHarnessAdapter().prepare_install(context)
-    assert config.read_bytes() == before
+    assert settings.read_bytes() == before
 
 
 def test_uninstall_restores_disabled_empty_hooks_after_reinstall(tmp_path):
     context = _ctx(tmp_path)
-    config = _write_cli_config(context.home_dir, {"hooks": {"enabled": False}})
+    legacy = _write_cli_config(context.home_dir, {})
+    settings = legacy.with_name("setting.json")
+    settings.write_text('{"hooks":{"enabled":false}}')
     adapter = ZCodeHarnessAdapter()
     adapter.install(context)
     adapter.install(context)
     adapter.uninstall(context)
-    assert json.loads(config.read_text())["hooks"]["enabled"] is False
+    assert json.loads(settings.read_text())["hooks"]["enabled"] is False
 
 
 @pytest.mark.parametrize("contents", ["[]", "null", "not json"])
@@ -333,7 +303,6 @@ def test_legacy_setting_json_state_maps_onto_file_config(tmp_path):
     config = _write_cli_config(context.home_dir, {})
     settings = _file_config(context.home_dir)
     settings.write_text(json.dumps({"hooks": {"enabled": False}}))
-    # State exactly as a setting.json-only install (pre dual-surface) left it.
     state = context.guard_home / "managed/zcode/install.state.json"
     state.parent.mkdir(parents=True, exist_ok=True)
     state.write_text(
@@ -349,7 +318,6 @@ def test_legacy_setting_json_state_maps_onto_file_config(tmp_path):
     adapter.uninstall(context)
 
     assert json.loads(settings.read_text())["hooks"]["enabled"] is False
-    # config.json had no hooks before the upgrade install, so it is cleaned.
     assert "hooks" not in json.loads(config.read_text())
 
 

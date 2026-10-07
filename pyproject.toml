@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling<1.31"]
+requires = ["hatchling<1.31", "jsonschema>=4.26.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.26.0"
+version = "3.29.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"

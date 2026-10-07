@@ -15,10 +15,8 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import partial
-from hashlib import sha256
 from pathlib import Path
 from typing import IO, Any, Literal, TextIO, cast
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
 from ..action_lattice import (
@@ -92,7 +90,6 @@ from .stdio import (
     _is_timeout_response,
     _quarantine_process,
     _readline_with_timeout,
-    _redact_json,
     _timeout_response,
 )
 
@@ -336,47 +333,19 @@ def _postclaim_tool_action(decision: ToolCallDecision) -> GuardAction:
     )
 
 
-_SECRET_ARGUMENT_KEY_FRAGMENTS = (
-    "apikey",
-    "authorization",
-    "cookie",
-    "credential",
-    "password",
-    "secret",
-    "token",
-)
-
-
-def _secret_shaped_argument_key(key: object) -> bool:
-    normalized = "".join(character for character in str(key).casefold() if character.isalnum())
-    return any(fragment in normalized for fragment in _SECRET_ARGUMENT_KEY_FRAGMENTS)
-
-
-def _redact_mcp_scalar(value: str) -> str:
-    parsed = urlsplit(value)
-    if parsed.scheme and parsed.netloc and parsed.query:
-        query = [
-            (key, "*****" if _secret_shaped_argument_key(key) else item)
-            for key, item in parse_qsl(parsed.query, keep_blank_values=True)
-        ]
-        value = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment))
-    redacted = _redact_json(value)
-    return redacted if isinstance(redacted, str) else "*****"
-
-
 def _safe_mcp_arguments(value: object) -> object:
-    """Project MCP arguments into a display/persistence-safe representation."""
+    """Project MCP arguments into a display/persistence-safe representation.
 
-    if isinstance(value, Mapping):
-        return {
-            str(key): "*****" if _secret_shaped_argument_key(key) else _safe_mcp_arguments(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, list | tuple):
-        return [_safe_mcp_arguments(item) for item in value]
-    if isinstance(value, str):
-        return _redact_mcp_scalar(value)
-    return value
+    Native authority only: the resident `mcp_arguments_projection` op owns the
+    secret-shaped-key masking, URL query redaction, and scalar fragment tables.
+    `None` means no `arguments` key — preserved so absent and null digest alike.
+    Native failure is terminal; the silent-Python-redaction fallback was an
+    accountability leak (secrets could persist unredacted).
+    """
+    from ..native_context import context_mcp_arguments_projection
+
+    safe_arguments, _launch, _digest = context_mcp_arguments_projection("", value)
+    return safe_arguments
 
 
 def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
@@ -384,11 +353,11 @@ def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
 
 
 def _mcp_arguments_digest(arguments: object) -> str:
-    try:
-        serialized = json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
-    except (TypeError, ValueError):
-        serialized = repr(arguments)
-    return sha256(serialized.encode("utf-8")).hexdigest()
+    """sha256 over the canonical JSON encoding of the RAW arguments."""
+    from ..native_context import context_mcp_arguments_projection
+
+    _safe, _launch, digest = context_mcp_arguments_projection("", arguments)
+    return digest
 
 
 def _browser_intent_payload(
@@ -590,39 +559,24 @@ class _NativeChildProcess:
         return self.poll()
 
 
-def _canonical_tool_catalog_entry(name: str, definition: Mapping[str, object]) -> dict[str, object]:
-    """Normalize internal aliases while retaining every advertised field."""
-
-    canonical = {str(key): deepcopy(value) for key, value in definition.items() if str(key) != "name"}
-    if "input_schema" in canonical:
-        canonical.setdefault("inputSchema", canonical["input_schema"])
-        canonical.pop("input_schema", None)
-    if "output_schema" in canonical:
-        canonical.setdefault("outputSchema", canonical["output_schema"])
-        canonical.pop("output_schema", None)
-    return {"name": name, **canonical}
-
-
 def _tool_catalog_fingerprint(
     catalog: Mapping[str, Mapping[str, object]],
     *,
     state: _ToolCatalogState = "complete",
 ) -> str:
-    """Hash catalog lifecycle state plus the complete canonical tool surface."""
+    """Hash catalog lifecycle state plus the complete canonical tool surface.
 
-    canonical_tools = [_canonical_tool_catalog_entry(name, catalog[name]) for name in sorted(catalog)]
-    serialized = json.dumps(
-        {
-            "state": state,
-            "tools": canonical_tools,
-            "version": "mcp-advertised-tool-catalog-v2",
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    )
-    return sha256(serialized.encode("utf-8")).hexdigest()
+    Canonicalization and hashing are native authority; this delegates. The
+    native validator returns `None` when the canonical document can't be
+    serialized — Python's `json.dumps(..., allow_nan=False)` raised
+    `ValueError` on the same condition, so this raises too.
+    """
+    from ..native_context import context_mcp_tool_catalog_fingerprint
+
+    fingerprint, _ = context_mcp_tool_catalog_fingerprint(catalog, state=state)
+    if fingerprint is None:
+        raise ValueError("mcp_tool_catalog_fingerprint_unserializable")
+    return fingerprint
 
 
 def _enforcement_action(
@@ -680,23 +634,14 @@ def _configured_server_launch_environment(configured_keys: Sequence[str]) -> dic
 def _ensure_native_launch_resident_verifier(store: GuardStore) -> None:
     """Provision the resident verifier key before any native launch RPC.
 
-    Production hook entry provisions this through the policy snapshot
-    publisher at worker start.  A proxy constructed standalone (the CLI MCP
-    proxy entrypoints) never starts that publisher, so it must establish the
-    same one-time prerequisite itself before touching a native launch RPC —
-    otherwise the resident either refuses to serve, or if some other process
-    already provisioned a *different* key for this guard home, authentic
-    approvals signed with this store's key would never verify.  Unlike the
-    best-effort pre-tool floor helper, launch-environment resolution has no
-    Python fallback, so a failure here must raise rather than proceed.
+    See `native_policy_snapshot_publisher.ensure_native_launch_resident_verifier`
+    — the same prerequisite is shared with the stdio proxy, which opens native
+    resident sessions through a different entrypoint.
     """
 
-    from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+    from ..native_policy_snapshot_publisher import ensure_native_launch_resident_verifier
 
-    # The provisioner is idempotent for a matching key and validates any
-    # existing file (regular, private, content-equal to this store's derived
-    # key), so always run it rather than short-circuiting on mere existence.
-    provision_native_verifier_key_for_store(store)
+    ensure_native_launch_resident_verifier(store)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1216,6 +1161,13 @@ class RuntimeMcpGuardProxy:
         tool_definition = self._tool_catalog.get(tool_name, {})
         tool_description_value = tool_definition.get("description")
         tool_schema = tool_definition.get("inputSchema", tool_definition.get("input_schema"))
+        # The native canonical catalog page retains `name` inside each entry.
+        # Strip it before building the public artifact so the name-matched
+        # `mcp_tool_authority_hash` is not written into hash-affecting
+        # `metadata`; the full definition is bound via
+        # `runtime_private_metadata` below without changing the exact
+        # saved-block artifact hash.
+        public_tool_definition = {key: value for key, value in tool_definition.items() if key != "name"}
         catalog_generation = self._tool_catalog_generation
         catalog_state = self._tool_catalog_state
         catalog_fingerprint = _tool_catalog_fingerprint(
@@ -1241,7 +1193,7 @@ class RuntimeMcpGuardProxy:
             server_identity=self._session_server_identity(),
             tool_schema=tool_schema,
             tool_description=tool_description_value if isinstance(tool_description_value, str) else None,
-            tool_definition=tool_definition,
+            tool_definition=public_tool_definition,
             provider_catalog_hash=(
                 self.store.read_mcp_provider_authority_hash() if composio_requires_action_review(tool_name) else None
             ),
@@ -3939,29 +3891,25 @@ class RuntimeMcpGuardProxy:
 
     @staticmethod
     def _normalized_tools_catalog_page(tools: object) -> dict[str, dict[str, object]] | None:
+        """Normalize the raw `tools` list into a name→entry page, or `None`.
+
+        Canonicalization authority is native; this delegates. The `tools` list
+        is reshaped into `(name, definition)` pairs so duplicate names remain
+        distinguishable to the native validator.
+        """
         if not isinstance(tools, list):
             return None
-        page: dict[str, dict[str, object]] = {}
+        entries: list[tuple[str, Mapping[str, object]]] = []
         for item in tools:
             if not isinstance(item, dict) or any(not isinstance(key, str) for key in item):
                 return None
             raw_name = item.get("name")
-            if not isinstance(raw_name, str) or not raw_name or raw_name != raw_name.strip():
+            if not isinstance(raw_name, str):
                 return None
-            if raw_name in page:
-                return None
-            entry = {key: deepcopy(value) for key, value in item.items() if key != "name"}
-            try:
-                json.dumps(
-                    _canonical_tool_catalog_entry(raw_name, entry),
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    ensure_ascii=False,
-                    allow_nan=False,
-                )
-            except (TypeError, ValueError):
-                return None
-            page[raw_name] = entry
+            entries.append((raw_name, item))
+        from ..native_context import context_mcp_tool_catalog_fingerprint
+
+        _, page = context_mcp_tool_catalog_fingerprint(entries, state="complete")
         return page
 
     def _capture_tools_catalog(
@@ -4026,12 +3974,10 @@ class RuntimeMcpGuardProxy:
 
     @staticmethod
     def _launch_target(tool_name: str, arguments: object) -> str:
-        safe_arguments = _safe_mcp_arguments(arguments)
-        serialized_arguments = (
-            json.dumps(safe_arguments, sort_keys=True, separators=(",", ":")) if arguments is not None else ""
-        )
-        digest = _mcp_arguments_digest(arguments)
-        return f"{tool_name} {serialized_arguments} [arguments-sha256:{digest}]".strip()
+        from ..native_context import context_mcp_arguments_projection
+
+        _safe, launch_target, _digest = context_mcp_arguments_projection(tool_name, arguments)
+        return launch_target
 
 
 class ElicitationMcpGuardProxy(RuntimeMcpGuardProxy):

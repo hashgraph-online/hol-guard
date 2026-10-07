@@ -102,6 +102,26 @@ def _resident_request(
     return decoded if isinstance(decoded, dict) else None
 
 
+def _resident_environment(environment: Mapping[str, str] | None) -> dict[str, str] | None:
+    """The environment the resident must resolve the launch in.
+
+    The resident is long-lived, so its own ``PATH`` is the one it was spawned
+    with.  A caller that passes no environment still means the ambient one this
+    decision is being made in — the Python baseline resolves the manager from
+    ``os.environ`` — and a manager the resident cannot reproduce (`npx` absent
+    from a spawn-time ``PATH``) makes the launch evidence incomplete and sends
+    a contained TypeScript typecheck back to review.  Bind the caller's ``PATH``
+    whenever it is not already part of the request.
+    """
+
+    ambient_path = os.environ.get("PATH")
+    if environment is None:
+        return {"PATH": ambient_path} if ambient_path else None
+    if "PATH" in environment or not ambient_path:
+        return dict(environment)
+    return {**environment, "PATH": ambient_path}
+
+
 def package_intent_parse_native(
     command_text: str,
     *,
@@ -120,7 +140,7 @@ def package_intent_parse_native(
         "workspace": str(workspace) if workspace is not None else None,
         "home_dir": str(home_dir) if home_dir is not None else None,
         "canonical_command": dict(canonical_command) if canonical_command else None,
-        "environment": dict(environment) if environment else None,
+        "environment": _resident_environment(environment),
     }
     response = _resident_request(
         operation="package_intent_parse",
@@ -238,6 +258,46 @@ def package_authority_decide_native(
     }
     response = _resident_request(
         operation="package_authority_decide",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=timeout_seconds,
+    )
+    if response is None:
+        return None
+    payload = response.get("payload")
+    return payload if isinstance(payload, dict) else None
+
+
+def apply_stored_package_policy_native(
+    evaluation: Mapping[str, object],
+    artifact: Mapping[str, object],
+    *,
+    store_path: Path,
+    guard_home: Path,
+    artifact_hash: str,
+    workspace_dir: Path,
+    now: str,
+    current_action: object | None = None,
+    claim_saved_approval: bool = True,
+    timeout_seconds: float = 10.0,
+) -> dict[str, object] | None:
+    """``apply_stored_package_policy`` op — returns the updated evaluation dict."""
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": _request_id(),
+        "store_path": str(store_path),
+        "guard_home": str(guard_home),
+        "evaluation": dict(evaluation),
+        "artifact": dict(artifact),
+        "artifact_hash": artifact_hash,
+        "workspace_dir": str(workspace_dir),
+        "now": now,
+        "claim_saved_approval": bool(claim_saved_approval),
+    }
+    if current_action is not None:
+        request["current_action"] = current_action
+    response = _resident_request(
+        operation="apply_stored_package_policy",
         request=request,
         guard_home=guard_home,
         timeout_seconds=timeout_seconds,
