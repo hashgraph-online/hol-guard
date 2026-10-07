@@ -384,6 +384,17 @@ fn declared_allowance_above_128_has_no_event_count_cap() {
         budget[field] = json!(1000000);
     }
     install(&fixture, json!([budget]));
+    // This capacity test performs 129 durable writes. Parallel debug builds
+    // can outlive the shared 60-second fixture; expiry is tested separately.
+    let mut snapshot = fixture.store.current_snapshot().unwrap();
+    snapshot.generation += 1;
+    snapshot.expires_at_ms = snapshot.issued_at_ms + 600_000;
+    snapshot.policy_digest = policy_digest(&snapshot).unwrap();
+    snapshot.integrity.mac = integrity_mac(&snapshot, &fixture.key).unwrap();
+    fixture
+        .store
+        .push(&json!({"schema":"guard-policy-snapshot-push.v1","snapshot":snapshot}))
+        .unwrap();
     let now = time(&fixture);
     let input = prepared();
     for index in 0..129 {

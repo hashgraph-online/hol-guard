@@ -14,6 +14,9 @@ use std::path::{Path, PathBuf};
 #[path = "workspace_review_owned_input_tests.rs"]
 pub(super) mod owned_input_tests;
 
+#[path = "workspace_review_local_summary_tests.rs"]
+mod local_summary_tests;
+
 pub(super) fn input(primary: &[u8], attachments: &[Vec<u8>]) -> Value {
     let total = primary.len() + attachments.iter().map(Vec::len).sum::<usize>();
     json!({"schema":"guard.private-business-input.v1","version":1,

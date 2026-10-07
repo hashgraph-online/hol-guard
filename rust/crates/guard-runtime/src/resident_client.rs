@@ -181,10 +181,9 @@ fn connect_unix_with_digest(
         nix::sys::socket::getsockopt(&stream, nix::sys::socket::sockopt::LocalPeerPid)
             .map_err(|_| "native_client_peer_identity_failed".to_owned())? as u32;
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let peer_process_id =
-        nix::sys::socket::getsockopt(&stream, nix::sys::socket::sockopt::PeerCredentials)
-            .map_err(|_| "native_client_peer_identity_failed".to_owned())?
-            .pid() as u32;
+    let peer_process_id = crate::resident_peer_identity::read_linux_credentials(&stream)
+        .map_err(|_| "native_client_peer_identity_failed".to_owned())?
+        .pid() as u32;
     #[cfg(not(any(
         target_os = "macos",
         target_os = "ios",
