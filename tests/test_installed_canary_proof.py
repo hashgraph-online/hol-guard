@@ -104,7 +104,10 @@ def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytes
             assert "HOL_GUARD_NATIVE_DIAGNOSTIC" not in kwargs["env"]
         completed = run(command, **kwargs)
         if is_hook:
-            assert completed.returncode == 0, (completed.stdout, completed.stderr)
+            # The hook emits a block payload; rc mirrors the verdict through the
+            # harness adapter contract (opencode/generic block -> 1). rc=0 would
+            # read the denial as allow to a shell harness.
+            assert completed.returncode == 1, (completed.stdout, completed.stderr)
             hook_responses.append(json.loads(completed.stdout))
         return completed
 

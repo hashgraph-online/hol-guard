@@ -146,6 +146,10 @@ pub(super) fn scan_external_tarball(
             ),
         );
         r.insert("severity".to_string(), Value::String("medium".to_string()));
+        r.insert(
+            "source".to_string(),
+            Value::String("guard-local".to_string()),
+        );
         (Some(r), if retain_blob { Some(downloaded) } else { None })
     })();
     // Drop `downloaded` when not retained (mirrors `downloaded.cleanup()`).

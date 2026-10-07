@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 guard-command = { path = "../guard-command" }
 guard-contracts = { path = "../guard-contracts" }
+guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-rule-contract = { path = "../guard-rule-contract" }
@@ -25,6 +26,7 @@ rusqlite.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true
+zeroize = "1.9.0"
 aes.workspace = true
 base64ct.workspace = true
 cbc.workspace = true
@@ -32,6 +34,7 @@ hmac.workspace = true
 sha2.workspace = true
 sha1.workspace = true
 pbkdf2.workspace = true
+scrypt.workspace = true
 base32ct.workspace = true
 sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }

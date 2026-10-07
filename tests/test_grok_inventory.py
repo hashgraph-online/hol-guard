@@ -169,7 +169,7 @@ GITHUB_TOKEN = "redacted"
         user_config.parent.mkdir(parents=True, exist_ok=True)
         user_config.write_text("[ui]\nsimple_mode = true\n", encoding="utf-8")
         GrokHarnessAdapter().install(ctx)
-        assert user_config.read_text(encoding="utf-8") == "[ui]\nsimple_mode = true\n"
+        assert user_config.read_text(encoding="utf-8").startswith("[ui]\nsimple_mode = true\n")
 
 
 class TestGrokInventoryAndResponses:

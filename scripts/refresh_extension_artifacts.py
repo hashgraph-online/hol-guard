@@ -50,8 +50,9 @@ def _read(path: Path) -> dict:
 
 def _write_json(path: Path, value: object, *, sort_keys: bool = True) -> bool:
     content = json.dumps(value, indent=2, sort_keys=sort_keys, ensure_ascii=False) + "\n"
-    if path.read_bytes() == content.encode():
+    if path.is_file() and path.read_bytes() == content.encode():
         return False
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
     return True
 
@@ -76,20 +77,82 @@ def pending_contribution_ids() -> list[str]:
     return sorted(set(contribution_ids()) - catalog_ids())
 
 
+TRUST_BINDINGS = ROOT / "contracts/extensions/trust"
+
+
+def _trust_binding_path(extension_id: str) -> Path:
+    if not extension_id.startswith("command.") or "/" in extension_id or "\\" in extension_id:
+        raise ValueError(f"invalid extension trust binding id {extension_id}")
+    return TRUST_BINDINGS / f"{extension_id}.v1.json"
+
+
+def _trust_binding_index() -> dict[str, str]:
+    """Fold authored bindings through the strict runtime parser."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_binding_index
+
+    return dict(trust_binding_index(TRUST_BINDINGS))
+
+
+def _read_binding_ids() -> set[str]:
+    return set(_trust_binding_index())
+
+
+def _write_binding(extension_id: str, trust_class: str) -> bool:
+    path = _trust_binding_path(extension_id)
+    return _write_json(
+        path,
+        {
+            "schemaVersion": "guard.extension-trust-binding.v1",
+            "extension": extension_id,
+            "trustClass": trust_class,
+        },
+    )
+
+
+def _projected_aggregate() -> dict:
+    """Fold authored trust bindings into the aggregate-map projection body."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
+    return trust_map_from_bindings(TRUST_BINDINGS)
+
+
+def check_trust_consistency() -> None:
+    """Fail if the committed aggregate map drifts from the authored bindings."""
+    if TRUST_MAP.is_file() and _read(TRUST_MAP) != _projected_aggregate():
+        raise SystemExit(
+            "trust-class-map.v1.json is out of sync with contracts/extensions/trust/; "
+            "edit the per-extension binding and run `refresh_extension_artifacts.py --trust-only`"
+        )
+
+
+def _sync_aggregate_map() -> bool:
+    """Project authored trust bindings into the packaged aggregate map.
+
+    The aggregate still ships to packaged/frozen runtimes and release staging;
+    it is generated, never edited by hand.
+    """
+    return _write_json(TRUST_MAP, _projected_aggregate(), sort_keys=False)
+
+
 def sync_trust_map() -> bool:
-    """Add contribution ids missing from every trust class to ``external``."""
-    trust = _read(TRUST_MAP)
-    classes = trust.get("classes", {})
-    mapped = {extension_id for entries in classes.values() for extension_id in entries}
-    missing = sorted(set(contribution_ids()) - mapped)
-    if not missing:
-        return False
-    external = classes.setdefault("external", [])
-    external.extend(missing)
-    external.sort()
-    _write_json(TRUST_MAP, trust, sort_keys=False)
-    print(f"trust map: added {missing} to external", file=sys.stderr)
-    return True
+    """Add contribution ids missing a trust binding as ``external`` files.
+
+    Gate on committed-aggregate consistency first: if the generated map was
+    hand-edited or is stale, fail instead of silently rewriting it to match the
+    bindings. Only after a clean baseline do we add missing bindings and regen.
+    """
+    check_trust_consistency()
+    missing = sorted(set(contribution_ids()) - _read_binding_ids())
+    changed = False
+    for extension_id in missing:
+        if _write_binding(extension_id, "external"):
+            changed = True
+            print(f"trust binding: added {extension_id} as external", file=sys.stderr)
+    if _sync_aggregate_map():
+        changed = True
+    return changed
 
 
 def build_source_compiler() -> None:
@@ -114,10 +177,11 @@ def build_source_compiler() -> None:
 
 
 def regenerate_projections() -> None:
-    """One native build, then project its sources without a rebuild fixpoint."""
+    """Publish current sources without admitting historical fixture snapshots."""
     build_source_compiler()
-    _run([sys.executable, "scripts/prepare_extension_contribution.py", "--compiler", str(COMPILER)])
-    _run([sys.executable, "scripts/prepare_extension_contribution.py", "--check", "--compiler", str(COMPILER)])
+    for check in ([], ["--check"]):
+        _run([sys.executable, "scripts/build_native_command_program.py", "--compiler", str(COMPILER), *check])
+        _run([sys.executable, "scripts/export_extension_directory.py", *check])
 
 
 def refresh_directory_render() -> None:
@@ -127,6 +191,7 @@ def refresh_directory_render() -> None:
 def verify() -> None:
     _run([sys.executable, "scripts/render_command_extension_directory.py", "--check"])
     _run([sys.executable, "scripts/export_extension_directory.py", "--check"])
+    check_trust_consistency()
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,6 +4,7 @@ use super::{
     POLICY_SNAPSHOT_VERIFIER_DERIVATION_DOMAIN,
 };
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, Zeroizing};
 
 pub fn digest_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
@@ -58,6 +59,12 @@ pub fn policy_digest(snapshot: &PolicySnapshotV3) -> Result<String, SnapshotErro
                 &serde_json::to_value(binding).map_err(|_| SnapshotError::Serialization)?,
             )?));
     }
+    if let Some(binding) = &snapshot.business_policy {
+        value["business_policy_digest"] =
+            serde_json::Value::String(digest_bytes(&canonical_json_bytes(
+                &serde_json::to_value(binding).map_err(|_| SnapshotError::Serialization)?,
+            )?));
+    }
     Ok(digest_bytes(&canonical_json_bytes(&value)?))
 }
 
@@ -80,27 +87,29 @@ pub(crate) fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> [u8; 32] {
 
 pub(super) fn hmac_sha256(key: &[u8], label: &[u8], message: &[u8]) -> [u8; 32] {
     const BLOCK_BYTES: usize = 64;
-    let mut key_block = [0u8; BLOCK_BYTES];
+    let mut key_block = Zeroizing::new([0u8; BLOCK_BYTES]);
     if key.len() > BLOCK_BYTES {
-        let digest = Sha256::digest(key);
+        let mut digest = Sha256::digest(key);
         key_block[..digest.len()].copy_from_slice(&digest);
+        digest.as_mut_slice().zeroize();
     } else {
         key_block[..key.len()].copy_from_slice(key);
     }
-    let mut inner_pad = [0x36u8; BLOCK_BYTES];
-    let mut outer_pad = [0x5cu8; BLOCK_BYTES];
+    let mut inner_pad = Zeroizing::new([0x36u8; BLOCK_BYTES]);
+    let mut outer_pad = Zeroizing::new([0x5cu8; BLOCK_BYTES]);
     for index in 0..BLOCK_BYTES {
         inner_pad[index] ^= key_block[index];
         outer_pad[index] ^= key_block[index];
     }
     let mut inner = Sha256::new();
-    inner.update(inner_pad);
+    inner.update(&inner_pad[..]);
     inner.update(label);
     inner.update(message);
-    let inner_digest = inner.finalize();
+    let mut inner_digest = inner.finalize();
     let mut outer = Sha256::new();
-    outer.update(outer_pad);
-    outer.update(inner_digest);
+    outer.update(&outer_pad[..]);
+    outer.update(inner_digest.as_slice());
+    inner_digest.as_mut_slice().zeroize();
     let digest = outer.finalize();
     let mut output = [0u8; 32];
     output.copy_from_slice(&digest);
@@ -116,4 +125,29 @@ pub(crate) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
         difference |= left ^ right;
     }
     difference == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cleared_scratch_preserves_independent_short_and_long_key_hmac_vectors() {
+        // Expected digests computed independently with Python stdlib HMAC.
+        for (key, expected) in [
+            (
+                vec![7u8; 32],
+                "ecacb2077000c38ea511853fa51e99358878ca2f68e9844ae1a6537777a26db8",
+            ),
+            (
+                vec![b'k'; 131],
+                "0f7e060a08c42d9d6e9e98ff49277f5a5e950de80a2d9f531dd214704d7e6df1",
+            ),
+        ] {
+            assert_eq!(
+                hex::encode(hmac_sha256(&key, b"publisher\0", b"payload")),
+                expected
+            );
+        }
+    }
 }

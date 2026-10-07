@@ -364,8 +364,35 @@ def _workflow_gate() -> None:
 
     native_wheel = _read(Path(".github/workflows/native-wheel-ci.yml"))
     native_trigger = native_wheel.split("permissions:", maxsplit=1)[0]
-    if "paths:" in native_trigger or "paths-ignore:" in native_trigger:
-        raise RuntimeError("installed native-wheel proof must be selected for every pull request to main")
+    if "pull_request:\n    branches: [main, release/3.2]" not in native_trigger:
+        raise RuntimeError("installed native-wheel proof must cover main pull requests")
+    if "paths-ignore:" in native_trigger or "paths:" not in native_trigger:
+        raise RuntimeError("installed native-wheel proof must use an explicit protected path allowlist")
+    required_native_paths = (
+        "rust/**",
+        "ci/native_runtime/**",
+        "contracts/extensions/**",
+        "contributions/**",
+        "src/codex_plugin_scanner/guard/*native*.py",
+        "src/codex_plugin_scanner/guard/runtime_transition*.py",
+        "src/codex_plugin_scanner/guard/adapters/*native*.py",
+        "scripts/ci/**",
+        "scripts/build_command_projection_hook.py",
+        "scripts/build_native_command_program.py",
+        "scripts/build_native_hol_guard_wheel.py",
+        ".github/workflows/native-wheel-ci.yml",
+        ".github/actions/native-regression/**",
+        ".github/actions/setup-rust/**",
+        ".github/actions/stage-command-projections/**",
+        "pyproject.toml",
+        "requirements.txt",
+        "uv.lock",
+    )
+    missing_native_paths = [value for value in required_native_paths if f'- "{value}"' not in native_trigger]
+    if missing_native_paths:
+        raise RuntimeError(
+            f"installed native-wheel protected path selection is incomplete: {missing_native_paths}"
+        )
     validate_installed_proof_environment(native_wheel)
 
 

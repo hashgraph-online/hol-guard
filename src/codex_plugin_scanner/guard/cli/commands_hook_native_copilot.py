@@ -49,6 +49,52 @@ from .commands_support_command_activity import (
 from .commands_support_observe_queue import queue_observe_mode_request
 
 
+def _record_copilot_silent_review(
+    *,
+    args: argparse.Namespace,
+    config: GuardConfig,
+    store: GuardStore,
+    runtime_artifact: GuardArtifact,
+    runtime_artifact_hash: str,
+    runtime_arguments: object,
+    decision: ToolCallDecision,
+    policy_action: GuardAction,
+    decision_scanner_evidence: tuple[dict[str, object], ...],
+    action_envelope: GuardActionEnvelope | None,
+) -> None:
+    """Store a Copilot review that the agent will see only as a silent block."""
+
+    from ..approvals import record_unprompted_review
+    from .commands_support_runtime_resolution import _runtime_detection
+
+    launch_target = (
+        json.dumps(runtime_arguments, sort_keys=True) if runtime_arguments is not None else runtime_artifact.command
+    )
+    record_unprompted_review(
+        detection=_runtime_detection(args.harness, runtime_artifact),
+        evaluation={
+            "artifacts": [
+                {
+                    "artifact_id": runtime_artifact.artifact_id,
+                    "artifact_name": runtime_artifact.name,
+                    "artifact_hash": runtime_artifact_hash,
+                    "policy_action": policy_action,
+                    "changed_fields": ["runtime_tool_call", *decision.signals],
+                    "artifact_type": runtime_artifact.artifact_type,
+                    "source_scope": runtime_artifact.source_scope,
+                    "config_path": runtime_artifact.config_path,
+                    "launch_target": launch_target,
+                    "risk_summary": decision.summary,
+                    "action_envelope_json": _action_envelope_json(action_envelope),
+                    "scanner_evidence": list(decision_scanner_evidence),
+                }
+            ]
+        },
+        store=store,
+        redaction_level=config.receipt_redaction_level,
+    )
+
+
 def _record_copilot_pre_activity(
     *,
     store: GuardStore,
@@ -182,6 +228,18 @@ def run_native_copilot_pretool(
 
     safe_alternative = policy_action in {"review", "require-reapproval"} and not asks_for_approval(config)
     if safe_alternative:
+        _record_copilot_silent_review(
+            args=args,
+            config=config,
+            store=store,
+            runtime_artifact=runtime_artifact,
+            runtime_artifact_hash=runtime_artifact_hash,
+            runtime_arguments=runtime_arguments,
+            decision=decision,
+            policy_action=policy_action,
+            decision_scanner_evidence=decision_scanner_evidence,
+            action_envelope=action_envelope,
+        )
         policy_action = "block"
     # Copilot review/reapproval continues to PermissionRequest, which owns that
     # activity. PreToolUse records only decisions that terminate at this stage.
@@ -357,6 +415,18 @@ def run_native_copilot_permission_request(
         config.mode != "observe" and policy_action in {"review", "require-reapproval"} and not asks_for_approval(config)
     )
     if safe_alternative:
+        _record_copilot_silent_review(
+            args=args,
+            config=config,
+            store=store,
+            runtime_artifact=runtime_artifact,
+            runtime_artifact_hash=runtime_artifact_hash,
+            runtime_arguments=runtime_arguments,
+            decision=decision,
+            policy_action=policy_action,
+            decision_scanner_evidence=decision_scanner_evidence,
+            action_envelope=action_envelope,
+        )
         policy_action = "block"
     terminal_action = policy_action in {"block", "sandbox-required"}
     runtime_detection = _runtime_detection(args.harness, runtime_artifact)

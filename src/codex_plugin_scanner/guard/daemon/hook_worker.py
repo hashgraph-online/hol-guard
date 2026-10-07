@@ -40,20 +40,23 @@ from ..config import load_guard_config
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
-from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store
+from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
 from ..native_runtime import NativeRuntimeStatus, native_mode, native_runtime_status, review_post_tool_native
 from ..runtime.hook_review_types import (
     HookReviewRequest,
 )
-from .hook_availability_policy import availability_harness_response
 from .hook_request_parsing import (
     build_hook_review_request,
     runtime_hook_event_name,
 )
 from .hook_worker_native import HookWorkerNativeMixin
+from .hook_worker_readiness import prepare_workspace_policy
 from .hook_worker_responses import (
     harness_json_from_review_response,
+)
+from .hook_worker_responses import (
+    post_tool_unavailable_response as _post_tool_unavailable_response,
 )
 
 if TYPE_CHECKING:
@@ -85,29 +88,9 @@ _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
     {
         "native_policy_snapshot_resident_changed",
         "native_resident_restart_budget_busy",
+        "native_command_control_mutation_in_progress",
     }
 )
-
-
-def _post_tool_unavailable_response(
-    payload: dict[str, object],
-    *,
-    harness: str,
-    reason_code: str,
-    workspace: Path | None,
-    home_dir: Path,
-    guard_home: Path,
-) -> dict[str, object]:
-    return availability_harness_response(
-        payload,
-        harness=harness,
-        event_name="PostToolUse",
-        reason_code=reason_code,
-        reason="HOL Guard could not complete the native local hook review safely.",
-        workspace=workspace,
-        home_dir=home_dir,
-        guard_home=guard_home,
-    )
 
 
 @final
@@ -221,57 +204,9 @@ class HookWorker(HookWorkerNativeMixin):
         return True
 
     def prepare_workspace_policy(
-        self,
-        workspace: Path | None = None,
-        *,
-        deadline: float | None = None,
+        self, workspace: Path | None = None, *, deadline: float | None = None
     ) -> dict[str, object] | None:
-        """Prepare an ACKed workspace policy before admitting a native hook.
-
-        Workspace overlays are published asynchronously, so the first hook
-        for a workspace must complete this same barrier used by normal hook
-        evaluation. The barrier is always capped at the native readiness
-        budget. Publishing workers fail closed when readiness is unavailable;
-        non-publishing workers may reuse a still-valid resident-accepted snapshot.
-        """
-
-        if native_mode() not in {"auto", "force", "shadow"}:
-            return None
-        if self._publish_native_policy:
-            register_workspace = getattr(self.policy_snapshot_publisher, "register_workspace", None)
-            if callable(register_workspace):
-                _ = register_workspace(workspace)
-            self.policy_snapshot_publisher.start()
-            if native_mode() in {"auto", "force"}:
-                wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
-                last_error = getattr(self.policy_snapshot_publisher, "last_error", None)
-                # A replacement resident can serve persisted policy before the
-                # publisher confirms its new generation. Its restart-budget
-                # lock can also be briefly held by a concurrent native client.
-                # Await the fresh ACK within the existing deadline; unrelated
-                # publication errors still fail immediately.
-                transient_publication_error = (
-                    isinstance(last_error, str) and last_error in _TRANSIENT_RESIDENT_PUBLICATION_ERRORS
-                )
-                no_publication_error = last_error is None or (isinstance(last_error, str) and not last_error.strip())
-                if callable(wait_until_ready) and (transient_publication_error or no_publication_error):
-                    readiness_deadline = time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS
-                    if deadline is not None:
-                        readiness_deadline = min(readiness_deadline, deadline)
-                    _ = wait_until_ready(readiness_deadline)
-        current_snapshot_binding = getattr(self.policy_snapshot_publisher, "current_snapshot_binding", None)
-        if callable(current_snapshot_binding):
-            snapshot = current_snapshot_binding()
-            if isinstance(snapshot, dict):
-                return snapshot
-        current_snapshot = getattr(self.policy_snapshot_publisher, "current_snapshot", None)
-        if callable(current_snapshot):
-            snapshot = current_snapshot()
-            if isinstance(snapshot, dict):
-                return snapshot
-        if self._publish_native_policy:
-            return None
-        return acked_snapshot_binding_for_store(self.store)
+        return prepare_workspace_policy(self, workspace, deadline=deadline, now=time.monotonic())
 
     def _native_policy_snapshot(
         self,
@@ -319,6 +254,10 @@ class HookWorker(HookWorkerNativeMixin):
             and str(payload.get("notification_type") or "") == "permission_prompt"
         ):
             return self._claude_permission_prompt_notification_response(payload)
+        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "claude-code":
+            from .claude_permission_request import claude_permission_request_response
+
+            return claude_permission_request_response(self.store, payload)
         mode = native_mode()
         if mode in {"auto", "force"}:
             # Send even unknown or malformed event labels to Rust. The edge

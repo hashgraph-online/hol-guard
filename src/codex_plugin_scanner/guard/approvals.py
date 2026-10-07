@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.metadata
+import logging
 import threading
 import time
 import uuid
@@ -98,6 +99,8 @@ from .trusted_local_tools import (
     parse_local_tool_grant_selection,
 )
 from .value_coercion import coerce_non_negative_int
+
+_LOGGER = logging.getLogger(__name__)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -454,6 +457,7 @@ def queue_blocked_approvals(
     approval_center_url: str,
     now: str | None = None,
     notify: bool = True,
+    prompt_shown: bool = True,
     redaction_level: str = "full",
     continuation_operation: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
@@ -595,7 +599,7 @@ def queue_blocked_approvals(
                 approval_url=build_approval_request_url(approval_center_url, persisted_request_id),
             )
         if created_new_request:
-            _record_created_event(store, request, timestamp)
+            _record_created_event(store, request, timestamp, prompt_shown=prompt_shown)
         if notify:
             _notify_pending_approval(store=store, request=request)
         request_payload = store.get_approval_request(persisted_request_id)
@@ -603,6 +607,46 @@ def queue_blocked_approvals(
             raise RuntimeError(f"Persisted approval request not found: {persisted_request_id}")
         queued.append(request_payload)
     return queued
+
+
+def silent_review_center_url(guard_home: Path) -> str:
+    """Loopback origin stored on a silent review. Does not start the daemon."""
+
+    from .daemon.manager import guard_daemon_url_for_home
+
+    return guard_daemon_url_for_home(guard_home)
+
+
+def record_unprompted_review(
+    *,
+    detection: HarnessDetection,
+    evaluation: Mapping[str, object],
+    store: GuardStore,
+    approval_center_url: str | None = None,
+    now: str | None = None,
+    redaction_level: str = "full",
+    continuation_operation: Mapping[str, object] | None = None,
+) -> list[dict[str, object]]:
+    """Persist a blocked review for the inbox and cloud outbox without prompting."""
+
+    import sqlite3
+
+    try:
+        return queue_blocked_approvals(
+            detection=detection,
+            evaluation=dict(evaluation),
+            store=store,
+            approval_center_url=approval_center_url or silent_review_center_url(store.guard_home),
+            now=now,
+            notify=False,
+            prompt_shown=False,
+            redaction_level=redaction_level,
+            continuation_operation=continuation_operation,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        # Exception text can include tool input. Keep the class only.
+        _LOGGER.warning("Silent review stayed blocked without an inbox row (%s)", type(error).__name__)
+        return []
 
 
 def _item_browser_intent(item: Mapping[str, object]) -> dict[str, object] | None:
@@ -1292,7 +1336,13 @@ def _enqueue_memory_decision_for_resolution(
     )
 
 
-def _record_created_event(store: GuardStore, request: GuardApprovalRequest, created_at: str) -> None:
+def _record_created_event(
+    store: GuardStore,
+    request: GuardApprovalRequest,
+    created_at: str,
+    *,
+    prompt_shown: bool = True,
+) -> None:
     store.add_event(
         "approval.created",
         {
@@ -1309,7 +1359,7 @@ def _record_created_event(store: GuardStore, request: GuardApprovalRequest, crea
         },
         created_at,
     )
-    if request.policy_action in {"review", "require-reapproval"}:
+    if prompt_shown and request.policy_action in {"review", "require-reapproval"}:
         store.add_event(
             "guard.protection.ask_once_shown",
             {

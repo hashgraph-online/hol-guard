@@ -13,12 +13,20 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
+pub mod business_budget;
 pub mod business_match;
+pub mod business_policy;
+pub mod business_policy_document;
+pub mod business_source_anchor;
+pub mod business_source_authority;
 
 #[path = "policy_snapshot_canonical.rs"]
 mod canonical;
 #[path = "policy_snapshot_crypto.rs"]
 mod crypto;
+#[path = "policy_snapshot_validation.rs"]
+mod validation;
+pub use validation::{inspect_unverified_content, validate_v3};
 
 pub use canonical::{canonical_json_bytes, snapshot_bytes, snapshot_signing_bytes};
 pub use crypto::{
@@ -29,6 +37,9 @@ pub use crypto::{
 pub mod local_authority_integrity;
 pub mod policy_integrity;
 
+#[cfg(test)]
+#[path = "business_policy_tests.rs"]
+mod business_policy_tests;
 #[cfg(test)]
 #[path = "policy_snapshot_tests.rs"]
 mod tests;
@@ -151,6 +162,12 @@ pub struct PolicySnapshotV3 {
     pub effective_policy: EffectiveNativePolicyV3,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_extensions: Option<guard_contracts::NativeCommandControlBindingV1>,
+    #[serde(
+        default,
+        deserialize_with = "business_policy::present_binding",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub business_policy: Option<business_policy::BusinessPolicyBindingV1>,
     pub issued_at_ms: u64,
     pub expires_at_ms: u64,
     pub integrity: SnapshotIntegrityV3,
@@ -246,78 +263,6 @@ pub fn validate(snapshot: &PolicySnapshotV1, minimum_generation: u64) -> Result<
         if !valid_hex(digest, 64) {
             return Err(SnapshotError::Digest);
         }
-    }
-    Ok(())
-}
-
-pub fn validate_v3(
-    snapshot: &PolicySnapshotV3,
-    minimum_generation: u64,
-    expected_runtime_identity: &str,
-    expected_rule_digest: &str,
-    verifier_key: &[u8],
-    now_ms: u64,
-) -> Result<(), SnapshotError> {
-    if snapshot.schema != POLICY_SNAPSHOT_SCHEMA {
-        return Err(SnapshotError::Schema);
-    }
-    if snapshot.version != POLICY_SNAPSHOT_VERSION {
-        return Err(SnapshotError::Version);
-    }
-    if snapshot.generation == 0 {
-        return Err(SnapshotError::Generation);
-    }
-    if snapshot.generation < minimum_generation {
-        return Err(SnapshotError::Downgrade);
-    }
-    if !valid_hex(&snapshot.policy_digest, 64)
-        || !valid_hex(&snapshot.config_digest, 64)
-        || !valid_hex(&snapshot.rule_digest, 64)
-        || !valid_hex(&snapshot.runtime_identity, 64)
-        || !valid_hex(expected_runtime_identity, 64)
-        || !valid_hex(expected_rule_digest, 64)
-    {
-        return Err(SnapshotError::Digest);
-    }
-    if snapshot.runtime_identity != expected_runtime_identity {
-        return Err(SnapshotError::RuntimeIdentity);
-    }
-    if snapshot.rule_digest != expected_rule_digest {
-        return Err(SnapshotError::RuleDigest);
-    }
-    if snapshot.protocol_version != POLICY_SNAPSHOT_PROTOCOL_VERSION {
-        return Err(SnapshotError::Protocol);
-    }
-    if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
-        return Err(SnapshotError::Mode);
-    }
-    validate_scope(&snapshot.scope_contract)?;
-    validate_effective_policy(&snapshot.effective_policy)?;
-    if let Some(binding) = &snapshot.command_extensions {
-        binding.validate().map_err(|_| SnapshotError::Policy)?;
-    }
-    if snapshot.expires_at_ms <= snapshot.issued_at_ms
-        || snapshot.expires_at_ms - snapshot.issued_at_ms > POLICY_SNAPSHOT_MAX_EXPIRY_MS
-    {
-        return Err(SnapshotError::Expiry);
-    }
-    if snapshot.expires_at_ms <= now_ms {
-        return Err(SnapshotError::Expired);
-    }
-    if snapshot.integrity.algorithm != POLICY_SNAPSHOT_INTEGRITY_ALGORITHM
-        || snapshot.integrity.key_id != verifier_key_id(verifier_key)
-        || !valid_hex(&snapshot.integrity.mac, 64)
-    {
-        return Err(SnapshotError::Integrity);
-    }
-    if snapshot.config_digest != config_digest(&snapshot.effective_policy)?
-        || snapshot.policy_digest != policy_digest(snapshot)?
-    {
-        return Err(SnapshotError::DigestMismatch);
-    }
-    let expected_mac = integrity_mac(snapshot, verifier_key)?;
-    if !crypto::constant_time_eq(expected_mac.as_bytes(), snapshot.integrity.mac.as_bytes()) {
-        return Err(SnapshotError::IntegrityMismatch);
     }
     Ok(())
 }

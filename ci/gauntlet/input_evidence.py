@@ -92,3 +92,63 @@ def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     if any(key in expected and expected[key] != enriched[key] for key in ("path", "paths")):
         return False
     return actual == enriched
+
+
+def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str, Any]) -> bool:
+    """Bind resolved read paths without accepting a different target or read options."""
+    if reviewed == completed:
+        return True
+    if tool != "read" or set(reviewed) != set(completed):
+        return False
+    path_keys = set(reviewed) & {"path", "file_path"}
+    if len(path_keys) != 1:
+        return False
+    key = path_keys.pop()
+    original, resolved = reviewed[key], completed[key]
+    if not isinstance(original, str) or not isinstance(resolved, str):
+        return False
+    if original.startswith("~/"):
+        expected = "{{home}}/" + original[2:]
+    elif original.startswith(("/", "{{")):
+        expected = original
+    else:
+        expected = "{{workspace}}/" + original.removeprefix("./")
+    if any(part in {".", "..", ""} for part in expected.split("/")[1:]):
+        return False
+    return completed == {**reviewed, key: expected}
+
+
+def public_native_receipt(receipt: object, replacements: dict[str, str]) -> dict[str, Any] | None:
+    """Keep only safe native denial metadata and structured extension binding."""
+    if not isinstance(receipt, dict):
+        return None
+    selected = {
+        key: receipt[key]
+        for key in (
+            "schema",
+            "version",
+            "authority",
+            "decision_id",
+            "request_id",
+            "harness",
+            "event_name",
+            "payload_kind",
+            "decision",
+            "policy_action",
+            "observed_policy_action",
+            "reason_code",
+            "command_extensions",
+        )
+        if key in receipt
+    }
+    return redact_value(selected, replacements)
+
+
+def public_native_extension_evidence(edge: object, replacements: dict[str, str]) -> dict[str, Any] | None:
+    """Export bounded full observations from an independent native expectation probe."""
+    if not isinstance(edge, dict):
+        return None
+    result = edge.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("command_extensions"), dict):
+        return None
+    return redact_value(result["command_extensions"], replacements)

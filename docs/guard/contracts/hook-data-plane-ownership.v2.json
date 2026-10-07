@@ -350,6 +350,7 @@
     "src/codex_plugin_scanner/guard/native_response_decoder.py",
     "src/codex_plugin_scanner/guard/native_command_observations.py",
     "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_worker_native_review.py",
     "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py",
     "src/codex_plugin_scanner/guard/daemon/hook_pretool_rendering.py",
     "src/codex_plugin_scanner/guard/daemon/hook_availability_policy.py",
@@ -425,8 +426,10 @@
     "src/codex_plugin_scanner/guard/config_mutation.py",
     "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
     "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
+    "src/codex_plugin_scanner/guard/native_business_*.py",
     "src/codex_plugin_scanner/guard/native_command_control_*.py",
     "src/codex_plugin_scanner/guard/daemon/hook_policy_repair.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_worker_readiness.py",
     "src/codex_plugin_scanner/guard/store_approvals.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_binding.py",
@@ -539,9 +542,10 @@
     "rust/crates/guard-hook-core/**",
     "rust/crates/guard-secure-fs/**",
     "rust/crates/guard-seatbelt/**",
-    "rust/crates/guard-runtime-windows-process/**"
+    "rust/crates/guard-runtime-windows-process/**",
+    "rust/crates/guard-google-identity/**"
    ],
-   "current": "PostToolUse output extraction, source validation, secure reads, identity, hashing, equivalence, scanning, and OS-bound containment primitives",
+   "current": "PostToolUse output extraction, source validation, secure reads, identity, hashing, equivalence, scanning, OS-bound containment primitives, and bounded fixed-endpoint HTTPS Google signing-key retrieval and registered code exchange with native identity verification and private credential retention",
    "target": "all decision-critical hook content and source I/O"
   }
  ],

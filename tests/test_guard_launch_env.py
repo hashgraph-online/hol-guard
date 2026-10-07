@@ -287,7 +287,12 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
     ]
 
 
-def test_guard_run_keeps_direct_env_prompt_terminal_when_sandbox_is_required(monkeypatch, tmp_path, capsys):
+def test_guard_run_keeps_direct_env_prompt_terminal_when_sandbox_is_required(
+    monkeypatch,
+    tmp_path,
+    capsys,
+    native_context_digest,
+):
     _trust_local_policy_rows(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

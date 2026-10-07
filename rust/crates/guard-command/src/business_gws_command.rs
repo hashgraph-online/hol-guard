@@ -171,6 +171,11 @@ impl GwsGmailSendCommandInputV1 {
         &self.wire
     }
 
+    /// Move the frozen provider bytes into the private worker's next stage.
+    pub fn into_wire_input(self) -> GmailSendWireInputV1 {
+        self.wire
+    }
+
     /// Preparation identity committing the command and underlying wire binding.
     pub fn input_binding(&self) -> &str {
         &self.binding

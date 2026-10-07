@@ -727,7 +727,7 @@ def test_native_cleanup_retries_transient_resident_close(monkeypatch: pytest.Mon
 
     assert [home for home, _deadline in calls] == [guard_home, guard_home]
     assert calls[0][1] == calls[1][1]
-    assert sleep_calls == [probe._NATIVE_CLEANUP_RETRY_INTERVAL]
+    assert sleep_calls == [probe._native_cleanup_retry_interval_seconds()]
 
 
 def test_native_cleanup_does_not_accept_failed_stop_when_state_disappears(
@@ -741,8 +741,8 @@ def test_native_cleanup_does_not_accept_failed_stop_when_state_disappears(
     state_checks = 0
     monotonic_values = iter((0.0, 0.0, 0.1, 0.1, 2.0))
 
-    monkeypatch.setattr(probe, "_DAEMON_CLEANUP_TIMEOUT", 1.0)
-    monkeypatch.setattr(probe.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(probe, "_daemon_cleanup_timeout_seconds", lambda: 1.0)
+    monkeypatch.setattr(probe.time, "monotonic", lambda: next(monotonic_values, 2.0))
 
     def close_native_residents(*args: object, **kwargs: object) -> bool:
         nonlocal close_calls
@@ -785,7 +785,7 @@ def test_installed_daemon_cleanup_bounds_stop(monkeypatch: pytest.MonkeyPatch) -
             release.wait()
             self.finished = True
 
-    monkeypatch.setattr(probe, "_DAEMON_CLEANUP_TIMEOUT", 0.01)
+    monkeypatch.setattr(probe, "_daemon_cleanup_timeout_seconds", lambda: 0.01)
     daemon = HangingDaemon()
     try:
         with pytest.raises(
@@ -852,7 +852,7 @@ def test_bounded_daemon_call_redelivers_expired_prior_timer(monkeypatch: pytest.
 
     probe._bounded_daemon_call(SimpleNamespace(stop=lambda: None), "stop")
 
-    assert timer_calls[0] == (probe.signal.ITIMER_REAL, probe._DAEMON_CLEANUP_TIMEOUT)
+    assert timer_calls[0] == (probe.signal.ITIMER_REAL, probe._daemon_cleanup_timeout_seconds())
     assert timer_calls[1] == (probe.signal.ITIMER_REAL, 0)
     assert timer_calls[2] == (probe.signal.ITIMER_REAL, 0.001, 0.02)
 
@@ -884,7 +884,7 @@ def test_bounded_daemon_call_restores_alarm_after_setup_failure(monkeypatch: pyt
     assert len(signal_calls) == 2
     assert signal_calls[1] == "previous-handler"
     assert timer_calls[:2] == [
-        (probe.signal.ITIMER_REAL, probe._DAEMON_CLEANUP_TIMEOUT),
+        (probe.signal.ITIMER_REAL, probe._daemon_cleanup_timeout_seconds()),
         (probe.signal.ITIMER_REAL, 0),
     ]
     assert timer_calls[2][0:2] == (probe.signal.ITIMER_REAL, pytest.approx(0.5, abs=0.001))
