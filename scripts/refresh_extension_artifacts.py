@@ -65,8 +65,16 @@ def _detector():
 
 
 def contribution_ids() -> list[str]:
-    """Extension ids declared by in-tree contribution sources."""
-    return sorted(_detector().contribution_ids())
+    """Derive trust inventory from canonical inputs, never published descriptors."""
+    commands = {
+        str(_read(path)["extension"]["extension_id"])
+        for path in (ROOT / "contributions/command-sources").glob("command.*.json")
+    }
+    servers = {
+        "command.mcp-" + str(_read(path)["id"]).removeprefix("mcp.")
+        for path in (ROOT / "contributions/mcp-servers").glob("*.json")
+    }
+    return sorted(commands | servers)
 
 
 def catalog_ids() -> set[str]:

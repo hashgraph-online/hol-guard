@@ -252,7 +252,10 @@ def test_native_input_byte_budget(compiler: Path, example: dict) -> None:
     assert expanded.returncode == 0
     for padding_mib in (8, 9):
         result = subprocess.run(
-            [str(compiler), "compile"], input=canonical(example) + b" " * (padding_mib * 1024 * 1024), capture_output=True, timeout=60
+            [str(compiler), "compile"],
+            input=canonical(example) + b" " * (padding_mib * 1024 * 1024),
+            capture_output=True,
+            timeout=60,
         )
         assert result.returncode != 0
 
@@ -277,7 +280,8 @@ def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
         "config": {},
         "matchers": groups,
     }
-    assert len(canonical(example)) < 4 * 1024 * 1024
+    # Exercise the node limit independently of the current input-byte limit.
+    assert len(canonical(example)) < 8 * 1024 * 1024
     result = invoke(compiler, example)
     assert result.returncode != 0
     assert json.loads(result.stdout)["code"] == "command_source_matcher_budget_exceeded"
