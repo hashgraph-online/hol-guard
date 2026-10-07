@@ -1,10 +1,9 @@
 //! Source-faithful shell heredoc and command-substitution structures
 //! (`runtime/shell_structure.py`, 323 lines — verbatim).
 
-use regex::Regex;
+use fancy_regex::Regex;
 use std::sync::OnceLock;
 
-#[allow(clippy::invalid_regex)]
 fn heredoc_operator_pattern() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -113,7 +112,7 @@ fn heredoc_declarations(line: &[char]) -> Vec<HeredocDecl> {
         if state.is_top_level() && starts_with(line, index, "<<") {
             // `pattern.match(line, index)` — anchored at index only.
             let tail: String = line[index..].iter().collect();
-            if let Some(caps) = heredoc_operator_pattern().captures(&tail) {
+            if let Ok(Some(caps)) = heredoc_operator_pattern().captures(&tail) {
                 let whole = caps.get(0).unwrap();
                 if whole.start() == 0 {
                     let byte_end = whole.end();

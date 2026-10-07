@@ -76,3 +76,15 @@ fn redact_local_source_tokens_hides_cargo_local_path() {
     ]);
     assert!(!flag_form.iter().any(|token| token.contains("crates/demo")));
 }
+
+#[test]
+fn compound_package_install_survives_quoted_and_unquoted_heredocs() {
+    for delimiter in ["EOF", "'EOF'", "\"EOF\""] {
+        let command = format!("npm install lodash && bash <<{delimiter}\nrm -f important.txt\nEOF");
+        let intent =
+            parse_package_intent(&command, None, None, None, None).expect("package install intent");
+        assert_eq!(intent.intent_kind, "install");
+        assert_eq!(intent.targets.len(), 1);
+        assert_eq!(intent.targets[0].package_name.as_deref(), Some("lodash"));
+    }
+}
