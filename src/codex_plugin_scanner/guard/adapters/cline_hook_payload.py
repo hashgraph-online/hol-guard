@@ -427,6 +427,7 @@ def normalize_cline_payload(
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
     guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize Cline onto Guard's canonical typed action envelope."""
 
@@ -440,6 +441,7 @@ def normalize_cline_payload(
         workspace=workspace,
         home_dir=home_dir,
         guard_home=guard_home,
+        deadline=deadline,
     )
     original_tool = _string(_mapping(prepared.get("tool_input")).get("cline_tool_name"))
     if original_tool and original_tool.lower() in _NETWORK_TOOLS:

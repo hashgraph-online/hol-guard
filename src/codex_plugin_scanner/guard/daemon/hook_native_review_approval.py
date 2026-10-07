@@ -98,6 +98,7 @@ def pause_native_pre_tool_for_approval(
     workspace: Path | None,
     guard_home: Path,
     home_dir: Path | None = None,
+    deadline: float | None = None,
     claim_saved_approval: bool = True,
     claimed_saved_allow_hash: str | None = None,
     claimed_approval_request_id: str | None = None,
@@ -174,6 +175,7 @@ def pause_native_pre_tool_for_approval(
             workspace=workspace,
             guard_home=guard_home,
             home_dir=home_dir,
+            deadline=deadline,
         )
         if queued is None:
             _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
@@ -200,6 +202,7 @@ def pause_native_pre_tool_for_approval(
         workspace=workspace,
         guard_home=guard_home,
         home_dir=home_dir,
+        deadline=deadline,
     )
     if queued is None:
         failed = dict(native_result)
@@ -259,6 +262,7 @@ def queue_native_pre_tool_review(
     workspace: Path | None,
     guard_home: Path,
     home_dir: Path | None = None,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
     try:
         native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
@@ -284,6 +288,7 @@ def queue_native_pre_tool_review(
             workspace=workspace,
             guard_home=guard_home,
             home_dir=home_dir,
+            deadline=deadline,
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
@@ -494,6 +499,7 @@ def _native_review_action_envelope(
     workspace: Path | None,
     home_dir: Path | None,
     guard_home: Path | None = None,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
     """Store the canonical redacted envelope used by live revalidation."""
 
@@ -506,6 +512,7 @@ def _native_review_action_envelope(
                 workspace=workspace,
                 home_dir=home_dir,
                 guard_home=guard_home,
+                deadline=deadline,
             )
             .with_pre_execution_result("review")
             .to_dict()
