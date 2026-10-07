@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
+from unittest.mock import Mock
 
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery as delivery
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
-from tests.guard_exact_cloud_review_support import connected_exact_review_store
+from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import recover_rejected_review_events
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
 
 _AUTH: dict[str, object] = {"sync_url": "https://guard.example/api/guard/receipts/sync"}
 
@@ -126,12 +130,133 @@ def test_canonical_upload_uses_frozen_batch_contract(monkeypatch: pytest.MonkeyP
     assert result["perEventResults"] == [{"index": 0, "accepted": True, "code": "review_event_rejected", "error": None}]
 
 
+def test_snapshot_collision_recovers_then_uploads_without_changing_event_or_decision(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store = connected_exact_review_store(tmp_path)
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    add_review_request(store, review_request("collision-recovery"))
+    delivery_binding = {
+        key: binding[key] for key in ("oauth_subject_hash", "workspace_id", "machine_id", "machine_installation_id")
+    }
+    store.acknowledge_review_events([1], **delivery_binding)
+    assert store.requeue_pending_review_events(changed_at="2026-10-01T12:00:00+00:00", require_binding=True) == 1
+    captured: list[dict[str, object]] = []
+
+    def respond(_auth: dict[str, object], *, path: str, payload: dict[str, object]) -> dict[str, object]:
+        assert path.endswith("events:batch")
+        events = payload["events"]
+        assert isinstance(events, list) and len(events) == 1
+        event = events[0]
+        assert isinstance(event, dict)
+        captured.append(dict(event))
+        collision = len(captured) == 1
+        assert store.review_event_outbox_status(now="2026-10-01T12:00:01+00:00")["depth"] == 1
+        return {
+            "protocolVersion": 2,
+            "acknowledgedThrough": 529 if collision else event["localStreamSequence"],
+            "accepted": 0 if collision else 1,
+            "rejected": 1 if collision else 0,
+            "results": [
+                {
+                    "eventId": event["eventId"],
+                    "status": "rejected" if collision else "accepted",
+                    **({"code": "review_event_snapshot_sequence_collision"} if collision else {}),
+                }
+            ],
+        }
+
+    monkeypatch.setattr(delivery, "_post_json", respond)
+    auth: dict[str, object] = {"oauth_source": "default", "sync_url": "https://guard.example", **binding}
+    first = cloud_review_sync.sync_cloud_review_events_once(store, auth)
+    assert first["synced"] == 1
+    second = cloud_review_sync.sync_cloud_review_events_once(store, auth)
+    assert second["synced"] == 0
+    assert len(captured) == 2
+    assert [event["localStreamSequence"] for event in captured] == [2, 530]
+    for key in ("eventId", "eventPayloadJson", "payloadHash", "localRequestId", "localEventSequence"):
+        assert captured[0][key] == captured[1][key]
+    assert store.review_event_outbox_status(now="2026-10-01T12:00:01+00:00")["depth"] == 0
+    request = store.get_approval_request("collision-recovery")
+    assert isinstance(request, dict) and request["status"] == "pending"
+
+
 def test_canonical_transport_rejects_invalid_advertised_batch_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     for invalid_limit in (0, -1, True, "250"):
         response = {**_response(), "maxBatchEvents": invalid_limit}
         monkeypatch.setattr(delivery, "_post_json", lambda *_args, response=response, **_kwargs: response)
         with pytest.raises(delivery.CloudReviewEventProtocolError, match="invalid batch limit"):
             _post([_event()])
+
+
+@pytest.mark.parametrize("high_water", [-1, True, 2**53, "529"])
+def test_canonical_transport_rejects_invalid_high_water(monkeypatch: pytest.MonkeyPatch, high_water: object) -> None:
+    response = {**_response(status="rejected"), "acknowledgedThrough": high_water}
+    monkeypatch.setattr(delivery, "_post_json", lambda *_args, **_kwargs: response)
+    with pytest.raises(delivery.CloudReviewEventProtocolError, match="invalid protocol 2 acknowledgement"):
+        _post([_event()])
+
+
+def test_canonical_transport_accepts_zero_for_an_all_rejected_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = {**_response(status="rejected"), "acknowledgedThrough": 0}
+    monkeypatch.setattr(delivery, "_post_json", lambda *_args, **_kwargs: response)
+
+    normalized = _post([_event()])
+
+    assert normalized["acknowledgedThrough"] == 0
+    assert normalized["accepted"] == 0
+    assert normalized["rejected"] == 1
+
+
+@pytest.mark.parametrize("code", ["review_event_snapshot_sequence_collision", "review_event_sequence_conflict"])
+def test_collision_result_retains_verified_event_identity_only_for_recoverable_code(
+    monkeypatch: pytest.MonkeyPatch, code: str
+) -> None:
+    response = {
+        **_response(status="rejected"),
+        "acknowledgedThrough": 529,
+        "results": [{"eventId": "event-41", "status": "rejected", "code": code}],
+    }
+    monkeypatch.setattr(delivery, "_post_json", lambda *_args, **_kwargs: response)
+    normalized = _post([_event()])["perEventResults"]
+    assert isinstance(normalized, list)
+    assert normalized[0].get("eventId") == ("event-41" if code.endswith("snapshot_sequence_collision") else None)
+
+
+@pytest.mark.parametrize(
+    ("code", "event_id", "high_water", "repaired"),
+    [
+        ("review_event_snapshot_sequence_collision", "event-41", 529, True),
+        ("review_event_sequence_conflict", "event-41", 529, False),
+        ("review_event_snapshot_sequence_collision", "different-event", 529, False),
+        ("review_event_snapshot_sequence_collision", "event-41", True, False),
+    ],
+)
+def test_recovery_requires_typed_collision_and_exact_sent_identity(
+    code: str, event_id: str, high_water: object, repaired: bool
+) -> None:
+    recovery = Mock(return_value={41: 530})
+
+    class Store:
+        recover_review_snapshot_sequences = recovery
+
+    result: dict[str, object] = {"code": code, "eventId": event_id}
+    binding = {"workspace_id": "workspace-1"}
+    sequences, results = recover_rejected_review_events(
+        cast(GuardStore, cast(object, Store())),
+        sequences=[41],
+        results=[result],
+        events={41: _event()},
+        binding=binding,
+        acknowledged_through=high_water,
+    )
+    if repaired:
+        recovery.assert_called_once_with(collisions={41: "event-41"}, acknowledged_through=529, binding=binding)
+        assert (sequences, results) == ([], [])
+    else:
+        recovery.assert_not_called()
+        assert (sequences, results) == ([41], [result])
 
 
 @pytest.mark.parametrize("status", ["duplicate", "stale"])

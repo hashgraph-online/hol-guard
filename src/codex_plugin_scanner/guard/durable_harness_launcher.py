@@ -10,7 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from .stable_guard_cli import desktop_core_shim_for_executable
+from .stable_guard_cli import desktop_core_shim_for_executable, durable_desktop_current_hol_guard
 
 
 class HarnessContextLike(Protocol):
@@ -39,14 +39,15 @@ def build_harness_shim(
     home_override_args: Sequence[str],
     is_transient_path: Callable[[Path], bool],
 ) -> str:
-    if getattr(sys, "frozen", False) or is_transient_appimage_path(executable):
+    desktop_cli = durable_desktop_current_hol_guard(context.home_dir)
+    if desktop_cli is not None or getattr(sys, "frozen", False) or is_transient_appimage_path(executable):
         return build_durable_cli_shim(
             harness,
             context,
             workspace_args,
             home_override_args=home_override_args,
             is_transient_path=is_transient_path,
-            runtime_executable=executable,
+            runtime_executable=str(desktop_cli) if desktop_cli is not None else executable,
         )
     command_args = [
         executable,
@@ -88,7 +89,7 @@ def build_harness_shim(
     )
 
 
-def build_windows_script(executable: str, posix_path: Path) -> str:
+def build_windows_script(executable: str, posix_path: Path, *, source: str | None = None) -> str:
     if is_transient_appimage_path(executable):
         return "\r\n".join(
             (
@@ -98,7 +99,7 @@ def build_windows_script(executable: str, posix_path: Path) -> str:
                 "",
             )
         )
-    harness_command = _generated_harness_command(posix_path)
+    harness_command = _generated_harness_command(posix_path, source=source)
     if harness_command is not None:
         guard_cli, _, harness, *context_args = harness_command
         command = [guard_cli, "run-shim", *context_args, harness, "--"]
@@ -129,13 +130,14 @@ def _cmd_quote_fixed_argument(value: str) -> str:
     return "".join(result)
 
 
-def _generated_harness_command(posix_path: Path) -> list[str] | None:
+def _generated_harness_command(posix_path: Path, *, source: str | None = None) -> list[str] | None:
     if not posix_path.name.startswith("guard-"):
         return None
-    try:
-        source = posix_path.read_text(encoding="utf-8")
-    except OSError:
-        return None
+    if source is None:
+        try:
+            source = posix_path.read_text(encoding="utf-8")
+        except OSError:
+            return None
     prefix = "# base_command = "
     command_line = next((line[len(prefix) :] for line in source.splitlines() if line.startswith(prefix)), None)
     if command_line is None:
@@ -206,6 +208,7 @@ def durable_guard_cli_path(
     runtime_executable: str | None = None,
 ) -> Path | None:
     candidates = (
+        durable_desktop_current_hol_guard(context.home_dir),
         os.environ.get("HOL_GUARD_DESKTOP_RUNTIME_OWNER"),
         str(context.home_dir / ".local" / "bin" / "hol-guard"),
         runtime_executable,

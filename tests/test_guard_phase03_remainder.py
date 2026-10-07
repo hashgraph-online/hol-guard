@@ -446,9 +446,7 @@ def test_latest_version_lookup_keeps_prior_cache_when_response_lacks_stable_vers
         def read(self, _limit: int) -> bytes:
             return b'{"info":{}}'
 
-    monkeypatch.setattr(
-        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
-    )
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
     assert update_commands._latest_version_from_pypi() == "2.0.9"
     assert update_commands._last_pypi_payload == cached_payload
@@ -480,9 +478,7 @@ def test_latest_version_lookup_ignores_prerelease_info_version(
                 b'"2.0.9":[{"filename":"hol_guard-2.0.9-py3-none-any.whl"}]}}'
             )
 
-    monkeypatch.setattr(
-        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
-    )
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
     assert update_commands._latest_version_from_pypi() == "2.0.9"
 
@@ -511,9 +507,7 @@ def test_alpha_only_response_preserves_stable_fallback(
                 b'"3.0.0a1":[{"filename":"hol_guard-3.0.0a1-py3-none-any.whl"}]}}'
             )
 
-    monkeypatch.setattr(
-        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
-    )
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
     assert update_commands._latest_version_from_pypi() == "2.0.9"
     assert update_commands._last_pypi_stable_version == "2.0.9"
@@ -542,9 +536,7 @@ def test_alpha_lookup_uses_alpha_only_payload(monkeypatch: pytest.MonkeyPatch) -
                 b'"3.0.0a1":[{"filename":"hol_guard-3.0.0a1-py3-none-any.whl"}]}}'
             )
 
-    monkeypatch.setattr(
-        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
-    )
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
     assert update_commands._latest_version_from_pypi() is None
     assert update_commands._latest_alpha_version_from_pypi("2.0.9") == "3.0.0a1"

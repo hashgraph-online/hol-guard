@@ -11,14 +11,21 @@ from typing import Protocol, TextIO, cast
 
 from ...version import __version__
 from ..approval_gate import ApprovalGateError, require_high_risk
+from ..business_policy_document_import import (
+    compile_document_for_import,
+    has_business_rules,
+    plan_document_for_import,
+    read_business_document_for_store,
+)
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..policy_authority import PolicyAuthorityError
 from ..policy_document import policy_document_digest
+from ..policy_document_authority import policy_import_approval_binding
 from ..policy_document_io import (
     PolicyCompilationError,
     PolicyDocumentDiff,
     PolicyFileTrustError,
     build_policy_document_from_rows,
-    compile_policy_document,
     diff_policy_documents,
     load_trusted_policy_document,
     read_trusted_policy_text,
@@ -72,13 +79,13 @@ def _now() -> str:
 
 def _load_and_compile(path: Path):
     document = load_trusted_policy_document(path)
-    return document, compile_policy_document(document)
+    return document, compile_document_for_import(document)
 
 
 def _compile_for_local_store(path: Path):
     document = load_trusted_policy_document(path)
     try:
-        return document, compile_policy_document(document), None
+        return document, compile_document_for_import(document), None
     except PolicyCompilationError as error:
         if error.code != "command_expression_requires_guard_3_1_runtime":
             raise
@@ -123,6 +130,12 @@ def _run_guard_policy_document_command(
 
         if command == "validate":
             document, compiled, local_store_error = _compile_for_local_store(Path(args.file))
+            if has_business_rules(document):
+                message = f"Valid Guard policy: {document.metadata.id} ({len(document.rules)} business rules)"
+            elif local_store_error is None:
+                message = f"Valid Guard policy: {document.metadata.id} ({len(compiled)} rows)"
+            else:
+                message = f"Valid Guard 3.0 policy: {document.metadata.id}"
             _write_payload(
                 "policy validate",
                 {
@@ -132,11 +145,7 @@ def _run_guard_policy_document_command(
                     "compiled_rows": len(compiled),
                     "local_store_compilable": local_store_error is None,
                     "local_store_reason": local_store_error.code if local_store_error is not None else None,
-                    "message": (
-                        f"Valid Guard policy: {document.metadata.id} ({len(compiled)} rows)"
-                        if local_store_error is None
-                        else f"Valid Guard 3.0 policy: {document.metadata.id}"
-                    ),
+                    "message": message,
                 },
                 as_json=as_json,
                 output_stream=output_stream,
@@ -194,9 +203,37 @@ def _run_guard_policy_document_command(
         if store is None:
             raise RuntimeError("Guard policy command requires a policy store.")
 
+        if command == "recover-business-source":
+            from ..native_business_source_recovery import recover_committed_business_source
+
+            if os.environ.get(_POLICY_IMPORT_FLAG) != "1":
+                raise NativePolicySnapshotError("policy_import_disabled")
+            document, _ = _load_and_compile(Path(args.file))
+            gate_input = prompt_for_approval_gate(
+                store.guard_home,
+                use_cooldown=False,
+                summary="Approve recovery of this exact interrupted business source installation.",
+            )
+            grant = require_high_risk(
+                store.guard_home,
+                purpose="policy_import",
+                **policy_import_approval_binding(document, "replace"),
+                approval_gate_input=gate_input,
+            )
+            source = recover_committed_business_source(store, document, approval_gate_grant=grant)
+            _write_payload(
+                "policy recover-business-source",
+                {"digest": source.source_digest, "message": "Recovered the business policy installation."},
+                as_json=as_json,
+                output_stream=output_stream,
+            )
+            return 0
+
         if command == "diff":
             candidate, _ = _load_and_compile(Path(args.file))
-            base = build_policy_document_from_rows(store.list_policy_decisions(), include_provenance=True)
+            base = read_business_document_for_store(store) or build_policy_document_from_rows(
+                store.list_policy_decisions(), include_provenance=True
+            )
             difference = diff_policy_documents(base, candidate)
             semantic_payload = _semantic_diff_payload(difference)
             if as_json:
@@ -236,13 +273,19 @@ def _run_guard_policy_document_command(
                     approval_gate_input=gate_input,
                 )
             rows = store.list_policy_decisions()
-            document = build_policy_document_from_rows(rows, include_provenance=include_provenance)
+            business_document = read_business_document_for_store(store)
+            if business_document is not None and not include_provenance:
+                from ..business_policy_document_view import without_provenance
+
+                business_document = without_provenance(business_document)
+            document = business_document or build_policy_document_from_rows(rows, include_provenance=include_provenance)
             formatted = format_policy_document_yaml(document)
             output_value = getattr(args, "output", None) if command == "export" else None
             payload: dict[str, object] = {
                 "rules": len(document.rules),
                 "digest": policy_document_digest(document),
                 "include_provenance": include_provenance,
+                "provenance_redacted": not include_provenance,
             }
             if output_value is None:
                 if as_json:
@@ -269,11 +312,11 @@ def _run_guard_policy_document_command(
                 )
             return 0
         if command == "explain":
-            document = build_policy_document_from_rows(
+            document = read_business_document_for_store(store) or build_policy_document_from_rows(
                 store.list_policy_decisions(),
                 include_provenance=True,
             )
-            compiled = compile_policy_document(document)
+            compiled = compile_document_for_import(document)
             actions: dict[str, int] = {}
             scopes: dict[str, int] = {}
             for row in compiled:
@@ -281,6 +324,17 @@ def _run_guard_policy_document_command(
                 scope = row.decision.scope
                 actions[action] = actions.get(action, 0) + 1
                 scopes[scope] = scopes.get(scope, 0) + 1
+            message = (
+                f"Active policy has {len(document.rules)} canonical rules compiled into {len(compiled)} local rows."
+            )
+            if has_business_rules(document):
+                for rule in document.rules:
+                    if rule.enabled:
+                        actions[rule.effect] = actions.get(rule.effect, 0) + 1
+                scopes["business"] = sum(rule.enabled for rule in document.rules)
+                message = (
+                    f"Active policy has {len(document.rules)} business rules in the authenticated complete source."
+                )
             _write_payload(
                 "policy explain",
                 {
@@ -290,10 +344,7 @@ def _run_guard_policy_document_command(
                     "compiled_rows": len(compiled),
                     "actions": dict(sorted(actions.items())),
                     "scopes": dict(sorted(scopes.items())),
-                    "message": (
-                        f"Active policy has {len(document.rules)} canonical rules "
-                        f"compiled into {len(compiled)} local rows."
-                    ),
+                    "message": message,
                 },
                 as_json=as_json,
                 output_stream=output_stream,
@@ -314,12 +365,12 @@ def _run_guard_policy_document_command(
                 return 4
             document, compiled = _load_and_compile(Path(args.file))
             mode = cast(PolicyImportMode, args.mode)
-            current_document = build_policy_document_from_rows(
+            current_document = read_business_document_for_store(store) or build_policy_document_from_rows(
                 store.list_policy_decisions(),
                 include_provenance=True,
             )
             difference = diff_policy_documents(current_document, document)
-            plan = store.plan_policy_document_import(compiled, mode=mode)
+            plan = plan_document_for_import(store, document, compiled, mode)
             dry_run = bool(args.dry_run)
             if dry_run:
                 _write_payload(
@@ -357,6 +408,7 @@ def _run_guard_policy_document_command(
             grant = require_high_risk(
                 store.guard_home,
                 purpose="policy_import",
+                **policy_import_approval_binding(document, mode),
                 approval_gate_input=gate_input,
             )
             result = store.import_policy_document(
@@ -377,7 +429,7 @@ def _run_guard_policy_document_command(
                     "additions": list(plan.additions),
                     "replacements": list(plan.replacements),
                     "removals": list(plan.removals),
-                    "message": f"Imported {result.inserted} policy rows.",
+                    "message": f"Imported {result.inserted} policy rules.",
                 },
                 as_json=as_json,
                 output_stream=output_stream,
@@ -391,6 +443,7 @@ def _run_guard_policy_document_command(
         PolicyCompilationError,
         PolicyDocumentError,
         PolicyFileTrustError,
+        NativePolicySnapshotError,
     ) as error:
         code = getattr(error, "code", error.__class__.__name__)
         _write_payload(

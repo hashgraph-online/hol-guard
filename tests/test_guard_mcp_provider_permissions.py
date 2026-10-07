@@ -22,19 +22,32 @@ def test_provider_action_identity_is_distinct_and_does_not_cross_hosts_or_connec
     assert not valid_provider_action_selector(key.replace("all-accounts", "work"))
     assert not valid_provider_action_selector(key + ":extra")
     for harness, prefix in [("claude", _PREFIX), ("codex", "mcp__codex_apps__github__")]:
-        floor = composio_provider_action_floor(_choices(), harness=harness,
-                                              tool_name=prefix + "composio_multi_execute_tool", arguments={"tools": [
-            {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {}},
-        ]})
+        floor = composio_provider_action_floor(
+            _choices(),
+            harness=harness,
+            tool_name=prefix + "composio_multi_execute_tool",
+            arguments={
+                "tools": [
+                    {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {}},
+                ]
+            },
+        )
         assert floor.action == "review"
 
 
 def test_denied_member_blocks_the_entire_batch_including_malformed_siblings() -> None:
     for sibling in [{"tool_slug": "SLACK_SEARCH_MESSAGES", "arguments": {}}, {}]:
-        floor = composio_provider_action_floor(_choices(), harness="codex",
-                                              tool_name=_PREFIX + "composio_multi_execute_tool", arguments={"tools": [
-            sibling, {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {}, "account": "unverified-alias"},
-        ]})
+        floor = composio_provider_action_floor(
+            _choices(),
+            harness="codex",
+            tool_name=_PREFIX + "composio_multi_execute_tool",
+            arguments={
+                "tools": [
+                    sibling,
+                    {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {}, "account": "unverified-alias"},
+                ]
+            },
+        )
         assert floor.action == "block"
         assert floor.reason == "denied-batch-member"
 
@@ -48,10 +61,16 @@ def test_opaque_execution_cannot_bypass_active_inner_denies(name: str) -> None:
 
 def test_unknown_account_and_unseen_action_never_receive_allow() -> None:
     floor = composio_provider_action_floor(
-        {}, harness="codex", tool_name=_PREFIX + "composio_multi_execute_tool",
+        {},
+        harness="codex",
+        tool_name=_PREFIX + "composio_multi_execute_tool",
         arguments={"tools": [{"tool_slug": "SLACK_SEARCH_MESSAGES", "arguments": {}}]},
     )
     assert floor.action == "review"
     assert floor.reason == "unresolved-actions"
-    assert composio_provider_action_floor(_choices(), harness="codex",
-                                         tool_name=_PREFIX + "composio_search_tools", arguments={}) is None
+    assert (
+        composio_provider_action_floor(
+            _choices(), harness="codex", tool_name=_PREFIX + "composio_search_tools", arguments={}
+        )
+        is None
+    )

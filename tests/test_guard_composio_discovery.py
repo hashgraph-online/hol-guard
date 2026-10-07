@@ -8,22 +8,37 @@ _TOOL = "mcp__codex_apps__composio__composio_search_tools"
 
 
 def _result():
-    return {"successful": True, "error": None, "data": {
-        "tool_schemas": {"SLACK_SEARCH_MESSAGES": {
-            "toolkit": "slack", "tool_slug": "SLACK_SEARCH_MESSAGES", "description": "Search messages",
-            "input_schema": {"type": "object", "required": ["query"]}, "hasFullSchema": True,
-        }},
-        "session": {"session_id": "private-fixture-session"},
-        "toolkit_connection_statuses": [{"toolkit": "slack", "has_active_connection": True}],
-    }}
+    return {
+        "successful": True,
+        "error": None,
+        "data": {
+            "tool_schemas": {
+                "SLACK_SEARCH_MESSAGES": {
+                    "toolkit": "slack",
+                    "tool_slug": "SLACK_SEARCH_MESSAGES",
+                    "description": "Search messages",
+                    "input_schema": {"type": "object", "required": ["query"]},
+                    "hasFullSchema": True,
+                }
+            },
+            "session": {"session_id": "private-fixture-session"},
+            "toolkit_connection_statuses": [{"toolkit": "slack", "has_active_connection": True}],
+        },
+    }
 
 
 @pytest.mark.parametrize("envelope", ["direct", "structured", "text"])
 def test_inspected_discovery_contract_retains_schemas_without_account_claims(envelope: str) -> None:
     value = _result()
-    response = value if envelope == "direct" else {"structuredContent": value} if envelope == "structured" else {
-        "content": [{"type": "text", "text": json.dumps(value)}],
-    }
+    response = (
+        value
+        if envelope == "direct"
+        else {"structuredContent": value}
+        if envelope == "structured"
+        else {
+            "content": [{"type": "text", "text": json.dumps(value)}],
+        }
+    )
     actions = composio_discovered_actions(_TOOL, response)
     assert actions is not None and len(actions) == 1
     assert actions[0].tool_slug == "SLACK_SEARCH_MESSAGES"
@@ -58,9 +73,15 @@ def test_tool_results_cannot_impersonate_host_inventory_or_discovery() -> None:
     assert composio_discovered_actions(_TOOL, {"result": _result()}) is None
     assert composio_discovered_actions(_TOOL, {"isError": True, "structuredContent": _result()}) is None
     assert composio_discovered_actions(_TOOL, {"isError": "false", "structuredContent": _result()}) is None
-    assert composio_discovered_actions(_TOOL, {
-        "content": [{"type": "text", "text": '{"successful": false, "successful": true}'}],
-    }) is None
+    assert (
+        composio_discovered_actions(
+            _TOOL,
+            {
+                "content": [{"type": "text", "text": '{"successful": false, "successful": true}'}],
+            },
+        )
+        is None
+    )
 
 
 def test_partial_schema_is_metadata_without_complete_authority() -> None:

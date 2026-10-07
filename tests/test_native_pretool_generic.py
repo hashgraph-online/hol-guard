@@ -20,123 +20,11 @@ from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
     harness_json_from_native_pre_tool_review,
     harness_json_from_native_prompt,
 )
-from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
-from codex_plugin_scanner.guard.native_pretool import _decode_pre_tool
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_pretool_edge_fixtures import _edge, _sync_receipt
 
-
-def _edge(harness: str, event: str, action_type: str = "unknown") -> dict[str, object]:
-    edge: dict[str, object] = {
-        "schema": "guard-hook-edge-result.v2",
-        "authority": "rust",
-        "harness": harness,
-        "event_name": "PreToolUse",
-        "payload_kind": "inline",
-        "result": {
-            "schema": "guard-pre-tool-result.v1",
-            "version": 1,
-            "authority": "rust",
-            "action": {
-                "schema": "guard-pre-tool-action.v1",
-                "version": 1,
-                "harness": harness,
-                "event": event,
-                "action_type": action_type,
-                "operation": "unknown",
-                "bounded": True,
-                "sensitive_target": False,
-            },
-            "decision": "deny",
-            "policy_action": "review",
-            "minimum_action": "review",
-            "reason_code": "native_pre_tool_unknown_review",
-            "reason": "HOL Guard requires review for this bounded action.",
-            "explicitly_benign": False,
-        },
-    }
-    result = edge["result"]
-    assert isinstance(result, dict)
-    receipt: dict[str, object] = {
-        "schema": "guard-native-hook-decision-receipt.v1",
-        "version": 1,
-        "authority": "rust",
-        "decision_id": "0" * 64,
-        "request_id": "request-1",
-        "request_digest": "a" * 64,
-        "harness": harness,
-        "event_name": "PreToolUse",
-        "payload_kind": "inline",
-        "policy_generation": 1,
-        "policy_digest": None,
-        "rule_digest": None,
-        "runtime_identity": None,
-        "decision": result["decision"],
-        "model_output_action": "not_applicable",
-        "policy_action": result["policy_action"],
-        "observed_policy_action": None,
-        "reason_code": result["reason_code"],
-        "workspace_bound": False,
-        "source_ref_external_allowed": False,
-        "reviewed_output_sha256": None,
-        "observe_mode": False,
-        "deadline_budget_ms": 100,
-    }
-    receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
-    edge["receipt"] = receipt
-    return edge
-
-
-def _sync_receipt(edge: dict[str, object]) -> None:
-    result = edge["result"]
-    receipt = edge["receipt"]
-    assert isinstance(result, dict)
-    assert isinstance(receipt, dict)
-    receipt.update(
-        {
-            "decision": result["decision"],
-            "policy_action": result["policy_action"],
-            "reason_code": result["reason_code"],
-        }
-    )
-    receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
-
-
-@pytest.mark.parametrize("harness", ("claude-code", "codex", "cline", "cursor", "copilot", "grok", "zcode", "devin"))
-def test_generic_result_decoder_accepts_supported_harnesses(harness: str) -> None:
-    edge = _edge(harness, "PreToolUse", "unknown")
-    assert _decode_edge(edge) == edge
-    result = edge["result"]
-    assert isinstance(result, dict)
-    assert _decode_pre_tool(result, command="ignored") == result
-
-
-def test_generic_result_decoder_rejects_raw_or_conflicting_content() -> None:
-    edge = _edge("codex", "PreToolUse", "file_read")
-    result = edge["result"]
-    assert isinstance(result, dict)
-    result["command"] = "must-not-cross-result-boundary"
-    assert _decode_edge(edge) is None
-
-    conflicting = _edge("codex", "PreToolUse", "file_read")
-    conflicting_result = conflicting["result"]
-    assert isinstance(conflicting_result, dict)
-    conflicting_result["decision"] = "allow"
-    assert _decode_edge(conflicting) is None
-
-    operation_conflict = _edge("codex", "PreToolUse", "file_read")
-    operation_result = operation_conflict["result"]
-    assert isinstance(operation_result, dict)
-    operation_action = operation_result["action"]
-    assert isinstance(operation_action, dict)
-    operation_action["operation"] = "write"
-    assert _decode_edge(operation_conflict) is None
-
-    malformed_type = _edge("codex", "PreToolUse", "unknown")
-    malformed_result = malformed_type["result"]
-    assert isinstance(malformed_result, dict)
-    malformed_result["decision"] = []
-    assert _decode_edge(malformed_type) is None
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def test_generic_allow_result_renders_grok_decision_json() -> None:
@@ -173,12 +61,17 @@ def test_native_prompt_block_renders_supported_host_contracts() -> None:
     claude = harness_json_from_native_prompt("claude-code", result)
     assert claude["decision"] == "block"
     assert claude["policy_action"] == "block"
-    assert claude["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    hook_specific = claude["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["hookEventName"] == "UserPromptSubmit"
     assert claude["reason_code"] == "native_guard_bypass_prompt"
-    assert len(claude["risk_signals"]) == 3
-    assert any("local .env file" in signal for signal in claude["risk_signals"])
-    assert any("exfiltration" in signal for signal in claude["risk_signals"])
-    assert any("bypass" in signal for signal in claude["risk_signals"])
+    signals = claude["risk_signals"]
+    assert isinstance(signals, list)
+    assert all(isinstance(signal, str) for signal in signals)
+    assert len(signals) == 3
+    assert any("local .env file" in signal for signal in signals)
+    assert any("exfiltration" in signal for signal in signals)
+    assert any("bypass" in signal for signal in signals)
     codex = harness_json_from_native_prompt("codex", result)
     assert codex["decision"] == "block"
     assert codex["continue"] is False
@@ -186,7 +79,11 @@ def test_native_prompt_block_renders_supported_host_contracts() -> None:
     copilot = harness_json_from_native_prompt("copilot", result)
     assert copilot["behavior"] == "deny"
     assert copilot["reason_code"] == "native_guard_bypass_prompt"
-    assert harness_json_from_native_prompt("grok", result) == {}
+    grok = harness_json_from_native_prompt("grok", result)
+    assert grok["decision"] == "block"
+    assert grok["reason"] == "HOL Guard blocked this prompt because it asks to disable Guard protection."
+    assert grok["policy_action"] == "block"
+    assert grok["reason_code"] == "native_guard_bypass_prompt"
 
 
 def test_native_prompt_allow_does_not_create_a_block() -> None:
@@ -195,7 +92,9 @@ def test_native_prompt_allow_does_not_create_a_block() -> None:
         {"decision": "allow", "minimum_action": "allow", "reason_code": "native_prompt_clean"},
     )
     assert "decision" not in rendered
-    assert rendered["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["hookEventName"] == "UserPromptSubmit"
     assert harness_json_from_native_prompt(
         "codex",
         {"decision": "allow", "minimum_action": "warn", "reason_code": "native_policy_warning"},
@@ -243,7 +142,9 @@ def test_hook_worker_routes_native_prompt_without_post_tool_projection(
         )
         if mode == "enforce":
             assert rendered["decision"] == "block"
-            assert rendered["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+            hook_specific = rendered["hookSpecificOutput"]
+            assert isinstance(hook_specific, dict)
+            assert hook_specific["hookEventName"] == "UserPromptSubmit"
         else:
             assert rendered["continue"] is True
             assert rendered["policy_action"] == "allow"
@@ -304,37 +205,6 @@ def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically()
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "allow"
-
-
-@pytest.mark.parametrize(
-    ("action", "decision"),
-    (
-        ("allow", "allow"),
-        ("warn", "allow"),
-        ("review", "deny"),
-        ("require-reapproval", "deny"),
-        ("sandbox-required", "deny"),
-        ("block", "deny"),
-    ),
-)
-def test_generic_result_decoder_accepts_complete_policy_action_lattice(
-    action: str,
-    decision: str,
-) -> None:
-    edge = _edge("codex", "PreToolUse")
-    result = edge["result"]
-    assert isinstance(result, dict)
-    result.update(
-        {
-            "decision": decision,
-            "policy_action": action,
-            "minimum_action": action,
-            "reason_code": f"native_policy_{action.replace('-', '_')}",
-            "reason": "HOL Guard returned a typed native policy result.",
-            "explicitly_benign": action == "allow",
-        }
-    )
-    assert _decode_pre_tool(result, command="ignored") == result
 
 
 def test_native_review_queues_approval_without_escaping_to_cli(
@@ -504,6 +374,9 @@ def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(
         runtime_workspace=tmp_path / "workspace",
         store=GuardStore(guard_home),
     )
+    # codex PreToolUse denies via the hookSpecificOutput.permissionDecision
+    # envelope; rc stays 0 so codex honors the deny rather than reading the
+    # nonzero rc as a hook error and permitting.
     assert result == 0
     assert emitted[0]["reason_code"] == "native_hook_worker_unavailable"
 
@@ -530,7 +403,7 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
         workspace=tmp_path / "workspace",
         store=GuardStore(tmp_path / "guard-home"),
     )
-    assert response is not None
+    assert isinstance(response, dict)
     assert response["reason_code"] == "native_hook_worker_exception"
     assert response["policy_action"] == "block"
     output = response["hookSpecificOutput"]

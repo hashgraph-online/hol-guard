@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+#[cfg(all(test, unix))]
+#[path = "managed_resident_containment_tests.rs"]
+mod tests;
+
 #[cfg(windows)]
 use guard_runtime_windows_process::ManagedChild;
 #[cfg(not(windows))]
@@ -50,6 +54,7 @@ pub(super) fn spawn_managed_for_owner(
     digest: &str,
     token: &[u8],
     owner_process_id: u32,
+    overall_deadline: Instant,
 ) -> Result<SpawnedManaged, String> {
     #[cfg(windows)]
     return super::managed_resident_windows::spawn_managed(
@@ -58,6 +63,7 @@ pub(super) fn spawn_managed_for_owner(
         digest,
         token,
         owner_process_id,
+        overall_deadline,
     );
     #[cfg(not(windows))]
     {
@@ -89,15 +95,26 @@ pub(super) fn spawn_managed_for_owner(
             .spawn()
             .map_err(|_| "native_resident_spawn_failed".to_owned())?;
         let mut stdin = child.stdin.take().ok_or_else(|| {
-            let _ = terminate_spawned_managed(&mut child, super::MANAGED_STOP_TIMEOUT);
-            "native_resident_spawn_stdin_failed".to_owned()
+            terminate_spawned_managed(
+                &mut child,
+                overall_deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(super::MANAGED_STOP_TIMEOUT),
+            )
+            .err()
+            .unwrap_or_else(|| "native_resident_spawn_stdin_failed".to_owned())
         })?;
         let write_result = stdin
             .write_all(hex_token(token).as_bytes())
             .and_then(|()| stdin.write_all(b"\n"))
             .and_then(|()| stdin.flush());
         if write_result.is_err() {
-            let _ = terminate_spawned_managed(&mut child, super::MANAGED_STOP_TIMEOUT);
+            terminate_spawned_managed(
+                &mut child,
+                overall_deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(super::MANAGED_STOP_TIMEOUT),
+            )?;
             return Err("native_resident_spawn_auth_failed".to_owned());
         }
         Ok(child)
@@ -243,6 +260,20 @@ fn terminate_managed_process(
     platform_result
 }
 
+pub(super) fn terminate_client_process(
+    process_id: u32,
+    start_marker: &str,
+    runtime_digest: &str,
+    timeout: Duration,
+) -> Result<(), String> {
+    let identity = ManagedProcessIdentity {
+        process_id,
+        start_marker: Some(start_marker.to_owned()),
+        runtime_digest: Some(runtime_digest.to_owned()),
+    };
+    terminate_managed_process(&identity, timeout)
+}
+
 fn generation_process_ids(
     states: &[ResidentState],
     known_processes: &[ManagedProcessIdentity],
@@ -311,7 +342,9 @@ pub(super) fn wait_for_generation_containment(
         if Instant::now() >= deadline {
             return Err("native_resident_spawn_containment_failed".to_owned());
         }
-        std::thread::sleep(super::CLIENT_RETRY_DELAY);
+        std::thread::sleep(
+            super::CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())),
+        );
     }
 }
 
@@ -364,19 +397,24 @@ pub(super) fn abort_spawned_managed(
     digest: &str,
     generation: u64,
     token: &[u8],
-) {
-    let cleanup_deadline = Instant::now() + super::MANAGED_STOP_TIMEOUT;
+    overall_deadline: Instant,
+) -> Result<(), String> {
+    // Containment remains synchronous and identity-bound, including after a
+    // request expires. Only its retry/grace waits share the request budget;
+    // process and filesystem calls can still exceed it.
+    let cleanup_deadline = overall_deadline.min(Instant::now() + super::MANAGED_STOP_TIMEOUT);
     let process_id = child_process_id(child);
     let known_processes = [ManagedProcessIdentity {
         process_id,
         start_marker: process_start_marker(process_id).ok(),
         runtime_digest: runtime_digest().ok(),
     }];
-    let _ = terminate_spawned_managed(
+    let termination = terminate_spawned_managed(
         child,
         cleanup_deadline.saturating_duration_since(Instant::now()),
     );
-    let _ = wait_for_generation_containment(
+    // Check generation containment even if direct-child termination fails.
+    let containment = wait_for_generation_containment(
         scope,
         digest,
         generation,
@@ -384,6 +422,9 @@ pub(super) fn abort_spawned_managed(
         &known_processes,
         cleanup_deadline,
     );
+    termination
+        .and(containment)
+        .map_err(|_| "native_resident_spawn_containment_failed".to_owned())
 }
 
 pub(super) fn is_stale_process_identity_error(error: &str) -> bool {

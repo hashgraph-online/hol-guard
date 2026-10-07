@@ -17,6 +17,8 @@ from codex_plugin_scanner.guard.trusted_local_tools import (
 )
 from tests.conftest import guard_commands_module
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _write_event(
     path: Path,
@@ -74,6 +76,7 @@ def local_tool_workspace(tmp_path: Path) -> tuple[Path, Path]:
     return workspace, tool
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_local_tool_eligibility_is_digest_bound_and_read_only(
     local_tool_workspace: tuple[Path, Path],
 ) -> None:
@@ -118,6 +121,7 @@ def test_local_tool_eligibility_is_digest_bound_and_read_only(
     assert changed.tool_identity_hash != first.tool_identity_hash
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_local_tool_eligibility_supports_verified_jq_output_processing(
     local_tool_workspace: tuple[Path, Path],
 ) -> None:
@@ -377,6 +381,7 @@ def test_local_tool_trust_allows_variable_read_queries_and_invalidates_changed_b
     guard_home.mkdir()
     _ = (guard_home / "config.toml").write_text(
         'mode = "enforce"\nsecurity_level = "balanced"\ndefault_action = "require-reapproval"\n'
+        'blocked_request_mode = "ask"\n'
     )
     monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
 

@@ -21,6 +21,9 @@ from .security_secret_patterns import (
     SecretPattern,
     _field_name_map_spans,
     _is_generated_token_expression,
+    _is_symbolic_reference_literal,
+    _python_symbolic_reference_spans,
+    _screen_route_map_spans,
 )
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
@@ -460,6 +463,7 @@ def _should_skip_secret_match(
     lines: list[str] | None = None,
     offsets: tuple[int, ...] | None = None,
     field_name_spans: tuple[tuple[int, int], ...] = (),
+    python_reference_spans: frozenset[tuple[int, int]] = frozenset(),
 ) -> bool:
     """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
@@ -470,6 +474,8 @@ def _should_skip_secret_match(
     if detector.kind == "generic" and _is_bracketed_placeholder_literal(content, detector, match):
         return True
     if detector.kind == "generic" and _provider_payload(candidate) is None:
+        if _is_symbolic_reference_literal(relative_path, content, match, python_reference_spans):
+            return True
         if _is_generated_token_expression(relative_path, content, match):
             return True
         span_index = bisect.bisect_right(field_name_spans, (match.start(), len(content))) - 1
@@ -499,7 +505,10 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
     """Find the first retained secret line while enforcing the per-file match budget."""
     offsets = _newline_offsets(content)
     lines = content.splitlines()
-    field_name_spans = _field_name_map_spans(relative_path, content)
+    python_reference_spans = _python_symbolic_reference_spans(relative_path, content)
+    field_name_spans = tuple(
+        sorted(_field_name_map_spans(relative_path, content) + _screen_route_map_spans(relative_path, content))
+    )
     first_line = _first_private_key_line(relative_path, content, lines=lines, offsets=offsets)
     first_offset: int | None = None
     matches_seen = 0
@@ -522,6 +531,7 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
                 lines=lines,
                 offsets=offsets,
                 field_name_spans=field_name_spans,
+                python_reference_spans=python_reference_spans,
             ):
                 continue
             first_offset = match.start()

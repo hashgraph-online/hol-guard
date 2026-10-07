@@ -270,6 +270,9 @@ def _native_prompt_context(artifact: GuardArtifact) -> str:
     )
 
 def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
+    guidance = response_payload.get("blocked_request_guidance")
+    if isinstance(guidance, str) and guidance.strip():
+        return guidance.strip()
     decision_message = _decision_v2_harness_message(response_payload)
     if decision_message is not None and _should_use_decision_v2_harness_message(response_payload, decision_message):
         return decision_message
@@ -385,7 +388,10 @@ def _should_use_decision_v2_harness_message(response_payload: dict[str, object],
     )
     if any(message.startswith(prefix) for prefix in generic_prefixes):
         return False
-    return not message.startswith("HOL Guard needs a fresh approval because this action changed.")
+    return not message.startswith((
+        "HOL Guard needs a fresh approval because this action changed.",
+        "HOL Guard needs a fresh approval before this action can run.",
+    ))
 
 def _claude_prompt_additional_context(
     *,

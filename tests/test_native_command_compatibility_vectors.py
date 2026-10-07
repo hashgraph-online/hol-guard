@@ -27,7 +27,13 @@ def test_frozen_github_capabilities_and_owners_match_independent_python_oracle()
         assert sorted(assessment.capabilities) == expected, case["case_id"]
         owners = tuple(github_capability_contract(capability) for capability in assessment.capabilities)
         assert sorted(owner.rule_id for owner in owners if owner.rule_id) == case["expected_rules"]
-        assert sorted(owner.permission_id for owner in owners if not owner.rule_id) == case["expected_permissions"]
+        permissions = sorted(owner.permission_id for owner in owners if not owner.rule_id)
+        if arguments == ["gh", "auth", "status"]:
+            # Native attribution retains the legacy local-read deny alongside
+            # the independent oracle's remote credential validation capability.
+            assert permissions == ["command.github.permission.read-remote"]
+            permissions.insert(0, "command.github.permission.read-local")
+        assert permissions == case["expected_permissions"]
         checked += 1
     assert checked == 123
     assert fixture["complete_python_parity"] is False

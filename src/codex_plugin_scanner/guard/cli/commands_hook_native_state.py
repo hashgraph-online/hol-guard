@@ -56,6 +56,7 @@ class NativeArtifactHookState:
     native_recording_only: bool = False
     receipt_recorded: bool = False
     workflow_authorization_claimed: bool = False
+    approval_prompted: bool | None = None
 
 
 def set_native_artifact_hook_final_action(
@@ -96,6 +97,14 @@ def set_native_artifact_hook_final_action(
         ),
         signals=state.decision_signals,
     ).to_dict()
+    package_review_cloud_reason_code = state.decision_v2_payload.get("package_review_cloud_reason_code")
+    if package_review_cloud_reason_code in {
+        "cloud_auth_error",
+        "cloud_http_error",
+        "cloud_timeout",
+        "cloud_validation_error",
+    }:
+        decision_v2_payload["package_review_cloud_reason_code"] = package_review_cloud_reason_code
     state.decision_v2_payload = decision_v2_payload
     state.response_payload["decision_v2_json"] = decision_v2_payload
 
@@ -248,9 +257,13 @@ def _record_runtime_command_activity(state: NativeArtifactHookState, store: Guar
         payload=state.hook_payload,
         policy_action=state.receipt.policy_decision,
         receipt_id=state.receipt.receipt_id,
-        prompted=command_activity_was_prompted(
-            normalize_guard_action(state.initial_policy_action),
-            approval_reuse_status,
+        prompted=(
+            state.approval_prompted
+            if state.approval_prompted is not None
+            else command_activity_was_prompted(
+                normalize_guard_action(state.initial_policy_action),
+                approval_reuse_status,
+            )
         ),
         approval_reuse_status=approval_reuse_status,
         workflow_authorization_claimed=state.workflow_authorization_claimed,
