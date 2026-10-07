@@ -15,12 +15,14 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use guard_command::local_supply_chain::{
-    resolve_package_firewall_entitlement, resolve_package_firewall_entitlement_with_refresh,
-    CommandExecution, GuardConfig, LocalSupplyChainError, PackageFirewallEntitlementApi,
-    PolicyDecisionLookup, RuntimeRunnerApi, SupplyChainStore,
+    apply_stored_package_policy_override, resolve_package_firewall_entitlement,
+    resolve_package_firewall_entitlement_with_refresh, ApprovalContextApi, CommandExecution,
+    GuardConfig, LocalSupplyChainError, PackageEvalApi, PackageFirewallEntitlementApi,
+    PackageIntentParserApi, PackageRequestEvaluation, PathSupportApi, PolicyDecisionLookup,
+    RuntimeRunnerApi, SupplyChainStore,
 };
 use guard_command::package_intent_common::{
-    build_package_request_artifact, resolve_path_within_workspace, GuardArtifact,
+    build_package_request_artifact, resolve_path_within_workspace, GuardArtifact, PackageIntent,
 };
 use guard_command::package_intent_parser::parse_package_intent;
 use guard_command::pep440::{SpecifierSet, Version};
@@ -36,6 +38,7 @@ use guard_command::supply_chain_package_eval::{
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{
+    ApplyStoredPackagePolicyRequestV1, ApplyStoredPackagePolicyResultV1,
     PackageAuthorityDecideRequestV1, PackageAuthorityDecideResultV1, PackageIntentParseRequestV1,
     PackageIntentParseResultV1, SupplyChainEvalRequestV1, SupplyChainEvalResultV1,
     PACKAGE_AUTHORITY_REQUEST_SCHEMA, PACKAGE_AUTHORITY_RESULT_SCHEMA,
@@ -2585,6 +2588,221 @@ pub(crate) fn evaluate_package_intent_parse(
     crate::encode_response(&result)
 }
 
+// ---------------------------------------------------------------------------
+// ApplyStoredPackagePolicy — `_apply_stored_package_policy_override` resident
+// op. The override reads only `store` + `approval_context_api` live; the other
+// seam params are parity placeholders carried through the ported signature.
+// ---------------------------------------------------------------------------
+
+/// `.approval_context` seam backed by the resident context-digest engine.
+struct ResidentApprovalContext;
+
+impl ApprovalContextApi for ResidentApprovalContext {
+    fn parse_approval_context_token(&self, token: &Value) -> Option<Value> {
+        let parsed = crate::context_digest::parse_context_token(token)?;
+        Some(json!({
+            "identity": parsed.identity,
+            "content": parsed.content,
+            "capabilities": parsed.capabilities,
+            "policy": parsed.policy,
+            "sandbox": parsed.sandbox,
+        }))
+    }
+    fn approval_context_tokens_validation_reason(
+        &self,
+        saved_token: &Value,
+        current_token: &Value,
+    ) -> Option<String> {
+        crate::context_digest::validate_context_tokens(saved_token, current_token)
+    }
+    fn build_approval_context_token(
+        &self,
+        identity: &Value,
+        content: &Value,
+        capabilities: &Value,
+        policy: &Value,
+        sandbox: &Value,
+    ) -> String {
+        // `extension_control_digest` is bound by the caller's snapshot; the
+        // override path never builds tokens, so the empty digest is inert.
+        let components = guard_contracts::ContextDigestComponentsV1 {
+            identity: identity.clone(),
+            content: content.clone(),
+            capabilities: capabilities.clone(),
+            policy: policy.clone(),
+            sandbox: sandbox.clone(),
+            extension_control_digest: String::new(),
+        };
+        crate::context_digest::build_context_token(&components).unwrap_or_default()
+    }
+    fn saved_allow_context_validation_reason(
+        &self,
+        decision: &Value,
+        artifact_hash: &str,
+    ) -> Option<String> {
+        if decision.get("action").and_then(Value::as_str) != Some("allow") {
+            return None;
+        }
+        self.approval_context_tokens_validation_reason(
+            decision.get("artifact_hash").unwrap_or(&Value::Null),
+            &Value::String(artifact_hash.to_string()),
+        )
+    }
+}
+
+/// Unused-in-override intent parser; satisfies the trait for the ported sig.
+struct ResidentIntentParser;
+
+impl PackageIntentParserApi for ResidentIntentParser {
+    fn parse_package_intent(
+        &self,
+        command: &str,
+        workspace: &Path,
+        environment: &BTreeMap<String, String>,
+    ) -> Option<PackageIntent> {
+        parse_package_intent(command, Some(workspace), None, None, Some(environment))
+    }
+}
+
+/// Unused-in-override eval seam; the override never re-evaluates the package.
+struct ResidentPackageEval;
+
+impl PackageEvalApi for ResidentPackageEval {
+    fn evaluate_package_request_artifact(
+        &self,
+        _artifact: &GuardArtifact,
+        _store: &dyn SupplyChainStore,
+        _workspace_dir: &Path,
+        _now: &str,
+        _external_archive_network_authorized: bool,
+        _retain_external_archive_blob: bool,
+    ) -> Result<PackageRequestEvaluation, String> {
+        Err("resident_apply_stored_package_policy_no_eval".to_string())
+    }
+    fn supply_chain_user_copy(
+        &self,
+        title: &str,
+        summary: &str,
+        next_step: Option<&str>,
+        dashboard_url: Option<&str>,
+        harness_message: Option<&str>,
+    ) -> Map<String, Value> {
+        let mut copy = Map::new();
+        copy.insert("title".into(), Value::String(title.to_string()));
+        copy.insert("summary".into(), Value::String(summary.to_string()));
+        copy.insert(
+            "next_step".into(),
+            next_step.map_or(Value::Null, |v| Value::String(v.to_string())),
+        );
+        copy.insert(
+            "dashboard_url".into(),
+            dashboard_url.map_or(Value::Null, |v| Value::String(v.to_string())),
+        );
+        copy.insert(
+            "harness_message".into(),
+            harness_message.map_or(Value::Null, |v| Value::String(v.to_string())),
+        );
+        copy
+    }
+}
+
+/// Unused-in-override path seam; the override never reads workspace files.
+struct ResidentPaths;
+
+impl PathSupportApi for ResidentPaths {
+    fn resolve_path_within_allowed_roots(
+        &self,
+        _candidate: &Path,
+        _allowed_roots: &[PathBuf],
+        _require_exists: bool,
+    ) -> Option<PathBuf> {
+        None
+    }
+    fn resolves_within_root(&self, _root: &Path, _candidate: &Path, _require_exists: bool) -> bool {
+        false
+    }
+    fn read_text_within_workspace(
+        &self,
+        workspace_dir: &Path,
+        relative_path: &str,
+    ) -> Option<String> {
+        let resolved = resolve_path_within_workspace(workspace_dir, relative_path)?;
+        if !resolved.is_file() {
+            return None;
+        }
+        std::fs::read_to_string(resolved).ok()
+    }
+    fn read_bytes_within_workspace(
+        &self,
+        workspace_dir: &Path,
+        relative_path: &str,
+    ) -> Option<Vec<u8>> {
+        let resolved = resolve_path_within_workspace(workspace_dir, relative_path)?;
+        if !resolved.is_file() {
+            return None;
+        }
+        std::fs::read(resolved).ok()
+    }
+}
+
+/// `ApplyStoredPackagePolicy` — `_apply_stored_package_policy_override` port.
+pub(crate) fn evaluate_apply_stored_package_policy(
+    request: &ApplyStoredPackagePolicyRequestV1,
+) -> Result<Vec<u8>, String> {
+    let request_sha256 = request_digest(request)?;
+    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
+        return serde_json::to_vec(&err_result(
+            &request.request_id,
+            &request_sha256,
+            "schema_mismatch",
+        ))
+        .map_err(|e| e.to_string());
+    }
+    if let Some(rejected) = reject_empty_resident_paths(
+        &request.request_id,
+        &request_sha256,
+        &request.store_path,
+        &request.guard_home,
+    ) {
+        return rejected;
+    }
+    let store_path = PathBuf::from(&request.store_path);
+    let guard_home = PathBuf::from(&request.guard_home);
+    let store = ResidentSupplyChainStore::new(&store_path, &guard_home);
+    let mut artifact = artifact_from_value(&request.artifact);
+    if let Some(meta) = request.runtime_private_metadata.clone() {
+        artifact.runtime_private_metadata = meta;
+    }
+    let evaluation = PackageRequestEvaluation {
+        value: request.evaluation.clone(),
+    };
+    let workspace_dir = PathBuf::from(&request.workspace_dir);
+    let result = apply_stored_package_policy_override(
+        &evaluation,
+        &store,
+        &artifact,
+        &request.artifact_hash,
+        &workspace_dir,
+        &request.now,
+        None,
+        request.current_action.as_ref(),
+        request.claim_saved_approval,
+        &ResidentIntentParser,
+        &ResidentPackageEval,
+        &ResidentPaths,
+        &ResidentApprovalContext,
+    );
+    let payload = ApplyStoredPackagePolicyResultV1 {
+        schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_string(),
+        request_id: request.request_id.clone(),
+        request_sha256,
+        status: "ok".to_string(),
+        code: "ok".to_string(),
+        payload: Some(result.value),
+    };
+    crate::encode_response(&payload)
+}
+
 /// `SupplyChainEval` — `evaluate_package_request_artifact` port.
 pub(crate) fn evaluate_supply_chain_eval(
     request: &SupplyChainEvalRequestV1,
@@ -2996,3 +3214,7 @@ mod package_advisory_tests {
         assert!(!fixture.home.join("missing.db").exists());
     }
 }
+
+#[cfg(test)]
+#[path = "apply_stored_package_policy_tests.rs"]
+mod apply_stored_package_policy_tests;

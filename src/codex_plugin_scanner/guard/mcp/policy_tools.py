@@ -9,13 +9,19 @@ transaction.  No CLI subprocess, no second schema, no remote transport.
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ..approval_gate import ApprovalGateGrant
+from ..business_policy_document_import import (
+    compile_document_for_import,
+    has_business_rules,
+    plan_document_for_import,
+    read_business_document_for_store,
+)
 from ..policy_document import GuardPolicyDocument, policy_document_digest
-from ..policy_document_compile import build_policy_document_from_rows, compile_policy_document
+from ..policy_document_authority import PolicyImportApprovalBinding, policy_import_approval_binding
+from ..policy_document_compile import build_policy_document_from_rows
 from ..policy_document_diff import diff_policy_documents
 from ..policy_document_io import CompiledPolicyRow
 from ..policy_document_yaml import (
@@ -23,14 +29,16 @@ from ..policy_document_yaml import (
     format_policy_document_yaml,
     parse_policy_document_yaml,
 )
-from ..store_policy_document import PolicyDocumentImportResult, PolicyImportMode
+from ..store_policy_document import PolicyImportMode
 from .policy_errors import PolicyToolError
 from .policy_store import (
     MCPolicyRequestRepository,
     PendingPolicyRequest,
     StageRequestInput,
 )
-from .policy_time import utc_now_iso as _now_iso
+from .policy_time import utc_now_iso
+
+_now_iso = utc_now_iso
 
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
@@ -67,13 +75,20 @@ def _parse_and_compile(policy_yaml: str) -> tuple[GuardPolicyDocument, tuple[Com
                 code = diag_code
         raise PolicyToolError(code, "Policy YAML parsing failed.") from error
     try:
-        compiled = compile_policy_document(document)
+        compiled = compile_document_for_import(document)
     except Exception as error:
         raise PolicyToolError("policy_compile_failed", "Policy compilation failed.") from error
     return document, compiled
 
 
 def _build_current_document(store: GuardStore) -> GuardPolicyDocument | None:
+    business = read_business_document_for_store(store)
+    if business is not None:
+        return business
+    return _build_current_legacy_document(store)
+
+
+def _build_current_legacy_document(store: GuardStore) -> GuardPolicyDocument | None:
     rows = store.list_policy_decisions()
     imported_rows = [row for row in rows if row.get("source") == "policy-yaml-import"]
     if not imported_rows:
@@ -99,9 +114,9 @@ def _semantic_diff_summary(
 
 
 def _write_plan_summary(
-    store: GuardStore, compiled: tuple[CompiledPolicyRow, ...], mode: PolicyImportMode
+    store: GuardStore, compiled: tuple[CompiledPolicyRow, ...], mode: PolicyImportMode, document: GuardPolicyDocument
 ) -> dict[str, list[str]]:
-    plan = store.plan_policy_document_import(compiled, mode=mode)
+    plan = plan_document_for_import(store, document, compiled, mode)
     return {
         "additions": list(plan.additions),
         "replacements": list(plan.replacements),
@@ -161,7 +176,7 @@ def execute_validate_policy(store: GuardStore, arguments: dict[str, object]) -> 
     current_document = _build_current_document(store)
     current_digest = policy_document_digest(current_document) if current_document else None
     diff_summary = _semantic_diff_summary(current_document, document)
-    plan_summary = _write_plan_summary(store, compiled, parsed.mode)
+    plan_summary = _write_plan_summary(store, compiled, parsed.mode, document)
 
     payload: dict[str, object] = {
         "ok": True,
@@ -219,10 +234,15 @@ def execute_create_policy(
         )
 
     diff_summary = _semantic_diff_summary(current_document, document)
-    if not diff_summary["additions"] and not diff_summary["modifications"] and not diff_summary["removals"]:
+    if (
+        not diff_summary["additions"]
+        and not diff_summary["modifications"]
+        and not diff_summary["removals"]
+        and not (has_business_rules(document) and current_digest != candidate_digest)
+    ):
         raise PolicyToolError("policy_no_changes", "The candidate policy has no semantic changes.")
 
-    plan_summary = _write_plan_summary(store, compiled, parsed.mode)
+    plan_summary = _write_plan_summary(store, compiled, parsed.mode, document)
     canonical_yaml = format_policy_document_yaml(document)
     plan_json = json.dumps(plan_summary, separators=(",", ":"), sort_keys=True)
 
@@ -305,84 +325,46 @@ def execute_get_policy_creation(store: GuardStore, arguments: dict[str, object])
     return _envelope(payload)
 
 
+def _pending_policy_candidate(
+    store: GuardStore,
+    request_id: str,
+) -> tuple[PendingPolicyRequest, GuardPolicyDocument]:
+    """Recheck candidate identity separately at issuance and application."""
+    request = MCPolicyRequestRepository(store).get_request(request_id)
+    if request is None:
+        raise PolicyToolError("policy_request_not_found", "Policy request not found.")
+    if request.status != "pending":
+        raise PolicyToolError("approval_already_resolved", f"Request is {request.status}.")
+    if request.mode not in {"merge", "replace"}:
+        raise PolicyToolError("candidate_invalid", "Stored policy candidate is invalid.")
+    try:
+        document = parse_policy_document_yaml(request.canonical_policy_yaml)
+    except ValueError:
+        raise PolicyToolError("candidate_invalid", "Stored policy candidate is invalid.") from None
+    if policy_document_digest(document) != request.policy_document_digest:
+        raise PolicyToolError("candidate_digest_mismatch", "Stored candidate digest mismatch.")
+    return request, document
+
+
+def pending_policy_import_approval_binding(
+    store: GuardStore,
+    request_id: str,
+) -> PolicyImportApprovalBinding:
+    """Bind approval issuance to the stored candidate rechecked during apply."""
+    request, document = _pending_policy_candidate(store, request_id)
+    return policy_import_approval_binding(document, request.mode)
+
+
 def apply_pending_policy_request(
     store: GuardStore,
     request_id: str,
     *,
     approval_gate_grant: ApprovalGateGrant | None = None,
 ) -> dict[str, object]:
-    """Apply a pending policy request through the atomic import path.
+    """Apply the exact approved candidate through the shared transaction owner."""
+    from .policy_apply import apply_pending_policy_request as apply
 
-    Called by the daemon approval endpoint after the human approves.
-    Revalidates status, expiry, digests, generation, authority, and plan
-    before applying through ``apply_policy_creation_request`` on the same
-    SQLite transaction as the pending -> applied status transition.
-
-    ``approval_gate_grant`` MUST be supplied by the daemon caller, which
-    obtains and validates the existing ``ApprovalGateGrant`` per PRD §25.7.
-    Passing ``None`` here would cause ``require_high_risk`` to raise
-    ``approval_gate_required`` whenever the gate is enabled.
-    """
-    repo = MCPolicyRequestRepository(store)
-    request = repo.get_request(request_id)
-    if request is None:
-        raise PolicyToolError("policy_request_not_found", "Policy request not found.")
-    if request.status != "pending":
-        raise PolicyToolError("approval_already_resolved", f"Request is {request.status}.")
-
-    document = parse_policy_document_yaml(request.canonical_policy_yaml)
-    compiled = compile_policy_document(document)
-    candidate_digest = policy_document_digest(document)
-    if candidate_digest != request.policy_document_digest:
-        raise PolicyToolError("candidate_digest_mismatch", "Stored candidate digest mismatch.")
-
-    current_document = _build_current_document(store)
-    current_digest = policy_document_digest(current_document) if current_document else None
-    if current_digest != request.expected_current_digest:
-        raise PolicyToolError("current_digest_mismatch", "Current policy digest has changed.")
-
-    # Pre-transaction generation fast-path (TOCTOU).  The authoritative
-    # check runs inside _do_import under BEGIN IMMEDIATE.
-    expected_generation = request.expected_policy_generation
-    if expected_generation is not None:
-        current_generation = _read_policy_integrity_generation(store)
-        if current_generation is not None and current_generation != expected_generation:
-            raise PolicyToolError(
-                "stale_policy_generation",
-                "Policy integrity generation has changed since the request was staged.",
-            )
-
-    def _do_import(pending: PendingPolicyRequest, conn: sqlite3.Connection) -> PolicyDocumentImportResult:
-        # Authoritative in-transaction generation revalidation.  Runs
-        # under BEGIN IMMEDIATE so no writer can interleave between this
-        # check and the row writes below.
-        if expected_generation is not None:
-            state = store._load_policy_integrity_state(conn)
-            gen = state.get("generation") if isinstance(state, dict) else None
-            if gen is not None:
-                gen_int = _safe_int(gen)
-                if gen_int != expected_generation:
-                    raise PolicyToolError(
-                        "stale_policy_generation",
-                        "Policy integrity generation has changed since the request was staged.",
-                    )
-        return store.apply_policy_creation_request(
-            document,
-            compiled,
-            mode=request.mode,
-            now=_now_iso(),
-            approval_gate_grant=approval_gate_grant,
-            connection=conn,
-        )
-
-    result = repo.apply_request(request_id, apply_fn=_do_import)
-    return {
-        "requestId": result.request_id,
-        "status": result.status,
-        "resolvedAt": result.resolved_at,
-        "inserted": result.inserted,
-        "replaced": result.replaced,
-    }
+    return apply(store, request_id, approval_gate_grant=approval_gate_grant)
 
 
 def decline_pending_policy_request(store: GuardStore, request_id: str) -> dict[str, object]:

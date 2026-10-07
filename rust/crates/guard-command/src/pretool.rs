@@ -23,7 +23,12 @@ mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
 mod search;
+mod search_scope;
+mod search_scope_filter;
+mod search_scope_glob;
+mod search_scope_ignore;
 mod segment_proof;
+mod shell_script;
 mod stdin_filters;
 mod worktree_add;
 mod worktree_writes;
@@ -366,6 +371,14 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
     let context = crate::pretool::PathContext { home_dir, cwd };
+    if shell_script::contains_credential_post(&model, context) {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_secret_exfiltration",
+            "HOL Guard blocked a local script that combines credential access with outbound posting.",
+        ));
+    }
     if exact_safe_command_with_context(&model, false, context)
         && model.segments.iter().all(|segment| {
             segment

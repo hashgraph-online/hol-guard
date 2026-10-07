@@ -254,6 +254,10 @@ class HookWorker(HookWorkerNativeMixin):
             and str(payload.get("notification_type") or "") == "permission_prompt"
         ):
             return self._claude_permission_prompt_notification_response(payload)
+        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "claude-code":
+            from .claude_permission_request import claude_permission_request_response
+
+            return claude_permission_request_response(self.store, payload)
         mode = native_mode()
         if mode in {"auto", "force"}:
             # Send even unknown or malformed event labels to Rust. The edge

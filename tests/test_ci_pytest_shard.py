@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -142,14 +143,22 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
     scheduling_job = "\n".join(step.get("run", "") for step in jobs["scheduling-sensitive"]["steps"])
     assert "--cov --cov-branch --cov-report=" in coverage_job
+    assert 'github.event_name }}" != "pull_request"' in coverage_job
+    assert "coverage_args=(--cov --cov-branch --cov-report=)" in coverage_job
+    coverage_upload = next(
+        step for step in jobs["coverage"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"
+    )
+    assert coverage_upload["if"] == "always() && github.event_name != 'pull_request'"
     assert "COVERAGE_CORE" not in coverage_job
     assert "-p pytest_coverage_core" not in coverage_job
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
     assert set(jobs["compatibility"]["strategy"]["matrix"]["python-version"]) == {"3.10", "3.11", "3.13", "3.14"}
+    selected = shlex.split(scheduling_job)
     for node in SCHEDULING_ONLY_NODE_IDS:
-        assert f"--deselect {node}" in coverage_job or f"--deselect '{node}'" in coverage_job
-        assert node in scheduling_job
-    assert coverage_job.count("--deselect ") == len(SCHEDULING_ONLY_NODE_IDS)
+        assert node in selected or node.split("[", 1)[0] in selected or node.split("::", 1)[0] in selected
+    redundant_deselections = re.findall(r"--deselect '?([^'\s]+)'?", coverage_job)
+    assert set(redundant_deselections) <= SCHEDULING_ONLY_NODE_IDS
+    assert coverage_job.count("--deselect ") == len(set(redundant_deselections))
     assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
     assert jobs["scheduling-sensitive"]["strategy"]["matrix"]["python-version"] == ["3.12.14", "3.14.7"]
     timing_setup = next(
@@ -163,7 +172,9 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     candidate = jobs["duration-manifest-candidate"]
     assert candidate["needs"] == ["coverage", "coverage-plan"]
     assert candidate["if"] == "needs.coverage.result == 'success'"
-    assert 'if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ];' in "\n".join(step.get("run", "") for step in candidate["steps"])
+    assert 'if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ];' in "\n".join(
+        step.get("run", "") for step in candidate["steps"]
+    )
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
