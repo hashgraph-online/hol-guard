@@ -46,8 +46,8 @@ pub use directory_binding::{
     PrivateDirectoryBinding,
 };
 pub use private_files::{
-    create_private_file, delete_private_file_handle, is_single_link_file, open_private_directory,
-    open_private_file, remove_file_if_same,
+    create_private_file, delete_private_file_handle, is_single_link_file, open_bound_regular_file,
+    open_private_directory, open_private_file, remove_file_if_same,
 };
 pub use process_lifecycle::{
     process_start_marker, terminate_process, terminate_process_verified, wait_for_process_exit,

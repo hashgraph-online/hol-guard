@@ -193,11 +193,11 @@ fn identity(metadata: &Metadata) -> FileIdentity {
 fn map_secure_open_error(error: SecureOpenError) -> SecureReadError {
     match error {
         SecureOpenError::PathChanged => SecureReadError::PathChanged,
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         SecureOpenError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
             SecureReadError::PermissionDenied
         }
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         SecureOpenError::Io(_) => SecureReadError::ReadFailed,
     }
 }
@@ -289,6 +289,12 @@ pub fn read_stable(
         }
         #[cfg(unix)]
         if metadata.nlink() != 1 {
+            return Err(SecureReadError::HardLinkedFile);
+        }
+        #[cfg(windows)]
+        if !guard_runtime_windows_process::is_single_link_file(path)
+            .map_err(|_| SecureReadError::ReadFailed)?
+        {
             return Err(SecureReadError::HardLinkedFile);
         }
         Ok(metadata)

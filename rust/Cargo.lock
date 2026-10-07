@@ -759,6 +759,7 @@ name = "guard-secure-fs"
 version = "0.1.0"
 dependencies = [
  "guard-rules",
+ "guard-runtime-windows-process",
  "hex",
  "libc",
  "nix",
