@@ -6,6 +6,11 @@ Google Workspace CLI v0.22.5 source commit
 and destructive routes, Drive permission changes, Calendar event changes and
 authentication/credential-export operations.
 Gmail delivery includes `+send`, `+reply`, `+reply-all` and `+forward` helpers.
+Destructive routes include Drive `files emptyTrash` and `drives delete`. The
+sharing rule covers Drive permissions, Calendar `acl insert`, `update`, `patch`
+and `delete`, and the Gmail settings that redirect or expose mail:
+`forwardingAddresses create`, `updateAutoForwarding`, `filters create` and
+`delegates create`.
 The CLI is a community project, not an officially supported Google product.
 
 The contribution is inert until the existing local-admin activation enables it.
