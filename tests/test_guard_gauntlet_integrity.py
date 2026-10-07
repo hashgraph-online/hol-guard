@@ -289,6 +289,9 @@ def test_windows_resolved_read_paths_bind_only_whole_backslash_form():
         "{{workspace}}/src\\settings.ts",
     ]:
         assert not post_input_matches("read", reviewed, {"path": altered})
+    # On POSIX, a reviewed backslash is part of a file name, not a separator.
+    windows_form = {"path": "{{workspace}}\\src\\settings.ts"}
+    assert not post_input_matches("read", {"path": "src\\settings.ts"}, windows_form)
 
 
 def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():

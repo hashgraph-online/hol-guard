@@ -83,11 +83,16 @@ class KillOnCloseJob:
         self._handle = handle
         limits = _ExtendedLimitInformation()
         limits.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        _check(
-            self._kernel32.SetInformationJobObject(
-                handle, _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, ctypes.byref(limits), ctypes.sizeof(limits)
+        try:
+            _check(
+                self._kernel32.SetInformationJobObject(
+                    handle, _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, ctypes.byref(limits), ctypes.sizeof(limits)
+                )
             )
-        )
+        except BaseException:
+            # A failed __enter__ never reaches __exit__.
+            self.__exit__()
+            raise
         return self
 
     def assign_and_resume(self, process: subprocess.Popen[bytes]) -> None:

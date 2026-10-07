@@ -136,7 +136,8 @@ class InferenceRelay:
                     size = 0
                     models: set[str] = set()
                     completed = False
-                    finished = False
+                    finish_seen = False
+                    finish_delivered = False
                     agent_open = True
                     phase = "provider-connect"
                     with relay._opener.open(request, timeout=relay.timeout) as response:
@@ -160,7 +161,7 @@ class InferenceRelay:
                                         chunk = json.loads(data)
                                         if isinstance(chunk.get("model"), str):
                                             models.add(chunk["model"])
-                                        finished = finished or any(
+                                        finish_seen = finish_seen or any(
                                             isinstance(choice, dict) and choice.get("finish_reason")
                                             for choice in chunk.get("choices") or []
                                         )
@@ -172,15 +173,18 @@ class InferenceRelay:
                                     self.wfile.write(line)
                                     self.wfile.flush()
                                     row["delivered_bytes"] += len(line)
+                                    # The blank line ends the SSE event that
+                                    # carried the finish reason.
+                                    finish_delivered = finish_delivered or (finish_seen and not line.strip())
                                 except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
-                                    # Agents may close once the model reports a
+                                    # Agents may close once they receive the
                                     # finish reason, before the trailing usage
                                     # chunk and DONE. Windows reports that close
                                     # on the next write. Keep reading so the
                                     # round still needs the provider's DONE; a
-                                    # close before the finish reason stays an
-                                    # error.
-                                    if not finished:
+                                    # close before the whole finish event was
+                                    # delivered stays an error.
+                                    if not finish_delivered:
                                         raise
                                     agent_open = False
                                     row["agent_closed_after_finish"] = True

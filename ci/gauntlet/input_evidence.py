@@ -108,11 +108,12 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
     if not isinstance(original, str) or not isinstance(resolved, str):
         return False
     # Windows agents resolve with backslash separators. Accept them only when
-    # the whole resolved path is in that form, so a POSIX name containing a
-    # backslash never matches a different file.
+    # the whole resolved path is in that form and the reviewed path has no
+    # backslash, so a POSIX name containing one never matches a different file.
     if resolved.startswith(("{{workspace}}\\", "{{home}}\\")) and "/" not in resolved:
+        if "\\" in original:
+            return False
         resolved = resolved.replace("\\", "/")
-        original = original.replace("\\", "/")
     if original.startswith("~/"):
         expected = "{{home}}/" + original[2:]
     elif original.startswith(("/", "{{")):
