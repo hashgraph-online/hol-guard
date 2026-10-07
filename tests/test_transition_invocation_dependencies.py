@@ -143,7 +143,7 @@ def test_expired_invocation_check_does_not_read_link_metadata(tmp_path, monkeypa
 
 def test_signed_inverse_preserves_invocation_and_target(
     transition,
-    tmp_path,  # noqa: F811 -- shared pytest fixture
+    tmp_path,
 ):
     runtime, plan, _bindings, _pointer = transition
     target, invocation, change = _invocation(tmp_path)

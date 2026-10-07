@@ -4,6 +4,8 @@ use evaluate::evaluate_signals;
 
 #[path = "generic_extract.rs"]
 mod extract;
+#[path = "redirect_projection.rs"]
+mod redirect_projection;
 #[path = "generic_result.rs"]
 mod result;
 
@@ -14,10 +16,28 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use super::evaluate_pre_tool_with_context;
+use super::evaluate_pre_tool_with_execution_context;
 use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
+
+/// Bounded caller-supplied context, never authenticated provider facts.
+pub struct UntrustedCommandContext {
+    pub command: Option<String>,
+    pub business_action_present: bool,
+}
+
+/// Share native aliases, nested JSON handling, ambiguity checks and limits.
+pub fn extract_untrusted_command_context(
+    payload: &Value,
+) -> Result<UntrustedCommandContext, String> {
+    let signals = extract_generic_signals(payload)
+        .map_err(|_| "native_command_context_unavailable".to_owned())?;
+    Ok(UntrustedCommandContext {
+        command: signals.command,
+        business_action_present: signals.business_action_present,
+    })
+}
 
 #[path = "agent_metadata.rs"]
 mod agent_metadata;
@@ -101,29 +121,118 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
+    evaluate_envelope(
+        harness,
+        event,
+        payload,
+        controls,
+        deadline,
+        context,
+        execution_environment,
+        true,
+    )
+}
+
+fn payload_with_command(payload: &Value, command: &str) -> Value {
+    let mut projected = payload.clone();
+    let Some(object) = projected.as_object_mut() else {
+        return projected;
+    };
+    for key in ["tool_input", "arguments", "input"] {
+        if let Some(nested) = object.get_mut(key).and_then(|value| value.as_object_mut()) {
+            for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
+                if nested.contains_key(command_key) {
+                    nested.insert(command_key.to_owned(), command.into());
+                }
+            }
+        }
+    }
+    for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
+        if object.contains_key(command_key) {
+            object.insert(command_key.to_owned(), command.into());
+        }
+    }
+    projected
+}
+
+#[allow(clippy::too_many_arguments)]
+fn evaluate_envelope(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+    context: super::PathContext<'_>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    project_redirects: bool,
+) -> PreToolResultV1 {
     let super::PathContext { home_dir, cwd } = context;
     let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
+    // A search pattern is data, not a command: a proven Claude `Grep` scope
+    // skips the command authority but still passes the command controls below.
+    let search_scope_proven = event == "PreToolUse"
+        && harness == "claude-code"
+        && signals.tool_name.as_deref() == Some("Grep")
+        && signals.url_values.is_empty()
+        && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd);
+    if let Some(projection) = signals
+        .command
+        .as_deref()
+        .filter(|_| project_redirects && !search_scope_proven)
+        .and_then(|command| redirect_projection::project(command, context))
+    {
+        let projected_payload = payload_with_command(payload, &projection.command);
+        let projected = evaluate_envelope(
+            harness,
+            event,
+            &projected_payload,
+            controls,
+            deadline,
+            context,
+            execution_environment,
+            false,
+        );
+        {
+            let raw = evaluate_envelope(
+                harness,
+                event,
+                payload,
+                None,
+                deadline,
+                context,
+                execution_environment,
+                false,
+            );
+            return redirect_projection::join(projected, raw, projection.writes_file);
+        }
+    }
     let task_metadata = event == "PreToolUse"
         && agent_metadata::bounded_task_list(payload, signals.tool_name.as_deref())
         && signals.command.is_none()
         && !signals.package_present
         && signals.path_values.is_empty()
         && signals.url_values.is_empty();
-    let command_decision = signals.command.as_deref().map(|command| {
-        evaluate_pre_tool_with_context(
-            &CommandModelRequestV1 {
-                command: command.to_owned(),
-                dialect: "posix".to_owned(),
-                transport: "shell_string".to_owned(),
-                extraction_provenance: "pre-tool-generic".to_owned(),
-            },
-            home_dir,
-            cwd,
-        )
-    });
+    let command_decision = signals
+        .command
+        .as_deref()
+        .filter(|_| !search_scope_proven)
+        .map(|command| {
+            evaluate_pre_tool_with_execution_context(
+                &CommandModelRequestV1 {
+                    command: command.to_owned(),
+                    dialect: "posix".to_owned(),
+                    transport: "shell_string".to_owned(),
+                    extraction_provenance: "pre-tool-generic".to_owned(),
+                },
+                home_dir,
+                cwd,
+                deadline,
+                execution_environment,
+            )
+        });
     // Parsed benign commands may contain credential words as search patterns.
     // Preserve independent structured-path/content risk, not the raw-text hint.
     if command_decision.as_ref().is_some_and(|decision| {
@@ -133,7 +242,21 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     }) {
         signals.sensitive_target = signals.independent_sensitive_target;
     }
-    let mut result = if task_metadata {
+    let mut result = if search_scope_proven {
+        generic_result(
+            generic_action(
+                harness,
+                event,
+                PreToolActionTypeV1::FileRead,
+                PreToolOperationV1::Read,
+                true,
+                false,
+            ),
+            "allow",
+            "native_bounded_search_scope",
+            "The Rust authority proved this directory search cannot reach a sensitive file.",
+        )
+    } else if task_metadata {
         generic_result(
             generic_action(harness, event, PreToolActionTypeV1::Harness,
                 if signals.tool_name.as_deref() == Some("TaskOutput") { PreToolOperationV1::Read } else { PreToolOperationV1::Set }, true, false),

@@ -9,6 +9,25 @@ fn python_runtime_name(name: &str) -> bool {
     })
 }
 
+fn python_inline_eval_args(arguments: &[String]) -> bool {
+    let mut rest = arguments;
+    let mut flags = 0_u8;
+    while let Some(flag) = rest.first() {
+        let bits = match flag.as_str() {
+            "-I" => 1,
+            "-S" => 2,
+            "-IS" | "-SI" => 3,
+            _ => break,
+        };
+        if flags & bits != 0 {
+            return false;
+        }
+        flags |= bits;
+        rest = &rest[1..];
+    }
+    matches!(rest, [flag, _program] if flag == "-c")
+}
+
 /// Classify a direct pytest invocation for delegation, never direct allowance.
 /// The execution sink must resolve the interpreter and enforce pytest-readonly-v2.
 pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
@@ -85,7 +104,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         arguments
     };
     match (super::executable_basename(executable), arguments) {
-        (name, [flag, _program]) if python_runtime_name(name) && flag == "-c" => {
+        (name, args) if python_runtime_name(name) && python_inline_eval_args(args) => {
             return Some("native_python_eval_readonly_containment_required");
         }
         ("node" | "nodejs", [flag, _program]) if matches!(flag.as_str(), "-e" | "--eval") => {
@@ -149,7 +168,8 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     {
         return Some("native_node_tool_readonly_containment_required");
     }
-    if super::executable_basename(executable) == "git" && super::git_helper_context_required(model)
+    if super::executable_basename(executable) == "git"
+        && super::git_helper_context::git_helper_context_required(model)
     {
         return Some("native_git_readonly_containment_required");
     }

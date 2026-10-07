@@ -58,7 +58,7 @@ def installed_hook_request(
                 state_path=guard_home / "daemon-state.json",
                 query=query,
                 data=encoded,
-                timeout_seconds=5,
+                timeout_seconds=10,
             )
         )
         return decoded if isinstance(decoded, dict) else None

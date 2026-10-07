@@ -79,7 +79,11 @@ def test_native_prompt_block_renders_supported_host_contracts() -> None:
     copilot = harness_json_from_native_prompt("copilot", result)
     assert copilot["behavior"] == "deny"
     assert copilot["reason_code"] == "native_guard_bypass_prompt"
-    assert harness_json_from_native_prompt("grok", result) == {}
+    grok = harness_json_from_native_prompt("grok", result)
+    assert grok["decision"] == "block"
+    assert grok["reason"] == "HOL Guard blocked this prompt because it asks to disable Guard protection."
+    assert grok["policy_action"] == "block"
+    assert grok["reason_code"] == "native_guard_bypass_prompt"
 
 
 def test_native_prompt_allow_does_not_create_a_block() -> None:
@@ -370,6 +374,9 @@ def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(
         runtime_workspace=tmp_path / "workspace",
         store=GuardStore(guard_home),
     )
+    # codex PreToolUse denies via the hookSpecificOutput.permissionDecision
+    # envelope; rc stays 0 so codex honors the deny rather than reading the
+    # nonzero rc as a hook error and permitting.
     assert result == 0
     assert emitted[0]["reason_code"] == "native_hook_worker_unavailable"
 

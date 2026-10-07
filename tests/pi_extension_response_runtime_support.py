@@ -253,6 +253,7 @@ def _run_generated_tool_result_fixture(source: str) -> dict[str, object]:
         "(event as { toolInput?: Record<string, unknown> })": "event",
         "(event as { arguments?: Record<string, unknown> })": "event",
         "event as Record<string, unknown>": "event",
+        " as Record<string, unknown>": "",
         "const guardPayload: Record<string, unknown>": "const guardPayload",
         " as string": "",
     }.items():
@@ -275,6 +276,9 @@ const GUARD_STRUCTURED_MAX_BYTES = 64 * 1024;
 const GUARD_STRUCTURED_MAX_DEPTH = 8;
 const GUARD_STRUCTURED_MAX_NODES = 128;
 const GUARD_STRUCTURED_MAX_FIELDS = 64;
+const GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES = new Set([
+  "read", "read_file", "open_file", "view", "view_file", "cat_file", "Read", "View"
+]);
 const blockedToolResults = new Map();
 const handlers = {{}};
 const notifications = [];

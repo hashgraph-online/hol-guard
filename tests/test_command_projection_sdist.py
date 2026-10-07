@@ -21,7 +21,11 @@ def archive(tmp_path):
     spec.loader.exec_module(module)
     files = {
         "contributions/command-sources/command.example.json": {"extension": {"extension_id": "command.example"}},
-        "contracts/extensions/trust-class-map.v1.json": {"classes": {"external": ["command.example"]}},
+        "contracts/extensions/trust/command.example.v1.json": {
+            "schemaVersion": "guard.extension-trust-binding.v1",
+            "extension": "command.example",
+            "trustClass": "external",
+        },
         "contracts/extensions/command-catalog.v1.json": {"catalog": []},
         "contracts/extensions/native-command-program.v1.json": {"rules": []},
         "rust/Cargo.toml": "[workspace]\n",
@@ -52,7 +56,7 @@ def test_frozen_archive_inputs_verify_without_invoking_rust(archive):
     "relative",
     [
         "contributions/command-sources/command.example.json",
-        "contracts/extensions/trust-class-map.v1.json",
+        "contracts/extensions/trust/command.example.v1.json",
         "rust/crates/example/src/lib.rs",
         "rust/Cargo.lock",
         "contracts/extensions/command-catalog.v1.json",

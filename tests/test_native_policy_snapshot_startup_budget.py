@@ -21,9 +21,7 @@ from .native_policy_snapshot_test_fixtures import _ack, _config, _status
 
 
 @pytest.mark.parametrize("cold,replacement", [(True, False), (False, False), (False, True)])
-def test_publication_budget_matches_cold_or_warm_resident(
-    tmp_path: Path, cold: bool, replacement: bool
-) -> None:
+def test_publication_budget_matches_cold_or_warm_resident(tmp_path: Path, cold: bool, replacement: bool) -> None:
     status = _status()
     publisher = SimpleNamespace(
         guard_home=tmp_path / "guard-home",

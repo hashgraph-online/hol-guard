@@ -6,7 +6,6 @@ to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 
 from __future__ import annotations
 
-import hashlib
 import importlib.metadata
 import json
 import math
@@ -19,6 +18,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
+from .native_binary_identity import validate_native_binary as _validate_binary
 from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
 from .native_response_decoder import response_from_payload as _response_from_payload
@@ -106,37 +106,6 @@ def _runtime_candidates() -> tuple[Path, ...]:
             unique.append(candidate)
             seen.add(key)
     return tuple(unique)
-
-
-def _validate_binary(path: Path) -> NativeRuntimeIdentity | None:
-    try:
-        lexical = path.expanduser()
-        metadata = lexical.lstat()
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-            return None
-        if os.name != "nt":
-            if stat.S_IMODE(metadata.st_mode) & 0o022:
-                return None
-            current_uid = os.getuid() if hasattr(os, "getuid") else None
-            owner = getattr(metadata, "st_uid", current_uid)
-            if current_uid is not None and owner not in {0, current_uid}:
-                return None
-        resolved = lexical.resolve(strict=True)
-        resolved_metadata = resolved.stat()
-        if metadata.st_size != resolved_metadata.st_size:
-            return None
-        digest = hashlib.sha256()
-        with resolved.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return NativeRuntimeIdentity(
-            path=resolved,
-            size=resolved_metadata.st_size,
-            mtime_ns=resolved_metadata.st_mtime_ns,
-            sha256=digest.hexdigest(),
-        )
-    except (OSError, RuntimeError, ValueError):
-        return None
 
 
 def _decode_runtime_manifest(payload: object) -> NativeRuntimeManifest | None:

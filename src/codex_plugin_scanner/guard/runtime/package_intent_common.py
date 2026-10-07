@@ -6,14 +6,15 @@ import hashlib
 import json
 import re
 import shlex
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePath
-from typing import Literal
+from typing import Literal, cast
 
 from ..models import GuardArtifact
 from .mcp_protection import _split_package_token
 from .npm_source_spec import NpmSourceSpec, parse_npm_source_spec
-from .typescript_launch_evidence import TypeScriptLaunchEvidence
+from .typescript_launch_evidence import TypeScriptLaunchEvidence, TypeScriptLaunchStatus
 from .workspace_path_guard import existing_paths_within_workspace
 
 IntentKind = Literal["install", "execute", "sync"]
@@ -124,6 +125,163 @@ class PackageIntent:
         payload["command_tokens"] = shlex.split(self.redacted_command)
         payload["targets"] = [target.to_dict() for target in self.targets]
         return payload
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> PackageIntent:
+        """Reconstruct an intent from a ``to_dict`` payload (e.g. the native
+        ``package_intent_parse`` result). Command tokens round-trip through
+        ``redacted_command`` exactly as the native surface serializes them."""
+
+        if not isinstance(payload.get("package_manager"), str):
+            raise ValueError("package intent payload missing package_manager")
+        intent_kind = payload.get("intent_kind")
+        if intent_kind not in ("install", "execute", "sync"):
+            raise ValueError("package intent payload missing intent_kind")
+        redacted_command = payload.get("redacted_command")
+        command_tokens = payload.get("command_tokens")
+        if not isinstance(command_tokens, (list, tuple)) and isinstance(redacted_command, str):
+            command_tokens = shlex.split(redacted_command)
+        return cls(
+            package_manager=str(payload["package_manager"]),
+            intent_kind=cast(IntentKind, intent_kind),
+            command_tokens=_str_tuple(command_tokens),
+            redacted_command=str(redacted_command) if isinstance(redacted_command, str) else "",
+            targets=tuple(
+                evidence
+                for evidence in (_package_intent_target_from_dict(item) for item in _dict_items(payload.get("targets")))
+                if evidence is not None
+            ),
+            manifest_paths=_str_tuple(payload.get("manifest_paths")),
+            lockfile_paths=_str_tuple(payload.get("lockfile_paths")),
+            flags=_str_tuple(payload.get("flags")),
+            notes=_str_tuple(payload.get("notes")),
+            local_executions=tuple(
+                evidence
+                for evidence in (
+                    _local_execution_evidence_from_dict(item) for item in _dict_items(payload.get("local_executions"))
+                )
+                if evidence is not None
+            ),
+            execution_context_hashes=_str_tuple(payload.get("execution_context_hashes")),
+            execution_context_cwds=_str_tuple(payload.get("execution_context_cwds")),
+            execution_context_reason_codes=_str_tuple(payload.get("execution_context_reason_codes")),
+        )
+
+
+def _dict_items(value: object) -> tuple[Mapping[str, object], ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, Mapping))
+
+
+def _str_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
+
+
+def _opt_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _package_execution_file_evidence_from_dict(
+    value: object,
+) -> PackageExecutionFileEvidence | None:
+    if not isinstance(value, Mapping):
+        return None
+    status = value.get("status")
+    if status not in ("available", "missing", "not_regular", "unreadable", "unstable"):
+        status = "missing"
+    path = value.get("path")
+    return PackageExecutionFileEvidence(
+        path=path if isinstance(path, str) else "",
+        resolved_path=_opt_str(value.get("resolved_path")),
+        status=cast(EvidenceStatus, status),
+        file_identity=_opt_str(value.get("file_identity")),
+        content_hash=_opt_str(value.get("content_hash")),
+    )
+
+
+def _typescript_launch_evidence_from_dict(value: object) -> TypeScriptLaunchEvidence | None:
+    if not isinstance(value, Mapping):
+        return None
+    status = value.get("status")
+    if status not in ("complete", "incomplete"):
+        status = "incomplete"
+    schema_version = value.get("schema_version")
+    return TypeScriptLaunchEvidence(
+        schema_version=schema_version if isinstance(schema_version, int) else 0,
+        status=cast(TypeScriptLaunchStatus, status),
+        reasons=_str_tuple(value.get("reasons")),
+        binding_digest=str(value.get("binding_digest") or ""),
+        manager_name=str(value.get("manager_name") or ""),
+        package_name=_opt_str(value.get("package_name")),
+        executable_name=_opt_str(value.get("executable_name")),
+        declared_version=_opt_str(value.get("declared_version")),
+        locked_version=_opt_str(value.get("locked_version")),
+        installed_version=_opt_str(value.get("installed_version")),
+        config_mode=str(value.get("config_mode") or "implicit_or_config_driven"),
+        source_files=_str_tuple(value.get("source_files")),
+        direct_silent_verification=bool(value.get("direct_silent_verification")),
+    )
+
+
+def _local_execution_evidence_from_dict(value: object) -> LocalPackageExecutionEvidence | None:
+    if not isinstance(value, Mapping):
+        return None
+    return LocalPackageExecutionEvidence(
+        manager_name=str(value.get("manager_name") or ""),
+        path_source=str(value.get("path_source") or ""),
+        effective_cwd=str(value.get("effective_cwd") or ""),
+        cwd_source=str(value.get("cwd_source") or ""),
+        manager_is_guard_shim=bool(value.get("manager_is_guard_shim")),
+        local_only_requested=bool(value.get("local_only_requested")),
+        context_hash=str(value.get("context_hash") or ""),
+        package_name=_opt_str(value.get("package_name")),
+        executable_name=_opt_str(value.get("executable_name")),
+        declared_version=_opt_str(value.get("declared_version")),
+        manager=_package_execution_file_evidence_from_dict(value.get("manager")),
+        local_executable=_package_execution_file_evidence_from_dict(value.get("local_executable")),
+        manifests=tuple(
+            evidence
+            for evidence in (
+                _package_execution_file_evidence_from_dict(item) for item in _dict_items(value.get("manifests"))
+            )
+            if evidence is not None
+        ),
+        lockfiles=tuple(
+            evidence
+            for evidence in (
+                _package_execution_file_evidence_from_dict(item) for item in _dict_items(value.get("lockfiles"))
+            )
+            if evidence is not None
+        ),
+        typescript_launch=_typescript_launch_evidence_from_dict(value.get("typescript_launch")),
+    )
+
+
+def _package_intent_target_from_dict(value: object) -> PackageIntentTarget | None:
+    if not isinstance(value, Mapping):
+        return None
+    ecosystem = value.get("ecosystem")
+    if not isinstance(ecosystem, str) or not ecosystem:
+        return None
+    return PackageIntentTarget(
+        ecosystem=ecosystem,
+        package_name=_opt_str(value.get("package_name")),
+        raw_spec=str(value.get("raw_spec") or ""),
+        requested_specifier=_opt_str(value.get("requested_specifier")),
+        source_url=_opt_str(value.get("source_url")),
+        source_kind=_opt_str(value.get("source_kind")),
+        source_repository=_opt_str(value.get("source_repository")),
+        source_revision_kind=_opt_str(value.get("source_revision_kind")),
+        source_identity=_opt_str(value.get("source_identity")),
+        source_invalid_reason=_opt_str(value.get("source_invalid_reason")),
+        alias=_opt_str(value.get("alias")),
+        dependency_group=_opt_str(value.get("dependency_group")),
+        extras=_str_tuple(value.get("extras")),
+        editable=bool(value.get("editable")),
+    )
 
 
 @dataclass(frozen=True, slots=True)

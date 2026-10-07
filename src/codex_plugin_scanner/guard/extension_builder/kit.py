@@ -24,9 +24,7 @@ from .render_native import (
     render_command_source,
     render_contribution,
     revision_digest,
-    test_path,
 )
-from .render_tests import render_mcp_tests
 from .review import Review, load_review
 
 MANIFEST_SCHEMA = "guard.extension-kit.v1"
@@ -112,12 +110,9 @@ canonical sources. The kit's `base: "packaged"` envelope is for a new addition;
 it cannot replace an extension already embedded in the rebuilt compiler.
 """
     else:
-        verification = f"""The MCP contribution is `{contribution_path(metadata)}`. Its generated Python
-tests validate contribution metadata and native registration:
-
-```sh
-python -m pytest {test_path(metadata)}
-```
+        verification = f"""The MCP contribution is `{contribution_path(metadata)}`. The shared
+contribution checks validate its metadata and native registration; no
+per-contribution test module is generated.
 
 Follow the [native validation sequence](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extension-builder/VALIDATION.md)
 to regenerate and verify the complete catalog after integration.
@@ -258,7 +253,6 @@ def build_kit(discovery: Discovery, review: Review) -> Kit:
         files.update({f"artifacts/{path}": content for path, content in artifacts.items()})
     else:
         files[f"artifacts/{contribution_path(metadata)}"] = render_contribution(discovery, review)
-        files[f"artifacts/{test_path(metadata)}"] = render_mcp_tests(discovery, review)
     manifest = {
         "schemaVersion": MANIFEST_SCHEMA,
         "builderVersion": BUILDER_VERSION,

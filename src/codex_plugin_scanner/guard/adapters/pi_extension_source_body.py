@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
+from .pi_extension_prompt_response_source import PROMPT_RESPONSE_HELPER_SOURCE
 from .pi_extension_source_body_shared_v1 import build_source_body_shared_v1
 
 _STRUCTURED_BLOCKED_REASON_PRELUDE = (
@@ -76,8 +77,7 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  }\n"
         "  return null;\n"
         "}\n"
-        "\n"
-        "function fallbackGuardResponse(\n"
+        "\n" + PROMPT_RESPONSE_HELPER_SOURCE + "function fallbackGuardResponse(\n"
         "  reasonCode: string,\n"
         "  reason: string,\n"
         "): GuardResponse {\n"
@@ -196,7 +196,9 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
         "    try {\n"
         "      const parsed = JSON.parse(raw) as unknown;\n"
-        "      const normalized = normalizeGuardResponse(parsed);\n"
+        "      const normalized = normalizePromptGuardResponse(\n"
+        "        parsed, JSON.parse(serializedPayload).hook_event_name,\n"
+        "      );\n"
         "      if (normalized !== null) {\n"
         "        return { response: normalized, recoveryKind: null };\n"
         "      }\n"
@@ -224,13 +226,18 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "const GUARD_DAEMON_READINESS_TIMEOUT_MS = 26_000;\n"
         "const GUARD_DAEMON_READINESS_RESPONSE_RESERVE_MS = 1_000;\n"
         "\n"
-        "async function daemonWorkspaceReadiness(cwd) {\n"
-        "  const deadlineAt = Date.now() + GUARD_DAEMON_READINESS_TIMEOUT_MS;\n"
+        "async function daemonWorkspaceReadiness(\n"
+        "  cwd: string, options: { deadlineAt?: number; allowRecovery?: boolean } = {},\n"
+        ") {\n"
+        "  const deadlineAt = options.deadlineAt ?? Date.now() + GUARD_DAEMON_READINESS_TIMEOUT_MS;\n"
         '  if (typeof fetch !== "function") {\n'
         '    return { ready: false, reasonCode: "daemon_readiness_transport_failure" };\n'
         "  }\n"
         "  let connection = loadGuardDaemonConnection();\n"
         "  if (connection === null || connection.stateId === null) {\n"
+        "    if (options.allowRecovery === false) {\n"
+        '      return { ready: false, reasonCode: "daemon_readiness_transport_failure" };\n'
+        "    }\n"
         "    let recovered = false;\n"
         "    try {\n"
         "      recovered = await recoverGuardDaemon(\n"
@@ -260,6 +267,21 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      },\n"
         "      signal: controller?.signal,\n"
         "    });\n"
+        "    if (response.status === 404 && options.allowRecovery !== false) {\n"
+        "      clearTimeout(timeoutHandle);\n"
+        "      try { void response.body?.cancel().catch(() => {}); } catch {}\n"
+        "      const remaining = deadlineAt - GUARD_DAEMON_READINESS_RESPONSE_RESERVE_MS - Date.now();\n"
+        "      let recovered = false;\n"
+        "      if (remaining > 0) {\n"
+        "        try {\n"
+        "          recovered = await recoverGuardDaemon(remaining, 'authenticated-control-plane-failure');\n"
+        "        } catch {}\n"
+        "      }\n"
+        "      if (recovered && Date.now() < deadlineAt - GUARD_DAEMON_READINESS_RESPONSE_RESERVE_MS) {\n"
+        "        return await daemonWorkspaceReadiness(cwd, { deadlineAt, allowRecovery: false });\n"
+        "      }\n"
+        "      return { ready: false, reasonCode: 'daemon_readiness_http_404', daemonStateId: readinessStateId };\n"
+        "    }\n"
         "    let readiness = {};\n"
         "    try {\n"
         "      const raw = await boundedResponseText(response, GUARD_TEXT_LIMIT_CHARS, deadlineAt);\n"
@@ -340,6 +362,10 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  }\n"
         + build_source_body_shared_v1(
             display_name=display_name, blocked_reason_prelude=_STRUCTURED_BLOCKED_REASON_PRELUDE
+        ).replace(
+            "const normalized = normalizeGuardResponse(parsed);",
+            "const normalized = normalizePromptGuardResponse(parsed, payload.hook_event_name);",
+            1,
         )
         + "function reviewedToolResult(content: unknown, details: unknown, isError?: boolean, deadlineAt?: number) {\n"
         "  let body = '';\n"
@@ -383,7 +409,8 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "        return workspaceReadiness.result;\n"
         "      }\n"
         "      if (workspaceReadiness.daemonStateId !== null &&\n"
-        "        currentConnection?.stateId === workspaceReadiness.daemonStateId) {\n"
+        "        currentConnection?.stateId === workspaceReadiness.daemonStateId &&\n"
+        "        (!workspaceReadiness.settled || workspaceReadiness.ready || !allowSetup)) {\n"
         "        return workspaceReadiness.result;\n"
         "      }\n"
         "      if (!allowSetup) {\n"
@@ -396,10 +423,11 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "    }\n"
         "    const daemonStateId = loadGuardDaemonConnection()?.stateId ?? null;\n"
         "    const result = daemonWorkspaceReadiness(workspace);\n"
-        "    const readinessEntry = { cwd: workspace, result, daemonStateId, settled: false };\n"
+        "    const readinessEntry = { cwd: workspace, result, daemonStateId, settled: false, ready: false };\n"
         "    workspaceReadiness = readinessEntry;\n"
         "    void result.then((readiness) => {\n"
         "      readinessEntry.settled = true;\n"
+        "      readinessEntry.ready = readiness.ready === true;\n"
         "      if (workspaceReadiness === readinessEntry && typeof readiness.daemonStateId === 'string') {\n"
         "        readinessEntry.daemonStateId = readiness.daemonStateId;\n"
         "      }\n"

@@ -11,17 +11,26 @@ pub struct PathContext<'a> {
 }
 
 mod git_config;
+mod git_helper_context;
 mod git_probe;
 mod git_routes;
+mod git_worktree;
 pub(crate) use git_routes::git_route_within_workspace;
 mod pure_expression;
 mod read_paths;
 mod restricted_tests;
 mod safe_reads;
+mod safe_scalar;
 mod safe_writes;
 mod search;
+mod search_scope;
+mod search_scope_filter;
+mod search_scope_glob;
+mod search_scope_ignore;
 mod segment_proof;
+mod shell_script;
 mod stdin_filters;
+mod worktree_add;
 mod worktree_writes;
 
 pub mod generic;
@@ -202,30 +211,6 @@ fn safe_git_arguments(
     )
 }
 
-fn git_helper_context_required(model: &CanonicalCommandV1) -> bool {
-    exact_safe_command(model, true)
-        && model.segments.iter().any(|segment| {
-            segment.executable.as_deref().is_some_and(|executable| {
-                executable_basename(executable) == "git"
-                    && segment.arguments.first().is_some_and(|subcommand| {
-                        let option_end = segment
-                            .arguments
-                            .iter()
-                            .position(|argument| argument == "--")
-                            .unwrap_or(segment.arguments.len());
-                        let active_options = &segment.arguments[1..option_end];
-                        matches!(subcommand.as_str(), "diff" | "log" | "show")
-                            && !(active_options
-                                .iter()
-                                .any(|argument| argument == "--no-ext-diff")
-                                && active_options
-                                    .iter()
-                                    .any(|argument| argument == "--no-textconv"))
-                    })
-            })
-        })
-}
-
 fn destructive_command(value: &str) -> bool {
     let lowered = normalized_haystack(value);
     let rm_force = lowered.contains("rm -rf") || lowered.contains("rm -fr");
@@ -373,9 +358,27 @@ pub(super) fn evaluate_pre_tool_with_context(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> Result<PreToolDecisionV1, String> {
+    evaluate_pre_tool_with_execution_context(request, home_dir, cwd, None, None)
+}
+
+pub(super) fn evaluate_pre_tool_with_execution_context(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    deadline: Option<std::time::Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
     let context = crate::pretool::PathContext { home_dir, cwd };
+    if shell_script::contains_credential_post(&model, context) {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_secret_exfiltration",
+            "HOL Guard blocked a local script that combines credential access with outbound posting.",
+        ));
+    }
     if exact_safe_command_with_context(&model, false, context)
         && model.segments.iter().all(|segment| {
             segment
@@ -435,6 +438,14 @@ pub(super) fn evaluate_pre_tool_with_context(
             "HOL Guard requires fresh approval for the privileged execution context.",
         ));
     }
+    if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_worktree_add",
+            "The Rust command authority proved this bounded worktree creation has a fresh contained destination, a local ref, and no executable Git routes.",
+        ));
+    }
     if exact_safe_command_with_context(&model, false, context) {
         return Ok(pretool_decision(
             model,
@@ -459,7 +470,20 @@ pub(super) fn evaluate_pre_tool_with_context(
             "HOL Guard requires review because this command overrides executable resolution.",
         ));
     }
-    if git_helper_context_required(&model) {
+    if git_helper_context::git_helper_context_required(&model) {
+        if git_helper_context::git_helpers_proven_inert(
+            &model,
+            context,
+            deadline,
+            execution_environment,
+        ) {
+            return Ok(pretool_decision(
+                model,
+                "allow",
+                "native_exact_safe_command",
+                "The Rust command authority verified that the effective Git configuration defines no diff, textconv, pager, or filter helper for this read.",
+            ));
+        }
         return Ok(pretool_decision(
             model,
             "review",

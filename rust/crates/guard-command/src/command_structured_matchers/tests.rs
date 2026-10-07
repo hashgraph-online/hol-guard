@@ -61,6 +61,7 @@ fn command(segments: Vec<SegmentInput>) -> CanonicalCommandV1 {
         uncertainty_reason: None,
         path_overridden: false,
         parser_profile: "oracle.v1".into(),
+        security_identity: String::new(),
     }
 }
 

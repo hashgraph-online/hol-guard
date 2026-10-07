@@ -153,7 +153,7 @@ def validate_installed_proof_environment(source: str) -> None:
 
 
 def registered_harnesses() -> frozenset[str]:
-    path = Path("src/codex_plugin_scanner/guard/adapters/contracts.py")
+    path = Path("src/codex_plugin_scanner/guard/adapters/contract_registry.py")
     tree = ast.parse(_read(path), filename=str(path))
     harnesses: set[str] = set()
     for node in ast.walk(tree):

@@ -120,7 +120,7 @@ _ACTION_MESSAGES: dict[GuardAction, tuple[GuardDecisionAction, str, str, str]] =
     "require-reapproval": (
         "ask",
         "Fresh approval required",
-        "HOL Guard needs a fresh approval because this action changed.",
+        "HOL Guard needs a fresh approval before this action can run.",
         "Choose the smallest approval scope that matches your intent, then retry.",
     ),
     "block": (

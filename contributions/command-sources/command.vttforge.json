@@ -1,0 +1,3808 @@
+{
+  "extension": {
+    "action_classes": [
+      "VTTForge project scaffold command",
+      "VTTForge lint fix command",
+      "VTTForge migration write command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews VTTForge CLI commands that write a project: the scaffold, lint fixes, and the v14 migration written in place. The audit, the lint report and the migration preview stay unreviewed.",
+    "ecosystem_ids": [
+      "vttforge"
+    ],
+    "executables": [
+      "vttforge"
+    ],
+    "extension_id": "command.vttforge",
+    "homepage": "https://vttforge.dev",
+    "icon": {
+      "background": "#B45309",
+      "kind": "react-icon",
+      "name": "HiMiniCube"
+    },
+    "license": "MIT",
+    "name": "VTTForge command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "VTTForge project scaffold command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `vttforge init`, which writes a new Foundry VTT system or module tree into the working directory, then runs the package manager install and `git init` unless --no-install and --no-git are present. A vttforge invocation whose subcommand is an unresolved shell expansion, with no literal --fix or --write beside it, is reviewed here too, since it may expand into init.",
+        "example_command": "vttforge init",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "VTTForge project scaffold",
+        "permission_id": "command.vttforge.permission.init",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Confirm the target directory does not already hold a project before scaffolding.",
+          "Pass --no-install and --no-git to write the files only, then review them before installing.",
+          "Expand shell variables and command substitutions before running vttforge."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "VTTForge lint fix command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `vttforge lint --fix`, which rewrites source files in place with the bundled formatter and linter fixes. Without --fix the command only reports. A lint invocation carrying an unresolved shell expansion is reviewed too, since it may expand to --fix. A literal --fix is reviewed whatever the subcommand token, since an expanded subcommand may be lint.",
+        "example_command": "vttforge lint --fix",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "VTTForge lint with fixes written",
+        "permission_id": "command.vttforge.permission.lint-fix",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `vttforge lint` without --fix to see the findings first.",
+          "Run --fix on a clean git tree so the rewrite is one reviewable diff.",
+          "Expand shell variables and command substitutions before running vttforge lint."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "VTTForge migration write command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `vttforge migrate --write`, which rewrites a v13 Foundry VTT project for v14 in place, and with --data-models or --sheets also writes generated files next to the originals. Without --write the command previews the same edits and writes nothing. A migrate invocation carrying an unresolved shell expansion is reviewed too, since it may expand to --write. A literal --write is reviewed whatever the subcommand token, since an expanded subcommand may be migrate.",
+        "example_command": "vttforge migrate --write",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "VTTForge migration written to the project",
+        "permission_id": "command.vttforge.permission.migrate-write",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `vttforge migrate` without --write first and read the report.",
+          "Run --write on a clean git tree, then `vttforge audit`, and review the diff before committing.",
+          "Add --strict so the command exits non-zero when it leaves anything that needs a decision.",
+          "Expand shell variables and command substitutions before running vttforge migrate."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.vttforge",
+      "url": null
+    },
+    "reference_urls": [
+      "https://github.com/vttforge/vttforge",
+      "https://vttforge.dev/docs/guide/cli"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "VTTForge project scaffold command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `vttforge init`, which writes a new Foundry VTT system or module tree into the working directory, then runs the package manager install and `git init` unless --no-install and --no-git are present. A vttforge invocation whose subcommand is an unresolved shell expansion, with no literal --fix or --write beside it, is reviewed here too, since it may expand into init.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vttforge",
+                  "vttforge.cmd",
+                  "vttforge.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--author",
+                  "--description",
+                  "--id",
+                  "--lang",
+                  "--license",
+                  "--title",
+                  "--type"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "init"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [
+                  "--author",
+                  "--description",
+                  "--id",
+                  "--lang",
+                  "--license",
+                  "--title",
+                  "--type"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge",
+                  "init"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [
+                  "--author",
+                  "--description",
+                  "--id",
+                  "--lang",
+                  "--license",
+                  "--title",
+                  "--type"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.cmd",
+                  "init"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [
+                  "--author",
+                  "--description",
+                  "--id",
+                  "--lang",
+                  "--license",
+                  "--title",
+                  "--type"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.exe",
+                  "init"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--author",
+                  "--description",
+                  "--id",
+                  "--lang",
+                  "--license",
+                  "--title",
+                  "--type"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge",
+                  "init"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--author",
+                  "--description",
+                  "--id",
+                  "--lang",
+                  "--license",
+                  "--title",
+                  "--type"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.cmd",
+                  "init"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--author",
+                  "--description",
+                  "--id",
+                  "--lang",
+                  "--license",
+                  "--title",
+                  "--type"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.exe",
+                  "init"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "expansion_markers": [
+                  "$",
+                  "`"
+                ],
+                "launchers": [
+                  [
+                    "vttforge"
+                  ],
+                  [
+                    "exec",
+                    "vttforge"
+                  ],
+                  [
+                    "xargs",
+                    "vttforge"
+                  ]
+                ],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ]
+              },
+              "op": "tui-runner-expansion.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.vttforge.permission.init",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.vttforge.init",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge project scaffold help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge project scaffold help",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "lint"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge",
+                      "lint"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd",
+                      "lint"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe",
+                      "lint"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge",
+                      "lint"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd",
+                      "lint"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe",
+                      "lint"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge lint subcommand",
+            "variant_id": "literal-lint"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge",
+                      "migrate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd",
+                      "migrate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe",
+                      "migrate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge",
+                      "migrate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd",
+                      "migrate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe",
+                      "migrate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge migrate subcommand",
+            "variant_id": "literal-migrate"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge",
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd",
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe",
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge",
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd",
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe",
+                      "audit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge audit subcommand",
+            "variant_id": "literal-audit"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--fix"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--fix"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--fix"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--fix"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--fix"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--fix"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--fix"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge line with a literal --fix",
+            "variant_id": "literal-fix"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [
+                      "--write"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [
+                      "--write"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [
+                      "--write"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [
+                      "--write"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [
+                      "--write"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [
+                      "--write"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--lang",
+                      "--style"
+                    ],
+                    "required_flags": [
+                      "--write"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge line with a literal --write",
+            "variant_id": "literal-write"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the target directory does not already hold a project before scaffolding.",
+          "Pass --no-install and --no-git to write the files only, then review them before installing.",
+          "Expand shell variables and command substitutions before running vttforge."
+        ],
+        "severity": "medium",
+        "title": "VTTForge project scaffold"
+      },
+      {
+        "action_classes": [
+          "VTTForge lint fix command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `vttforge lint --fix`, which rewrites source files in place with the bundled formatter and linter fixes. Without --fix the command only reports. A lint invocation carrying an unresolved shell expansion is reviewed too, since it may expand to --fix. A literal --fix is reviewed whatever the subcommand token, since an expanded subcommand may be lint.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vttforge",
+                  "vttforge.cmd",
+                  "vttforge.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--fix"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--fix"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--fix"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.cmd"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--fix"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.exe"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--fix"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--fix"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.cmd"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--fix"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.exe"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "expansion_markers": [
+                  "$",
+                  "`"
+                ],
+                "launchers": [
+                  [
+                    "vttforge",
+                    "lint"
+                  ],
+                  [
+                    "exec",
+                    "vttforge",
+                    "lint"
+                  ],
+                  [
+                    "xargs",
+                    "vttforge",
+                    "lint"
+                  ]
+                ],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ]
+              },
+              "op": "tui-runner-expansion.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.vttforge.permission.lint-fix",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.vttforge.lint-fix",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge lint with fixes written help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `vttforge lint` without --fix to see the findings first.",
+          "Run --fix on a clean git tree so the rewrite is one reviewable diff.",
+          "Expand shell variables and command substitutions before running vttforge lint."
+        ],
+        "severity": "medium",
+        "title": "VTTForge lint with fixes written"
+      },
+      {
+        "action_classes": [
+          "VTTForge migration write command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `vttforge migrate --write`, which rewrites a v13 Foundry VTT project for v14 in place, and with --data-models or --sheets also writes generated files next to the originals. Without --write the command previews the same edits and writes nothing. A migrate invocation carrying an unresolved shell expansion is reviewed too, since it may expand to --write. A literal --write is reviewed whatever the subcommand token, since an expanded subcommand may be migrate.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vttforge",
+                  "vttforge.cmd",
+                  "vttforge.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--lang",
+                  "--style"
+                ],
+                "required_flags": [
+                  "--write"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [
+                  "--lang",
+                  "--style"
+                ],
+                "required_flags": [
+                  "--write"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [
+                  "--lang",
+                  "--style"
+                ],
+                "required_flags": [
+                  "--write"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.cmd"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-c",
+                  "-l"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-a"
+                ],
+                "options_with_values": [
+                  "--lang",
+                  "--style"
+                ],
+                "required_flags": [
+                  "--write"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.exe"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--lang",
+                  "--style"
+                ],
+                "required_flags": [
+                  "--write"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--lang",
+                  "--style"
+                ],
+                "required_flags": [
+                  "--write"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.cmd"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--exit",
+                  "--interactive",
+                  "--no-run-if-empty",
+                  "--null",
+                  "--open-tty",
+                  "--show-limits",
+                  "--verbose",
+                  "-0",
+                  "-o",
+                  "-t",
+                  "-x"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--lang",
+                  "--style"
+                ],
+                "required_flags": [
+                  "--write"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "vttforge.exe"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "expansion_markers": [
+                  "$",
+                  "`"
+                ],
+                "launchers": [
+                  [
+                    "vttforge",
+                    "migrate"
+                  ],
+                  [
+                    "exec",
+                    "vttforge",
+                    "migrate"
+                  ],
+                  [
+                    "xargs",
+                    "vttforge",
+                    "migrate"
+                  ]
+                ],
+                "leading_options_with_values": [
+                  "--arg-file",
+                  "--delimiter",
+                  "--eof",
+                  "--max-args",
+                  "--max-chars",
+                  "--max-lines",
+                  "--max-procs",
+                  "--replace",
+                  "-a",
+                  "-d",
+                  "-j",
+                  "-n",
+                  "-s"
+                ]
+              },
+              "op": "tui-runner-expansion.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.vttforge.permission.migrate-write",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.vttforge.migrate-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vttforge",
+                      "vttforge.cmd",
+                      "vttforge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-c",
+                      "-l"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-a"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.cmd"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--exit",
+                      "--interactive",
+                      "--no-run-if-empty",
+                      "--null",
+                      "--open-tty",
+                      "--show-limits",
+                      "--verbose",
+                      "-0",
+                      "-o",
+                      "-t",
+                      "-x"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--arg-file",
+                      "--delimiter",
+                      "--eof",
+                      "--max-args",
+                      "--max-chars",
+                      "--max-lines",
+                      "--max-procs",
+                      "--replace",
+                      "-a",
+                      "-d",
+                      "-j",
+                      "-n",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "vttforge.exe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "VTTForge migration written to the project help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `vttforge migrate` without --write first and read the report.",
+          "Run --write on a clean git tree, then `vttforge audit`, and review the diff before committing.",
+          "Add --strict so the command exits non-zero when it leaves anything that needs a decision.",
+          "Expand shell variables and command substitutions before running vttforge migrate."
+        ],
+        "severity": "medium",
+        "title": "VTTForge migration written to the project"
+      }
+    ],
+    "safer_alternatives": [
+      "Run the preview forms first: `vttforge migrate` and `vttforge lint` without --write or --fix.",
+      "Run the writing forms on a clean git tree and review the diff."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

@@ -18,14 +18,13 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 
 SHARD_COUNT = 128
-# The planner and each dependent shard have separate five-minute watchdogs.
-# Include one minute for polling and scheduling overhead; this bound does not
-# delay successful producers or define the CI performance target.
-_DEFAULT_TIMEOUT_SECONDS = 660.0
+# coverage-plan (5 min) + coverage (10 min) + one minute of polling slack
+_DEFAULT_TIMEOUT_SECONDS = 960.0
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _SHARD_NAME = re.compile(r"coverage \(3\.12, (0|[1-9][0-9]*)\)")
 _PENDING_STATUSES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})
 _PREREQUISITE_LABELS = {
+    "plan": "Change planner",
     "coverage-plan": "Python coverage-plan",
     "native-command-evaluators": "Native command evaluators",
 }
@@ -142,6 +141,7 @@ def _snapshot(
     deadline: float,
     clock: Callable[[], float],
     execution_validator: Callable[[Mapping[str, object], str], None] = _require_current_execution,
+    plan_skippable: bool = False,
 ) -> tuple[str, ...]:
     """Validate the full inventory before classifying a deferred matrix error."""
     states = ["absent"] * SHARD_COUNT
@@ -191,6 +191,11 @@ def _snapshot(
                 if name in seen_prerequisites:
                     raise ShardWaitError(f"GitHub jobs API returned duplicate {name} jobs")
                 seen_prerequisites.add(name)
+                # The change planner only runs on pull_request events; on push it
+                # is legitimately skipped, which is not a coverage blocker. On a
+                # pull_request a non-success plan still fails the barrier.
+                if plan_skippable and name == "plan" and job.get("status") == "completed" and job.get("conclusion") == "skipped":
+                    continue
                 _job_state(job, _PREREQUISITE_LABELS[name])
             if not name.startswith("coverage (3.12,"):
                 continue
@@ -236,6 +241,7 @@ def wait_for_shards(
     sleep: Callable[[float], None] = time.sleep,
     log: Callable[[str], None] = _progress,
     execution_validator: Callable[[Mapping[str, object], str], None] = _require_current_execution,
+    plan_skippable: bool = False,
 ) -> None:
     """Accept every expected successful shard, scoped to the current run attempt."""
     if REPOSITORY_PATTERN.fullmatch(repository) is None or any(part in {".", ".."} for part in repository.split("/")):
@@ -260,6 +266,7 @@ def wait_for_shards(
                 deadline=deadline,
                 clock=clock,
                 execution_validator=execution_validator,
+                plan_skippable=plan_skippable,
             )
         except _SchedulingRaceError:
             if clock() >= deadline:

@@ -76,6 +76,7 @@ def local_tool_workspace(tmp_path: Path) -> tuple[Path, Path]:
     return workspace, tool
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_local_tool_eligibility_is_digest_bound_and_read_only(
     local_tool_workspace: tuple[Path, Path],
 ) -> None:
@@ -120,6 +121,7 @@ def test_local_tool_eligibility_is_digest_bound_and_read_only(
     assert changed.tool_identity_hash != first.tool_identity_hash
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_local_tool_eligibility_supports_verified_jq_output_processing(
     local_tool_workspace: tuple[Path, Path],
 ) -> None:

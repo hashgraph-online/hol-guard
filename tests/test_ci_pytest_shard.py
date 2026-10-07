@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -54,6 +56,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     payload = expand_ci_job_actions(yaml.safe_load(workflow))
     jobs = payload["jobs"]
+    workflow_env = payload.get("env", {})
     plan_action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))
     plan_steps = plan_action["runs"]["steps"]
     collector = next(step["run"] for step in plan_steps if "build_pytest_shard_plan.py" in step.get("run", ""))
@@ -69,7 +72,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "tests" not in jobs
     assert jobs["coverage-plan"]["needs"] == "native-command-evaluators"
     for name in ("coverage-plan", "compatibility", "cisco-full", "cross-platform", "windows-updater"):
-        assert jobs[name]["needs"] == "native-command-evaluators"
+        needs = jobs[name]["needs"]
+        assert "native-command-evaluators" in (needs if isinstance(needs, list) else [needs])
         resources = [
             step
             for step in jobs[name]["steps"]
@@ -100,14 +104,22 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]
-        assert set(execution_job["needs"]) == {planner, "native-command-evaluators"}
-        assert execution_job["strategy"]["matrix"]["shard-index"] == list(range(count))
+        assert set(execution_job["needs"]) == {planner, "plan", "native-command-evaluators"}
+        # Coverage consumes the planner-emitted shard indices via a dynamic matrix
+        # rather than a static literal range, so assert the expression references
+        # the coverage-plan output and that the planner emits the expected count.
+        raw_index = execution_job["strategy"]["matrix"]["shard-index"]
+        assert "fromJSON" in str(raw_index) and "coverage-plan.outputs.shard-indices" in str(raw_index)
         for job in (plan_job, execution_job):
             setup = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/setup-ci-python")
             assert setup["with"]["python-version"] == "${{ env." + env_name + " }}"
         plan = next(step for step in plan_job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
         assert plan["with"]["python-version"] == version
-        assert plan["with"]["shard-count"] == str(count)
+        # shard-count is a `${{ env.NAME }}` reference into the workflow env block.
+        raw_count = str(plan["with"]["shard-count"])
+        env_ref = re.fullmatch(r"\$\{\{\s*env\.([A-Z0-9_]+)\s*\}\}", raw_count)
+        resolved = int(workflow_env[env_ref.group(1)]) if env_ref else int(raw_count)
+        assert resolved == count
         download = next(
             step for step in execution_job["steps"] if step.get("uses", "").startswith("actions/download-artifact@")
         )
@@ -131,14 +143,22 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
     scheduling_job = "\n".join(step.get("run", "") for step in jobs["scheduling-sensitive"]["steps"])
     assert "--cov --cov-branch --cov-report=" in coverage_job
+    assert 'github.event_name }}" != "pull_request"' in coverage_job
+    assert "coverage_args=(--cov --cov-branch --cov-report=)" in coverage_job
+    coverage_upload = next(
+        step for step in jobs["coverage"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"
+    )
+    assert coverage_upload["if"] == "always() && github.event_name != 'pull_request'"
     assert "COVERAGE_CORE" not in coverage_job
     assert "-p pytest_coverage_core" not in coverage_job
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
     assert set(jobs["compatibility"]["strategy"]["matrix"]["python-version"]) == {"3.10", "3.11", "3.13", "3.14"}
+    selected = shlex.split(scheduling_job)
     for node in SCHEDULING_ONLY_NODE_IDS:
-        assert f"--deselect {node}" in coverage_job or f"--deselect '{node}'" in coverage_job
-        assert node in scheduling_job
-    assert coverage_job.count("--deselect ") == len(SCHEDULING_ONLY_NODE_IDS)
+        assert node in selected or node.split("[", 1)[0] in selected or node.split("::", 1)[0] in selected
+    redundant_deselections = re.findall(r"--deselect '?([^'\s]+)'?", coverage_job)
+    assert set(redundant_deselections) <= SCHEDULING_ONLY_NODE_IDS
+    assert coverage_job.count("--deselect ") == len(set(redundant_deselections))
     assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
     assert jobs["scheduling-sensitive"]["strategy"]["matrix"]["python-version"] == ["3.12.14", "3.14.7"]
     timing_setup = next(
@@ -150,9 +170,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "--cov" not in scheduling_job
 
     candidate = jobs["duration-manifest-candidate"]
-    assert candidate["needs"] == "coverage"
+    assert candidate["needs"] == ["coverage", "coverage-plan"]
     assert candidate["if"] == "needs.coverage.result == 'success'"
-    assert 'if [ "${#reports[@]}" -ne 128 ];' in "\n".join(step.get("run", "") for step in candidate["steps"])
+    assert 'if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ];' in "\n".join(
+        step.get("run", "") for step in candidate["steps"]
+    )
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
@@ -167,6 +189,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         "coverage",
         "compatibility",
         "scheduling-sensitive",
+        "native-workspace",
+        "plan",
     }
 
     cache_consumers = (
@@ -243,4 +267,7 @@ def test_native_preflight_stops_known_contract_failures_before_shard_fanout() ->
     assert "--ignore" not in check["run"] and "--deselect" not in check["run"]
     assert check["env"]["HOL_GUARD_NATIVE_REGRESSION"] == "1"
     assert document["jobs"]["coverage-plan"]["needs"] == "native-command-evaluators"
-    assert len(document["jobs"]["coverage"]["strategy"]["matrix"]["shard-index"]) == 128
+    assert (
+        document["jobs"]["coverage"]["strategy"]["matrix"]["shard-index"]
+        == "${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}"
+    )

@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from .catalog import load_catalog
+from .provider import REASONING_EFFORTS
 
 
 def main() -> int:
@@ -23,6 +24,12 @@ def main() -> int:
     run.add_argument("--provider-url", default=os.environ.get("GUARD_GAUNTLET_PROVIDER_URL"))
     run.add_argument("--model", default=os.environ.get("GUARD_GAUNTLET_MODEL"))
     run.add_argument("--provider-identity", default=os.environ.get("GUARD_GAUNTLET_PROVIDER_IDENTITY"))
+    run.add_argument(
+        "--reasoning-effort",
+        choices=REASONING_EFFORTS,
+        default=os.environ.get("GUARD_GAUNTLET_REASONING_EFFORT") or None,
+        help="Pin the provider's reasoning_effort on every relayed request (for example GPT 6 Luna High)",
+    )
     run.add_argument("--api-key-env", default="GUARD_GAUNTLET_API_KEY")
     run.add_argument("--allow-loopback-provider", action="store_true")
     run.add_argument("--case", action="append", dest="cases", help="Targeted runs are never full-profile qualification")
@@ -30,6 +37,17 @@ def main() -> int:
     run.add_argument("--max-inference-rounds", type=int, default=32)
     run.add_argument("--omp", help="Path to the repository-pinned Oh My Pi executable")
     run.add_argument("--work-root", type=Path, help="Parent for newly created disposable fixtures")
+    run.add_argument(
+        "--profile",
+        choices=("core", "contained-bun-vitest"),
+        default="core",
+        help="Complete core qualification or the additive contained Bun/Vitest profile",
+    )
+    run.add_argument(
+        "--contained-test-project",
+        type=Path,
+        help="Explicit fixture project for --profile contained-bun-vitest; dependencies are never installed",
+    )
     verify = sub.add_parser("verify", help="Independently reconcile a complete evidence package")
     verify.add_argument("directory", type=Path)
     verify.add_argument("--expected-sha", required=True)
@@ -93,9 +111,19 @@ def main() -> int:
             raise ValueError("live provider URL, model and provider identity are required; there is no mock fallback")
         if not 30 <= args.timeout <= 1800 or not 1 <= args.max_inference_rounds <= 128:
             raise ValueError("host timeout or inference-round budget is outside supported bounds")
+        # argparse does not apply choices to an environment-supplied default.
+        if args.reasoning_effort is not None and args.reasoning_effort not in REASONING_EFFORTS:
+            raise ValueError("unsupported reasoning effort; use " + ", ".join(REASONING_EFFORTS))
+        if args.profile == "core" and args.contained_test_project is not None:
+            raise ValueError("--contained-test-project requires --profile contained-bun-vitest")
+        if args.profile == "contained-bun-vitest" and args.contained_test_project is None:
+            raise ValueError("--profile contained-bun-vitest requires --contained-test-project")
+        if args.profile == "contained-bun-vitest" and args.cases:
+            raise ValueError("--case is only supported by the core profile")
         api_key = os.environ.pop(args.api_key_env, None)
         if not api_key and not args.allow_loopback_provider:
             raise ValueError("configure a dedicated inference API key; missing inference cannot pass")
+        from .contained import run_contained_profile
         from .runner import run_suite
 
         provider = {
@@ -106,23 +134,37 @@ def main() -> int:
             "allow_loopback": args.allow_loopback_provider,
             "max_rounds": args.max_inference_rounds,
             "timeout": min(args.timeout, 120),
+            "reasoning_effort": args.reasoning_effort,
         }
-        report = run_suite(
-            expected_source_sha=args.expected_source_sha,
-            output=args.output,
-            provider=provider,
-            model_timeout=args.timeout,
-            selected_ids=args.cases,
-            omp=args.omp,
-            work_root=args.work_root,
-            candidate_sha=args.candidate_sha,
-        )
+        if args.profile == "contained-bun-vitest":
+            report = run_contained_profile(
+                expected_source_sha=args.expected_source_sha,
+                output=args.output,
+                provider=provider,
+                test_project=args.contained_test_project,
+                model_timeout=args.timeout,
+                omp=args.omp,
+                work_root=args.work_root,
+                candidate_sha=args.candidate_sha,
+            )
+        else:
+            report = run_suite(
+                expected_source_sha=args.expected_source_sha,
+                output=args.output,
+                provider=provider,
+                model_timeout=args.timeout,
+                selected_ids=args.cases,
+                omp=args.omp,
+                work_root=args.work_root,
+                candidate_sha=args.candidate_sha,
+            )
         print(
             json.dumps(
                 {
                     "pass": report["pass"],
                     "merge_qualified": report["merge_qualified"],
                     "scenarios": len(report["cases"]),
+                    "profile": report.get("profile", "core"),
                     "evidence": str(args.output),
                 }
             )

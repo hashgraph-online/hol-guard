@@ -371,9 +371,11 @@ def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
+        # Claude permission dialogs have their own passthrough route; Codex
+        # permission events still reach the native fail-safe.
         payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
         params={},
-        default_harness="claude-code",
+        default_harness="codex",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",

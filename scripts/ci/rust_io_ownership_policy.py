@@ -46,6 +46,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
+        # Extracted binary identity validation; no command or policy semantics.
+        "src/codex_plugin_scanner/guard/native_binary_identity.py",
         "src/codex_plugin_scanner/guard/native_context.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
@@ -83,6 +85,11 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_edge.py",
         "src/codex_plugin_scanner/guard/native_pretool.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
+        # Resident-op dispatch bridge: decodes the bounded native response and
+        # returns a DTO; it does not interpret response content into a decision.
+        "src/codex_plugin_scanner/guard/native_execution.py",
+        # Bounded response decoding for native package-authority results.
+        "src/codex_plugin_scanner/guard/native_package_authority.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_context.py",
     }
@@ -102,6 +109,13 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py",
+        # Native-authenticated source binding and asynchronous snapshot bytes;
+        # Rust remains the document compiler and resident admission authority.
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_codec.py",
+        "src/codex_plugin_scanner/guard/native_business_source_bridge.py",
+        "src/codex_plugin_scanner/guard/native_business_source_anchor_bridge.py",
+        "src/codex_plugin_scanner/guard/native_business_source_store.py",
+        "src/codex_plugin_scanner/guard/native_business_source_retention.py",
         "src/codex_plugin_scanner/guard/config.py",
         "src/codex_plugin_scanner/guard/config_file_io.py",
         "src/codex_plugin_scanner/guard/directory_path_authority.py",
@@ -159,6 +173,7 @@ _SERVICE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_snapshot_windows_support.py",
         "src/codex_plugin_scanner/guard/oauth_token_claims.py",
         "src/codex_plugin_scanner/guard/stable_guard_cli.py",
+        "src/codex_plugin_scanner/guard/runtime/supply_chain_package_services.py",
     }
 )
 _PENDING_AUTHORITY_PATHS: Final = frozenset(

@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import Condition
 from typing import TYPE_CHECKING, cast
 
+from .native_business_source_store import ANCHOR_FILE_NAME, SOURCE_FILE_NAME
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_command_control_binding import read_native_command_control_binding
 from .native_policy_snapshot_codec import _digest_v3
@@ -55,6 +56,8 @@ class NativePolicySnapshotPublisherInputs:
             self.guard_home / "guard.db-journal",
             self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME,
             self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / AUTHORITY_FILE_NAME,
+            self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / SOURCE_FILE_NAME,
+            self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / ANCHOR_FILE_NAME,
             *self._external_policy_paths(),
             *self._workspace_policy_paths(),
         )
@@ -146,7 +149,20 @@ class NativePolicySnapshotPublisherInputs:
         """Reject ACKs that do not identify the resident observed after push."""
 
         if before and before != observed:
-            return None
+            # resident-stop removes the generation file, not its scope directory.
+            # A new authenticated ACK may create the first generation in those
+            # same empty roots. Treat that like cold startup, not replacement
+            # of a resident observed before publication. A pre-existing generation
+            # still requires the original unchanged-before/after fence.
+            before_roots = {path for path, _mtime, _size in before}
+            observed_roots = {path for path, _mtime, _size in observed if "/" not in path}
+            started_in_empty_roots = (
+                all(path.startswith("resident-v3-") and "/" not in path for path in before_roots)
+                and before_roots == observed_roots
+                and any("/generation-" in path and path.endswith(".json") for path, _mtime, _size in observed)
+            )
+            if not started_in_empty_roots:
+                return None
         if not self._resident_fingerprint_matches_generation(observed, resident_generation):
             return None
         # Re-read only bounded metadata while the barrier is held. A changed
@@ -250,6 +266,22 @@ class NativePolicySnapshotPublisherInputs:
                 self._condition.notify_all()
             raise
 
+    def _compiled_business_source(self):
+        from .business_policy_document_import import read_business_source_for_store
+
+        return read_business_source_for_store(self.store)
+
+    @staticmethod
+    def _source_control_fingerprint(command_extensions, source) -> str:
+        if source is None:
+            return _digest_v3(command_extensions)
+        return _digest_v3(
+            {
+                "command_extensions": command_extensions,
+                "business_source": source.retained_identity_bytes.decode("utf-8"),
+            }
+        )
+
     @staticmethod
     def _external_policy_paths() -> tuple[Path, ...]:
         try:
@@ -285,6 +317,7 @@ class NativePolicySnapshotPublisherInputs:
                 with self._condition:
                     self._acked = False
                     self._condition.notify_all()
+        source = None
         try:
             effective_policy = self._compiled_effective_policy()
             # ``_compiled_effective_policy`` carries the raw mode beside the
@@ -295,10 +328,11 @@ class NativePolicySnapshotPublisherInputs:
             # and continuously revoke the ACKed snapshot.
             policy_for_digest = dict(effective_policy)
             policy_for_digest.pop("mode", None)
+            source = self._compiled_business_source()
             current_fingerprint = (
                 cast(str, _digest_v3(policy_for_digest)),
                 cast(str, effective_policy["mode"]),
-                _digest_v3(self._compiled_command_extensions()),
+                self._source_control_fingerprint(self._compiled_command_extensions(), source),
             )
         except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
             current_fingerprint = ("unavailable", "", "")
@@ -324,6 +358,8 @@ class NativePolicySnapshotPublisherInputs:
             and previous_fingerprint[1] == "observe"
             and current_fingerprint[1] == "observe"
             and previous_fingerprint[2] != current_fingerprint[2]
+            and source is None
+            and not (getattr(self, "_snapshot", None) or {}).get("business_policy")
         )
         if (changed or current_fingerprint[0] == "unavailable") and not self._observe_extension_refresh:
             # A verified state change invalidates the previous ACK immediately,

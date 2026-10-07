@@ -94,6 +94,31 @@ def test_receipt_is_strictly_redacted_and_identity_bound() -> None:
     assert validate_native_decision_receipt(with_mutated_identity) is None
 
 
+def test_business_review_binding_is_strict_and_changes_receipt_identity() -> None:
+    ordinary = _receipt()
+    business = _receipt(business_review_binding="e" * 64)
+    assert validate_native_decision_receipt(business) == business
+    assert business["decision_id"] != ordinary["decision_id"]
+    assert hashlib.sha256(canonical_receipt_bytes(business)).hexdigest() == business["decision_id"]
+    for invalid in (None, "", "E" * 64, "e" * 63, "e" * 64 + "\n"):
+        assert validate_native_decision_receipt(_receipt(business_review_binding=invalid)) is None
+    # Shared vector with native_hook_receipt::tests in the Rust producer.
+    native_vector = _receipt(
+        request_id="request",
+        harness="codex",
+        event_name="PreToolUse",
+        policy_digest=None,
+        rule_digest=None,
+        runtime_identity=None,
+        model_output_action="not_applicable",
+        reason_code="test",
+        deadline_budget_ms=100,
+        business_review_binding="b" * 64,
+    )
+    assert validate_native_decision_receipt(native_vector) == native_vector
+    assert native_vector["decision_id"] == "c3613993d236fb3d798bcbcd227fb80875328e5bb072590151e17bad67b424ed"
+
+
 def test_origin_authentication_is_optional_and_not_decision_identity() -> None:
     legacy = _receipt()
     sealed = _receipt(origin_authentication="e" * 64)

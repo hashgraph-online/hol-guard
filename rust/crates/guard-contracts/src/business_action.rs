@@ -69,10 +69,14 @@ pub enum BusinessFactStateV1 {
 pub struct BusinessProviderV1 {
     pub service: BusinessServiceV1,
     /// Native-private identity commitment, not a browser/model account claim.
+    /// Both binding keys are required even when their value is explicitly null.
+    /// Do not add serde(default): an omitted identity must fail strict decoding.
+    /// The business_provider_required_nullable tests pin this wire distinction.
     #[serde(deserialize_with = "required_nullable")]
-    pub account_binding: Option<String>,
+    pub account_binding: Option<String>, // NOSONAR: rust:S9334; required key, nullable value.
+    /// Explicit nullable tenant commitment. Missing is invalid.
     #[serde(deserialize_with = "required_nullable")]
-    pub tenant_binding: Option<String>,
+    pub tenant_binding: Option<String>, // NOSONAR: rust:S9334; required key, nullable value.
     pub identity_state: BusinessFactStateV1,
     pub tool_identity_digest: String,
     pub tool_schema_digest: String,
@@ -191,7 +195,9 @@ fn required_nullable<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<St
     Option::<String>::deserialize(d)
 }
 
-fn domain(value: &str) -> bool {
+/// Canonical DNS-name syntax shared by recipient facts and policy selectors.
+/// This proves neither provider resolution nor organization membership.
+pub fn is_canonical_business_domain(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 253
         && value.split('.').all(|label| {
@@ -242,6 +248,10 @@ impl BusinessActionV1 {
         {
             return Err(Error::LimitExceeded);
         }
+        let identity_bindings = [
+            &self.provider.account_binding,
+            &self.provider.tenant_binding,
+        ];
         if ![
             &self.provider.tool_identity_digest,
             &self.provider.tool_schema_digest,
@@ -253,12 +263,9 @@ impl BusinessActionV1 {
         ]
         .iter()
         .all(|value| digest(value))
-            || ![
-                &self.provider.account_binding,
-                &self.provider.tenant_binding,
-            ]
-            .iter()
-            .all(|value| value.as_deref().is_none_or(digest))
+            || !identity_bindings
+                .iter()
+                .all(|value| value.as_deref().is_none_or(digest))
             || !self
                 .content
                 .attachment_digests
@@ -268,7 +275,7 @@ impl BusinessActionV1 {
                 .audience
                 .recipients
                 .iter()
-                .all(|r| digest(&r.identity_binding) && domain(&r.domain))
+                .all(|r| digest(&r.identity_binding) && is_canonical_business_domain(&r.domain))
         {
             return Err(Error::Invalid);
         }

@@ -17,7 +17,8 @@ function transitionProbe(): { operation_id: string; request_id: string } {
 
 function publicNativeObservation(body: unknown): JsonRecord | undefined {
   if (!body || typeof body !== "object") return undefined;
-  const observation = (body as JsonRecord).guard_transition_observation;
+  const response = body as JsonRecord;
+  const observation = response.guard_transition_observation;
   if (!observation || typeof observation !== "object") return undefined;
   const native = (observation as JsonRecord).native_receipt;
   if (!native || typeof native !== "object") return undefined;
@@ -26,16 +27,24 @@ function publicNativeObservation(body: unknown): JsonRecord | undefined {
     schema: (observation as JsonRecord).schema,
     operation_id: (observation as JsonRecord).operation_id,
     request_id: (observation as JsonRecord).request_id,
+    ...(typeof response.required_execution_profile === "string"
+      ? { required_execution_profile: response.required_execution_profile }
+      : {}),
     native_receipt: {
       schema: receipt.schema,
       version: receipt.version,
       authority: receipt.authority,
       decision_id: receipt.decision_id,
       request_id: receipt.request_id,
+      request_digest: receipt.request_digest,
       harness: receipt.harness,
       event_name: receipt.event_name,
       payload_kind: receipt.payload_kind,
+      policy_generation: receipt.policy_generation,
+      policy_digest: receipt.policy_digest,
+      runtime_identity: receipt.runtime_identity,
       decision: receipt.decision,
+      observe_mode: receipt.observe_mode,
       policy_action: receipt.policy_action,
       observed_policy_action: receipt.observed_policy_action,
       reason_code: receipt.reason_code,

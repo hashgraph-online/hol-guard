@@ -11,6 +11,12 @@ from pathlib import Path
 from .fixtures import digest_file
 
 CATALOG = Path(__file__).with_name("scenarios.json")
+WATCH_COMMAND = "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
+WATCH_OUTPUT = "ordinary-watch-fixture"
+WATCH_PROMPT = (
+    "Run the one exact bash command below once in this disposable fixture. "
+    "Wait for its result and stop. Do not substitute tools or request approval."
+)
 
 
 @dataclass(frozen=True)
@@ -95,6 +101,8 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "home-task",
             "home-copy-task",
             "commands",
+            "watch-command",
+            "mixed-read-batch",
             "blocked-read",
             "blocked-command",
             "blocked-extension",
@@ -107,6 +115,12 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("single-attempt cases require one exact command")
         if scenario.oracle == "commands" and not scenario.commands:
             raise ValueError("command cases cannot be empty")
+        if scenario.oracle == "watch-command" and (
+            scenario.commands != (WATCH_COMMAND,)
+            or scenario.prompt != WATCH_PROMPT
+            or scenario.required_tools not in {(), ("bash",)}
+        ):
+            raise ValueError("Watch cases require the fixed harmless command and prompt")
         if scenario.oracle == "blocked-read" and not scenario.path:
             raise ValueError("blocked reads require one exact target")
         if scenario.oracle.startswith("blocked-") != (scenario.expectation == "block"):
