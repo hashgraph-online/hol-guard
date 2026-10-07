@@ -6243,29 +6243,27 @@ function CustomExtensionsSection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extensions-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Custom extensions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm text-slate-500", children: "Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions." })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
-        searchable ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative min-w-0 flex-1 sm:flex-none", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search custom extensions" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "search",
-              value: search,
-              onChange: handleSearchChange,
-              placeholder: "Search connectors",
-              className: "min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-normal text-brand-dark sm:w-64"
-            }
-          )
-        ] }) }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-blue", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
-          "Add custom extension"
-        ] })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
+        "Add custom extension"
       ] })
     ] }),
+    searchable ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block w-full max-w-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search custom extensions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "search",
+          value: search,
+          onChange: handleSearchChange,
+          placeholder: "Search connectors",
+          className: "min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-normal text-brand-dark"
+        }
+      )
+    ] }) }) : null,
     added.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       CustomExtensionEmptyState,
       {
@@ -6736,17 +6734,24 @@ const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
   developerRelationshipCap: 1024
 });
 const COMMAND_PATTERN_DISPLAY_LIMIT = 24;
-function patternSearchText(extension, permission) {
+const IDENTITY_MATCH = 0;
+const EXAMPLE_MATCH = 1;
+const CONTEXT_MATCH = 2;
+const RISK_TIER_SEVERITY = { critical: 3, high: 2, medium: 1, low: 0 };
+function catalogOriginRank(extension) {
+  return extension.source === "local-admin" ? 1 : 0;
+}
+function patternSearchBands(extension, permission) {
   return [
-    permission.label,
-    permission.description,
-    permission.example_command ?? "",
-    permission.family ?? "",
-    permission.permission_id,
-    extension.name,
-    extension.extension_id,
-    ...extension.executables
-  ].join(" ").toLowerCase();
+    [permission.label, extension.name, extension.extension_id, ...extension.executables].join(" ").toLowerCase(),
+    [permission.example_command ?? "", permission.permission_id].join(" ").toLowerCase(),
+    [permission.description, permission.family ?? ""].join(" ").toLowerCase()
+  ];
+}
+function termBand(term, bands) {
+  if (bands[IDENTITY_MATCH].includes(term)) return IDENTITY_MATCH;
+  if (bands[EXAMPLE_MATCH].includes(term)) return EXAMPLE_MATCH;
+  return CONTEXT_MATCH;
 }
 function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DISPLAY_LIMIT) {
   const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
@@ -6755,14 +6760,15 @@ function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DIS
   const matches = [];
   for (const extension of extensions) {
     for (const permission of extension.permissions) {
-      const text = patternSearchText(extension, permission);
-      if (terms.every((term) => text.includes(term))) {
-        matches.push({ extension, permission, score: terms.length });
-      }
+      const bands = patternSearchBands(extension, permission);
+      const text = bands.join(" ");
+      if (!terms.every((term) => text.includes(term))) continue;
+      const score = Math.max(...terms.map((term) => termBand(term, bands)));
+      matches.push({ extension, permission, score });
     }
   }
   return matches.sort(
-    (left, right) => right.permission.risk_tier.localeCompare(left.permission.risk_tier) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
+    (left, right) => left.score - right.score || catalogOriginRank(left.extension) - catalogOriginRank(right.extension) || (RISK_TIER_SEVERITY[right.permission.risk_tier] ?? 0) - (RISK_TIER_SEVERITY[left.permission.risk_tier] ?? 0) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
   ).slice(0, limit);
 }
 function CatalogSearchRow(props) {
@@ -7599,9 +7605,10 @@ function McpServerDefaults({ extension }) {
   const tools = extension.mcp_tools ?? [];
   const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
   const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
+  const directLaunch = launch?.kind === "direct-command" ? launch : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "MCP server defaults" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : directLaunch ? "Matching launches use this command. Defaults apply only after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: remoteLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Endpoint" }),
@@ -7611,6 +7618,9 @@ function McpServerDefaults({ extension }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Server names" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: remoteLaunch.serverNames.join(", ") })
       ] })
+    ] }) : directLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: directLaunch.command })
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),

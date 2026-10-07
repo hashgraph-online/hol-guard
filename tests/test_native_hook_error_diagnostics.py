@@ -47,7 +47,12 @@ def test_raw_hook_bridge_records_control_fence_rejection_without_retry(
         compatible=True,
         identity=SimpleNamespace(path=tmp_path / "runtime", sha256="a" * 64),
         capabilities=SimpleNamespace(
-            features=("hook-envelope-v2", "native-resident-client-v1", "pre-tool-generic-authority-v1")
+            features=(
+                "hook-envelope-v2",
+                "native-resident-client-v1",
+                "pre-tool-generic-authority-v1",
+                "git-execution-context-v1",
+            )
         ),
     )
     calls: list[dict[str, object]] = []

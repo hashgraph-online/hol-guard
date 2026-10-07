@@ -181,7 +181,7 @@ def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_l
         )
 
     publisher = NativePolicySnapshotPublisher(
-        store=store, status_provider=_status, client_request=lambda **kwargs: _ack(kwargs["payload"])
+        store=store, status_provider=_status, client_request=lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
     )
     try:
         publisher._publish_once()

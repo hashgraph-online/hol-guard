@@ -14,7 +14,7 @@ from ci.native_runtime import probe_installed_native_extensions as probe
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 
 
-@pytest.mark.parametrize(("publish_timeout", "expected_deadline"), [(2.0, 105.0), (8.0, 108.0)])
+@pytest.mark.parametrize(("publish_timeout", "expected_deadline"), [(2.0, 109.0), (8.0, 109.0)])
 def test_control_publication_finishes_before_hook_admission_with_one_deadline(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, publish_timeout: float, expected_deadline: float
 ) -> None:
@@ -23,6 +23,8 @@ def test_control_publication_finishes_before_hook_admission_with_one_deadline(
     published = [False]
     monkeypatch.setattr(probe.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(probe, "_PUBLISH_TIMEOUT_SECONDS", publish_timeout)
+    monkeypatch.setattr(probe, "_PUBLISH_STARTUP_TIMEOUT_SECONDS", 9.0)
+    assert probe._PUBLISH_STARTUP_TIMEOUT_SECONDS >= probe._PUBLISH_TIMEOUT_SECONDS
 
     def register(workspace: Path) -> None:
         assert workspace == tmp_path
@@ -138,3 +140,26 @@ def test_readiness_diagnostic_rejects_arbitrary_error_text_and_lifecycle_values(
     }
     assert "private" not in json.dumps(diagnostic)
     assert "secret" not in json.dumps(diagnostic)
+
+
+def test_request_phase_diagnostic_does_not_serialize_the_policy_binding() -> None:
+    private = "private-policy-path-or-secret"
+    publisher = SimpleNamespace(
+        last_error=private,
+        closed=False,
+        current_snapshot_binding=lambda: {"policy_digest": private, "runtime_identity": private},
+    )
+    diagnostic = probe.policy_request_phase_diagnostic(publisher, private)
+    assert diagnostic["binding_available"] is True
+    assert diagnostic["phase"] == "unknown"
+    assert private not in json.dumps(diagnostic)
+
+
+@pytest.mark.parametrize("reason", ["native_policy_not_ready", "daemon_hook_deadline_exhausted"])
+def test_late_receipt_cannot_accept_failed_production_http_admission(reason: str) -> None:
+    with pytest.raises(RuntimeError, match="http_native_admission_failed"):
+        probe.require_native_http_admission({"decision": "deny", "reason_code": reason})
+
+
+def test_native_policy_denial_remains_a_valid_production_response() -> None:
+    probe.require_native_http_admission({"decision": "deny", "reason_code": "native_policy_deny"})

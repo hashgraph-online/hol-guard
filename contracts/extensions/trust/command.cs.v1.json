@@ -1,0 +1,5 @@
+{
+  "extension": "command.cs",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "external"
+}

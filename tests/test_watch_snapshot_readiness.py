@@ -202,6 +202,37 @@ def test_resident_mtime_churn_keeps_watch_when_policy_inputs_are_unchanged(tmp_p
         publisher.close()
 
 
+def test_resident_heartbeat_does_not_revoke_unchanged_protected_policy(tmp_path: Path) -> None:
+    clock = _DeterministicClock()
+    publisher = _publisher(tmp_path, clock)
+    publisher._snapshot = _ready_snapshot(clock, "enforce")
+    publisher._acked = True
+    generation = "resident-v3-a/generation-00000000000000000007.json"
+    publisher._input_fingerprint = ((), ((generation, 1, 1),))
+    try:
+        epoch = publisher._epoch
+        publisher._accept_resident_fingerprint(((), ((generation, 2, 1),)))
+        assert publisher.is_ready()
+        assert publisher.current_snapshot_binding()["generation"] == 7
+        assert publisher._epoch == epoch
+    finally:
+        publisher.close()
+
+
+def test_new_resident_revokes_protected_policy_binding(tmp_path: Path) -> None:
+    clock = _DeterministicClock()
+    publisher = _publisher(tmp_path, clock)
+    publisher._snapshot = _ready_snapshot(clock, "enforce")
+    publisher._acked = True
+    publisher._input_fingerprint = ((), (("resident-v3-a/generation-00000000000000000007.json", 1, 1),))
+    try:
+        publisher._accept_resident_fingerprint(((), (("resident-v3-a/generation-00000000000000000008.json", 2, 1),)))
+        assert not publisher.is_ready()
+        assert publisher.current_snapshot_binding() is None
+    finally:
+        publisher.close()
+
+
 def test_resident_mtime_churn_withdraws_watch_when_policy_moves_to_enforce(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

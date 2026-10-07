@@ -350,14 +350,20 @@
     "src/codex_plugin_scanner/guard/native_response_decoder.py",
     "src/codex_plugin_scanner/guard/native_command_observations.py",
     "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_worker_native_review.py",
     "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_pretool_rendering.py",
     "src/codex_plugin_scanner/guard/daemon/hook_availability_policy.py",
     "src/codex_plugin_scanner/guard/daemon/hook_availability_floor.py",
     "src/codex_plugin_scanner/guard/daemon/hook_launcher_recovery.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_pretool_rendering.py",
     "src/codex_plugin_scanner/guard/native_approval_errors.py",
+    "src/codex_plugin_scanner/guard/native_approval_gate.py",
+    "src/codex_plugin_scanner/guard/native_package_authority.py",
     "src/codex_plugin_scanner/guard/native_approval_protocol.py",
     "src/codex_plugin_scanner/guard/native_approval_v4_portal.py",
-    "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py"
+    "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py",
+    "src/codex_plugin_scanner/guard/native_context.py"
    ],
    "current": "mechanical bounded guard-hook-envelope.v2 and guard-archive-inspection.v1 serialization, package-bound native invocation, typed result decoding, and harness response projection; the archive-inspection lease is owned inside the native worker",
    "target": "minimal launcher, serialization, and response projection only"
@@ -388,12 +394,18 @@
    "class": "python_transport",
    "paths": [
     "src/codex_plugin_scanner/guard/native_resident_client.py",
+    "src/codex_plugin_scanner/guard/native_resident_update_lock.py",
     "src/codex_plugin_scanner/guard/native_resident_stream.py",
     "src/codex_plugin_scanner/guard/native_resident_transport.py",
     "src/codex_plugin_scanner/guard/native_runtime.py",
+    "src/codex_plugin_scanner/guard/native_binary_identity.py",
+    "src/codex_plugin_scanner/guard/native_runtime_values.py",
     "src/codex_plugin_scanner/guard/native_runtime_admission.py",
+    "src/codex_plugin_scanner/guard/native_execution.py",
+    "src/codex_plugin_scanner/guard/native_prompt.py",
     "src/codex_plugin_scanner/guard/native_route_receipt.py",
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+    "src/codex_plugin_scanner/guard/native_context.py",
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/daemon/discovery.py",
     "src/codex_plugin_scanner/guard/daemon/manager.py",
@@ -414,8 +426,10 @@
     "src/codex_plugin_scanner/guard/config_mutation.py",
     "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
     "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
+    "src/codex_plugin_scanner/guard/native_business_*.py",
     "src/codex_plugin_scanner/guard/native_command_control_*.py",
     "src/codex_plugin_scanner/guard/daemon/hook_policy_repair.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_worker_readiness.py",
     "src/codex_plugin_scanner/guard/store_approvals.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_binding.py",
@@ -461,6 +475,9 @@
     "scripts/ci/hook_data_plane_ownership_contract.py",
     "scripts/ci/rust_io_ownership_gate.py",
     "scripts/ci/rust_io_ownership_resolver.py",
+    "scripts/ci/rust_io_ownership_cache.py",
+    "scripts/ci/rust_io_ownership_policy.py",
+    "scripts/ci/rust_io_ownership_bindings.py",
     "scripts/ci/rust_io_privacy_gate.py",
     "scripts/bench_guard_native_release_gate.py",
     "scripts/ci/rust_pretool_no_python_gate.py",
@@ -476,6 +493,7 @@
     ".github/workflows/publish.yml",
     "scripts/verify_native_runtime_release.py",
     "tests/test_rust_io_ownership_gate.py",
+    "tests/test_rust_io_ownership_cache.py",
     "tests/test_rust_io_privacy_gate.py",
     ".github/workflows/decision-critical-io.yml",
     "tests/test_native_hook_edge.py",
@@ -494,7 +512,8 @@
    "paths": [
     "rust/Cargo.lock",
     "rust/Cargo.toml",
-    "rust/rust-toolchain.toml"
+    "rust/rust-toolchain.toml",
+    "rust/build_support/**"
    ],
    "current": "pinned native dependency graph, shared fixtures, and fuzz targets",
    "target": "same"
@@ -510,7 +529,8 @@
     "rust/crates/guard-rule-contract/**",
     "rust/crates/guard-rules/**",
     "rust/crates/guard-runtime/**",
-    "rust/crates/guard-scanner/**"
+    "rust/crates/guard-scanner/**",
+    "rust/crates/guard-command-build/**"
    ],
    "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 V3 and root-authenticated WebAuthn V4 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
    "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"
@@ -522,9 +542,10 @@
     "rust/crates/guard-hook-core/**",
     "rust/crates/guard-secure-fs/**",
     "rust/crates/guard-seatbelt/**",
-    "rust/crates/guard-runtime-windows-process/**"
+    "rust/crates/guard-runtime-windows-process/**",
+    "rust/crates/guard-google-identity/**"
    ],
-   "current": "PostToolUse output extraction, source validation, secure reads, identity, hashing, equivalence, scanning, and OS-bound containment primitives",
+   "current": "PostToolUse output extraction, source validation, secure reads, identity, hashing, equivalence, scanning, OS-bound containment primitives, and bounded fixed-endpoint HTTPS Google signing-key retrieval and registered code exchange with native identity verification and private credential retention",
    "target": "all decision-critical hook content and source I/O"
   }
  ],
@@ -571,9 +592,13 @@
   ".github/workflows/publish.yml",
   "scripts/ci/rust_io_ownership_gate.py",
   "scripts/ci/rust_io_ownership_resolver.py",
+  "scripts/ci/rust_io_ownership_cache.py",
+  "scripts/ci/rust_io_ownership_policy.py",
+  "scripts/ci/rust_io_ownership_bindings.py",
   "scripts/ci/rust_io_privacy_gate.py",
   "scripts/verify_native_runtime_release.py",
   "tests/test_rust_io_ownership_gate.py",
+  "tests/test_rust_io_ownership_cache.py",
   "tests/test_rust_io_privacy_gate.py",
   "tests/test_native_hook_edge.py",
   "tests/test_native_pretool_generic.py"

@@ -31,6 +31,7 @@ from yaml.tokens import (
 )
 
 from .policy_document import GuardPolicyDocument
+from .policy_document_business_bounds import oversized_business_selector_path
 from .runtime.command_expression import (
     CommandExpressionError,
     command_expression_from_mapping,
@@ -496,6 +497,8 @@ def parse_policy_document_yaml(source: str | bytes) -> GuardPolicyDocument:
         raise PolicyDocumentError(diagnostics)
     if not isinstance(value, dict):
         raise PolicyDocumentError((PolicyDiagnostic("schema_type"),))
+    if path := oversized_business_selector_path(value):
+        raise PolicyDocumentError((PolicyDiagnostic("business_selector_limit_bytes", path),))
     _validate_rule_ids(value)
     _validate_timestamps(value)
     _validate_command_expressions(value)

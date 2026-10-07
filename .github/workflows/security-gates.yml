@@ -32,6 +32,7 @@ jobs:
           version: "0.9.26"
           enable-cache: true
           cache-dependency-glob: uv.lock
+      - uses: ./.github/actions/stage-command-projections
       - name: Install policy dependencies
         run: uv sync --frozen --extra dev
       - name: Validate workflow policy code
@@ -67,6 +68,26 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Verify the locked MCPB RSA backport
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
+          node --test .github/tools/mcpb-cli/harden-forge.test.cjs
+          node .github/tools/mcpb-cli/harden-forge.cjs --vex-output "$RUNNER_TEMP/mcpb-forge-openvex.json"
+      - name: Scan the verified MCPB tool dependency
+        run: >
+          docker run --rm
+          -v "$PWD/.github/tools/mcpb-cli:/workdir:ro"
+          -v "$RUNNER_TEMP/mcpb-forge-openvex.json:/verified-openvex.json:ro"
+          aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
+          fs
+          --scanners vuln,misconfig,secret
+          --severity HIGH,CRITICAL
+          --skip-dirs /workdir/node_modules
+          --vex /verified-openvex.json
+          --exit-code 1
+          --quiet
+          /workdir
       - name: Run Trivy on release surfaces
         run: >
           docker run --rm
@@ -75,8 +96,11 @@ jobs:
           fs
           --scanners vuln,misconfig,secret
           --severity HIGH,CRITICAL
+          --ignorefile /workdir/.trivyignore
           --skip-dirs /workdir/tests/fixtures
+          --skip-dirs /workdir/.github/tools/mcpb-cli/node_modules
           --skip-files /workdir/.clusterfuzzlite/Dockerfile
+          --skip-files /workdir/.github/tools/mcpb-cli/package-lock.json
           --exit-code 1
           --quiet
           /workdir
@@ -107,6 +131,8 @@ jobs:
           GOBIN="$RUNNER_TEMP/gitleaks-bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
       - name: Add Gitleaks to PATH
         run: echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+      - name: Verify Gitleaks fixture exclusion scope
+        run: python3 scripts/ci/check_gitleaks_fixture_scope.py
       - name: Determine Gitleaks scope
         id: gitleaks-scope
         env:

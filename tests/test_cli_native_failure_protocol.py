@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
 from codex_plugin_scanner.guard.cli import commands_hook_native_pipeline as pipeline
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -55,15 +56,19 @@ def test_native_failure_preserves_codex_wire_response(
         store=store,
     )
     captured = capsys.readouterr()
-    assert result == 0
     response = json.loads(captured.out)
+    # codex denies via the hookSpecificOutput.permissionDecision envelope;
+    # rc stays 0 so codex honors the deny rather than treating a nonzero rc
+    # as a hook error and permitting the action.
     assert response["hookSpecificOutput"]["hookEventName"] == event
     if event == "PreToolUse":
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert result == 0
     else:
         assert response["continue"] is True
         assert "permissionDecision" not in response["hookSpecificOutput"]
         assert "decision" not in response["hookSpecificOutput"]
+        assert result == 0
 
 
 @pytest.mark.parametrize("event", ("PreToolUse", "PermissionRequest"))
@@ -80,13 +85,18 @@ def test_pipeline_unavailable_preserves_codex_wire_response(
         context=context,
         event_name=event,
         reason_code="native_hook_event_unavailable",
+        worker=HookWorker(
+            store=GuardStore(context.guard_home), wait_for_native_policy=False, publish_native_policy=False
+        ),
     )
-    assert result == 0
     response = json.loads(capsys.readouterr().out)
+    # codex deny rides the permissionDecision envelope; rc stays 0.
     assert response["hookSpecificOutput"]["hookEventName"] == event
     if event == "PreToolUse":
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert result == 0
     else:
         assert response["continue"] is True
         assert "permissionDecision" not in response["hookSpecificOutput"]
         assert "decision" not in response["hookSpecificOutput"]
+        assert result == 0

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import sqlite3
 from collections.abc import Mapping
+from datetime import datetime, timezone
+from pathlib import Path
 
 from ..native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
 
@@ -61,7 +65,10 @@ def native_review_policy_binding(
     if any(not isinstance(receipt.get(field), str) for field in ("policy_digest", "rule_digest", "runtime_identity")):
         raise ValueError("native_review_policy_binding_invalid")
     command_binding = receipt.get("command_extensions")
-    if not isinstance(command_binding, dict) or command_binding.get("uncertainty_count") != 0:
+    if not isinstance(command_binding, dict):
+        raise ValueError("native_review_policy_binding_invalid")
+    uncertainty_count = command_binding.get("uncertainty_count")
+    if type(uncertainty_count) is not int or uncertainty_count < 0:
         raise ValueError("native_review_policy_binding_invalid")
     return {
         "schema": _SCHEMA,
@@ -99,3 +106,85 @@ def native_review_action_identity(
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(b"hol-guard.native-review-action.v1\0" + encoded).hexdigest()
+
+
+def native_review_matching_allow(
+    store: object,
+    *,
+    harness: str,
+    artifact_id: str,
+    tool_name: str,
+    launch_target: str,
+    workspace: Path | None,
+    identity: str | None,
+) -> bool:
+    consume = getattr(store, "consume_native_review_approval", None)
+    if not callable(consume) or identity is None or not launch_target:
+        return False
+    try:
+        return (
+            consume(
+                harness=harness,
+                artifact_id=artifact_id,
+                artifact_name=tool_name,
+                artifact_hash=identity,
+                launch_target=launch_target,
+                workspace=str(workspace) if workspace is not None else None,
+                now=datetime.now(tz=timezone.utc).isoformat(),
+            )
+            is True
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return False
+
+
+def native_review_claimed_allow(
+    store: object,
+    *,
+    harness: str,
+    artifact_id: str,
+    workspace: Path | None,
+    identity: str | None,
+    claimed_saved_allow_hash: str,
+    claimed_approval_request_id: str | None,
+    claim_saved_approval: bool,
+) -> bool:
+    """Settle a MAC'd once-approval bound to this exact native request."""
+
+    if identity is None or not hmac.compare_digest(identity, claimed_saved_allow_hash):
+        return False
+    peek = getattr(store, "peek_local_once_approval", None)
+    if not callable(peek):
+        return False
+    try:
+        decision = peek(
+            harness=harness,
+            artifact_id=artifact_id,
+            artifact_hash=identity,
+            workspace=str(workspace) if workspace is not None else None,
+            publisher=None,
+            now=datetime.now(tz=timezone.utc).isoformat(),
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return False
+    if not isinstance(decision, Mapping) or decision.get("action") != "allow":
+        return False
+    if claimed_approval_request_id is not None and decision.get("request_id") != claimed_approval_request_id:
+        return False
+    if not claim_saved_approval:
+        return True
+    approval_id = decision.get("approval_id")
+    claim = getattr(store, "claim_local_once_approval", None)
+    if not isinstance(approval_id, str) or not callable(claim):
+        return False
+    try:
+        return (
+            claim(
+                approval_id,
+                claimed_at=datetime.now(tz=timezone.utc).isoformat(),
+                expected_decision=decision,
+            )
+            is True
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return False

@@ -369,7 +369,11 @@ fn scan_tar_members(
                 )));
             }
         }
-        let member_size = entry.header().size().map_err(|_| parse_failed())?;
+        // `entry.size()` returns the *effective* member size: it honors a PAX
+        // `size=` override, which `header().size()` (the raw octal field) does
+        // not. Enforcement must match the bytes the iterator actually consumes,
+        // otherwise a PAX size override inflates a member past the caps unseen.
+        let member_size = entry.size();
         if member_size > caps.max_member_bytes {
             return Err(ArchiveOutcome::blocked(
                 "external_archive_member_size_limit",

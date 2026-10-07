@@ -62,6 +62,7 @@ jobs:
             pyproject.toml
             uv.lock
           save-cache: false
+      - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Generate an ephemeral MDM lab admin token
         shell: bash

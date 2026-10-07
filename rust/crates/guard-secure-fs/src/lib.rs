@@ -16,9 +16,9 @@ mod source_path;
 
 use secure_open::{secure_open, SecureOpenError};
 pub use source_path::{
-    classify_source_path, credential_named_path, credential_path_markers,
-    hidden_read_parts_allowed, is_source_code_extension, sensitive_external_filename,
-    sensitive_path_family, source_like, EXTERNAL_SENSITIVE_PARTS,
+    classify_scannable_source_path, classify_source_path, credential_named_path,
+    credential_path_markers, hidden_read_parts_allowed, is_source_code_extension,
+    sensitive_external_filename, sensitive_path_family, source_like, EXTERNAL_SENSITIVE_PARTS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -261,62 +261,101 @@ pub fn open_immutable_blob(path: &Path) -> Result<SecureBlob, SecureReadError> {
     })
 }
 
-pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureReadError> {
-    let max_bytes = max_bytes.min(MAX_SCAN_BYTES);
-    if contains_symlink_component(path) {
-        return Err(SecureReadError::SymlinkInPath);
-    }
-    #[cfg(not(unix))]
-    if secure_open::is_oversized_regular_file(path, max_bytes) {
-        return Err(SecureReadError::TooLarge);
-    }
-    // Canonicalize around a descriptor-bound read to close path races.
-    let canonical_before = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
-    let mut file = secure_open(path, &canonical_before).map_err(map_secure_open_error)?;
-    let before_metadata = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
-    if !before_metadata.is_file() {
-        return Err(SecureReadError::NotRegularFile);
-    }
-    #[cfg(unix)]
-    {
-        let mode = before_metadata.mode();
-        if mode & 0o444 == 0 {
+/// Read a mutable context input without trusting a path-only snapshot.
+///
+/// Ancestor symlinks are resolved before the descriptor walk. Leaf symlinks
+/// are admitted only for executable acquisition; callers set their own byte
+/// limit rather than inheriting the source-scanner limit.
+pub fn read_stable(
+    path: &Path,
+    max_bytes: usize,
+    allow_leaf_symlink: bool,
+) -> Result<SecureRead, SecureReadError> {
+    fn checked_metadata(
+        path: &Path,
+        allow_leaf_symlink: bool,
+    ) -> Result<Metadata, SecureReadError> {
+        let leaf = fs::symlink_metadata(path).map_err(|_| SecureReadError::ReadFailed)?;
+        if leaf.file_type().is_symlink() && !allow_leaf_symlink {
+            return Err(SecureReadError::SymlinkInPath);
+        }
+        let metadata = fs::metadata(path).map_err(|_| SecureReadError::ReadFailed)?;
+        if !metadata.is_file() {
+            return Err(SecureReadError::NotRegularFile);
+        }
+        #[cfg(unix)]
+        if metadata.mode() & 0o444 == 0 {
             return Err(SecureReadError::PermissionDenied);
         }
-        if before_metadata.nlink() != 1 {
+        #[cfg(unix)]
+        if metadata.nlink() != 1 {
             return Err(SecureReadError::HardLinkedFile);
         }
+        Ok(metadata)
     }
-    if before_metadata.len() > max_bytes as u64 {
+
+    fn unchanged(before: &Metadata, after: &Metadata) -> bool {
+        if identity(before) != identity(after) {
+            return false;
+        }
+        #[cfg(unix)]
+        {
+            before.ctime() == after.ctime() && before.ctime_nsec() == after.ctime_nsec()
+        }
+        #[cfg(not(unix))]
+        {
+            true
+        }
+    }
+
+    let source_before = checked_metadata(path, allow_leaf_symlink)?;
+    if source_before.len() > max_bytes as u64 {
         return Err(SecureReadError::TooLarge);
     }
-    let before = identity(&before_metadata);
-    let mut bytes = Vec::with_capacity(before.size as usize);
+    let canonical_before = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
+    let mut file = secure_open(path, &canonical_before).map_err(map_secure_open_error)?;
+    let descriptor_before = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
+    if !unchanged(&source_before, &descriptor_before) {
+        return Err(SecureReadError::Changed);
+    }
+    let limit = (max_bytes as u64).saturating_add(1);
+    let mut bytes = Vec::with_capacity(source_before.len() as usize);
     file.by_ref()
-        .take(max_bytes as u64 + 1)
+        .take(limit)
         .read_to_end(&mut bytes)
         .map_err(|_| SecureReadError::ReadFailed)?;
     if bytes.len() > max_bytes {
         return Err(SecureReadError::TooLarge);
     }
-    let after = identity(&file.metadata().map_err(|_| SecureReadError::ReadFailed)?);
-    if before != after {
+    let descriptor_after = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
+    let source_after = checked_metadata(path, allow_leaf_symlink)?;
+    if bytes.len() as u64 != source_before.len()
+        || !unchanged(&descriptor_before, &descriptor_after)
+        || !unchanged(&source_before, &source_after)
+    {
         return Err(SecureReadError::Changed);
-    }
-    if contains_symlink_component(path) {
-        return Err(SecureReadError::SymlinkInPath);
     }
     let canonical_after = fs::canonicalize(path).map_err(|_| SecureReadError::PathChanged)?;
     if canonical_before != canonical_after {
         return Err(SecureReadError::PathChanged);
     }
-    let mut hasher = Sha256::new();
-    hasher.update(&bytes);
+    let sha256 = hex::encode(Sha256::digest(&bytes));
     Ok(SecureRead {
         bytes,
-        identity: after,
-        sha256: hex::encode(hasher.finalize()),
+        identity: identity(&descriptor_after),
+        sha256,
     })
+}
+
+pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureReadError> {
+    if contains_symlink_component(path) {
+        return Err(SecureReadError::SymlinkInPath);
+    }
+    let read = read_stable(path, max_bytes.min(MAX_SCAN_BYTES), false)?;
+    if contains_symlink_component(path) {
+        return Err(SecureReadError::SymlinkInPath);
+    }
+    Ok(read)
 }
 
 #[cfg(test)]
