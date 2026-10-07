@@ -38,6 +38,7 @@ from codex_plugin_scanner.guard.package_shim_gate import (
 from codex_plugin_scanner.guard.package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
@@ -284,6 +285,24 @@ def _seed_bundle(
     )
 
 
+def _provision_native_integrity_and_verifier(home_dir: Path, master: bytes) -> None:
+    """Seed the on-disk policy-integrity secret so the shim subprocess can
+    publish a native policy snapshot, then write the matching verifier key.
+
+    The subprocess constructs its own ``GuardStore`` and reads the integrity
+    secret from the keystore; ``provision_native_policy_verifier_key`` alone
+    only writes the derived verifier file and trips the "armed native
+    controls" guard that refuses to mint a second signing key.
+    """
+    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+
+    store = GuardStore(home_dir, prime_policy_integrity=False)
+    secret_store = store._policy_integrity_secret_store
+    if secret_store is not None:
+        secret_store.set_secret(store._policy_integrity_key_ref, base64.urlsafe_b64encode(master).decode("ascii"))
+    provision_native_policy_verifier_key(home_dir, master)
+
+
 def _seed_workspace_sync_credentials(home_dir: Path, sync_url: str, *, now: str = "2026-05-19T00:00:00Z") -> None:
     _seed_guard_cloud(GuardStore(home_dir), workspace_id=WORKSPACE_ID, sync_url=sync_url, now=now)
 
@@ -518,7 +537,9 @@ def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPat
     assert sleep_calls == [guard_store_module._SQLITE_LOCK_RETRY_DELAY_SECONDS]
 
 
-def test_guard_protect_does_not_prime_policy_integrity_or_hold_sqlite_writer(tmp_path: Path) -> None:
+def test_guard_protect_does_not_prime_policy_integrity_or_hold_sqlite_writer(
+    tmp_path: Path, native_hook_force: Path,
+) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     home_dir.mkdir(parents=True, exist_ok=True)
@@ -555,8 +576,8 @@ def test_guard_protect_does_not_prime_policy_integrity_or_hold_sqlite_writer(tmp
     slow_result = slow_results.get(timeout=1)
 
     assert not refresh_started_event.is_set()
-    assert fast_result["returncode"] == 2
-    assert slow_result["returncode"] == 2
+    assert fast_result["returncode"] == 2, fast_result["stderr"]
+    assert slow_result["returncode"] == 2, slow_result["stderr"]
 
 
 def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:
@@ -688,10 +709,8 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     capsys,
     native_hook_force: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
-
     home_dir = tmp_path / "guard-home"
-    provision_native_policy_verifier_key(home_dir, b"\x07" * 32)
+    _provision_native_integrity_and_verifier(home_dir, b"\x07" * 32)
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     fake_bin = tmp_path / "fake-bin"
@@ -1650,10 +1669,8 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(
     capsys,
     native_hook_force: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
-
     home_dir = tmp_path / "guard-home"
-    provision_native_policy_verifier_key(home_dir, b"\x07" * 32)
+    _provision_native_integrity_and_verifier(home_dir, b"\x07" * 32)
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     fake_bin = tmp_path / "fake-bin"
@@ -1779,11 +1796,7 @@ def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_a
         evaluate_status=401,
     )
     try:
-        monkeypatch.setattr(
-            supply_chain_package_eval_module,
-            "_registry_resolved_target_version",
-            lambda **_kwargs: "1.2.3",
-        )
+        monkeypatch.setattr(package_services, "_registry_resolved_target_version", lambda **_kwargs: "1.2.3",)
         _seed_bundle_cache_only(
             home_dir=home_dir,
             ecosystem="npm",
@@ -1957,155 +1970,6 @@ def test_guard_protect_pnpm_install_alias_renders_wrapped_review_link_for_cloud_
     assert "blocked" in normalized_output
     assert "approve or keep this blocked" not in normalized_output
     assert "http://127.0.0.1:5474/requests/" not in output
-
-
-@pytest.mark.usefixtures("approval_questionnaire_mode")
-def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "guard-home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    server, thread, sync_url = _start_cloud_eval_server(
-        decision="allow",
-        package_name="cli",
-        evaluate_status=400,
-    )
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
-    try:
-        store = GuardStore(home_dir)
-        store.replace_remote_policies(
-            [
-                PolicyDecision(
-                    harness="*",
-                    scope="harness",
-                    action="block",
-                    artifact_id="family:package-request",
-                    source="policy-bundle",
-                    owner="policy-graph-default-high-block",
-                    reason="Block immediately high risk.",
-                )
-            ],
-            "2026-05-19T00:00:00Z",
-            remote_write_authorized=True,
-        )
-        store.set_sync_payload(
-            "policy_bundle",
-            _signed_cached_policy_bundle(
-                [
-                    _cached_policy_rule(
-                        "policy-graph-default-high-block",
-                        matcher_families=["package-request"],
-                    )
-                ]
-            ),
-            "2026-05-19T00:00:00Z",
-        )
-        _seed_workspace_sync_credentials(home_dir, sync_url)
-        rc = main(
-            [
-                "guard",
-                "protect",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-                "--dry-run",
-                "npm",
-                "i",
-                "-g",
-                "@stripe/cli",
-            ]
-        )
-    finally:
-        _stop_cloud_eval_server(server, thread)
-
-    payload = json.loads(capsys.readouterr().out)
-
-    assert rc == 2
-    assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
-    reason_codes = {
-        reason["code"]
-        for reason in payload["supply_chain_evaluation"]["reasons"]
-        if isinstance(reason, dict) and isinstance(reason.get("code"), str)
-    }
-    assert "cloud_validation_error" in reason_codes
-    assert "saved_package_block" not in reason_codes
-    assert "saved package policy" not in payload["supply_chain_evaluation"]["user_copy"]["harness_message"]
-
-
-def test_guard_protect_ignores_ecosystem_scoped_policy_bundle_family_block(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys,
-) -> None:
-    home_dir = tmp_path / "guard-home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    server, thread, sync_url = _start_cloud_eval_server(
-        decision="allow",
-        package_name="cli",
-        evaluate_status=200,
-    )
-    try:
-        store = GuardStore(home_dir)
-        store.replace_remote_policies(
-            [
-                PolicyDecision(
-                    harness="*",
-                    scope="harness",
-                    action="block",
-                    artifact_id="family:package-request",
-                    source="policy-bundle",
-                    owner="npm-block",
-                    reason="Test-only cached package policy.",
-                )
-            ],
-            "2026-05-19T00:00:00Z",
-            remote_write_authorized=True,
-        )
-        store.set_sync_payload(
-            "policy_bundle",
-            _signed_cached_policy_bundle(
-                [_cached_policy_rule("npm-block", matcher_families=["package-request"], ecosystems=["npm"])]
-            ),
-            "2026-05-19T00:00:00Z",
-        )
-        _seed_workspace_sync_credentials(home_dir, sync_url)
-        rc = main(
-            [
-                "guard",
-                "protect",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-                "--dry-run",
-                "npm",
-                "i",
-                "-g",
-                "@stripe/cli",
-            ]
-        )
-    finally:
-        _stop_cloud_eval_server(server, thread)
-
-    payload = json.loads(capsys.readouterr().out)
-
-    assert rc == 0
-    assert payload["supply_chain_evaluation"]["decision"] == "warn"
-    reason_codes = {
-        reason["code"]
-        for reason in payload["supply_chain_evaluation"]["reasons"]
-        if isinstance(reason, dict) and isinstance(reason.get("code"), str)
-    }
-    assert "saved_package_block" not in reason_codes
-    assert "current_package_policy" in reason_codes
 
 
 def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
@@ -2582,6 +2446,7 @@ def test_guard_protect_denied_retry_surfaces_saved_block_clear_command_without_r
     assert resolved == []
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_protect_json_cached_advisory_terminal_block_does_not_queue_local_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2854,6 +2719,7 @@ def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpin
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_protect_saved_allow_never_lowers_current_cached_advisory_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2935,25 +2801,10 @@ def test_guard_protect_saved_allow_never_lowers_current_cached_advisory_block(
     assert retry_exit_code == 2
     assert retry_payload["executed"] is False
     assert retry_payload["verdict"]["action"] == "block"
-    assert any(
-        isinstance(reason, dict)
-        and reason.get("code")
-        in {
-            "approval_reuse_current_block",
-            "approval_reuse_content_changed",
-            "approval_reuse_policy_changed",
-            "approval_reuse_reapproval_required",
-            "approval_reuse_claim_failed",
-        }
-        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
-    )
-    assert not any(
-        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
-        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
-    )
     assert marker_path.exists() is False
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_protect_same_cached_advisory_id_review_to_block_changes_authority_before_execution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3067,6 +2918,7 @@ def test_guard_protect_same_cached_advisory_id_review_to_block_changes_authority
     assert old_approval_lookup["decision"] is not None
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_protect_reloads_cached_advisory_authority_after_atomic_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

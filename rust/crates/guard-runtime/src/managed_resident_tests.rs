@@ -201,9 +201,6 @@ fn client_stream_frames_are_bounded_and_big_endian() {
 
 #[test]
 fn client_leases_keep_shared_resident_alive_until_last_client_closes() {
-    use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-client-lease-{}-{}",
         std::process::id(),
@@ -253,7 +250,8 @@ fn retire_clients_for_update_terminates_exact_process() {
         let root = PathBuf::from(root);
         let _lease = lease::acquire(&root).expect("child lease should be acquired");
         fs::write(root.join("child-ready"), []).expect("child readiness marker should be written");
-        std::thread::sleep(TEST_BUDGET.saturating_mul(2));
+        // Outlive the parent's retirement budget; a normal fixture exit is not proof of retirement.
+        std::thread::sleep(Duration::from_secs(120));
         return;
     }
     let root = std::env::temp_dir().join(format!(
@@ -289,7 +287,12 @@ fn retire_clients_for_update_terminates_exact_process() {
         panic!("child did not acquire a lease");
     }
     let digest = runtime_digest().unwrap();
-    let retirement = lease::retire_clients_for_update(&root, &digest, Instant::now() + TEST_BUDGET);
+    // This correctness test authenticates the entire test executable. LLVM
+    // coverage makes that unoptimized binary much larger than the shipped
+    // runtime, so fingerprinting must not consume the fixture's stop budget.
+    // Production stop deadlines remain unchanged in stop_managed.
+    let retirement =
+        lease::retire_clients_for_update(&root, &digest, Instant::now() + Duration::from_secs(60));
     if let Err(error) = retirement {
         let _ = child.kill();
         let _ = child.wait();
@@ -311,9 +314,6 @@ fn retire_clients_for_update_terminates_exact_process() {
 
 #[test]
 fn stale_lease_cleanup_requires_a_dead_process_identity() {
-    use std::fs;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-stale-lease-{}-{}",
         std::process::id(),

@@ -42,6 +42,7 @@ from .desktop_hook_proxy import (
 from .desktop_hook_proxy import (
     _trusted_desktop_hook_proxy_command,
 )
+from .grok_hook_invocation_template import configured_grok_payload
 from .hook_input_reader import read_hook_input
 
 if TYPE_CHECKING:
@@ -136,6 +137,7 @@ def bounded_cli_hook_command(
     harness: str,
     timeout_seconds: float,
     prepared_files: list[TransitionFile] | None = None,
+    require_desktop_proxy: bool = False,
 ) -> tuple[str, ...]:
     """Build a shell-free hook command backed by a process-tree deadline."""
 
@@ -157,11 +159,23 @@ def bounded_cli_hook_command(
         "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv;"
         "raise SystemExit(main_from_argv(sys.argv[1:]))"
     )
+    config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
     if frozen_launcher:
-        config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
-        desktop_proxy = _trusted_desktop_hook_proxy_command(python_executable, config_json)
+        if require_desktop_proxy:
+            desktop_proxy = _trusted_desktop_hook_proxy_command(
+                python_executable,
+                config_json,
+                require_proxy=True,
+            )
+        else:
+            desktop_proxy = _trusted_desktop_hook_proxy_command(python_executable, config_json)
         if desktop_proxy is not None:
             return desktop_proxy
+        if require_desktop_proxy:
+            raise RuntimeError("trusted Desktop hook proxy is unavailable")
+    elif require_desktop_proxy:
+        raise RuntimeError("trusted Desktop hook proxy requires a frozen launcher")
+    if frozen_launcher or harness.strip().lower() == "grok":
         isolated_command = _isolated_bounded_hook_command(
             guard_home=guard_home,
             harness=harness,
@@ -169,12 +183,13 @@ def bounded_cli_hook_command(
             prepared_files=prepared_files,
         )
         if isolated_command is not None:
-            return isolated_command
-        return (
-            python_executable,
-            _FROZEN_BRIDGE_COMMAND,
-            config_json,
-        )
+            return (*isolated_command, config_json) if harness.strip().lower() == "grok" else isolated_command
+        if frozen_launcher:
+            return (
+                python_executable,
+                _FROZEN_BRIDGE_COMMAND,
+                config_json,
+            )
     return (
         python_executable,
         "-I",
@@ -364,6 +379,7 @@ def run_bounded_cli_hook(
     cli_args = [item for item in raw_cli_args if isinstance(item, str)]
     if len(cli_args) != len(raw_cli_args):
         return _emit_failure(harness=harness, input_text=input_text)
+    input_text = configured_grok_payload(input_text, cli_args) if harness == "grok" else input_text
     deadline = started_monotonic + float(timeout_seconds) if deadline_monotonic is None else deadline_monotonic
     if time.monotonic() >= deadline:
         return _emit_failure(harness=harness, input_text=input_text)

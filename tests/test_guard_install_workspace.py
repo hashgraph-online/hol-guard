@@ -324,6 +324,10 @@ def test_launcher_drops_relative_pythonpath_when_current_directory_is_unavailabl
 
     monkeypatch.setattr(Path, "cwd", staticmethod(unavailable_cwd))
 
+    monkeypatch.delenv("HOL_GUARD_NATIVE", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_BINARY", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_MODE", raising=False)
     assert merge_guard_launcher_env() == {"PYTHONPATH": str(absolute_entry)}
 
 

@@ -1279,9 +1279,9 @@ fn effective_execution_context(
 ) -> (Option<String>, String, Option<PathBuf>, String) {
     let mut effective_path: Option<String> = supplied_environment.get("PATH").cloned();
     let mut path_source = if effective_path.is_some() {
-        "env".to_owned()
+        "inherited".to_owned()
     } else {
-        "env_unset".to_owned()
+        "inherited_unset".to_owned()
     };
     let mut effective_cwd: Option<PathBuf> = Some(initial_cwd.to_path_buf());
     let mut cwd_source = initial_cwd_source.to_owned();
@@ -1297,6 +1297,27 @@ fn effective_execution_context(
         );
     }
     let mut index = 0usize;
+    let (next_index, next_path, next_source) = consume_path_assignments(
+        raw_segment,
+        index,
+        effective_path.clone(),
+        &path_source,
+        "inline",
+        supplied_environment,
+    );
+    index = next_index;
+    effective_path = next_path;
+    path_source = next_source;
+    if index >= raw_segment.len() {
+        return (
+            effective_path
+                .as_deref()
+                .map(|path| path_for_resolution(path, effective_cwd.as_deref())),
+            path_source,
+            effective_cwd,
+            cwd_source,
+        );
+    }
     let mut name = command_name(&raw_segment[index]);
     if name == "sudo" {
         return (
@@ -1942,12 +1963,26 @@ fn redacted_segment(raw_segment: &[String]) -> Vec<String> {
 // package_intent_parser.py `_redact_local_source_tokens`
 fn redact_local_source_tokens(tokens: &[String]) -> Vec<String> {
     let mut redacted: Vec<String> = Vec::new();
-    for token in tokens {
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = &tokens[index];
+        if token == "--path" && index + 1 < tokens.len() {
+            redacted.push("--path".to_owned());
+            redacted.push("<local-path>".to_owned());
+            index += 2;
+            continue;
+        }
+        if token.starts_with("--path=") {
+            redacted.push("--path=<local-path>".to_owned());
+            index += 1;
+            continue;
+        }
         if token.contains("://") || token.contains("git@") || token.contains("file:") {
             redacted.push("[REDACTED_URL]".to_owned());
         } else {
             redacted.push(token.clone());
         }
+        index += 1;
     }
     redacted
 }
@@ -2843,5 +2878,29 @@ mod tests {
         assert_eq!(control_context_label(Some("&&")), "and");
         assert_eq!(control_context_label(Some("|&")), "pipe-stderr");
         assert_eq!(control_context_label(None), "end");
+    }
+
+    // package_intent_parser.py `_redact_local_source_tokens`
+    #[test]
+    fn redact_local_source_tokens_hides_cargo_local_path() {
+        let redacted = redacted_segment(&[
+            "cargo".to_owned(),
+            "add".to_owned(),
+            "demo".to_owned(),
+            "--path".to_owned(),
+            "crates/demo".to_owned(),
+        ]);
+        assert!(redacted.contains(&"--path".to_owned()));
+        assert!(redacted.contains(&"<local-path>".to_owned()));
+        assert!(!redacted.iter().any(|token| token == "crates/demo"));
+
+        let flag_form = redacted_segment(&[
+            "cargo".to_owned(),
+            "add".to_owned(),
+            "demo".to_owned(),
+            "--path=crates/demo".to_owned(),
+        ]);
+        assert!(flag_form.contains(&"--path=<local-path>".to_owned()));
+        assert!(!flag_form.iter().any(|token| token.contains("crates/demo")));
     }
 }

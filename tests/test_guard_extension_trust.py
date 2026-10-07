@@ -83,10 +83,14 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     """Verify trust map covers every builtin extension."""
     registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
     assert mapped_ids() == registry_ids
-    # Expected membership comes from authored policy, never generated Python.
+    # Expected membership comes from authored per-extension bindings, never
+    # generated Python or the derived aggregate map.
     root = Path(__file__).resolve().parents[1]
-    authored = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())
-    for trust_class, expected_ids in authored["classes"].items():
+    authored: dict[str, list[str]] = {"first-party": [], "trusted-library": [], "external": []}
+    for binding in sorted((root / "contracts/extensions/trust").glob("*.v1.json")):
+        payload = json.loads(binding.read_bytes())
+        authored[payload["trustClass"]].append(payload["extension"])
+    for trust_class, expected_ids in authored.items():
         assert ids_for_class(trust_class) == set(expected_ids)
     assert trust_class_for("command.git") == "first-party"
     assert trust_class_for("command.cloud.aws") == "trusted-library"

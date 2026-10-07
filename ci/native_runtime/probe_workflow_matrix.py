@@ -19,7 +19,6 @@ from pathlib import Path
 
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.workflow_matrix_cases import WorkflowCase, create_cases
-from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 
 
 @contextmanager
@@ -132,8 +131,7 @@ def contained_vitest_cases(project: Path) -> list[WorkflowCase]:
             ),
             (
                 "bun-cross-project-equals",
-                f"bun --cwd={shlex.quote(str(resolved_project))} x --no-install vitest run "
-                "tests/secondary.test.mjs",
+                f"bun --cwd={shlex.quote(str(resolved_project))} x --no-install vitest run tests/secondary.test.mjs",
             ),
         ]
     ]
@@ -192,8 +190,7 @@ def _workflow_prompt(batch: list[WorkflowCase]) -> str:
         "Do not change, omit, repeat, or add commands. Do not inspect or verify results with extra calls; "
         "the test runner checks side effects. After the final listed command, reply DONE and stop. "
         "Stop early only if an attempted bash call returns a block. "
-        "Do not infer that an unattempted command is blocked.\n"
-        + json.dumps([case.command for case in batch])
+        "Do not infer that an unattempted command is blocked.\n" + json.dumps([case.command for case in batch])
     )
 
 
@@ -274,6 +271,8 @@ def run_live(
 
 
 def main() -> int:
+    from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live-omp", action="store_true")
     parser.add_argument("--model", default="opencode-go/deepseek-flash")

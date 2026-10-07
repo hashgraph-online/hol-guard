@@ -168,7 +168,8 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     {
         return Some("native_node_tool_readonly_containment_required");
     }
-    if super::executable_basename(executable) == "git" && super::git_helper_context_required(model)
+    if super::executable_basename(executable) == "git"
+        && super::git_helper_context::git_helper_context_required(model)
     {
         return Some("native_git_readonly_containment_required");
     }

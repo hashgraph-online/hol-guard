@@ -1,5 +1,11 @@
 use super::super::super::tests::{input, Fixture};
 use super::*;
+use guard_policy_snapshot::business_source_anchor::{
+    sign_business_source_anchor, BusinessSourcePhase,
+};
+use guard_policy_snapshot::business_source_authority::{
+    sign_business_source, verify_business_source,
+};
 use guard_policy_snapshot::{integrity_mac, policy_digest};
 use serde_json::{json, Value};
 
@@ -11,9 +17,19 @@ fn declaration(scope: &str) -> Value {
 fn install(fixture: &Fixture, budgets: Value) {
     let mut snapshot = fixture.store.current_snapshot().unwrap();
     snapshot.generation += 1;
-    let mut policy = serde_json::to_value(snapshot.business_policy.as_ref().unwrap()).unwrap();
-    policy["budgets"] = budgets;
-    snapshot.business_policy = Some(serde_json::from_value(policy).unwrap());
+    let mut document = fixture.source_document.as_ref().unwrap().clone();
+    document["metadata"]["revision"] = json!(snapshot.generation);
+    document["spec"]["budgets"] = budgets;
+    let record = sign_business_source(&document, snapshot.generation, &fixture.key).unwrap();
+    let source = verify_business_source(&record, &fixture.key).unwrap();
+    snapshot.business_policy = Some(source.compiled().binding().clone());
+    let marker =
+        sign_business_source_anchor(&source, BusinessSourcePhase::Committed, &fixture.key).unwrap();
+    super::super::super::tests::write(
+        &fixture.root,
+        &fixture.root.join("business-source-anchor.v1.json"),
+        &serde_json::from_slice(&marker).unwrap(),
+    );
     snapshot.policy_digest = policy_digest(&snapshot).unwrap();
     snapshot.integrity.mac = integrity_mac(&snapshot, &fixture.key).unwrap();
     fixture
@@ -63,6 +79,59 @@ fn chunking_restarts_replay_and_uncertain_outcomes_keep_usage() {
         "native_business_budget_reservation_replay"
     );
     assert_eq!(load(fixture.store.state_base()).unwrap().0.events.len(), 2);
+}
+
+#[test]
+fn snapshot_mac_cannot_replace_the_reviewed_budget_source() {
+    let fixture = Fixture::new("business-budget-source-binding");
+    let mut budget = declaration("account");
+    budget["maximumActions"] = json!(1);
+    install(&fixture, json!([budget]));
+    let mut snapshot = fixture.store.current_snapshot().unwrap();
+    let generation = snapshot.generation;
+    snapshot.generation += 1;
+    snapshot
+        .business_policy
+        .as_mut()
+        .unwrap()
+        .budgets
+        .as_mut()
+        .unwrap()[0]
+        .maximum_actions = 10;
+    snapshot.policy_digest = policy_digest(&snapshot).unwrap();
+    snapshot.integrity.mac = integrity_mac(&snapshot, &fixture.key).unwrap();
+    assert_eq!(
+        fixture
+            .store
+            .push(&json!({"schema":"guard-policy-snapshot-push.v1","snapshot":snapshot}))
+            .unwrap_err(),
+        "native_business_source_authority_not_current"
+    );
+    assert_eq!(
+        fixture.store.current_snapshot().unwrap().generation,
+        generation
+    );
+    let now = time(&fixture);
+    reserve_at(
+        &fixture.store,
+        "budget-source-first",
+        &prepared(),
+        &actor(),
+        now,
+    )
+    .unwrap();
+    assert_eq!(
+        reserve_at(
+            &fixture.store,
+            "budget-source-second",
+            &prepared(),
+            &actor(),
+            now + 1
+        )
+        .err()
+        .unwrap(),
+        "native_business_budget_exceeded"
+    );
 }
 
 #[test]

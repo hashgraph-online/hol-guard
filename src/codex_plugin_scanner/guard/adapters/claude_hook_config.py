@@ -6,7 +6,9 @@ from pathlib import Path
 
 from .base import HarnessContext
 
-CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+# Grep reads file contents, including hidden files such as `.env`; the
+# native authority proves directory scopes before allowing them.
+CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
 CLAUDE_GUARD_POST_TOOL_MATCHER = f"{CLAUDE_GUARD_TOOL_MATCHER}|AskUserQuestion"
 CLAUDE_GUARD_NOTIFICATION_MATCHER = "permission_prompt"
 CLAUDE_GUARD_SESSION_START_MATCHERS = ("startup", "resume", "clear", "compact")
@@ -16,6 +18,9 @@ CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_STOP_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 CLAUDE_GUARD_SESSION_START_HOOK_MARKER = "HOL_GUARD_CLAUDE_SESSION_START_HOOK"
+# Authenticated daemon marker: defer a PermissionRequest to Claude's own
+# dialog without supplying a decision.
+CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY = "guard_permission_passthrough"
 
 
 def manifest_notes(payload: dict[str, object]) -> list[str]:

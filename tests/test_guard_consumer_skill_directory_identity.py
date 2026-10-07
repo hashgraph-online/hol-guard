@@ -65,7 +65,9 @@ def _detection(artifact: GuardArtifact) -> HarnessDetection:
 
 
 def _config(tmp_path: Path, artifact_id: str) -> GuardConfig:
-    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
 
     workspace = tmp_path / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
@@ -75,7 +77,10 @@ def _config(tmp_path: Path, artifact_id: str) -> GuardConfig:
         harness="gemini",
         now="2026-07-19T00:00:00Z",
     )
-    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    # Derive the verifier key from this store's master key.  A fixed test key
+    # collides with the derived verifier `ensure_policy_integrity_ready_for_write`
+    # already wrote, raising `native_policy_verifier_key_mismatch`.
+    provision_native_verifier_key_for_store(store)
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
