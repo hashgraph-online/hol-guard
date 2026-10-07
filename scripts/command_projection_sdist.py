@@ -36,12 +36,12 @@ def _generator(root: Path):
     return module
 
 
-def projection_manifest(root: Path) -> dict:
+def projection_manifest(root: Path, *, descriptors: Path | None = None) -> dict:
     """Fingerprint canonical sources, native implementation, and both outputs."""
     generator = _generator(root)
     for name in NAMES:
         generator.read_object(root / "contracts/extensions" / name)
-    return {
+    result = {
         "schema": "guard.command-projection-build.v1",
         "request_sha256": hashlib.sha256(generator.canonical_bytes(generator.build_request())).hexdigest(),
         "bindings_sha256": _binding_fingerprint(root),
@@ -50,19 +50,32 @@ def projection_manifest(root: Path) -> dict:
             name: hashlib.sha256((root / "contracts/extensions" / name).read_bytes()).hexdigest() for name in NAMES
         },
     }
+    if descriptors is not None:
+        if descriptors.is_symlink():
+            raise ValueError("descriptor directory cannot be a symlink")
+        result["descriptors"] = {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(descriptors.glob("command.*.json"))
+            if not path.is_symlink() and path.is_file()
+        }
+        if any(path.is_symlink() for path in descriptors.glob("*.json")):
+            raise ValueError("descriptor cannot be a symlink")
+    return result
 
 
-def write_projection_manifest(root: Path) -> None:
+def write_projection_manifest(root: Path, *, descriptors: Path | None = None) -> None:
     """Record the source and output fingerprints shipped in the source archive."""
     generator = _generator(root)
     destination = root / MANIFEST
     if destination.is_symlink():
         raise ValueError("source-distribution projection manifest cannot be a symlink")
-    destination.write_bytes(generator.canonical_bytes(projection_manifest(root)))
+    destination.write_bytes(generator.canonical_bytes(projection_manifest(root, descriptors=descriptors)))
 
 
 def verify_projection_manifest(root: Path) -> None:
     """Never accept archive projections after any bound input has changed."""
     generator = _generator(root)
-    if generator.read_object(root / MANIFEST) != projection_manifest(root):
+    saved = generator.read_object(root / MANIFEST)
+    descriptors = root / "contributions/extensions" if "descriptors" in saved else None
+    if saved != projection_manifest(root, descriptors=descriptors):
         raise ValueError("source-distribution command projections do not match their build inputs")

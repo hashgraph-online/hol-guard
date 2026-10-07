@@ -32,12 +32,19 @@ class CommandProjectionBuildHook(BuildHookInterface):
             return
         root = Path(self.root)
         archive = _archive_support()
+        descriptors = root / "contributions/extensions"
         if (root / "PKG-INFO").is_file():
             # Hatch source archives carry frozen projections plus a fingerprint
             # of all authored inputs. Verify those without requiring Cargo.
             archive.verify_projection_manifest(root)
         else:
-            command = [sys.executable, str(root / "scripts/build_native_command_program.py"), "--projections-only"]
+            descriptors = root / "contracts/extensions/build-descriptors"
+            command = [
+                sys.executable,
+                str(root / "scripts/build_native_command_program.py"),
+                "--descriptor-dir",
+                str(descriptors),
+            ]
             compiler = os.environ.get("HOL_GUARD_BUILD_SOURCE_COMPILER")
             if compiler:
                 compiler_path = Path(compiler)
@@ -46,6 +53,15 @@ class CommandProjectionBuildHook(BuildHookInterface):
                 command.extend(["--compiler", str(compiler_path)])
             subprocess.run(command, cwd=root, check=True)
             subprocess.run([*command, "--check"], cwd=root, check=True)
+        # Keep legacy tracked copies available to existing PRs. Only compiler
+        # outputs become package metadata; do not overwrite the contributor tree.
+        build_data["force_include"].pop("contributions/extensions", None)
+        build_data["force_include"].pop(str(root / "contributions/extensions"), None)
+        build_data["force_include"][str(descriptors)] = (
+            "contributions/extensions"
+            if self.target_name == "sdist"
+            else "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
+        )
         # Register only after generation so editable dependency setup works
         # with absent outputs. Ignored files still travel in both artifacts.
         for name in ("command-catalog.v1.json", "native-command-program.v1.json"):
@@ -57,5 +73,5 @@ class CommandProjectionBuildHook(BuildHookInterface):
             )
             build_data["force_include"][str(root / relative)] = destination
         if self.target_name == "sdist":
-            archive.write_projection_manifest(root)
+            archive.write_projection_manifest(root, descriptors=descriptors)
             build_data["force_include"][str(root / archive.MANIFEST)] = archive.MANIFEST

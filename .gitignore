@@ -78,3 +78,4 @@ ci/pi-exact-continuation/node_modules/
 native-dist/
 source-build.json
 source-compiled.json
+contracts/extensions/build-descriptors/

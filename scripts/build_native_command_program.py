@@ -127,6 +127,9 @@ def main() -> int:
         "--projections-only", action="store_true", help="Stage package inputs without rewriting published descriptors."
     )
     parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")
+    parser.add_argument(
+        "--descriptor-dir", type=Path, help="Generate descriptors outside the tracked contribution tree."
+    )
     args = parser.parse_args()
     command = (
         [str(args.compiler.resolve(strict=True)), "compile"]
@@ -178,12 +181,18 @@ def main() -> int:
     if any(parent.is_symlink() for parent in (package_directory, *package_directory.parents) if parent != ROOT):
         raise ValueError("package resource directory cannot traverse a symlink")
     outputs.update({package_directory / path.name: content for path, content in tuple(outputs.items())})
+    descriptor_directory = args.descriptor_dir or ROOT / "contributions/extensions"
+    if not descriptor_directory.is_absolute():
+        descriptor_directory = ROOT / descriptor_directory
+    if any(path.is_symlink() for path in (descriptor_directory, *descriptor_directory.parents) if path != ROOT):
+        raise ValueError("descriptor output directory cannot traverse a symlink")
+    descriptor_directory = descriptor_directory.resolve()
+    descriptor_directory.relative_to(ROOT.resolve())
     for descriptor in () if args.projections_only else compiled["descriptors"]:
         identity = descriptor["id"]
         if "/" in identity or "\\" in identity or not identity.startswith("command."):
             raise ValueError("invalid generated descriptor identity")
-        outputs[ROOT / "contributions/extensions" / f"{identity}.json"] = canonical_bytes(descriptor)
-    descriptor_directory = ROOT / "contributions/extensions"
+        outputs[descriptor_directory / f"{identity}.json"] = canonical_bytes(descriptor)
     expected_descriptors = {path for path in outputs if path.parent == descriptor_directory}
     unexpected_descriptors = sorted(
         path
@@ -231,6 +240,8 @@ def main() -> int:
         if any(identity.get(key) != program[key] for key in ("program_digest", "catalog_digest")):
             raise ValueError("native compiler embeds a stale program; rebuild it after generating the artifacts")
     else:
+        if not args.projections_only:
+            descriptor_directory.mkdir(parents=True, exist_ok=True)
         for path in unexpected_descriptors:
             path.unlink()
         for path, content in outputs.items():

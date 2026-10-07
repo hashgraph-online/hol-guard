@@ -85,3 +85,16 @@ def test_new_canonical_source_is_rejected(archive):
     )
     with pytest.raises(ValueError, match="do not match"):
         module.verify_projection_manifest(root)
+
+
+def test_descriptor_projection_is_bound_in_new_archives(archive):
+    module, root = archive
+    descriptors = root / "contributions/extensions"
+    descriptors.mkdir()
+    descriptor = descriptors / "command.example.json"
+    descriptor.write_text('{"id":"command.example"}')
+    module.write_projection_manifest(root, descriptors=descriptors)
+    module.verify_projection_manifest(root)
+    descriptor.write_text('{"id":"command.changed"}')
+    with pytest.raises(ValueError, match="do not match"):
+        module.verify_projection_manifest(root)

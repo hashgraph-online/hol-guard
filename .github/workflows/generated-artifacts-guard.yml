@@ -22,7 +22,8 @@ jobs:
         run: |
           set -euo pipefail
           owned='^contracts/extensions/(native-command-program|command-catalog)\.v1\.json$'
-          owned+='|^docs/guard/extensions/(README\.md|catalog\.v[12]\.json)$'
+          # Legacy directory copies remain accepted until open PRs and readers
+          # have migrated. They no longer determine packaged metadata.
           owned+='|^src/codex_plugin_scanner/guard/contracts/data/extensions/'
           owned+='|^src/codex_plugin_scanner/guard/contracts/data/mcp_servers/'
           # These four projections are now ignored build outputs. Permit their
