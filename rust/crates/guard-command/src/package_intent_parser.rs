@@ -1279,9 +1279,9 @@ fn effective_execution_context(
 ) -> (Option<String>, String, Option<PathBuf>, String) {
     let mut effective_path: Option<String> = supplied_environment.get("PATH").cloned();
     let mut path_source = if effective_path.is_some() {
-        "env".to_owned()
+        "inherited".to_owned()
     } else {
-        "env_unset".to_owned()
+        "inherited_unset".to_owned()
     };
     let mut effective_cwd: Option<PathBuf> = Some(initial_cwd.to_path_buf());
     let mut cwd_source = initial_cwd_source.to_owned();
@@ -1297,6 +1297,27 @@ fn effective_execution_context(
         );
     }
     let mut index = 0usize;
+    let (next_index, next_path, next_source) = consume_path_assignments(
+        raw_segment,
+        index,
+        effective_path.clone(),
+        &path_source,
+        "inline",
+        supplied_environment,
+    );
+    index = next_index;
+    effective_path = next_path;
+    path_source = next_source;
+    if index >= raw_segment.len() {
+        return (
+            effective_path
+                .as_deref()
+                .map(|path| path_for_resolution(path, effective_cwd.as_deref())),
+            path_source,
+            effective_cwd,
+            cwd_source,
+        );
+    }
     let mut name = command_name(&raw_segment[index]);
     if name == "sudo" {
         return (

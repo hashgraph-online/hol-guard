@@ -12,6 +12,7 @@ import hashlib
 import json
 import multiprocessing
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -103,6 +104,10 @@ def _prime(
 
     monkeypatch.setattr(native_context, "native_resident_client_request", _client)
     monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    # Provisioning the resident's on-disk prerequisite is exercised on its own;
+    # these cases stay at the transport-binding level.
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _guard_home: True)
+    monkeypatch.setattr(native_context, "native_resident_client_ready", lambda _executable, _guard_home: True)
     return captured
 
 
@@ -122,6 +127,407 @@ def test_native_context_digest_missing_feature_returns_none(tmp_path: Path, monk
 def test_native_context_digest_incompatible_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _prime(monkeypatch, status=_status(compatible=False))
     assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
+
+
+def _seed_verifier_key(guard_home: Path) -> Path:
+    from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+        NATIVE_POLICY_VERIFIER_KEY_NAME,
+        NATIVE_RUNTIME_STATE_DIRECTORY,
+    )
+
+    key = guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME
+    key.parent.mkdir(parents=True, exist_ok=True)
+    key.write_bytes(b"\x07" * 32)
+    return key
+
+
+def _forget_prerequisite_memo(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(native_context, "_RESIDENT_PREREQUISITE_HOMES", set())
+
+
+def test_resident_prerequisite_accepts_seeded_key_without_opening_a_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A home that already carries the verifier key must not need a store.
+
+    The resident only refuses to serve when that file is missing, so homes
+    whose key was seeded by an owner (the test harness, a repair path) must
+    keep working even when the home has no policy master to derive from.
+    """
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    _seed_verifier_key(guard_home)
+    _forget_prerequisite_memo(monkeypatch)
+
+    def _unexpected(_store: object) -> None:
+        raise AssertionError("a seeded home must not be provisioned again")
+
+    from codex_plugin_scanner.guard import native_policy_snapshot_publisher
+
+    monkeypatch.setattr(native_policy_snapshot_publisher, "provision_native_verifier_key_for_store", _unexpected)
+    assert native_context.ensure_resident_prerequisite(guard_home) is True
+
+
+def test_resident_prerequisite_provisions_a_missing_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A home without the key is provisioned from its store, once per process."""
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    _forget_prerequisite_memo(monkeypatch)
+    provisioned: list[Path] = []
+
+    from codex_plugin_scanner.guard import native_policy_snapshot_publisher
+
+    def _provision(store: object) -> None:
+        provisioned.append(Path(store.guard_home))
+        _seed_verifier_key(guard_home)
+
+    monkeypatch.setattr(native_policy_snapshot_publisher, "provision_native_verifier_key_for_store", _provision)
+    assert native_context.ensure_resident_prerequisite(guard_home) is True
+    assert native_context.ensure_resident_prerequisite(guard_home) is True
+    assert provisioned == [guard_home]
+
+
+def test_resident_prerequisite_reports_an_unprovisionable_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    _forget_prerequisite_memo(monkeypatch)
+
+    from codex_plugin_scanner.guard import native_policy_snapshot_publisher
+
+    def _fail(_store: object) -> None:
+        raise RuntimeError("no policy master")
+
+    monkeypatch.setattr(native_policy_snapshot_publisher, "provision_native_verifier_key_for_store", _fail)
+    assert native_context.ensure_resident_prerequisite(guard_home) is False
+
+
+def test_native_context_digest_does_not_ship_requests_to_an_unprovisionable_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without the prerequisite every request would fail closed after a spawn."""
+
+    real_prerequisite = native_context.ensure_resident_prerequisite
+    captured = _prime(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    _forget_prerequisite_memo(monkeypatch)
+
+    from codex_plugin_scanner.guard import native_policy_snapshot_publisher
+
+    def _fail(_store: object) -> None:
+        raise RuntimeError("no policy master")
+
+    monkeypatch.setattr(native_policy_snapshot_publisher, "provision_native_verifier_key_for_store", _fail)
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", real_prerequisite)
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=guard_home) is None
+    assert captured == []
+
+
+def test_native_context_digest_grants_the_cold_start_allowance_only_while_the_pool_must_spawn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The allowance pays for a spawn, so it tracks the pool, not a memory.
+
+    A resident the pool has parked answers in milliseconds; one that has never
+    started — or that something killed — has to be spawned inside the same
+    budget, which a contended runner cannot promise.
+    """
+
+    budgets: list[int] = []
+    remaining: list[float] = []
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+
+    def _client(*_args: object, **kwargs: object) -> bytes | None:
+        envelope = json.loads(kwargs["payload"])
+        budgets.append(envelope["deadline_budget_ms"])
+        remaining.append((kwargs["deadline_monotonic"] - time.monotonic()) * 1_000)
+        return _ok_result(envelope["request"])
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    monkeypatch.setattr(native_context, "native_resident_client_ready", lambda _executable, _home: False)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    for argv in ("a", "b"):
+        assert native_context.native_context_digest("launch_argv_digest", {"argv": [argv]}, guard_home=guard_home)
+
+    monkeypatch.setattr(native_context, "native_resident_client_ready", lambda _executable, _home: True)
+    for argv in ("c", "d"):
+        assert native_context.native_context_digest("launch_argv_digest", {"argv": [argv]}, guard_home=guard_home)
+
+    warm = int(native_context._TIMEOUT_SECONDS * 1_000)
+    cold = warm + int(native_context._COLD_START_ALLOWANCE_SECONDS * 1_000)
+    # The client's deadline is what the pool readiness buys: a warm home keeps the
+    # tight steady-state budget, a home the pool must spawn does not.
+    assert [value > cold - 500 for value in remaining[:2]] == [True, True]
+    assert [value < warm + 500 for value in remaining[2:]] == [True, True]
+    # The resident's own bound is the retry's, and it is the same on every
+    # attempt, so a retry is never bound by the tight budget the first carried.
+    retry = warm + native_context._RETRY_ALLOWANCE_MULTIPLIER * int(
+        native_context._COLD_START_ALLOWANCE_SECONDS * 1_000
+    )
+    assert budgets == [retry, retry, retry, retry]
+
+
+def test_native_context_digest_asks_the_pool_about_the_resolved_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The readiness probe must describe the same runtime and home as the request."""
+
+    _prime(monkeypatch)
+    seen: list[tuple[Path, Path]] = []
+
+    def _ready(executable: Path, guard_home: Path) -> bool:
+        seen.append((executable, guard_home))
+        return True
+
+    monkeypatch.setattr(native_context, "native_resident_client_ready", _ready)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home)
+    status = native_context._native_runtime_status_memo()
+    assert seen == [(status.identity.path, guard_home)]
+
+
+def test_native_context_digest_retries_a_timeout_once_with_the_allowance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pooled client serialises requests, so a tight budget can lose the lock.
+
+    A sibling's long RPC and a resident that must be spawned look identical
+    from here, and the second attempt tells them apart at the cost of one
+    round trip.
+    """
+
+    remaining: list[float] = []
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(native_context, "native_resident_client_ready", lambda _executable, _home: True)
+    monkeypatch.setattr(native_context, "native_resident_client_failure_code", lambda: "native_client_timed_out")
+    outcomes: list[bytes | None] = [None]
+
+    def _client(*_args: object, **kwargs: object) -> bytes | None:
+        envelope = json.loads(kwargs["payload"])
+        remaining.append((kwargs["deadline_monotonic"] - time.monotonic()) * 1_000)
+        return outcomes.pop(0) if outcomes else _ok_result(envelope["request"])
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home)
+    assert native_context._DIGEST_ATTEMPTS == 2
+    assert len(remaining) == 2
+    # The retry is the last word, so it carries more than the bare timeout.
+    assert remaining[0] < 1_500
+    retry_ms = native_context._RETRY_ALLOWANCE_MULTIPLIER * int(native_context._COLD_START_ALLOWANCE_SECONDS * 1_000)
+    assert remaining[1] > retry_ms - 500
+
+
+def test_native_context_digest_retries_a_timeout_that_already_had_the_allowance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A contended cold start must be retried, not trusted to a single allowance.
+
+    The first attempt's allowance covers a spawn that has not finished; the
+    second attempt finds the process resident and its binary in page cache, so
+    a timeout there is evidence of contention rather than of a dead runtime.
+    """
+
+    remaining: list[float] = []
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(native_context, "native_resident_client_ready", lambda _executable, _home: False)
+    monkeypatch.setattr(native_context, "native_resident_client_failure_code", lambda: "native_client_timed_out")
+    outcomes: list[bytes | None] = [None]
+
+    def _client(*_args: object, **kwargs: object) -> bytes | None:
+        envelope = json.loads(kwargs["payload"])
+        remaining.append((kwargs["deadline_monotonic"] - time.monotonic()) * 1_000)
+        return outcomes.pop(0) if outcomes else _ok_result(envelope["request"])
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home)
+    allowance_ms = int(native_context._COLD_START_ALLOWANCE_SECONDS * 1_000)
+    assert len(remaining) == 2
+    assert remaining[0] > allowance_ms - 500
+    assert remaining[1] > allowance_ms - 500
+
+
+def test_native_context_digest_does_not_retry_other_failures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failure more time cannot fix must fail once, not twice."""
+
+    calls: list[int] = []
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(native_context, "native_resident_client_ready", lambda _executable, _home: True)
+    monkeypatch.setattr(native_context, "native_resident_client_failure_code", lambda: "native_client_exit_nonzero")
+    monkeypatch.setattr(native_context, "native_resident_client_request", lambda **_kwargs: calls.append(1))
+    monkeypatch.setattr(
+        native_context,
+        "native_record_resident_failure",
+        lambda *_args, **_kwargs: None,
+    )
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home) is None
+    assert len(calls) == 1
+
+
+def _stub_digest_client(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    transport: object,
+) -> None:
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(native_context, "native_resident_client_ready", lambda _executable, _home: True)
+    monkeypatch.setattr(native_context, "native_resident_client_failure_code", lambda: None)
+    monkeypatch.setattr(native_context, "native_record_resident_failure", lambda *_a, **_k: None)
+    monkeypatch.setattr(native_context, "native_resident_client_request", transport)
+
+
+def test_native_context_digest_retries_a_resident_deadline_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The resident's own deadline code is "not enough time", so it is retried.
+
+    The resident reports `native_client_deadline_exceeded` when it begins
+    serving after the budget the request carried has lapsed — a contended
+    runner, not a missing runtime.
+    """
+
+    remaining: list[float] = []
+    outcomes: list[bytes | None] = [None]
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(native_context, "native_resident_client_ready", lambda _executable, _home: True)
+    monkeypatch.setattr(
+        native_context, "native_resident_client_failure_code", lambda: "native_client_deadline_exceeded"
+    )
+
+    def _client(*_args: object, **kwargs: object) -> bytes | None:
+        remaining.append((kwargs["deadline_monotonic"] - time.monotonic()) * 1_000)
+        return outcomes.pop(0) if outcomes else _ok_result(json.loads(kwargs["payload"])["request"])
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home)
+    assert len(remaining) == 2
+    assert remaining[1] > int(native_context._COLD_START_ALLOWANCE_SECONDS * 1_000) - 500
+
+
+def test_native_context_digest_names_a_non_json_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A truncated or non-JSON frame must say so rather than "result_invalid"."""
+
+    _stub_digest_client(monkeypatch, transport=lambda **_kwargs: b"{not json")
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home) is None
+    assert (
+        native_context.native_context_failure_reason()
+        == "native_context_digest_result_invalid:response_not_json bytes=9"
+    )
+
+
+def test_native_context_digest_names_unexpected_result_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A frame that is not a digest response at all must name its foreign keys."""
+
+    def _transport(*_args: object, **kwargs: object) -> bytes:
+        payload = json.loads(_ok_result(json.loads(kwargs["payload"])["request"]))
+        payload["kind"] = "policy_snapshot"
+        return json.dumps(payload).encode("utf-8")
+
+    _stub_digest_client(monkeypatch, transport=_transport)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home) is None
+    reason = native_context.native_context_failure_reason() or ""
+    assert reason.startswith("native_context_digest_result_invalid:payload_keys_mismatch")
+    assert "'kind'" in reason
+
+
+def test_native_context_digest_reports_a_resident_error_envelope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refused request must report the resident's code, not "result invalid"."""
+
+    recorded: list[str] = []
+    _stub_digest_client(
+        monkeypatch,
+        transport=lambda **_kwargs: json.dumps(
+            {"error": "native_resident_update_in_progress", "retryable": True}
+        ).encode("utf-8"),
+    )
+    monkeypatch.setattr(
+        native_context,
+        "native_record_resident_failure",
+        lambda *_a, reason=None, **_k: recorded.append(str(reason)),
+    )
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home) is None
+    assert native_context.native_context_failure_reason() == "native_resident_update_in_progress"
+    assert recorded == ["native_resident_update_in_progress"]
+
+
+def test_native_context_digest_reports_an_unknown_resident_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An error envelope outside the contract must still name its code."""
+
+    _stub_digest_client(
+        monkeypatch,
+        transport=lambda **_kwargs: json.dumps({"error": "native_wat", "retryable": False}).encode("utf-8"),
+    )
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home) is None
+    reason = native_context.native_context_failure_reason() or ""
+    assert reason.startswith("native_context_digest_result_invalid:payload_keys_mismatch")
+    assert "error='native_wat'" in reason
+
+
+def test_native_context_digest_names_a_mismatched_request_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A response to somebody else's request must be reported as such."""
+
+    def _transport(*_args: object, **kwargs: object) -> bytes:
+        payload = json.loads(_ok_result(json.loads(kwargs["payload"])["request"]))
+        payload["request_id"] = "0" * 32
+        return json.dumps(payload).encode("utf-8")
+
+    _stub_digest_client(monkeypatch, transport=_transport)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["a"]}, guard_home=guard_home) is None
+    reason = native_context.native_context_failure_reason() or ""
+    assert "payload_header_mismatch" in reason
+    assert "id_matches=False" in reason
+    assert "sha_matches=True" in reason
+
+
+def test_unavailable_errors_report_the_transport_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`*_unavailable` must say *why*: a callers that has no fallback needs the reason."""
+
+    _prime(monkeypatch, status=_status(mode="off"))
+    with pytest.raises(ValueError, match=":native_context_digest_unsupported"):
+        native_context.context_runtime_launch_identity("python", guard_home=tmp_path)
+
+    _prime(monkeypatch)
+    monkeypatch.setattr(native_context, "native_resident_client_request", lambda **_kwargs: None)
+    monkeypatch.setattr(native_context, "native_resident_client_failure_code", lambda: "native_client_timed_out")
+    with pytest.raises(ValueError, match="native_runtime_launch_identity_unavailable:native_client_timed_out"):
+        native_context.context_runtime_launch_identity("python", guard_home=tmp_path)
 
 
 def test_native_context_digest_happy_path_binds_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -40,7 +40,7 @@ def _mutate(store: GuardStore) -> int:
 def test_publication_status_requires_ack_for_exact_local_revision(tmp_path: Path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "home")
     assert local_cli_publication_status(store.guard_home, 0)["state"] == "unavailable"
-    publisher = _publisher(store, monkeypatch, lambda **kwargs: _ack(kwargs["payload"]))
+    publisher = _publisher(store, monkeypatch, lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home")))
     try:
         assert local_cli_publication_status(store.guard_home, 0)["state"] == "pending"
         publisher._publish_once()
@@ -62,7 +62,7 @@ def test_local_revision_changed_during_native_ack_keeps_barrier_closed(tmp_path:
 
     def client(**kwargs):
         _mutate(store)
-        return _ack(kwargs["payload"])
+        return _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
 
     publisher = _publisher(store, monkeypatch, client)
     try:
@@ -96,7 +96,7 @@ def test_provider_schema_changed_during_ack_keeps_barrier_closed(tmp_path: Path,
             ),
             seen_at="2026-09-27T12:01:00Z",
         )
-        return _ack(kwargs["payload"])
+        return _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
 
     publisher = _publisher(store, monkeypatch, client)
     try:

@@ -1,14 +1,17 @@
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
-    ApprovalChallengeRequestV3, ApprovalChallengeRequestV4, ApprovalConsumeRequestV3,
-    ApprovalConsumeRequestV4, ApprovalGateRequestV1, ApprovalReuseRequestV1,
-    ApprovalValidateRequestV3, ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1,
-    CommandEffectRequestV1, ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
-    ContainedPackageScriptExecuteRequestV1, ContainedTestHookRequestV1,
-    ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
-    ContextDigestRequestV1, GuardHookEnvelopeV2, McpStdioProbeRequestV1, NativeHookRequestV1,
-    PackageAuthorityDecideRequestV1, PackageIntentParseRequestV1, PromptAnalyzeRequestV1,
-    RuntimeCapabilitiesV1, ShimAdminRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    ApplyStoredPackagePolicyRequestV1, ApprovalChallengeRequestV3, ApprovalChallengeRequestV4,
+    ApprovalConsumeRequestV3, ApprovalConsumeRequestV4, ApprovalGateRequestV1,
+    ApprovalReuseRequestV1, ApprovalValidateRequestV3, ApprovalValidateRequestV4,
+    ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1, ContainedExecuteRequestV1,
+    ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
+    ContainedTestHookRequestV1, ContainedTypescriptExecuteRequestV1,
+    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1, GuardHookEnvelopeV2,
+    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
+    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, NativeHookRequestV1,
+    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1, PackageIntentParseRequestV1,
+    PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1, RuntimeCapabilitiesV1,
+    ShimAdminRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
     NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
@@ -53,6 +56,13 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-workspace-review-context-v1".into(),
         "native-workspace-review-decision-v1".into(),
         "native-policy-in-memory-v1".into(),
+        "native-policy-snapshot-build-v1".into(),
+        "native-policy-snapshot-inspect-v1".into(),
+        "native-business-policy-retained-floor-v1".into(),
+        "native-business-policy-document-compile-v1".into(),
+        "native-business-source-codec-v1".into(),
+        "native-business-source-anchor-codec-v1".into(),
+        "native-business-source-current-fence-v2".into(),
         "hook-envelope-v2".into(),
         "git-execution-context-v1".into(),
         "native-resident-client-v1".into(),
@@ -67,15 +77,19 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),
+        guard_contracts::POLICY_DECISION_LOOKUP_FEATURE.into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
     }
     if cfg!(unix) {
         features.push("authenticated-unix-resident-v1".into());
-        // Contained execution dispatch is Unix-only. Do not advertise an
-        // operation that can only return platform-unavailable on Windows.
+        // Capability flags must reflect dispatch reality: features gated
+        // cfg(unix) in resident_ops::evaluate_resident_bytes must not be
+        // advertised on other platforms, or callers route work the binary
+        // cannot honor.
         features.push(guard_contracts::CONTAINED_EXECUTION_FEATURE.into());
+        features.push(guard_contracts::MCP_STDIO_SESSION_FEATURE.into());
     }
     let (program_digest, catalog_digest, trust_digest) =
         guard_command::native_command_program::packaged_program_digests();
@@ -114,6 +128,7 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalGate(ApprovalGateRequestV1),
     PackageIntentParse(PackageIntentParseRequestV1),
     SupplyChainEval(SupplyChainEvalRequestV1),
+    ApplyStoredPackagePolicy(ApplyStoredPackagePolicyRequestV1),
     PackageAuthorityDecide(PackageAuthorityDecideRequestV1),
     #[allow(dead_code)]
     ContainedNodeExecute(ContainedNodeExecuteRequestV1),
@@ -129,10 +144,23 @@ pub(crate) enum ResidentOperationV1 {
     ContainedTestHook(ContainedTestHookRequestV1),
     ShimAdmin(ShimAdminRequestV1),
     McpStdioProbe(McpStdioProbeRequestV1),
+    McpStdioCancel(McpStdioCancelRequest),
+    McpStdioSessionOpen(McpStdioSessionOpenRequestV1),
+    McpStdioSessionSend(McpStdioSessionSendRequestV1),
+    McpStdioSessionRecv(McpStdioSessionRecvRequestV1),
+    McpStdioSessionClose(McpStdioSessionCloseRequestV1),
+    PackageAdvisoryIds(PackageAdvisoryIdsRequestV1),
+    PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     Health(Value),
     Shutdown(Value),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct McpStdioCancelRequest {
+    pub(crate) request_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -278,6 +306,26 @@ mod tests {
         ))
         .expect("redacted policy error is JSON");
         assert_eq!(unknown_policy["error"], "native_request_invalid_json");
+        for code in [
+            "native_business_policy_floor_invalid",
+            "native_business_policy_removal_requires_authority",
+            "native_business_source_authority_missing",
+            "native_business_source_authority_invalid",
+            "native_business_source_authority_not_current",
+            "native_business_source_mutation_in_progress",
+            "native_business_source_enforce_required",
+        ] {
+            let response: Value =
+                serde_json::from_slice(&safe_error_response(code, false)).unwrap();
+            assert_eq!(response["error"], code);
+            assert_eq!(response["retryable"], false);
+        }
+        let unknown_business: Value = serde_json::from_slice(&safe_error_response(
+            "native_business_policy_future_unregistered_code",
+            false,
+        ))
+        .unwrap();
+        assert_eq!(unknown_business["error"], "native_request_invalid_json");
     }
 
     #[test]

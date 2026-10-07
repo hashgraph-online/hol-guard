@@ -7,7 +7,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const MAX_INPUT_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_INPUT_BYTES: u64 = 8 * 1024 * 1024;
+// The canonical corpus plus one acceptance source no longer fits in 4MiB.
+const MAX_ENVELOPE_BYTES: u64 = 8 * 1024 * 1024;
 
 fn read_input(root: &Path, path: &Path) -> String {
     let relative = path.strip_prefix(root).expect("input inside source tree");
@@ -98,7 +100,7 @@ fn main() {
         trust
     );
     assert!(
-        request.len() as u64 <= MAX_INPUT_BYTES,
+        request.len() as u64 <= MAX_ENVELOPE_BYTES,
         "canonical source envelope exceeds budget"
     );
     let compiled = guard_command_build::native_command_program::source::compile_build_request(

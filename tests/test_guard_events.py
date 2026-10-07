@@ -186,7 +186,12 @@ class TestGuardEvents:
         assert [item["payload"]["sequence"] for item in store.list_events()] == [3, 2, 1]
         assert [item["payload"]["sequence"] for item in store.list_events(event_name="alpha")] == [3, 1]
 
-    def test_guard_run_records_first_session_and_change_event(self, tmp_path, capsys) -> None:
+    def test_guard_run_records_first_session_and_change_event(
+        self,
+        tmp_path,
+        capsys,
+        native_context_digest: Path,
+    ) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _write_text(

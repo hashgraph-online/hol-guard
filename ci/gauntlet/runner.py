@@ -19,13 +19,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ci.native_runtime import probe_installed_native_extensions as native_probe
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
 from .evidence import TRANSCRIPT_LIMIT, assess_case, public_events, read_events, sha256_bytes
-from .fixtures import create_fixture, digest_file, filesystem_checks, scenario_fixture_name
+from .fixtures import Fixture, create_fixture, digest_file, filesystem_checks, scenario_fixture_name
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
 from .latency import summarize_hook_latency
 from .provider import InferenceRelay, LoopbackCollector
@@ -228,6 +227,23 @@ def _scenario_tools(scenario: Scenario) -> str:
     return ",".join(scenario.required_tools) or "read,write,edit,bash"
 
 
+def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
+    """Use one normalization path for rendered host and Guard evidence."""
+    replacements = {
+        fixture.canary: "<synthetic-canary-redacted>",
+        str(fixture.workspace): "{{workspace}}",
+        str(fixture.home): "{{home}}",
+        str(fixture.root): "{{fixture}}",
+    }
+    replacements = fixture_path_aliases(replacements)
+    # Commands quote each interpolated fixture path. Normalize the entire
+    # shell-quoted spelling before redacting raw paths, including apostrophes.
+    for value, placeholder in tuple(replacements.items()):
+        if value != fixture.canary:
+            replacements[shlex.quote(value)] = placeholder
+    return replacements
+
+
 def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replacements: dict[str, str]) -> None:
     """Retain Guard timings even when the independently parsed host transcript fails."""
     if guard_log.exists():
@@ -265,6 +281,8 @@ def run_case(
     timeout: float,
 ) -> dict[str, Any]:
     """Exercise one independent scenario, retaining failures and all evidence."""
+    from ci.native_runtime import probe_installed_native_extensions as native_probe
+
     fixture = create_fixture(root / scenario_fixture_name(scenario.id))
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
@@ -291,18 +309,7 @@ def run_case(
     extension_receipt_processed_before: int | None = None
     native_extension_expectation: dict[str, Any] | None = None
     started = time.monotonic()
-    replacements = {
-        fixture.canary: "<synthetic-canary-redacted>",
-        str(fixture.workspace): "{{workspace}}",
-        str(fixture.home): "{{home}}",
-        str(fixture.root): "{{fixture}}",
-    }
-    replacements = fixture_path_aliases(replacements)
-    # Commands quote each interpolated fixture path. Normalize the entire
-    # shell-quoted spelling before redacting raw paths, including apostrophes.
-    for value, placeholder in tuple(replacements.items()):
-        if value != fixture.canary:
-            replacements[shlex.quote(value)] = placeholder
+    replacements = _fixture_replacements(fixture)
     try:
         with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
             replacements[collector.url] = "{{collector_url}}"
@@ -427,7 +434,7 @@ def run_case(
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
             if scenario.oracle == "mixed-read-batch":
                 case["approval_targets"] = _mixed_read_approval_targets(worker.store, approval_ids_before)
-            case["inference"] = relay.evidence()
+            case["inference"] = relay.evidence(wait_seconds=3)
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
             case["stderr_sha256"] = digest_file(error_log)

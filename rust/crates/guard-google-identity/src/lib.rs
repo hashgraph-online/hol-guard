@@ -19,6 +19,8 @@ const LIFETIME: u64 = 300;
 const CLOCK_SKEW: u64 = 30;
 
 pub mod oauth;
+mod sender;
+pub mod worker_input;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum IdentityError {
@@ -43,6 +45,7 @@ pub struct GoogleIdentityEvidence {
     account_binding: String,
     tenant_binding: String,
     expires_at: u64,
+    sender: Option<sender::VerifiedSender>,
 }
 impl GoogleIdentityEvidence {
     pub fn account_binding(&self) -> &str {
@@ -188,6 +191,7 @@ impl GoogleLoginChallenge {
             return Err(IdentityError::Invalid);
         }
         Ok(GoogleIdentityEvidence {
+            sender: sender::VerifiedSender::from_claims(c.email, c.email_verified),
             account_binding,
             tenant_binding: binding(
                 &self.namespace_key,
@@ -248,6 +252,14 @@ struct Claims {
     azp: Option<String>,
     iat: u64,
     exp: u64,
+    #[serde(default, deserialize_with = "present_string")]
+    email: Option<String>,
+    #[serde(default, deserialize_with = "present_bool")]
+    email_verified: Option<bool>,
+}
+
+fn present_bool<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<bool>, D::Error> {
+    bool::deserialize(d).map(Some)
 }
 
 fn present_string<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {

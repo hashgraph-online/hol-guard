@@ -422,7 +422,7 @@ class TestPiInstall:
 
         assert 'if (!raw) return { response: null, recoveryKind: "transport-failure" };' in text
         assert "function normalizeGuardResponse(" in text
-        assert "const normalized = normalizeGuardResponse(parsed);" in text
+        assert "const normalized = normalizePromptGuardResponse(parsed, payload.hook_event_name);" in text
         assert 'parsed.reason !== undefined && parsed.reason !== null && typeof parsed.reason !== "string"' in text
         assert 'if (parsed.decision === "block")' in text
         assert "Array.isArray(value)" in text

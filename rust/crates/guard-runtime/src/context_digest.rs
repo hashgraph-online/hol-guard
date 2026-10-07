@@ -7,6 +7,8 @@
 //! components and project the typed result, never a Python-built hash, into
 //! approval evidence.
 
+use std::path::Path;
+
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -15,7 +17,8 @@ use super::context_digest_json::{
 };
 use guard_contracts::{
     ContextDigestComponentsV1, ContextDigestKindV1, ContextDigestRequestV1, ContextDigestResultV1,
-    APPROVAL_CONTEXT_TOKEN_PREFIX, CONTEXT_DIGEST_REQUEST_SCHEMA, CONTEXT_DIGEST_RESULT_SCHEMA,
+    PackageContextComponentV1, PackageContextEvidenceV1, APPROVAL_CONTEXT_TOKEN_PREFIX,
+    CONTEXT_COMPONENT_MAX_BYTES, CONTEXT_DIGEST_REQUEST_SCHEMA, CONTEXT_DIGEST_RESULT_SCHEMA,
 };
 use guard_policy_snapshot::digest_bytes;
 
@@ -27,8 +30,16 @@ const TOKEN_HASH_FIELDS: [&str; 5] = ["identity", "content", "capabilities", "po
 
 pub(super) const ERR_COMPONENT: &str = "native_context_component_invalid";
 const ERR_VALUES: &str = "native_context_values_invalid";
+const ERR_ARGUMENTS: &str = "native_mcp_arguments_invalid";
 
 fn component_hash(component: &str, value: &Value) -> Result<String, &'static str> {
+    component_hash_with(component, |out| write_canonical_json(value, out))
+}
+
+fn component_hash_with(
+    component: &str,
+    write_value: impl FnOnce(&mut Vec<u8>) -> Result<(), &'static str>,
+) -> Result<String, &'static str> {
     // {"component": ..., "domain": ..., "value": ..., "version": 1}
     // Wrapper keys are already in sorted order for the canonical writer.
     let mut material = Vec::with_capacity(128);
@@ -43,7 +54,10 @@ fn component_hash(component: &str, value: &Value) -> Result<String, &'static str
     material.push(b',');
     write_json_string("value", &mut material);
     material.push(b':');
-    write_canonical_json(value, &mut material)?;
+    write_value(&mut material)?;
+    if material.len() > CONTEXT_COMPONENT_MAX_BYTES {
+        return Err(ERR_COMPONENT);
+    }
     material.push(b',');
     write_json_string("version", &mut material);
     material.push(b':');
@@ -105,12 +119,12 @@ fn base64_url_decode(encoded: &str) -> Option<Vec<u8>> {
 }
 
 /// Parsed non-secret approval-context component digests.
-struct ParsedContextToken {
-    identity: String,
-    content: String,
-    capabilities: String,
-    policy: String,
-    sandbox: String,
+pub(crate) struct ParsedContextToken {
+    pub(crate) identity: String,
+    pub(crate) content: String,
+    pub(crate) capabilities: String,
+    pub(crate) policy: String,
+    pub(crate) sandbox: String,
 }
 
 fn is_sha256_hex(value: &Value) -> Option<String> {
@@ -126,7 +140,7 @@ fn is_sha256_hex(value: &Value) -> Option<String> {
     }
 }
 
-fn parse_context_token(token: &Value) -> Option<ParsedContextToken> {
+pub(crate) fn parse_context_token(token: &Value) -> Option<ParsedContextToken> {
     let text = token.as_str()?;
     let encoded = text.strip_prefix(APPROVAL_CONTEXT_TOKEN_PREFIX)?;
     if text.len() > guard_contracts::APPROVAL_CONTEXT_TOKEN_MAX_BYTES
@@ -165,22 +179,40 @@ fn parse_context_token(token: &Value) -> Option<ParsedContextToken> {
     })
 }
 
-fn build_context_token(components: &ContextDigestComponentsV1) -> Result<String, &'static str> {
-    let policy_wrapped = {
-        let mut wrapped = Map::with_capacity(2);
-        wrapped.insert(
-            "extension_control_digest".to_owned(),
-            Value::String(components.extension_control_digest.clone()),
-        );
-        wrapped.insert("policy".to_owned(), components.policy.clone());
-        Value::Object(wrapped)
-    };
+pub(crate) fn build_context_token(
+    components: &ContextDigestComponentsV1,
+) -> Result<String, &'static str> {
+    build_context_token_fields(
+        &components.identity,
+        &components.content,
+        &components.capabilities,
+        &components.sandbox,
+        &components.extension_control_digest,
+        |out| write_canonical_json(&components.policy, out),
+    )
+}
+
+fn build_context_token_fields(
+    identity: &Value,
+    content: &Value,
+    capabilities: &Value,
+    sandbox: &Value,
+    extension_control_digest: &str,
+    write_policy: impl FnOnce(&mut Vec<u8>) -> Result<(), &'static str>,
+) -> Result<String, &'static str> {
     let digests = [
-        component_hash("identity", &components.identity)?,
-        component_hash("content", &components.content)?,
-        component_hash("capabilities", &components.capabilities)?,
-        component_hash("policy", &policy_wrapped)?,
-        component_hash("sandbox", &components.sandbox)?,
+        component_hash("identity", identity)?,
+        component_hash("content", content)?,
+        component_hash("capabilities", capabilities)?,
+        component_hash_with("policy", |out| {
+            out.extend_from_slice(b"{\"extension_control_digest\":");
+            write_json_string(extension_control_digest, out);
+            out.extend_from_slice(b",\"policy\":");
+            write_policy(out)?;
+            out.push(b'}');
+            Ok(())
+        })?,
+        component_hash("sandbox", sandbox)?,
     ];
     // Payload keys emitted in sorted order: capabilities, content, identity,
     // policy, sandbox, version.
@@ -212,7 +244,7 @@ fn build_context_token(components: &ContextDigestComponentsV1) -> Result<String,
 
 /// First-difference validation over two opaque tokens; malformed input fails
 /// closed as changed content, matching the legacy contract exactly.
-fn validate_context_tokens(saved: &Value, current: &Value) -> Option<String> {
+pub(crate) fn validate_context_tokens(saved: &Value, current: &Value) -> Option<String> {
     let saved = parse_context_token(saved);
     let current = parse_context_token(current);
     let (Some(saved), Some(current)) = (saved, current) else {
@@ -415,8 +447,325 @@ fn evaluate_request(
             // NO JSON serialization (module specifiers, source text, h:s:n).
             result.digest = Some(digest_bytes(material.as_bytes()));
         }
+        ContextDigestKindV1::McpArgumentsProjection {
+            tool_name,
+            arguments,
+        } => {
+            // _launch_target: safe arguments + display serialization +
+            // sha256 over the RAW arguments (default=str is irrelevant at
+            // the JSON transport boundary — every surviving value is a JSON
+            // scalar/container already).
+            let arguments_value = arguments.clone().unwrap_or(Value::Null);
+            let safe = match arguments {
+                Some(inner) => guard_command::mcp_arguments::mcp_safe_arguments(inner)
+                    .map_err(|_| ERR_ARGUMENTS)?,
+                None => Value::Null,
+            };
+            let mut digest_material = Vec::with_capacity(256);
+            write_canonical_json(&arguments_value, &mut digest_material)?;
+            result.digest = Some(digest_bytes(&digest_material));
+            let serialized = if arguments.is_some() {
+                let mut out = Vec::with_capacity(256);
+                write_canonical_json(&safe, &mut out)?;
+                String::from_utf8(out).map_err(|_| "canonical_json_unencodable")?
+            } else {
+                String::new()
+            };
+            result.mcp_serialized_arguments = Some(serialized.clone());
+            result.mcp_safe_arguments = Some(safe);
+            let label = format!(
+                "{tool_name} {serialized} [arguments-sha256:{}]",
+                result.digest.as_deref().unwrap_or("")
+            );
+            result.mcp_launch_target = Some(label.trim().to_owned());
+        }
+        ContextDigestKindV1::McpRedactJson { material } => {
+            result.mcp_redacted_value = Some(
+                guard_command::mcp_arguments::redact_json(material).map_err(|_| ERR_ARGUMENTS)?,
+            );
+        }
+        ContextDigestKindV1::PackageEnvironmentPolicy {
+            manager,
+            environment,
+            referenced_names,
+        } => {
+            result.environment_values = Some(
+                guard_command::package_context_environment::environment_policy_values(
+                    manager,
+                    environment,
+                    referenced_names,
+                ),
+            );
+        }
+        ContextDigestKindV1::McpLaunchEnvironment {
+            inherited,
+            configured,
+        } => {
+            result.mcp_launch_environment = Some(
+                guard_command::mcp_launch_environment::build_launch_environment(
+                    inherited, configured,
+                ),
+            );
+        }
+        ContextDigestKindV1::PackageExecutionContextFromEvidence { material } => {
+            result.package_context =
+                guard_command::package_execution_context::package_execution_context_from_evidence(
+                    material,
+                )
+                .map(package_context_evidence);
+        }
+        ContextDigestKindV1::PackageExecutionContextFromScannerEvidence { material } => {
+            result.package_context =
+                guard_command::package_execution_context::package_execution_context_from_scanner_evidence(
+                    material,
+                )
+                .map(package_context_evidence);
+        }
+        ContextDigestKindV1::McpServerIdentity { request } => {
+            let environment = request.environment.as_ref().map(|pairs| {
+                let mut values = Map::new();
+                for (key, value) in pairs {
+                    let key = python_strip(key);
+                    if !key.is_empty() {
+                        values.insert(key.to_owned(), Value::String(value.clone()));
+                    }
+                }
+                values
+            });
+            let identity = guard_command::mcp_decision::build_mcp_server_identity(
+                &request.config_path,
+                &request.command,
+                &request.args,
+                &request.transport,
+                environment.as_ref(),
+                &request.env_keys,
+            );
+            result.mcp_server_identity = Some(guard_contracts::McpServerIdentityV1 {
+                config_path: identity.config_path,
+                command: identity.command,
+                args_hash: identity.args_hash,
+                package_name: identity.package_name,
+                package_version: identity.package_version,
+                package_source: identity.package_source,
+                transport: identity.transport,
+                env_keys: identity.env_keys,
+                env_values_hash: identity.env_values_hash,
+                identity_hash: identity.identity_hash,
+            });
+        }
+        ContextDigestKindV1::McpToolIdentity { request } => {
+            let identity = guard_command::mcp_decision::build_mcp_tool_identity(
+                &request.server_hash,
+                &request.tool_name,
+                request.schema.as_ref(),
+                request.description.as_deref(),
+            );
+            result.mcp_tool_identity = Some(guard_contracts::McpToolIdentityV1 {
+                server_hash: identity.server_hash,
+                tool_name: identity.tool_name,
+                schema_hash: identity.schema_hash,
+                description_hash: identity.description_hash,
+                identity_hash: identity.identity_hash,
+            });
+        }
+        ContextDigestKindV1::McpServerDescriptor { request } => {
+            result.mcp_descriptor = Some(
+                guard_command::mcp_decision::portal_mcp_server_descriptor(request),
+            );
+        }
+        ContextDigestKindV1::McpToolDescriptor { request } => {
+            result.mcp_descriptor = Some(guard_command::mcp_decision::portal_mcp_tool_descriptor(
+                request,
+            ));
+        }
+        ContextDigestKindV1::McpToolContentDigest { request } => {
+            result.digest = Some(guard_command::mcp_decision::mcp_tool_content_digest(
+                request,
+            )?);
+        }
+        ContextDigestKindV1::BrowserMcp { request } => {
+            result.browser_mcp = Some(guard_command::browser_mcp_intent::evaluate_browser_mcp(
+                request,
+            )?);
+        }
+        ContextDigestKindV1::McpToolRisk {
+            artifact,
+            arguments,
+        } => {
+            result.mcp_tool_risk = Some(guard_command::mcp_tool_risk::evaluate_tool_risk(
+                artifact, arguments,
+            )?);
+        }
+        ContextDigestKindV1::McpToolPolicy { request } => {
+            result.mcp_tool_policy = Some(guard_command::mcp_tool_policy::evaluate_tool_policy(
+                request,
+            )?);
+        }
+        ContextDigestKindV1::BuildMcpToolApprovalHash { request } => match &request.config {
+            None => {
+                let hash = guard_command::mcp_tool_approval::build_tool_approval_digest(request)?;
+                result.digest = Some(hash.token_or_digest);
+                result.mcp_tool_risk = Some(hash.risk_categories);
+            }
+            Some(config) => {
+                let material = guard_command::mcp_tool_approval::tool_approval_token_material(
+                    request, config,
+                )?;
+                let extension_control_digest = request
+                    .extension_control_digest
+                    .as_deref()
+                    .ok_or("native_context_component_invalid")?;
+                result.token = Some(build_context_token_fields(
+                    &material.identity,
+                    &Value::String(material.content_digest.clone()),
+                    &material.capabilities,
+                    &material.sandbox,
+                    extension_control_digest,
+                    |out| {
+                        guard_command::mcp_tool_policy::write_tool_policy_context(
+                            &guard_contracts::McpToolApprovalContextRequestV1 {
+                                config: config.clone(),
+                                harness: request.harness.clone(),
+                                artifact_id: request.artifact_id.clone(),
+                                publisher: request.publisher.clone(),
+                                identity: material.identity.clone(),
+                                content: Value::String(material.content_digest.clone()),
+                                capabilities: material.capabilities.clone(),
+                                sandbox: material.sandbox.clone(),
+                                extension_control_digest: extension_control_digest.to_owned(),
+                            },
+                            out,
+                        )
+                    },
+                )?);
+                result.mcp_tool_risk = Some(material.risk_categories);
+            }
+        },
+        ContextDigestKindV1::McpToolApprovalDigest { request } => {
+            result.digest = Some(guard_command::mcp_decision::mcp_tool_approval_digest(
+                request,
+            )?);
+        }
+        ContextDigestKindV1::PackageLauncherToken { command_name, args } => {
+            result.package_launcher = Some(guard_contracts::PackageLauncherResultV1 {
+                package: guard_command::mcp_decision::package_token(command_name, args),
+            });
+        }
+        ContextDigestKindV1::RuntimeExecutableIdentity {
+            command,
+            search_path,
+            cwd,
+            home_dir,
+            require_executable,
+        } => {
+            result.runtime_identity = Some(
+                guard_command::launch_identity::build_runtime_executable_identity(
+                    command.as_ref().unwrap_or(&Value::Null),
+                    search_path.as_deref(),
+                    cwd.as_deref().map(Path::new),
+                    home_dir.as_deref().map(Path::new),
+                    *require_executable,
+                ),
+            );
+        }
+        ContextDigestKindV1::RuntimeLaunchIdentity {
+            command,
+            args,
+            structured_command,
+            direct_executable,
+            search_path,
+            cwd,
+            home_dir,
+            launch_env,
+        } => {
+            let launch_env_value = launch_env.as_ref().map(|env| {
+                Value::Object(
+                    env.iter()
+                        .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+                        .collect(),
+                )
+            });
+            result.runtime_identity = Some(
+                guard_command::launch_identity::build_runtime_launch_identity(
+                    command.as_ref().unwrap_or(&Value::Null),
+                    args,
+                    *structured_command,
+                    *direct_executable,
+                    search_path.as_deref(),
+                    cwd.as_deref().map(Path::new),
+                    home_dir.as_deref().map(Path::new),
+                    launch_env_value.as_ref(),
+                ),
+            );
+        }
+        ContextDigestKindV1::RuntimeLaunchIdentityMatches {
+            expected_identity,
+            command,
+            args,
+            structured_command,
+            direct_executable,
+            search_path,
+            cwd,
+            launch_env,
+        } => {
+            let launch_env_value = launch_env.as_ref().map(|env| {
+                Value::Object(
+                    env.iter()
+                        .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+                        .collect(),
+                )
+            });
+            result.runtime_identity_match = Some(
+                guard_command::launch_identity::runtime_launch_identity_matches(
+                    expected_identity,
+                    command.as_ref().unwrap_or(&Value::Null),
+                    args,
+                    *structured_command,
+                    *direct_executable,
+                    search_path.as_deref(),
+                    cwd.as_deref().map(Path::new),
+                    launch_env_value.as_ref(),
+                ),
+            );
+        }
+        ContextDigestKindV1::RuntimeLaunchIdentityProjection { identity, args } => {
+            result.runtime_identity_reusable =
+                Some(guard_command::launch_identity::runtime_launch_identity_is_reusable(identity));
+            result.runtime_resolved_executable =
+                guard_command::launch_identity::resolved_runtime_launch_executable(identity);
+            result.runtime_resolved_argv =
+                guard_command::launch_identity::resolved_runtime_launch_argv(identity, args);
+        }
+        ContextDigestKindV1::McpToolCatalogFingerprint {
+            entries,
+            state,
+            version,
+        } => {
+            let (digest, canonical) =
+                guard_command::mcp_tool_catalog::tool_catalog_fingerprint(entries, state, version);
+            result.digest = digest;
+            result.tool_catalog = canonical;
+        }
     }
     Ok(())
+}
+
+fn package_context_evidence(
+    context: guard_command::package_execution_context::PackageExecutionContext,
+) -> PackageContextEvidenceV1 {
+    PackageContextEvidenceV1 {
+        digest: context.digest,
+        portable: context.portable,
+        components: context
+            .components
+            .into_iter()
+            .map(|component| PackageContextComponentV1 {
+                name: component.name,
+                digest: component.digest,
+            })
+            .collect(),
+        non_portable_reason: context.non_portable_reason,
+    }
 }
 
 /// Canonical-JSON digest of a request — order-independent, so the caller can
@@ -445,6 +794,26 @@ pub(crate) fn evaluate_context_digest_request(
         token: None,
         digest: None,
         validation_reason: None,
+        environment_values: None,
+        mcp_launch_environment: None,
+        package_context: None,
+        mcp_server_identity: None,
+        mcp_tool_identity: None,
+        package_launcher: None,
+        mcp_descriptor: None,
+        browser_mcp: None,
+        mcp_tool_risk: None,
+        mcp_tool_policy: None,
+        mcp_launch_target: None,
+        mcp_safe_arguments: None,
+        mcp_serialized_arguments: None,
+        mcp_redacted_value: None,
+        runtime_identity: None,
+        runtime_identity_match: None,
+        runtime_identity_reusable: None,
+        runtime_resolved_executable: None,
+        runtime_resolved_argv: None,
+        tool_catalog: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();
@@ -455,7 +824,7 @@ pub(crate) fn evaluate_context_digest_request(
 
 pub(crate) fn evaluate_context_digest_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value = crate::strict_json_value(bytes)?;
-    let request: ContextDigestRequestV1 = serde_json::from_value(value)
+    let request: ContextDigestRequestV1 = crate::strict_json::from_value(value)
         .map_err(|_| "native_context_digest_invalid_json".to_owned())?;
     evaluate_context_digest_request(&request)
 }

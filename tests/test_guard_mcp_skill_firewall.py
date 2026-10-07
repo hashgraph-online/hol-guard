@@ -2,16 +2,53 @@
 
 from __future__ import annotations
 
+import pytest
+
+from codex_plugin_scanner.guard import native_context
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import append_artifact
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity, build_mcp_tool_identity
 from codex_plugin_scanner.guard.runtime.mcp_skill_firewall import (
     enrich_artifact_with_mcp_skill_firewall,
+    portal_mcp_server_identity,
+    portal_mcp_tool_identity,
     portal_skill_identity,
     skill_identity_metadata,
 )
 from codex_plugin_scanner.guard.runtime.skill_protection import build_skill_identity
+
+pytestmark = pytest.mark.usefixtures("native_context_digest")
+
+
+@pytest.mark.parametrize("kind", ("mcp_server_descriptor", "mcp_tool_descriptor"))
+def test_cached_mcp_identity_cannot_synthesize_descriptor_without_native_authority(
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    server = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("demo@1.2.3",),
+        transport="stdio",
+        env={},
+    )
+    tool = build_mcp_tool_identity(
+        server_hash=server.identity_hash,
+        tool_name="read",
+        schema={"type": "object"},
+    )
+    real_digest = native_context.native_context_digest
+
+    def unavailable(request_kind, payload, **kwargs):
+        return None if request_kind == kind else real_digest(request_kind, payload, **kwargs)
+
+    monkeypatch.setattr(native_context, "native_context_digest", unavailable)
+    with pytest.raises(ValueError, match="^native_mcp_descriptor_unavailable$"):
+        if kind == "mcp_server_descriptor":
+            portal_mcp_server_identity(server, config_path=".mcp.json")
+        else:
+            portal_mcp_tool_identity(tool, schema={"type": "object"})
 
 
 def test_mcp_server_artifact_emits_mcp_skill_firewall_bundle() -> None:

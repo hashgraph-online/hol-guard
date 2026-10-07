@@ -81,6 +81,46 @@ fn bounded_inspection(arguments: &[String]) -> bool {
             .all(|part| !matches!(part, "" | "." | ".."))
 }
 
+fn read_only_plumbing(arguments: &[String]) -> bool {
+    let Some((command, rest)) = arguments.split_first() else {
+        return false;
+    };
+    // Git ignores aliases that shadow built-ins, so these names always run the
+    // read-only built-in. Forms that read arbitrary files, run configured
+    // drivers, touch the network, or write are excluded.
+    match command.as_str() {
+        "rev-parse" | "merge-base" | "show-ref" | "ls-tree" | "for-each-ref" => true,
+        "rev-list" => !rest.iter().any(|argument| {
+            matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
+        }),
+        "symbolic-ref" => {
+            let operands: Vec<&String> = rest
+                .iter()
+                .filter(|argument| !matches!(argument.as_str(), "-q" | "--quiet" | "--short"))
+                .collect();
+            operands.len() == 1 && !operands[0].starts_with('-')
+        }
+        "config" => {
+            let mut reads = false;
+            for argument in rest {
+                let option = argument.split('=').next().unwrap_or(argument);
+                match option {
+                    "--get" | "--get-all" | "--get-regexp" | "--get-urlmatch" | "--list" | "-l" => {
+                        reads = true;
+                    }
+                    "--local" | "--global" | "--system" | "--worktree" | "--show-origin"
+                    | "--show-scope" | "--name-only" | "--null" | "-z" | "--type" | "--bool"
+                    | "--int" | "--path" | "--default" | "--includes" | "--no-includes" => {}
+                    _ if option.starts_with('-') => return false,
+                    _ => {}
+                }
+            }
+            reads
+        }
+        _ => false,
+    }
+}
+
 pub(super) fn inspection_arguments<'a>(
     arguments: &'a [String],
     context: crate::pretool::PathContext<'_>,
@@ -160,7 +200,15 @@ pub(super) fn observe_with_context(
     };
     let command = arguments[command_index].as_str();
     let inspection = inspection_arguments(arguments, context);
-    if (command_index == 0 && bounded_inspection(arguments))
+    let plumbing = (command_index == 0 && read_only_plumbing(arguments))
+        || inspection.is_some_and(read_only_plumbing);
+    if plumbing {
+        // The command stays read-only, but a disabled Git permission or
+        // extension can still block it.
+        result.permission("command.git.permission.ls-files", index, false);
+    }
+    if plumbing
+        || (command_index == 0 && bounded_inspection(arguments))
         || inspection.is_some_and(bounded_inspection)
     {
         return;
@@ -232,6 +280,17 @@ mod tests {
     fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
         for command in [
             "git rev-parse --show-toplevel",
+            "git rev-parse --git-dir",
+            "git rev-parse --abbrev-ref HEAD",
+            "git merge-base HEAD origin/main",
+            "git show-ref --verify refs/heads/main",
+            "git for-each-ref '--format=%(refname)' refs/heads",
+            "git rev-list --count HEAD",
+            "git ls-tree -r HEAD",
+            "git symbolic-ref --short HEAD",
+            "git config --get remote.origin.url",
+            "git config --global --get user.email",
+            "git config --list --show-origin",
             "git apply --check workspace/patches/change.patch",
         ] {
             assert!(observations(command).rule_matches.is_empty(), "{command}");
@@ -243,7 +302,13 @@ mod tests {
         for command in [
             "git -C workspace status",
             "git -c alias.apply=payload apply --check change.patch",
-            "git rev-parse --git-dir",
+            "git -c core.pager=payload rev-parse HEAD",
+            "git config user.name payload",
+            "git config --unset user.name",
+            "git config --file /home/user/.aws/credentials --list",
+            "git config --get --file other.cfg key",
+            "git symbolic-ref HEAD refs/heads/other",
+            "git cat-file --textconv HEAD:file",
             "git apply change.patch",
             "git apply --check --unsafe-paths change.patch",
             "git apply --check ../change.patch",

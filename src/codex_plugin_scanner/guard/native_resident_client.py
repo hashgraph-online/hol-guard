@@ -35,6 +35,9 @@ _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_PERSISTENT_CLIENTS = 16
 _MAX_PERSISTENT_POOLS = 16
 _MAX_FAILURE_CODE_LENGTH = 128
+# Shared bounds for probes that must confirm native resident cleanup.
+NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS = 10.0
+NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS = 0.25
 _LAST_FAILURE_CODE: ContextVar[str | None] = ContextVar(
     "native_resident_client_failure_code",
     default=None,
@@ -49,7 +52,7 @@ def native_resident_client_failure_code() -> str | None:
     return _LAST_FAILURE_CODE.get()
 
 
-def record_native_resident_client_failure_code(code: str) -> None:
+def record_native_resident_client_failure_code(code: str | None) -> None:
     """Record a privacy-safe failure code for the current native client request."""
     _LAST_FAILURE_CODE.set(code)
 
@@ -98,6 +101,14 @@ class _PersistentNativeClientPool:
         self._idle: list[_PersistentNativeClient] = []
         self._condition = threading.Condition()
         self._closed = False
+
+    def has_idle_client(self) -> bool:
+        """True when a live client is parked and can serve without a spawn."""
+
+        with self._condition:
+            if self._closed:
+                return False
+            return any(client._process is not None and client._process.poll() is None for client in self._idle)
 
     def _lease(self, *, deadline_monotonic: float) -> _PersistentNativeClient | None:
         with self._condition:
@@ -183,6 +194,21 @@ class _PersistentNativeClientPool:
 _CLIENTS_LOCK = threading.Lock()
 _CLIENT_POOLS: dict[tuple[str, str], _PersistentNativeClientPool] = {}
 forget_in_child(_CLIENT_POOLS)
+
+
+def native_resident_client_ready(executable: Path, guard_home: Path) -> bool:
+    """True when a pooled resident for this runtime and home needs no spawn.
+
+    Callers that budget a request tightly have to know whether the cost they
+    are bounding is a round trip or a process spawn: the pool starts a client
+    lazily, and a resident that a test or an operator killed leaves no idle
+    client behind.
+    """
+
+    key = (str(executable), str(_pinned_state_dir(guard_home / "native-runtime")))
+    with _CLIENTS_LOCK:
+        pool = _CLIENT_POOLS.get(key)
+    return pool is not None and pool.has_idle_client()
 
 
 def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str, str]) -> _PersistentNativeClientPool:
@@ -482,6 +508,12 @@ def _legacy_native_resident_client_request(
     return result.stdout.encode("utf-8")
 
 
+def native_resident_client_transport() -> str:
+    """Which transport the next request takes: ``"pool"`` or the legacy seam."""
+
+    return "legacy" if run_isolated_hook_process is not _legacy_run_isolated_hook_process else "pool"
+
+
 def native_resident_client_request(
     *,
     executable: Path,
@@ -532,7 +564,9 @@ __all__ = [
     "close_native_resident_clients",
     "close_native_residents",
     "native_resident_client_failure_code",
+    "native_resident_client_ready",
     "native_resident_client_request",
+    "native_resident_client_transport",
     "record_native_resident_client_failure_code",
     "retire_native_resident_for_update",
     "stop_native_resident",

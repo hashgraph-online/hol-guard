@@ -92,7 +92,9 @@ fn probe(
         .unwrap_or(declared_home);
     command
         .args(leading)
-        .current_dir(&cwd)
+        // Git for Windows rejects the `\\?\` prefix from canonicalize.
+        // The declared cwd is the path the agent process would use.
+        .current_dir(declared_cwd)
         .env("HOME", git_home)
         .env("USERPROFILE", git_home);
     let mut query = super::git_probe::copy_command(&command)?;
@@ -189,7 +191,7 @@ fn probe(
         || filters::unused(
             &binary,
             leading,
-            &cwd,
+            declared_cwd,
             git_home,
             execution_environment,
             deadline,

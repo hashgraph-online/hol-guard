@@ -55,6 +55,16 @@ impl GoogleSendCredential {
             && Instant::now() < self.expires_monotonic
             && now().is_ok_and(|time| time < self.expires_at && time < self.identity.expires_at())
     }
+    /// Authenticate the exact primary From mailbox without exporting it.
+    /// This does not resolve recipients, enroll an account or permit a send.
+    pub fn authenticates_sender(&self, sender: &str) -> bool {
+        self.is_current()
+            && self
+                .identity
+                .sender
+                .as_ref()
+                .is_some_and(|s| s.matches(sender))
+    }
 }
 
 impl GoogleSendAuthorization {
@@ -94,6 +104,7 @@ impl GoogleSendAuthorization {
         let (url, state) = client
             .authorize_url(CsrfToken::new_random)
             .add_scope(Scope::new("openid".to_owned()))
+            .add_scope(Scope::new("email".to_owned()))
             .add_scope(Scope::new(SEND_SCOPE.to_owned()))
             .set_pkce_challenge(pkce)
             .add_extra_param("nonce", challenge.nonce())
@@ -206,7 +217,13 @@ impl GoogleSendAuthorization {
             || !bounded_ascii(&response.id_token, super::MAX_TOKEN)
             || response.expires_in == 0
             || response.expires_in > 3600
-            || response.scopes.len() != 2
+            || response.scopes.len() != 3
+            || !response.scopes.iter().any(|scope| {
+                matches!(
+                    scope.as_str(),
+                    "email" | "https://www.googleapis.com/auth/userinfo.email"
+                )
+            })
             || !response
                 .scopes
                 .iter()
@@ -225,6 +242,9 @@ impl GoogleSendAuthorization {
         let received_at = now()?;
         self.challenge.check_time(received_at)?;
         let identity = verify_identity(self.challenge, &response.id_token, &response.access_token)?;
+        if identity.sender.is_none() {
+            return Err(IdentityError::Invalid);
+        }
         // Google verification may fetch keys; both clocks are checked again.
         let observed = now()?;
         let (expires_at, expires_monotonic) = credential_deadline(
@@ -428,3 +448,7 @@ fn exchange_http(request: HttpRequest) -> Result<HttpResponse, ExchangeTransport
 #[cfg(test)]
 #[path = "oauth_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "worker_input_tests.rs"]
+mod worker_input_tests;
