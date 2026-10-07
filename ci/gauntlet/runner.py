@@ -136,7 +136,8 @@ def _agent_configuration(path: Path, relay: InferenceRelay) -> None:
                         "reasoning": False,
                         "input": ["text"],
                         "contextWindow": 128000,
-                        "maxTokens": 8192,
+                        # Pinned reasoning spends output tokens before the tool call.
+                        "maxTokens": 8192 if relay.reasoning_effort is None else 32768,
                     }
                 ],
             }

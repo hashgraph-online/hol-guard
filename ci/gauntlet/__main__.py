@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from .catalog import load_catalog
+from .provider import REASONING_EFFORTS
 
 
 def main() -> int:
@@ -23,6 +24,12 @@ def main() -> int:
     run.add_argument("--provider-url", default=os.environ.get("GUARD_GAUNTLET_PROVIDER_URL"))
     run.add_argument("--model", default=os.environ.get("GUARD_GAUNTLET_MODEL"))
     run.add_argument("--provider-identity", default=os.environ.get("GUARD_GAUNTLET_PROVIDER_IDENTITY"))
+    run.add_argument(
+        "--reasoning-effort",
+        choices=REASONING_EFFORTS,
+        default=os.environ.get("GUARD_GAUNTLET_REASONING_EFFORT") or None,
+        help="Pin the provider's reasoning_effort on every relayed request (for example GPT 6 Luna High)",
+    )
     run.add_argument("--api-key-env", default="GUARD_GAUNTLET_API_KEY")
     run.add_argument("--allow-loopback-provider", action="store_true")
     run.add_argument("--case", action="append", dest="cases", help="Targeted runs are never full-profile qualification")
@@ -124,6 +131,7 @@ def main() -> int:
             "allow_loopback": args.allow_loopback_provider,
             "max_rounds": args.max_inference_rounds,
             "timeout": min(args.timeout, 120),
+            "reasoning_effort": args.reasoning_effort,
         }
         if args.profile == "contained-bun-vitest":
             report = run_contained_profile(
