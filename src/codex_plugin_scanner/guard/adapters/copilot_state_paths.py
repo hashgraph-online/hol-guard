@@ -253,6 +253,28 @@ def _target_matches_payload(
         return False
 
 
+def copilot_state_payload(
+    context: HarnessContext,
+    *,
+    target_path: Path,
+    backup_path: Path,
+    state_path: Path,
+    scope: str,
+    create_key: bool = True,
+) -> dict[str, object]:
+    return authenticate_adapter_state(
+        context.guard_home,
+        harness="copilot",
+        create_key=create_key,
+        payload={
+            "managed_config_path": str(target_path.resolve()),
+            "backup_path": str(backup_path.resolve()),
+            "scope": scope,
+            "workspace_dir": str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None,
+        },
+    )
+
+
 def write_copilot_state(
     context: HarnessContext,
     *,
@@ -261,15 +283,8 @@ def write_copilot_state(
     state_path: Path,
     scope: str,
 ) -> None:
-    payload = authenticate_adapter_state(
-        context.guard_home,
-        harness="copilot",
-        payload={
-            "managed_config_path": str(target_path.resolve()),
-            "backup_path": str(backup_path.resolve()),
-            "scope": scope,
-            "workspace_dir": str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None,
-        },
+    payload = copilot_state_payload(
+        context, target_path=target_path, backup_path=backup_path, state_path=state_path, scope=scope
     )
     write_text_atomic_no_follow(state_path, json.dumps(payload, indent=2) + "\n")
 
@@ -347,10 +362,11 @@ def copilot_state_authorizes_backup_reuse(
     target_path: Path,
     backup_path: Path,
     state_path: Path,
+    state_payload: dict[str, object] | None = None,
 ) -> bool:
     """Return whether authenticated durable state binds this target to this backup."""
 
-    payload = _json_payload(state_path)
+    payload = _json_payload(state_path) if state_payload is None else state_payload
     if not adapter_state_is_authenticated(context.guard_home, harness="copilot", payload=payload):
         return False
     authenticated_target = authenticated_adapter_path(

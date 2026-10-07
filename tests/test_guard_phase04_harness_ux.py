@@ -17,6 +17,8 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _parse_guard_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -167,7 +169,7 @@ def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_pat
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_path: Path) -> None:
+def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_path: Path, native_hook_force) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
@@ -265,7 +267,7 @@ def test_codex_post_tool_secret_output_caps_browser_approval_wait(
 
     payload = _json_line(output)
 
-    assert exit_code == 0
+    assert exit_code == 1
     assert payload["decision"] == "block"
     assert payload["continue"] is True
     assert observed_timeouts == [8]

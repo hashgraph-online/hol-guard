@@ -20,6 +20,12 @@ def _source(tmp_path: Path) -> str:
 
 def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path) -> None:
     source = _source(tmp_path)
+    assert "guard_execution_environment" in source
+    assert "home: typeof process.env.HOME" in source
+    assert "['1', 'true', 'yes', 'on']" in source
+    assert "git_pager_disabled: process.env.GIT_PAGER" in source
+    assert "pager_disabled: process.env.PAGER" in source
+    assert "let payloadToSend = {" in source
     for constant in (
         "const GUARD_TIMEOUT_MS = 4250;",
         "const GUARD_DEADLINE_RESERVE_MS = 250;",
@@ -29,7 +35,9 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
         "const GUARD_CLI_TIMEOUT_MS = 300;",
     ):
         assert constant in source
-    assert "const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS" in source
+    assert (
+        "const deadlineAt = options?.deadlineAt ?? Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS" in source
+    )
     assert "Math.max(deadlineAt - Date.now(), 1)" in source
     assert "spawnSync" not in source
 
@@ -92,9 +100,7 @@ def test_managed_extension_prefers_macos_desktop_support_shim_over_path_pipx(
     official_cli.parent.mkdir(parents=True)
     official_cli.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     official_cli.chmod(0o755)
-    desktop_shim = (
-        home / "Library" / "Application Support" / "org.hol.guard.desktop" / "core" / "current-hol-guard"
-    )
+    desktop_shim = home / "Library" / "Application Support" / "org.hol.guard.desktop" / "core" / "current-hol-guard"
     desktop_shim.parent.mkdir(parents=True)
     desktop_shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     desktop_shim.chmod(0o755)

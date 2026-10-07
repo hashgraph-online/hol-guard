@@ -98,6 +98,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         self._decisions: dict[str, int] = {}
         self._reason_codes: dict[str, int] = {}
         self._routes: dict[str, int] = {}
+        self._last_startup_failure_code: str | None = None
 
     def start(self, *, defer_backfill: bool = False) -> None:
         nonblocking_deferred_start = defer_backfill and self._adaptive_capacity is not None
@@ -112,6 +113,8 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
             self._recovery_event.clear()
             self._generation += 1
             generation = self._generation
+            with self._metrics_lock:
+                self._last_startup_failure_code = None
             startup_floor_target = min(1, self._initial_target) if defer_backfill else self._initial_target
             self._capacity_target = startup_floor_target
             self._startup_floor_target = startup_floor_target if nonblocking_deferred_start else 0
@@ -358,6 +361,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
                 "timeouts": self._timeouts,
                 "failures": self._failures,
                 "restarts": self._restarts,
+                "last_startup_failure": self._last_startup_failure_code,
                 "decisions": dict(self._decisions),
                 "reason_codes": dict(self._reason_codes),
                 "routes": dict(self._routes),

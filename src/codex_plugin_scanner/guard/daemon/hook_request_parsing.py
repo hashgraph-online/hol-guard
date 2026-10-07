@@ -67,6 +67,7 @@ def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
             if compact in {
                 "pretool",
                 "pretooluse",
+                "pretoolcall",
                 "beforeshellexecution",
                 "beforereadfile",
                 "beforewritefile",
@@ -76,6 +77,7 @@ def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
             if compact in {
                 "posttool",
                 "posttooluse",
+                "posttoolcall",
                 "aftershellexecution",
                 "afterreadfile",
                 "afterwritefile",

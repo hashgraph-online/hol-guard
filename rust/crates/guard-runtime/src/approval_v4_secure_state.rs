@@ -50,7 +50,9 @@ pub(super) fn secure_state_matches_record(
 }
 
 #[cfg(not(test))]
-use super::approval_enrollment::{read_platform_secret_for_v4, write_platform_secret_for_v4};
+use super::approval_enrollment::{
+    read_platform_secret_for_v4_state, write_platform_secret_for_v4_state,
+};
 
 const MAX_SECRET_TEXT_BYTES: usize = 16 * 1024;
 #[cfg(test)]
@@ -92,7 +94,8 @@ pub(super) fn load(state_base: &Path) -> Result<Option<String>, String> {
             super::approval_enrollment::account_for_state_base(state_base)?,
             V4_SECURE_STATE_ACCOUNT_SUFFIX
         );
-        read_platform_secret_for_v4(&account).map_err(map_platform_error)
+        read_platform_secret_for_v4_state(state_base, &account, MAX_SECRET_TEXT_BYTES)
+            .map_err(map_platform_error)
     }
 }
 
@@ -122,7 +125,8 @@ pub(super) fn store(state_base: &Path, value: &str) -> Result<(), String> {
             super::approval_enrollment::account_for_state_base(state_base)?,
             V4_SECURE_STATE_ACCOUNT_SUFFIX
         );
-        write_platform_secret_for_v4(&account, value).map_err(map_platform_error)
+        write_platform_secret_for_v4_state(state_base, &account, value, MAX_SECRET_TEXT_BYTES)
+            .map_err(map_platform_error)
     }
 }
 

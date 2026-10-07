@@ -40,6 +40,16 @@ SOURCE_SHA = "a" * 40
 WHEEL_NAME = f"hol_guard-{VERSION}-py3-none-any.whl"
 
 
+def test_canary_counts_match_the_reviewed_native_contract() -> None:
+    from scripts import run_installed_canary as canary
+
+    root = Path(__file__).resolve().parents[1]
+    totals = json.loads((root / "tests/fixtures/guard-command-corpus/native-contract.json").read_bytes())["totals"]
+    assert totals["cases"] == canary._FROZEN_CORPUS_CASE_COUNT
+    assert totals["native_evaluation_errors"] == canary._FROZEN_NATIVE_REJECTION_COUNT
+    assert totals["stronger_than_original_oracle"] == canary._FROZEN_ORACLE_ABOVE_COUNT
+
+
 def test_current_corpus_manifest_is_verified_by_its_canonical_bindings() -> None:
     root = Path(__file__).resolve().parents[1]
 
@@ -73,24 +83,31 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
         _run_corpus(tmp_path)
 
 
-@pytest.mark.usefixtures("native_hook_force")
-def test_unavailable_native_harness_records_prevention(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Exercise the installed native route in the child process; the unit-test
-    # oracle callbacks do not cross the subprocess boundary with their env vars.
+def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The runner must establish its outage even when the parent uses auto and
+    # diagnostic shortcuts; none of these settings may leak into the child.
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
-    monkeypatch.delenv("HOL_GUARD_PYTHON_ORACLE", raising=False)
-    monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
+    monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    cache_prefix = str(tmp_path / "child-bytecode-cache")
+    monkeypatch.setattr(sys, "pycache_prefix", cache_prefix)
     run = subprocess.run
     hook_responses: list[dict[str, object]] = []
 
     def capture_native_hook(command: list[str], **kwargs):
         is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
         if is_hook:
-            guard_home = Path(command[command.index("--guard-home") + 1])
-            assert (guard_home / "native-runtime").is_file()
+            assert kwargs["env"]["PYTHONPYCACHEPREFIX"] == cache_prefix
+            assert kwargs["env"]["HOL_GUARD_NATIVE"] == "off"
+            assert kwargs["env"]["PYTHONPATH"] == ""
+            assert "HOL_GUARD_PYTHON_ORACLE" not in kwargs["env"]
+            assert "HOL_GUARD_NATIVE_DIAGNOSTIC" not in kwargs["env"]
         completed = run(command, **kwargs)
         if is_hook:
-            assert completed.returncode == 0, (completed.stdout, completed.stderr)
+            # The hook emits a block payload; rc mirrors the verdict through the
+            # harness adapter contract (opencode/generic block -> 1). rc=0 would
+            # read the denial as allow to a shell harness.
+            assert completed.returncode == 1, (completed.stdout, completed.stderr)
             hook_responses.append(json.loads(completed.stdout))
         return completed
 
@@ -104,9 +121,8 @@ def test_unavailable_native_harness_records_prevention(monkeypatch: pytest.Monke
         "decision_reason_code": "policy",
     }
     assert len(hook_responses) == 1
-    # The blocked resident state directory makes unavailability deterministic;
-    # this unavailable request does not establish healthy enforcement proof.
-    assert hook_responses[0]["reason_code"] == "native_pre_tool_unavailable"
+    # Outage prevention is not evidence of healthy enforcement or execution.
+    assert hook_responses[0]["reason_code"] == "native_hook_disabled"
     assert hook_responses[0]["policy_action"] == "block"
 
 
@@ -288,6 +304,10 @@ def test_verified_wheel_detects_payload_tamper_even_when_installed_record_is_rew
     cache_dir = package / "__pycache__"
     cache_dir.mkdir()
     malicious_cache = cache_dir / f"__init__.{sys.implementation.cache_tag}.pyc"
+    import py_compile
+
+    py_compile.compile(str(module), cfile=str(malicious_cache), doraise=True)
+    assert verify_wheel_payloads(distribution, wheel) == 2
     source_stat = module.stat()
     malicious_code = compile("INJECTED = True\n", str(module), "exec")
     header = importlib.util.MAGIC_NUMBER + struct.pack("<III", 0, int(source_stat.st_mtime), source_stat.st_size)

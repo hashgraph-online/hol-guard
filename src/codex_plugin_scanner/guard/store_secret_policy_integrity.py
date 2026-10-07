@@ -186,7 +186,7 @@ class StoreSecretPolicyIntegrityMixin:
         return cast(SecretStore | None, secret_store)
 
     @_policy_integrity_secret_store.setter
-    def _policy_integrity_secret_store(self, value: SecretStore | None | object) -> None:
+    def _policy_integrity_secret_store(self, value: SecretStore | object | None) -> None:
         self.__policy_integrity_secret_store = value
 
     def _build_scoped_secret_ref(self, prefix: str) -> str:

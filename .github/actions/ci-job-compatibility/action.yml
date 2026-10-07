@@ -1,0 +1,40 @@
+name: CI compatibility
+description: Run the compatibility checks inside the existing CI job.
+inputs:
+  python-version:
+    description: Explicit python-version from the calling job.
+    required: true
+runs:
+  using: composite
+  steps:
+  - name: Download this run's current command projections
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      name: pytest-native-command-projections
+      path: .
+  - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+    with:
+      python-version: ${{ inputs.python-version }}
+  - name: Set up uv
+    id: setup-uv-primary
+    continue-on-error: true
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - name: Retry uv setup after transient download failure
+    if: steps.setup-uv-primary.outcome == 'failure'
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - run: uv sync --frozen --no-dev --group ci-test --python ${{ inputs.python-version }}
+    shell: bash
+  - name: Run cross-version compatibility contracts
+    run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_cisco_install_surfaces.py
+      tests/test_policy.py tests/test_policy_bundle_parser.py --tb=short
+    shell: bash
