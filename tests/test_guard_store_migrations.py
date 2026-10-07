@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.store import (
     _build_oauth_secret_store,
 )
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord
-from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
@@ -249,76 +248,6 @@ def test_windows_keyring_non_session_error_is_not_swallowed(monkeypatch: pytest.
 
     assert exc_info.value is error
     assert not store._is_unavailable()
-
-
-def test_windows_policy_integrity_keyring_write_session_failure_uses_local_vault(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    module = _FakeSystemKeyringModule()
-    writes_available = False
-
-    def _fail_first_write(service_name: str, secret_id: str, value: str) -> None:
-        if not writes_available:
-            raise _windows_no_such_logon_session_error()
-        module._secrets[(service_name, secret_id)] = value
-
-    monkeypatch.setattr(guard_store_module.sys, "platform", "win32", raising=False)
-    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
-    monkeypatch.setattr(module, "set_password", _fail_first_write)
-
-    with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.store"):
-        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-        sessionless = store.setup_policy_integrity(
-            now="2026-09-13T21:00:00Z",
-            include_items=False,
-        )
-
-    assert sessionless["backend"] == "encrypted-file"
-    assert sessionless["mode"] == "protected"
-    assert sessionless["degraded_reasons"] == []
-    assert "1312" not in caplog.text
-    assert "logon session" not in caplog.text
-    key_ref = store._policy_integrity_key_ref
-    vault_key = store._policy_integrity_secret_store.fallback.get_secret(key_ref)
-    assert vault_key is not None
-    assert module._secrets == {}
-
-    # A later interactive session keeps the vault key instead of minting another.
-    writes_available = True
-    interactive = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    recovered = interactive.setup_policy_integrity(
-        now="2026-09-13T21:01:00Z",
-        include_items=False,
-    )
-
-    assert recovered["mode"] == "protected"
-    assert recovered["degraded_reasons"] == []
-    assert interactive._policy_integrity_secret_store.get_secret(key_ref) == vault_key
-
-
-def test_windows_policy_integrity_uses_accessible_system_keyring(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    module = _FakeSystemKeyringModule()
-    monkeypatch.setattr(guard_store_module.sys, "platform", "win32", raising=False)
-    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
-
-    store = GuardStore(
-        tmp_path / "guard-home",
-        prime_policy_integrity=False,
-    )
-
-    secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
-    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
-    state = store.setup_policy_integrity(now="2026-09-13T21:00:00Z", include_items=False)
-
-    assert state["backend"] == "system-keyring"
-    assert state["mode"] == "protected"
-    assert state["degraded_reasons"] == []
 
 
 def test_migrating_fallback_no_ui_uses_bounded_primary_read(tmp_path, monkeypatch):

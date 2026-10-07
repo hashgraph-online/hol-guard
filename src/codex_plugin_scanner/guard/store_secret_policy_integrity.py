@@ -12,6 +12,7 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
+from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -278,6 +279,8 @@ class StoreSecretPolicyIntegrityMixin:
             return None
         if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
             return secret_store.get_secret(secret_id)
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return self._get_secret_from_store(secret_store, secret_id)
         if isinstance(secret_store, FallbackSecretStore):
             fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
             if fallback_value is not None:
@@ -299,9 +302,6 @@ class StoreSecretPolicyIntegrityMixin:
 
     @staticmethod
     def _policy_integrity_secret_store_is_unavailable(secret_store: SecretStore | None) -> bool:
-        if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
-            # Its local vault holds the key when the session cannot open the keyring.
-            return False
         if isinstance(secret_store, SystemKeyringSecretStore):
             return secret_store._is_unavailable()
         if isinstance(secret_store, FallbackSecretStore):
@@ -424,11 +424,7 @@ class StoreSecretPolicyIntegrityMixin:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             return "unavailable"
-        if (
-            isinstance(secret_store, MirroredPolicyIntegritySecretStore)
-            and isinstance(secret_store.primary, SystemKeyringSecretStore)
-            and secret_store.primary._is_unavailable()
-        ):
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
             return _secret_store_backend_name(secret_store.fallback)
         return _secret_store_backend_name(secret_store)
 

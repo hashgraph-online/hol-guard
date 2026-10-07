@@ -2,8 +2,7 @@
 
 Keep local policy integrity usable on desktop Linux when the Python keyring
 backend changes between daemon and terminal sessions, and on Windows when a
-logon session (OpenSSH key authentication, S4U tasks) cannot open Credential
-Manager. Keep the signing key and
+logon session cannot open Credential Manager. Keep the signing key and
 its control metadata together; never overwrite a verified local identity with
 an unrelated keyring copy.
 """
@@ -184,18 +183,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
                 return
             if source == "unverified":
                 raise RuntimeError("policy identity could not be verified for a control-state update")
-        try:
-            self.primary.set_secret(secret_id, value)
-        except Exception as error:
-            if not (
-                isinstance(self.primary, SystemKeyringSecretStore)
-                and self.primary._is_windows_keyring_session_unavailable(error)
-            ):
-                raise
-            # This logon session has no Credential Manager access, so the local
-            # vault is the only store that can hold the value.
-            self.fallback.set_secret(secret_id, value)
-            return
+        self.primary.set_secret(secret_id, value)
         with suppress(Exception):
             self.fallback.set_secret(secret_id, value)
 
@@ -225,7 +213,18 @@ def build_policy_integrity_secret_store(
             allow_system_keyring=allow_system_keyring,
         )
 
-    if sys.platform not in {"linux", "win32"}:
+    if sys.platform == "win32":
+        from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
+
+        vault = EncryptedFileSecretStore(guard_home)
+        if SystemKeyringSecretStore._backend_is_available():
+            return WindowsPolicyIntegritySecretStore(
+                SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME),
+                vault,
+            )
+        return vault
+
+    if sys.platform != "linux":
         return _base_policy_integrity_secret_store(
             guard_home,
             allow_system_keyring=allow_system_keyring,
