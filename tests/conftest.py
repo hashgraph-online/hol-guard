@@ -261,8 +261,8 @@ def _ambient_context_digest_home(
 
     real_status = native_runtime.native_runtime_status
 
-    def _digest_status() -> object:
-        status = real_status()
+    def _digest_status(*, deadline_monotonic: float | None = None) -> object:
+        status = real_status(deadline_monotonic=deadline_monotonic)
         if status.mode != "off":
             return status
         binary = _context_digest_runtime_binary()
@@ -273,7 +273,7 @@ def _ambient_context_digest_home(
         os.environ["HOL_GUARD_NATIVE"] = "force"
         os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
         try:
-            return real_status()
+            return real_status(deadline_monotonic=deadline_monotonic)
         finally:
             if previous_mode is None:
                 os.environ.pop("HOL_GUARD_NATIVE", None)

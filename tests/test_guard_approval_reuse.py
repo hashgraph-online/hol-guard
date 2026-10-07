@@ -2037,3 +2037,61 @@ def test_already_expired_deadline_cannot_grant_reuse(monkeypatch: pytest.MonkeyP
         evaluate_approval_reuse("review", "allow", saved_decision_present=True, deadline_monotonic=time.monotonic() - 1)
         is None
     )
+
+
+@pytest.mark.parametrize("caller_deadline", (None, 101.0, 110.0))
+@pytest.mark.parametrize("expiry_stage", ("discovery", "serialization"))
+def test_approval_reuse_discovery_and_serialization_cannot_restart_budget(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caller_deadline: float | None,
+    expiry_stage: str,
+) -> None:
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import native_approval_reuse
+
+    clock = [100.0]
+    deadline = min(102.0, caller_deadline) if caller_deadline is not None else 102.0
+    monkeypatch.setattr(native_approval_reuse, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+
+    def discover(*, deadline_monotonic: float) -> object:
+        assert deadline_monotonic == deadline
+        if expiry_stage == "discovery":
+            clock[0] = deadline
+        return SimpleNamespace(
+            mode="auto",
+            available=True,
+            compatible=True,
+            identity=SimpleNamespace(path=tmp_path / "resident", sha256="runtime"),
+            capabilities=SimpleNamespace(features={"resident-protocol-v2", "approval-reuse-v1"}),
+        )
+
+    monkeypatch.setattr(native_approval_reuse, "native_runtime_status", discover)
+    monkeypatch.setattr(
+        native_approval_reuse, "native_runtime_health_snapshot", lambda *args: SimpleNamespace(circuit_open=False)
+    )
+    original_dumps = native_approval_reuse.json.dumps
+
+    def serialize(*args: object, **kwargs: object) -> str:
+        result = original_dumps(*args, **kwargs)
+        if expiry_stage == "serialization":
+            clock[0] = deadline
+        return result
+
+    monkeypatch.setattr(native_approval_reuse.json, "dumps", serialize)
+
+    def forbidden_transport(**kwargs: object) -> bytes:
+        pytest.fail("budget exhausted before resident dispatch")
+
+    monkeypatch.setattr(native_approval_reuse, "native_resident_client_request", forbidden_transport)
+    assert native_approval_reuse.approval_reuse_decide_native(
+        "review",
+        "allow",
+        saved_decision_present=True,
+        validation_reason=None,
+        fresh_local_approval=False,
+        durable_exact_approval=False,
+        guard_home=tmp_path,
+        deadline_monotonic=caller_deadline,
+    ) is None

@@ -63,9 +63,12 @@ def approval_reuse_decide_native(
     Shared caller deadlines may shorten, never extend, the per-call timeout.
     """
     global _request_counter
-    if deadline_monotonic is not None and deadline_monotonic <= time.monotonic():
+    effective_deadline = time.monotonic() + timeout_seconds
+    if deadline_monotonic is not None:
+        effective_deadline = min(effective_deadline, deadline_monotonic)
+    if effective_deadline <= time.monotonic():
         return None
-    status = native_runtime_status()
+    status = native_runtime_status(deadline_monotonic=effective_deadline)
     if (
         status.mode == "off"
         or not status.available
@@ -93,9 +96,6 @@ def approval_reuse_decide_native(
     if validation_reason is not None:
         request["validation_reason"] = str(validation_reason)
 
-    effective_deadline = time.monotonic() + timeout_seconds
-    if deadline_monotonic is not None:
-        effective_deadline = min(effective_deadline, deadline_monotonic)
     remaining_seconds = effective_deadline - time.monotonic()
     if remaining_seconds <= 0:
         return None
@@ -122,6 +122,8 @@ def approval_reuse_decide_native(
     except (TypeError, ValueError) as exc:
         raise ApprovalReuseMalformedResultError("approval_reuse request is not JSON data") from exc
     if len(resident) > _MAX_REQUEST_BYTES:
+        return None
+    if time.monotonic() >= effective_deadline:
         return None
 
     output = native_resident_client_request(
