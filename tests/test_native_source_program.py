@@ -279,7 +279,6 @@ def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
         }
         for group in range(17)
     ]
-    example["sources"] = example["sources"][:1]
     example["sources"][0]["extension"]["rules"][0]["matcher"] = {
         "op": "any.v1",
         "config": {},
