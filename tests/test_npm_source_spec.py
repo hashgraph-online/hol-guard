@@ -186,7 +186,10 @@ def test_deeply_nested_npm_aliases_fail_without_recursion() -> None:
     assert parsed.reason == "npm_source_alias_depth_exceeded"
 
 
-def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit() -> None:
+def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit(monkeypatch, _native_context_home) -> None:
+    from codex_plugin_scanner.guard import config
+
+    monkeypatch.setattr(config, "resolve_guard_home", lambda: _native_context_home)
     first = _artifact_for_source(f"github:Hashgraph-Online/hol-guard.git#{COMMIT}")
     equivalent = _artifact_for_source(
         f"git+https://GITHUB.com:443/hashgraph-online/hol-guard.git?token=ROTATING_SECRET#{COMMIT}"

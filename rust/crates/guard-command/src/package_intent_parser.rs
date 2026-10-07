@@ -1977,8 +1977,15 @@ fn redact_local_source_tokens(tokens: &[String]) -> Vec<String> {
             index += 1;
             continue;
         }
-        if token.contains("://") || token.contains("git@") || token.contains("file:") {
+        if token.starts_with("file:") {
+            redacted.push("file:<local-path>".to_owned());
+        } else if token.contains("git@") || token.contains("file:") {
             redacted.push("[REDACTED_URL]".to_owned());
+        } else if token.contains("://") || token.starts_with("git+") {
+            // Retain the repository spelling so canonical Git approval
+            // fingerprints survive transport, while removing credentials,
+            // query values and fragments before serialization.
+            redacted.push(sanitize_url(token));
         } else {
             redacted.push(token.clone());
         }
@@ -2878,6 +2885,28 @@ mod tests {
         assert_eq!(control_context_label(Some("&&")), "and");
         assert_eq!(control_context_label(Some("|&")), "pipe-stderr");
         assert_eq!(control_context_label(None), "end");
+    }
+
+    #[test]
+    fn source_redaction_preserves_git_identity_without_credentials() {
+        let tokens = vec![
+            "npm".to_owned(),
+            "install".to_owned(),
+            "git+https://user:password@GITHUB.com:443/owner/repo.git?token=secret#commit"
+                .to_owned(),
+        ];
+        assert_eq!(
+            redact_local_source_tokens(&tokens),
+            vec![
+                "npm",
+                "install",
+                "git+https://GITHUB.com:443/owner/repo.git"
+            ]
+        );
+        assert_eq!(
+            redact_local_source_tokens(&["file:/private/project".to_owned()]),
+            vec!["file:<local-path>"]
+        );
     }
 
     // package_intent_parser.py `_redact_local_source_tokens`
