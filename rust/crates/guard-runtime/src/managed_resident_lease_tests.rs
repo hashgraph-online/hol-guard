@@ -554,6 +554,37 @@ fn update_retirement_removes_an_expired_dead_same_runtime_lease() {
     fs::remove_dir_all(root).expect("test directory should be removable");
 }
 
+#[cfg(windows)]
+#[test]
+fn update_retirement_removes_a_recent_lease_of_an_exited_held_process() {
+    let root = test_directory("retire-exited-held");
+    let directory = lease_directory(&root).expect("lease directory should be available");
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .arg("--help")
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .expect("short-lived child should start");
+    let process_id = child.id();
+    assert!(child.wait().expect("child should exit").success());
+    // `child` still holds its process handle, so the exited process keeps its
+    // start marker but no longer reports an image path.
+    let start_marker = crate::resident_state::process_start_marker(process_id)
+        .expect("a held exited process should keep its start marker");
+    let digest =
+        crate::resident_state::runtime_digest().expect("runtime digest should be available");
+    let path = directory.join(format!("client-{process_id}-recent.lease"));
+    fixture_file(
+        &path,
+        format!("{process_id}\n{start_marker}\n{digest}\n").as_bytes(),
+    );
+
+    let result = retire_clients_for_update(&root, &digest, Instant::now() + Duration::from_secs(2));
+    drop(child);
+    assert_eq!(result, Ok(()));
+    assert!(!path.exists(), "an exited owner's lease should be drained");
+    fs::remove_dir_all(root).expect("test directory should be removable");
+}
+
 #[test]
 fn lease_directory_entry_overflow_is_retained_as_live() {
     let root = test_directory("entry-overflow");
