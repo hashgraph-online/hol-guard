@@ -53,6 +53,8 @@ pub(crate) mod resident_workspace_review_context;
 pub(crate) mod workspace_review_authority;
 #[path = "workspace_review_business.rs"]
 pub(crate) mod workspace_review_business;
+#[path = "workspace_review_business_queue.rs"]
+pub(crate) mod workspace_review_business_queue;
 #[path = "workspace_review_claim_index.rs"]
 pub(crate) mod workspace_review_claim_index;
 #[path = "workspace_review_decision.rs"]

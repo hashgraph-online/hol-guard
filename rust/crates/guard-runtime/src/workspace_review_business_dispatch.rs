@@ -2,7 +2,11 @@
 use super::super::super::{workspace_review_authority, PolicySnapshotStore};
 use super::{ClaimedBusinessReview, PreparedGoogleBusinessRequest};
 use guard_command::business_input::PreparedBusinessInputV1;
-use guard_contracts::WorkspaceReviewDecisionEnvelopeV1;
+use guard_contracts::{
+    BusinessDispatchAttemptV1, BusinessDispatchJournalV1, BusinessDispatchRetryAuthorityV1,
+    BusinessProviderEffectV1, NativeBusinessDispatchReceiptV1, WorkspaceReviewDecisionEnvelopeV1,
+    NATIVE_BUSINESS_DISPATCH_RECEIPT_V1_SCHEMA,
+};
 use guard_google_identity::dispatch::{GoogleDispatchError, GoogleSendAttempt};
 use guard_policy_snapshot::{canonical_json_bytes, digest_bytes};
 
@@ -17,6 +21,39 @@ pub(super) struct Lease {
 pub(crate) struct Outcome {
     pub(crate) attempt: GoogleSendAttempt,
     pub(crate) journal_recorded: bool,
+    decision_binding: String,
+    input_binding: String,
+}
+
+impl Outcome {
+    /// Project only finite metadata. A projection error never changes the
+    /// transport observation into a refusal or permission to send again.
+    pub(crate) fn receipt(&self) -> Result<NativeBusinessDispatchReceiptV1, &'static str> {
+        let (attempt, acknowledgement_binding) = match &self.attempt {
+            GoogleSendAttempt::ApiAccepted { message_binding } => (
+                BusinessDispatchAttemptV1::ApiAccepted,
+                Some(message_binding.clone()),
+            ),
+            GoogleSendAttempt::Unconfirmed => (BusinessDispatchAttemptV1::OutcomeUnknown, None),
+        };
+        let receipt = NativeBusinessDispatchReceiptV1 {
+            schema: NATIVE_BUSINESS_DISPATCH_RECEIPT_V1_SCHEMA.into(),
+            version: 1,
+            decision_binding: self.decision_binding.clone(),
+            input_binding: self.input_binding.clone(),
+            attempt,
+            journal: if self.journal_recorded {
+                BusinessDispatchJournalV1::Recorded
+            } else {
+                BusinessDispatchJournalV1::Unconfirmed
+            },
+            provider_effect: BusinessProviderEffectV1::NotChecked,
+            retry_authority: BusinessDispatchRetryAuthorityV1::None,
+            acknowledgement_binding,
+        };
+        receipt.validate()?;
+        Ok(receipt)
+    }
 }
 
 // There is no authenticated worker admission implementation yet. An empty
@@ -178,6 +215,8 @@ impl<T> ClaimedBusinessReview<T> {
             }
             // Hold the same native transition lock through the bounded fixed
             // SDK call: a policy/authority update cannot race admission.
+            let decision_binding = self.lease.envelope_digest.clone();
+            let input_binding = self.owned.binding().to_owned();
             let attempt = send(self.input, self.owned);
             match attempt {
                 Ok(attempt) => {
@@ -191,6 +230,8 @@ impl<T> ClaimedBusinessReview<T> {
                     Ok(Outcome {
                         attempt,
                         journal_recorded,
+                        decision_binding,
+                        input_binding,
                     })
                 }
                 // SDK errors are pre-I/O refusals; HTTP/provider uncertainty

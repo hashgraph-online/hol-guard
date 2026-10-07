@@ -283,6 +283,7 @@ export function App() {
   const appDetailHarness = parseAppDetail(pathname);
   const [requests, setRequests] = useState<RequestState>({ kind: "loading" });
   const [detail, setDetail] = useState<DetailState>({ kind: "idle" });
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
   const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
   const [runtime, setRuntime] = useState<RuntimeState>({ kind: "loading" });
   const [policies, setPolicies] = useState<PolicyState>({ kind: "loading" });
@@ -324,7 +325,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeRequestId]);
+  }, [activeRequestId, detailRefreshKey]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -992,6 +993,7 @@ export function App() {
       onResolve={handleResolve}
       onBulkApprove={handleBulkApprove}
       onRetry={handleRetry}
+      onRetryDetail={() => setDetailRefreshKey((key) => key + 1)}
       onRepair={handleRepair}
       onGuardReconnected={handleRetry}
       onClearEvidence={handleClearEvidence}

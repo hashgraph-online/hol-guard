@@ -220,13 +220,22 @@ fn open_raw_with_access(
     share_mode: DWORD,
     desired_access: DWORD,
 ) -> io::Result<std::fs::File> {
-    let path_w = super::wide_path(path)?;
     let flags = FILE_FLAG_OPEN_REPARSE_POINT
         | if directory {
             FILE_FLAG_BACKUP_SEMANTICS
         } else {
             0
         };
+    open_raw_with_flags(path, share_mode, desired_access, flags)
+}
+
+pub(super) fn open_raw_with_flags(
+    path: &Path,
+    share_mode: DWORD,
+    desired_access: DWORD,
+    flags: DWORD,
+) -> io::Result<std::fs::File> {
+    let path_w = super::wide_path(path)?;
     // SAFETY: The path is NUL-terminated and all pointers remain valid for
     // the synchronous CreateFileW call.
     let raw = unsafe {

@@ -107,6 +107,13 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
     original, resolved = reviewed[key], completed[key]
     if not isinstance(original, str) or not isinstance(resolved, str):
         return False
+    # Windows agents resolve with backslash separators. Accept them only when
+    # the whole resolved path is in that form and the reviewed path has no
+    # backslash, so a POSIX name containing one never matches a different file.
+    if resolved.startswith(("{{workspace}}\\", "{{home}}\\")) and "/" not in resolved:
+        if "\\" in original:
+            return False
+        resolved = resolved.replace("\\", "/")
     if original.startswith("~/"):
         expected = "{{home}}/" + original[2:]
     elif original.startswith(("/", "{{")):
@@ -115,7 +122,7 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
         expected = "{{workspace}}/" + original.removeprefix("./")
     if any(part in {".", "..", ""} for part in expected.split("/")[1:]):
         return False
-    return completed == {**reviewed, key: expected}
+    return resolved == expected and all(completed[other] == reviewed[other] for other in reviewed if other != key)
 
 
 def public_native_receipt(receipt: object, replacements: dict[str, str]) -> dict[str, Any] | None:

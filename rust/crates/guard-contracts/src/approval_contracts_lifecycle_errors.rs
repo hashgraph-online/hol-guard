@@ -201,6 +201,7 @@ pub const NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES: &[&str] = &[
     "native_workspace_review_request_not_pending",
     "native_workspace_review_request_unavailable",
     "native_local_business_summary_unavailable",
+    "native_local_business_queue_unavailable",
     "native_workspace_review_secure_state_invalid",
     "native_workspace_review_secure_state_unavailable",
     "native_socket_accept_failed",
