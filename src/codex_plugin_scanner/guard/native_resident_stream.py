@@ -13,6 +13,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, suppress
+from contextvars import ContextVar
 from pathlib import Path
 from queue import Empty, Full, Queue
 from typing import Protocol
@@ -22,6 +23,10 @@ from .native_resident_transport import write_frame
 
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
+_LAST_CALL_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
+    "native_resident_client_call_context", default=None
+)
 _STREAM_FRAME_HEADER_BYTES = 4
 _CLIENT_CLOSE_TIMEOUT_SECONDS = 0.5
 
@@ -246,6 +251,7 @@ class _PersistentNativeClient:
         return process, stdin, self._responses
 
     def request(self, payload: bytes, *, deadline_monotonic: float) -> bytes | None:
+        _LAST_CALL_CONTEXT.set(("connect", "pre_commit"))
         if not payload or len(payload) > _MAX_REQUEST_BYTES:
             self._record_failure("native_client_request_invalid")
             return None
@@ -268,6 +274,8 @@ class _PersistentNativeClient:
                 self._record_current_failure(deadline_monotonic)
                 return None
             frame = struct.pack(">I", len(payload)) + payload
+            # A failed pipe write may still have delivered the complete request.
+            _LAST_CALL_CONTEXT.set(("write", "unknown"))
             if not self._write_frame(
                 stdin,
                 frame,
@@ -288,6 +296,7 @@ class _PersistentNativeClient:
             if not self._request_is_current(process, responses, deadline_monotonic=deadline_monotonic):
                 self._record_current_failure(deadline_monotonic)
                 return None
+            _LAST_CALL_CONTEXT.set(("read", "unknown"))
             # A pool teardown may call close() while this request waits for
             # its response. Hold the lifecycle lock for that wait so teardown
             # cannot close the captured process or queue mid-read. The lock is

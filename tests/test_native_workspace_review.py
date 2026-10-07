@@ -271,6 +271,7 @@ def _verified_body(*, digest: str, replayed: bool) -> bytes:
 
 def _bind_native_client(monkeypatch: pytest.MonkeyPatch, responder) -> None:
     from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
+    monkeypatch.setattr(native, "native_resident_client_failure_context", lambda: None)
 
     monkeypatch.setattr(native, "native_runtime_status", _status)
     monkeypatch.setattr(native, "_isolated_environment", lambda: {})
@@ -284,6 +285,28 @@ def _bind_native_client(monkeypatch: pytest.MonkeyPatch, responder) -> None:
         return encoded
 
     monkeypatch.setattr(native, "native_resident_client_request", request)
+
+
+@pytest.mark.parametrize(
+    ("code", "retryable", "certainty"),
+    [
+        ("native_overloaded", True, "pre_commit"),
+        ("native_overloaded", False, "unknown"),
+        ("future_native_error", True, "unknown"),
+    ],
+)
+def test_only_authenticated_dispatch_overload_proves_precommit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: str, retryable: bool, certainty: str
+) -> None:
+    store = _Store(_request())
+    _bind_native_client(
+        monkeypatch, lambda _kwargs: json.dumps({"error": code, "retryable": retryable}).encode()
+    )
+    with pytest.raises(native.NativeWorkspaceReviewError) as failure:
+        native.apply_native_workspace_review_decision(store, tmp_path, "request-1", {"signed": "envelope"})
+    assert failure.value.call_stage == "read"
+    assert failure.value.commit_certainty == certainty
+    assert store.request["status"] == "pending"
 
 
 def test_emitted_transport_codes_keep_portal_commit_certainty() -> None:

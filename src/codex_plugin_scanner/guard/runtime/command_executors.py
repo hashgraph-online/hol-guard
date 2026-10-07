@@ -118,9 +118,13 @@ def execute_guard_command_job(
             )
     except ValueError as error:
         failure_code = str(error) or "invalid_payload"
+        call_stage = getattr(error, "call_stage", None)
+        commit_certainty = getattr(error, "commit_certainty", None)
         return {
             "failureCode": failure_code,
             "failureMessage": failure_code.replace("_", " "),
+            **({"callStage": call_stage} if call_stage is not None else {}),
+            **({"commitCertainty": commit_certainty} if commit_certainty is not None else {}),
         }
     return {
         "failureCode": "unsupported_operation",

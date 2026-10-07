@@ -117,11 +117,7 @@ def test_stdio_sensitive_read_binds_pinned_executable_script_and_configured_env(
         security_level="custom",
         risk_actions={"local_secret_read": "review"},
     )
-    monkeypatch.setattr(
-        stdio_module.subprocess,
-        "Popen",
-        _intercept_server_spawn([str(launcher), "server.py"], lambda *_args, **_kwargs: _FakeProcess()),
-    )
+    _patch_server_spawn(monkeypatch, lambda *_args, **_kwargs: _FakeProcess())
 
     def proxy(env_value: str) -> StdioGuardProxy:
         return StdioGuardProxy(
