@@ -21,7 +21,8 @@ Most contributions add or update versioned JSON in
 [`contributions/command-sources/`](../../../contributions/command-sources).
 Compose the admitted native matcher operations, add portable behavior fixtures,
 and keep trust classification in the separately reviewed
-[`trust-class-map.v1.json`](../../../contracts/extensions/trust-class-map.v1.json).
+[`trust/`](../../../contracts/extensions/trust). Clean Rust builds derive the
+aggregate from these bindings without requiring a generated map in the checkout.
 Do not add a Python detector or edit generated descriptors and program files as
 independent inputs.
 

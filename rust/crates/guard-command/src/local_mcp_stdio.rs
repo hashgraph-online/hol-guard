@@ -1544,10 +1544,19 @@ fn stop_child(child: &mut Child) {
 /// `os.killpg(child.pid, SIGKILL)` — group id equals the child pid after
 /// `process_group(0)`; `nix::killpg` keeps the call safe-Rust.
 pub(crate) fn kill_process_group(pgid: i32) {
+    if process_group_operand(pgid).is_none() {
+        return;
+    }
     let _ = nix::sys::signal::killpg(
         nix::unistd::Pid::from_raw(pgid),
         nix::sys::signal::Signal::SIGKILL,
     );
+}
+
+pub(crate) fn process_group_operand(pgid: i32) -> Option<String> {
+    // 0 targets the caller's group; -1 targets nearly every process. Neither
+    // can identify a fresh child-owned group, including the reserved ID 1.
+    (pgid > 1).then(|| format!("-{pgid}"))
 }
 
 #[cfg(test)]

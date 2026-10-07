@@ -114,6 +114,13 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py",
+        # Native-authenticated source binding and asynchronous snapshot bytes;
+        # Rust remains the document compiler and resident admission authority.
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_codec.py",
+        "src/codex_plugin_scanner/guard/native_business_source_bridge.py",
+        "src/codex_plugin_scanner/guard/native_business_source_anchor_bridge.py",
+        "src/codex_plugin_scanner/guard/native_business_source_store.py",
+        "src/codex_plugin_scanner/guard/native_business_source_retention.py",
         "src/codex_plugin_scanner/guard/config.py",
         "src/codex_plugin_scanner/guard/config_file_io.py",
         "src/codex_plugin_scanner/guard/directory_path_authority.py",
