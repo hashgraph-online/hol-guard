@@ -1963,6 +1963,12 @@ fn redacted_segment(raw_segment: &[String]) -> Vec<String> {
 // package_intent_parser.py `_redact_local_source_tokens`
 fn redact_local_source_tokens(tokens: &[String]) -> Vec<String> {
     let mut redacted: Vec<String> = Vec::new();
+    let javascript_manager = tokens.first().is_some_and(|token| {
+        matches!(
+            command_name(token).as_str(),
+            "npm" | "pnpm" | "yarn" | "bun" | "npx" | "bunx"
+        )
+    });
     let mut index = 0;
     while index < tokens.len() {
         let token = &tokens[index];
@@ -1978,7 +1984,16 @@ fn redact_local_source_tokens(tokens: &[String]) -> Vec<String> {
             continue;
         }
         if token.contains("://") || token.contains("git@") || token.contains("file:") {
-            redacted.push("[REDACTED_URL]".to_owned());
+            let git_source = javascript_manager
+                && crate::npm_source_spec::parse_npm_source_spec(Some(token))
+                    .is_some_and(|source| source.is_git());
+            // Git approval fingerprints need the validated repository spelling.
+            // Other URLs retain blanket redaction; credentials never survive.
+            redacted.push(if git_source {
+                sanitize_url(token)
+            } else {
+                "[REDACTED_URL]".to_owned()
+            });
         } else {
             redacted.push(token.clone());
         }
@@ -2878,6 +2893,59 @@ mod tests {
         assert_eq!(control_context_label(Some("&&")), "and");
         assert_eq!(control_context_label(Some("|&")), "pipe-stderr");
         assert_eq!(control_context_label(None), "end");
+    }
+
+    #[test]
+    fn source_redaction_preserves_git_identity_without_credentials() {
+        let tokens = vec![
+            "npm".to_owned(),
+            "install".to_owned(),
+            "git+https://GITHUB.com:443/owner/repo.git?token=secret#commit".to_owned(),
+        ];
+        assert_eq!(
+            redact_local_source_tokens(&tokens),
+            vec![
+                "npm",
+                "install",
+                "git+https://GITHUB.com:443/owner/repo.git"
+            ]
+        );
+        assert_eq!(
+            redact_local_source_tokens(&["file:/private/project".to_owned()]),
+            vec!["[REDACTED_URL]"]
+        );
+        assert_eq!(
+            redact_local_source_tokens(&[
+                "npm".to_owned(),
+                "install".to_owned(),
+                "git+ssh://git@github.com/owner/repo.git#commit".to_owned()
+            ]),
+            vec!["npm", "install", "git+ssh://github.com/owner/repo.git"]
+        );
+        assert_eq!(
+            redact_local_source_tokens(&[
+                "npm".to_owned(),
+                "install".to_owned(),
+                "git@github.com:owner/repo.git#commit".to_owned()
+            ]),
+            vec!["npm", "install", "git@github.com:owner/repo.git#commit"]
+        );
+        assert_eq!(
+            redact_local_source_tokens(&[
+                "pip".to_owned(),
+                "install".to_owned(),
+                "--index-url=https://user:password@example.com/simple".to_owned()
+            ]),
+            vec!["pip", "install", "[REDACTED_URL]"]
+        );
+        assert_eq!(
+            redact_local_source_tokens(&[
+                "npm".to_owned(),
+                "install".to_owned(),
+                "git+https://user:password@github.com/owner/repo.git".to_owned()
+            ]),
+            vec!["npm", "install", "[REDACTED_URL]"]
+        );
     }
 
     // package_intent_parser.py `_redact_local_source_tokens`
