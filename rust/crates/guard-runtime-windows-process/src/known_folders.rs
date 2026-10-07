@@ -7,7 +7,7 @@ use winapi::shared::guiddef::GUID;
 use winapi::shared::winerror::S_OK;
 use winapi::um::combaseapi::CoTaskMemFree;
 use winapi::um::knownfolders::{
-    FOLDERID_ProgramFiles, FOLDERID_ProgramFilesX64, FOLDERID_ProgramFilesX86, FOLDERID_Windows,
+    FOLDERID_ProgramFiles, FOLDERID_ProgramFilesX64, FOLDERID_ProgramFilesX86,
 };
 use winapi::um::shlobj::{SHGetKnownFolderPath, KF_FLAG_DEFAULT};
 
@@ -31,8 +31,11 @@ fn known_folder(id: &GUID) -> Option<PathBuf> {
     path.filter(|path| path.is_absolute())
 }
 
-/// Return the Program Files and Windows directories as the system reports
-/// them.
+/// Return the Program Files directories as the system reports them.
+///
+/// The Windows directory is excluded: standard users can create files in
+/// descendants such as `Temp` and `System32\Tasks`, so a location there
+/// proves nothing about who installed an executable.
 ///
 /// Callers that trust executables by install location must not read these
 /// from environment variables such as `ProgramFiles` or `SystemRoot`: the
@@ -44,7 +47,6 @@ pub fn trusted_install_roots() -> Vec<PathBuf> {
         &FOLDERID_ProgramFiles,
         &FOLDERID_ProgramFilesX64,
         &FOLDERID_ProgramFilesX86,
-        &FOLDERID_Windows,
     ] {
         if let Some(path) = known_folder(id) {
             if !roots.contains(&path) {

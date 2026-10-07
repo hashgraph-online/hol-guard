@@ -15,8 +15,9 @@ fn trusted_install_roots_ignore_environment_overrides() {
     assert_eq!(trusted_install_roots(), roots);
     assert!(!roots.contains(&decoy));
     assert!(roots.iter().all(|root| root.is_absolute() && root.is_dir()));
-    assert!(roots
+    // The Windows directory holds user-writable descendants such as Temp.
+    assert!(!roots
         .iter()
-        .any(|root| root.join("System32").join("cmd.exe").is_file()));
+        .any(|root| root.join("System32").join("cmd.exe").exists()));
     assert!(roots.iter().any(|root| root.join("Common Files").is_dir()));
 }
