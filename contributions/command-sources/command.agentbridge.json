@@ -1,0 +1,2029 @@
+{
+  "extension": {
+    "action_classes": [
+      "AgentBridge forced plugin scaffold command",
+      "AgentBridge run with tool registry command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews AgentBridge CLI commands that can overwrite generated plugin files or execute with an attached app tool registry.",
+    "ecosystem_ids": [
+      "agentbridge"
+    ],
+    "executables": [
+      "agentbridge"
+    ],
+    "extension_id": "command.agentbridge",
+    "homepage": "https://agentbridge.readthedocs.io/en/latest/",
+    "icon": {
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine",
+      "background": "#0F172A"
+    },
+    "license": "MIT",
+    "name": "AgentBridge",
+    "permissions": [
+      {
+        "action_classes": [
+          "AgentBridge forced plugin scaffold command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews agentbridge scaffold-plugin --force and unresolved arguments that cannot prove the risky option absent.",
+        "example_command": "agentbridge scaffold-plugin --force",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "AgentBridge forced plugin scaffold",
+        "permission_id": "command.agentbridge.permission.scaffold-force",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Review generated plugin files before using --force."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "AgentBridge run with tool registry command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews agentbridge run --tool-registry and unresolved arguments that cannot prove the risky option absent.",
+        "example_command": "agentbridge run --tool-registry",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "AgentBridge run with tool registry",
+        "permission_id": "command.agentbridge.permission.run-tool-registry",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Review the app-provided Python tool registry before attaching it to a run."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.agentbridge",
+      "display_name": "Community",
+      "url": "https://github.com/0sparsh2/AgentBridge"
+    },
+    "reference_urls": [
+      "https://agentbridge.readthedocs.io/en/latest/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution"
+    ],
+    "rules": [
+      {
+        "rule_id": "command.agentbridge.scaffold-force",
+        "rule_version": "1.0.0",
+        "permission_id": "command.agentbridge.permission.scaffold-force",
+        "title": "AgentBridge forced plugin scaffold",
+        "description": "Reviews agentbridge scaffold-plugin --force and unresolved arguments that cannot prove the risky option absent.",
+        "severity": "medium",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "AgentBridge forced plugin scaffold command"
+        ],
+        "safer_alternatives": [
+          "Review generated plugin files before using --force."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "agentbridge",
+                      "agentbridge.exe",
+                      "agentbridge.cmd"
+                    ],
+                    "subcommands": [
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--force"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": false,
+                    "leading_options_with_values": [],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--force"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--force"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--force"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--force"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--force"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--force"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                }
+              ]
+            },
+            {
+              "op": "all.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "any.v1",
+                  "config": {},
+                  "matchers": [
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "agentbridge",
+                          "agentbridge.exe",
+                          "agentbridge.cmd"
+                        ],
+                        "subcommands": [
+                          "scaffold-plugin"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": false,
+                        "leading_options_with_values": [],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "exec",
+                          "exec.exe",
+                          "exec.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge",
+                          "scaffold-plugin"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "exec",
+                          "exec.exe",
+                          "exec.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge.exe",
+                          "scaffold-plugin"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "exec",
+                          "exec.exe",
+                          "exec.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge.cmd",
+                          "scaffold-plugin"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "xargs",
+                          "xargs.exe",
+                          "xargs.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge",
+                          "scaffold-plugin"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "xargs",
+                          "xargs.exe",
+                          "xargs.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge.exe",
+                          "scaffold-plugin"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "xargs",
+                          "xargs.exe",
+                          "xargs.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge.cmd",
+                          "scaffold-plugin"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "tui-runner-expansion.v1",
+                  "config": {
+                    "launchers": [
+                      [
+                        "agentbridge"
+                      ],
+                      [
+                        "exec",
+                        "agentbridge"
+                      ],
+                      [
+                        "xargs",
+                        "agentbridge"
+                      ]
+                    ],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "expansion_markers": [
+                      "$",
+                      "`",
+                      "%"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "AgentBridge forced plugin scaffold help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "agentbridge",
+                      "agentbridge.exe",
+                      "agentbridge.cmd"
+                    ],
+                    "subcommands": [
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": false,
+                    "leading_options_with_values": [],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "AgentBridge forced plugin scaffold help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "agentbridge",
+                      "agentbridge.exe",
+                      "agentbridge.cmd"
+                    ],
+                    "subcommands": [
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": false,
+                    "leading_options_with_values": [],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "scaffold-plugin"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.agentbridge.run-tool-registry",
+        "rule_version": "1.0.0",
+        "permission_id": "command.agentbridge.permission.run-tool-registry",
+        "title": "AgentBridge run with tool registry",
+        "description": "Reviews agentbridge run --tool-registry and unresolved arguments that cannot prove the risky option absent.",
+        "severity": "medium",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "AgentBridge run with tool registry command"
+        ],
+        "safer_alternatives": [
+          "Review the app-provided Python tool registry before attaching it to a run."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "agentbridge",
+                      "agentbridge.exe",
+                      "agentbridge.cmd"
+                    ],
+                    "subcommands": [
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--tool-registry"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": false,
+                    "leading_options_with_values": [],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--tool-registry"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--tool-registry"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--tool-registry"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--tool-registry"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--tool-registry"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--tool-registry"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": false
+                  }
+                }
+              ]
+            },
+            {
+              "op": "all.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "any.v1",
+                  "config": {},
+                  "matchers": [
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "agentbridge",
+                          "agentbridge.exe",
+                          "agentbridge.cmd"
+                        ],
+                        "subcommands": [
+                          "run"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": false,
+                        "leading_options_with_values": [],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "exec",
+                          "exec.exe",
+                          "exec.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge",
+                          "run"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "exec",
+                          "exec.exe",
+                          "exec.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge.exe",
+                          "run"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "exec",
+                          "exec.exe",
+                          "exec.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge.cmd",
+                          "run"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "xargs",
+                          "xargs.exe",
+                          "xargs.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge",
+                          "run"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "xargs",
+                          "xargs.exe",
+                          "xargs.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge.exe",
+                          "run"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    },
+                    {
+                      "op": "executable.v1",
+                      "config": {
+                        "executables": [
+                          "xargs",
+                          "xargs.exe",
+                          "xargs.cmd"
+                        ],
+                        "subcommands": [
+                          "agentbridge.cmd",
+                          "run"
+                        ],
+                        "required_flags": [],
+                        "options_with_values": [
+                          "--tool-registry"
+                        ],
+                        "allow_leading_options": true,
+                        "leading_options_with_values": [
+                          "-i",
+                          "-l",
+                          "-n",
+                          "-p",
+                          "-s"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "fail_secure_unknown_options": false
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "tui-runner-expansion.v1",
+                  "config": {
+                    "launchers": [
+                      [
+                        "agentbridge"
+                      ],
+                      [
+                        "exec",
+                        "agentbridge"
+                      ],
+                      [
+                        "xargs",
+                        "agentbridge"
+                      ]
+                    ],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "expansion_markers": [
+                      "$",
+                      "`",
+                      "%"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "AgentBridge run with tool registry help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "agentbridge",
+                      "agentbridge.exe",
+                      "agentbridge.cmd"
+                    ],
+                    "subcommands": [
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": false,
+                    "leading_options_with_values": [],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "AgentBridge run with tool registry help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "agentbridge",
+                      "agentbridge.exe",
+                      "agentbridge.cmd"
+                    ],
+                    "subcommands": [
+                      "run"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": false,
+                    "leading_options_with_values": [],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "exec",
+                      "exec.exe",
+                      "exec.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.exe",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xargs",
+                      "xargs.exe",
+                      "xargs.cmd"
+                    ],
+                    "subcommands": [
+                      "agentbridge.cmd",
+                      "run"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "options_with_values": [
+                      "--tool-registry"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "fail_secure_unknown_options": true,
+                    "interspersed_flags": [
+                      "--force",
+                      "--help",
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect or validate AgentBridge specs before side-effectful runs.",
+      "Avoid --force unless the target scaffold files have been reviewed."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
