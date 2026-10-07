@@ -28,6 +28,8 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **ci:** verify checksum-pinned nextest downloads on Python 3.10 with bounded streaming SHA-256 reads, and bound its version probe.
 * **ci:** make absent managed stores explicit before opening a connection scope, preserving existing hook decisions while allowing the optional-store type check to pass.
 * **ci:** collect pytest once for the shard plan and complete protected test inventory, retaining markers, corpus and source metrics before scheduling-only nodes are excluded; run the remaining static quality checks independently of native artifact production.
+* **ci:** remove obsolete fake-Cargo workflow command tests after the real pinned nextest cutover; retain required-aggregate failure checks and complete native test execution.
+* **ci:** execute existing pytest shards with four checksum-locked file-affine workers and no worker restarts, preserving single-process corpus fixtures and fresh coverage merging; only the controller publishes complete per-node durations.
 
 ### Features
 * **policy:** the saved-package-approval claim now resolves inside the resident. The `apply_stored_package_policy` operation ships the evaluation, artifact and store path to `evaluate_apply_stored_package_policy`, which reuses the ported `resolve_stored_package_policy_override` and returns the evaluation unchanged when the store holds no usable saved approval. The previous `commands_hook_native_eval` bridge re-entered the Python override; it now routes through `apply_stored_package_policy_native` and, on transport failure, returns the evaluation unchanged — the resident's own no-saved-approval terminal — rather than re-running the Python override.

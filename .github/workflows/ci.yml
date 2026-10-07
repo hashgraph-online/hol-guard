@@ -181,7 +181,7 @@ jobs:
             test)
               nextest_bin="$(python3 scripts/ci/install_nextest.py)"
               PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --workspace --all-targets \
-                --test-threads 2 --retries 0 --no-fail-fast
+                --test-threads 4 --retries 0 --no-fail-fast
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
@@ -377,6 +377,7 @@ jobs:
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
             uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
             -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
+            -n 4 --dist loadfile --max-worker-restart 0 \
             --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --deselect tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon \
             --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_first_queue_page_with_100k_rows_stays_under_100ms \
