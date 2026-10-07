@@ -32,14 +32,10 @@ from .contained_judge import (
 )
 from .evidence import public_events, read_events
 from .fixtures import create_fixture, digest_file
+from .host_process import clean_environment, run_process
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
 from .provider import InferenceRelay, LoopbackCollector
-from .runner import (
-    HERE,
-    REPO,
-    clean_environment,
-    run_process,
-)
+from .runner import HERE, REPO
 from .source_files import digest_runner_files
 from .source_identity import source_identity
 
