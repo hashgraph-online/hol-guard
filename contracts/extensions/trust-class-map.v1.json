@@ -106,13 +106,15 @@
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",
+      "command.routed",
       "command.skill-base",
       "command.skill-sunset",
       "command.snoboard",
       "command.syngraphe",
       "command.tui-runner",
       "command.uivoid",
-      "command.vttforge"
+      "command.vttforge",
+      "command.xrpl-muse-skill"
     ]
   }
 }

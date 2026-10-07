@@ -168,11 +168,13 @@ Protection model meanings:
 | `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
+| `command.routed` | Reviews host adapter changes, environment reconciliation, and updates through the Routed CLI. | 5 | External opt-in |
 | `command.skill-base` | Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version. | 1 | External opt-in |
 | `command.snoboard` | Reviews snoboard commands that write initiative.md or fetch from origin. validate, status, and next-number without --fetch only read and are not matched. fix --dry-run, --help, and --version exit without writing. Upstream CLI 0.1.0. | 3 | External opt-in |
 | `command.syngraphe` | Reviews shared repository context initialization, document creation, state archiving, and agent policy creation through syngraphe or syg. | 4 | External opt-in |
 | `command.uivoid` | Reviews uivoid commands that create or reconfigure a live MCP server mapped from an existing API, rotate the credential it calls that API with, or write local session and skill files a later command or agent session will trust. | 5 | External opt-in |
 | `command.vttforge` | Reviews VTTForge CLI commands that write a project: the scaffold, lint fixes, and the v14 migration written in place. The audit, the lint report and the migration preview stay unreviewed. | 3 | External opt-in |
+| `command.xrpl-muse-skill` | Guards the xrpl-muse-skill ceremony: xrpl-trade builds unsigned transaction proposals and never signs; xrpl-sign --approve is the sole hash-bound, policy-gated signer; fresh installs stay read-only until the typed xrpl-trade live ceremony. Proposal, signing, and gate-transition commands review; read-only queries stay inert. | 7 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 
