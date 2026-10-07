@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -142,27 +143,52 @@ def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
     This is migration recognition only, never proof that a hook is operational.
     Parse canonical argv without executing either command or loading old code.
     """
-    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
 
-    def binding(text: str) -> tuple[Path, dict[str, str]] | None:
+    def binding(text: str, *, old_client: bool) -> tuple[Path | None, dict[str, str]] | None:
         args = _arguments(text)
-        interpreter = isolated_cursor_hook_python()
-        if len(args) != 4 or args[1] != "-I" or interpreter is None:
+        if not args or not Path(args[0]).is_absolute():
             return None
-        if not Path(args[0]).is_absolute() or Path(args[0]).resolve() != Path(interpreter).resolve():
+        script = None
+        if len(args) == 4 and args[1] == "-I":
+            # Migration must work even when the old interpreter is gone or
+            # isolated Python is unavailable to the new launcher.
+            if not re.fullmatch(r"python(?:\d+(?:\.\d+)*)?(?:\.exe)?", Path(args[0]).name, re.IGNORECASE):
+                return None
+            script = Path(args[2])
+            serialized = args[3]
+        elif old_client:
             return None
-        raw = json.loads(args[3])
+        elif len(args) == 5 and args[1:3] == ("-I", "-c"):
+            serialized = args[4]
+        elif len(args) == 3 and args[1] == "__guard-bounded-hook":
+            serialized = args[2]
+        elif len(args) == 9 and _desktop_proxy(args, None):
+            serialized = args[7]
+        else:
+            return None
+        raw = json.loads(serialized)
         if not isinstance(raw, dict) or not isinstance(raw.get("frozen_launcher"), bool):
             return None
         executable = raw.get("python_executable")
         if not isinstance(executable, str) or not Path(executable).is_absolute():
             return None
-        config = _config(args[3], executable, frozen=raw["frozen_launcher"], context=None)
+        config = _config(serialized, executable, frozen=raw["frozen_launcher"], context=None)
         if config is None:
             return None
-        script = Path(args[2])
         expected = Path(cast(str, config["guard_home"])) / "managed" / "bounded-hooks" / "grok.py"
-        if not script.is_absolute() or script != expected:
+        if script is not None and (not script.is_absolute() or script != expected):
+            return None
+        if len(args) == 5:
+            package = cast(str, config["package_root"])
+            bootstrap = (
+                "import sys;"
+                f"sys.path.insert(0,{package!r});"
+                "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv;"
+                "raise SystemExit(main_from_argv(sys.argv[1:]))"
+            )
+            if args[3] != bootstrap or executable != args[0] or raw["frozen_launcher"]:
+                return None
+        if len(args) == 3 and (executable != args[0] or not raw["frozen_launcher"]):
             return None
         cli_args = cast(list[str], config["cli_args"])
         options = dict(zip(cli_args[2:-1:2], cli_args[3:-1:2], strict=True))
@@ -172,8 +198,8 @@ def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
         return script, scope
 
     try:
-        old, new = binding(command), binding(replacement)
-        return bool(old and new and old[1] == new[1] and not old[0].exists())
+        old, new = binding(command, old_client=True), binding(replacement, old_client=False)
+        return bool(old and new and old[0] is not None and old[1] == new[1] and not old[0].exists())
     except (OSError, ValueError, TypeError, RuntimeError):
         return False
 

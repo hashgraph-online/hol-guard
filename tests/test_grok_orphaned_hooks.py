@@ -90,3 +90,34 @@ def test_workspace_fallback_changes_do_not_retain_missing_global_client(tmp_path
     assert is_missing_grok_hook_command(
         command(tmp_path / "old"), command(tmp_path / "new", workspace=tmp_path / "project")
     )
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+def test_repair_recognizes_orphan_after_isolated_python_disappears(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, frozen: bool
+) -> None:
+    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
+    from codex_plugin_scanner.guard.adapters import cursor_hook_config
+
+    stale = command(tmp_path / "old")
+    monkeypatch.setattr(cursor_hook_config, "isolated_cursor_hook_python", lambda: None)
+    monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: None)
+    monkeypatch.setattr(bridge.sys, "frozen", frozen, raising=False)
+    monkeypatch.setattr(bridge, "prune_safe_cli_executable", lambda value: value)
+    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args, **kwargs: None)
+    new_home = tmp_path / "new"
+    replacement = _shell_command(
+        bridge.bounded_cli_hook_command(
+            python_executable=str(tmp_path / "hol-guard"),
+            package_root=tmp_path / "package",
+            guard_home=new_home,
+            cli_args=["guard", "hook", "--guard-home", str(new_home), "--harness", "grok", "--json"],
+            harness="grok",
+            timeout_seconds=85,
+        )
+    )
+    original, _ = prepare_user_config_text("", stale, previous_state={})
+    repaired, _ = prepare_user_config_text(original, replacement, previous_state={})
+    for groups in tomlkit.parse(repaired)["hooks"].values():
+        assert len(groups) == 1
+        assert groups[0]["hooks"][0]["command"] == replacement
