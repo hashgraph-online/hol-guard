@@ -90,11 +90,14 @@ fn authenticated_initial_probe_reaches_restart_and_preserves_auth_failure() {
         while requests < 2 && Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    // The client revalidates process identity after connect
+                    // and before sending its nonce. Let the fixture honor the
+                    // client's four-second budget rather than closing early.
                     stream
-                        .set_read_timeout(Some(Duration::from_secs(1)))
+                        .set_read_timeout(Some(Duration::from_secs(4)))
                         .unwrap();
                     stream
-                        .set_write_timeout(Some(Duration::from_secs(1)))
+                        .set_write_timeout(Some(Duration::from_secs(4)))
                         .unwrap();
                     let mut nonce = [0; crate::AUTH_NONCE_BYTES];
                     stream.read_exact(&mut nonce).unwrap();

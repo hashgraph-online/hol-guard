@@ -12218,7 +12218,10 @@ def test_guard_hook_cloud_allow_does_not_lower_current_package_reapproval(
     )
 
     assert rc == 0
-    assert output["policy_action"] == "require-reapproval"
+    assert output["policy_action"] == "require-reapproval", {
+        "policy_action": output.get("policy_action"),
+        "reason_code": output.get("reason_code"),
+    }
     assert output["trust_status"]["remembered_rules"] == "disabled_degraded"
     assert output["remembered_rule_rejection"]["integrity_status"] == "degraded_mode"
     assert output["supply_chain_evaluation"]["reasons"][0]["code"] == "approval_reuse_integrity_failure"
