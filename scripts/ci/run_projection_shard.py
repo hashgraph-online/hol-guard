@@ -15,6 +15,15 @@ from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+PREPARATION_TIMEOUT_SECONDS = 300
+
+
+def _prepare(arguments: Sequence[str]) -> int:
+    try:
+        return subprocess.run(arguments, cwd=ROOT, check=False, timeout=PREPARATION_TIMEOUT_SECONDS).returncode
+    except subprocess.TimeoutExpired:
+        print(f"Projection preparation timed out after {PREPARATION_TIMEOUT_SECONDS}s: {arguments[1]}", file=sys.stderr)
+        return 124
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -27,27 +36,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.shard_file.read_text(encoding="utf-8")
     compiler = os.environ.get("HOL_GUARD_NATIVE_SOURCE_COMPILER")
     if compiler:
-        prepared = subprocess.run(
+        prepared = _prepare(
             [
                 sys.executable,
                 "scripts/ci/verify_native_command_program.py",
                 "--compiler",
                 compiler,
             ],
-            cwd=ROOT,
-            check=False,
         )
-        if prepared.returncode:
-            return prepared.returncode
+        if prepared:
+            return prepared
         # Directory preparation needs runtime validation dependencies, available
         # in the coverage environment but not in isolated wheel builds.
         for script in ("export_extension_directory.py", "render_command_extension_directory.py"):
             for arguments in ([], ["--check"]):
-                prepared = subprocess.run(
-                    [sys.executable, f"scripts/{script}", *arguments], cwd=ROOT, check=False
-                )
-                if prepared.returncode:
-                    return prepared.returncode
+                prepared = _prepare([sys.executable, f"scripts/{script}", *arguments])
+                if prepared:
+                    return prepared
     pytest_args = args.pytest_args
     if pytest_args[:1] == ["--"]:
         pytest_args = pytest_args[1:]
