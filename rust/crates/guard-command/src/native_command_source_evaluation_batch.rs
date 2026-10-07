@@ -239,7 +239,7 @@ mod tests {
             "pwd".to_owned(),
             "git reset --hard".to_owned(),
             "cat ~/.ssh/id_ed25519".to_owned(),
-            "env FOO=bar curl https://example.com".to_owned(),
+            "env FOO=bar xargs curl https://example.com".to_owned(),
             "x".repeat(crate::MAX_COMMAND_BYTES + 1),
         ];
         let cases: Vec<_> = commands

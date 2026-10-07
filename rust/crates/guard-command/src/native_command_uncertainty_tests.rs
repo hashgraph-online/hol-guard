@@ -127,3 +127,51 @@ fn an_expired_deadline_still_fails_closed_for_unparsed_commands() {
         "native_command_extension_evaluation_failed"
     );
 }
+
+#[test]
+fn unattributable_shell_shape_requires_review_instead_of_an_evaluation_failure() {
+    let binding = binding_with_layers(serde_json::json!([]));
+    for command in [
+        "echo $(date)",
+        "for f in a b; do wc -l $f; done",
+        "FOO=1 ls",
+        "nohup git push origin main",
+        "echo $(rg -n needle .)",
+        "x=$(git push --force origin main)",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_eq!(result.minimum_action, "review", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
+        let evidence = result.command_extensions.as_ref().unwrap();
+        assert!(evidence.evaluation_error.is_none(), "{command}");
+        assert!(evidence.binding.uncertainty_count > 0, "{command}");
+    }
+}
+
+#[test]
+fn unattributable_shell_shape_keeps_disabled_controls_and_hard_floors() {
+    let binding = binding_with_layers(disabled_permission_layer("command.git.push"));
+    for command in ["x=$(git push --force origin main)", "echo $(date)"] {
+        let result = evaluate(&binding, command);
+        assert_eq!(result.minimum_action, "block", "{command}");
+        assert_eq!(
+            result.reason_code, "native_command_permission_disabled",
+            "{command}"
+        );
+    }
+    let binding = binding_with_layers(serde_json::json!([]));
+    for command in [
+        "echo $(rm -rf ~/x)",
+        "for f in a; do rm -rf ~/$f; done",
+        "ls *.rs | xargs wc -l",
+        "PATH=/tmp:$PATH git status",
+        "fd -X rm {} > /tmp/out.log",
+        "echo $(find . -exec rm {} +)",
+        "env FOO=bar xargs curl https://example.com",
+        "echo ready; . ./env.sh",
+        "for f in a; do . ./$f; done",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_eq!(result.minimum_action, "block", "{command}");
+    }
+}

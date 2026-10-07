@@ -145,7 +145,7 @@ impl NativeCommandProgram {
         Ok(batch)
     }
 
-    pub(super) fn observe_declarative(
+    pub(crate) fn observe_declarative(
         &self,
         command: &CanonicalCommandV1,
         active_extensions: &BTreeSet<String>,

@@ -56,3 +56,40 @@ pub(super) fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &st
         .to_owned();
     }
 }
+
+impl super::CompiledNativeCommandControls {
+    /// Unattributed compatibility evidence may belong to any active
+    /// compatibility-owned rule, so it takes their strongest floor (never
+    /// below review) and reports whether any candidate control is disabled.
+    pub(super) fn unattributed_compatibility_floor(&self) -> (&'static str, bool) {
+        let mut floor = "review";
+        let mut disabled = false;
+        for rule in self
+            .program
+            .rules
+            .iter()
+            .filter(|rule| rule.is_compatibility_owned())
+        {
+            let extension = &self.program.extensions[rule.extension_index];
+            if !self.active_extensions.contains(&extension.extension_id) {
+                continue;
+            }
+            if self.blocked_extensions.contains(&extension.extension_id)
+                || self.blocked_permissions.contains(&rule.permission_id)
+            {
+                disabled = true;
+            }
+            if self
+                .explicitly_enabled_permissions
+                .contains(&rule.permission_id)
+            {
+                continue;
+            }
+            let candidate = rule_floor(rule, extension.required);
+            if rank(candidate) > rank(floor) {
+                floor = candidate;
+            }
+        }
+        (floor, disabled)
+    }
+}

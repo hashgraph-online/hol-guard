@@ -212,13 +212,27 @@ impl CompiledNativeCommandControls {
         deadline: Option<Instant>,
         context: crate::pretool::PathContext<'_>,
     ) -> PreToolResultV1 {
+        let mut compatibility_unattributed = false;
         let observed = match command {
-            Some(command) => self.program.observe_with_context(
+            Some(command) => match self.program.observe_with_context(
                 command,
                 &self.active_extensions,
                 deadline,
                 context,
-            ),
+            ) {
+                // Unattributable parser shape keeps declarative evidence and
+                // a bounded uncertainty floor instead of an evaluation failure.
+                Err(error)
+                    if crate::command_compatibility::compatibility_unattributable(
+                        command, error,
+                    ) =>
+                {
+                    compatibility_unattributed = true;
+                    self.program
+                        .observe_declarative(command, &self.active_extensions, deadline)
+                }
+                observed => observed,
+            },
             None => Ok(NativeCommandObservationBatchV1::default()),
         };
         let mut batch = match observed {
@@ -326,6 +340,15 @@ impl CompiledNativeCommandControls {
                 reason = "native_command_permission_disabled";
             }
         }
+        if compatibility_unattributed && batch.evaluation_error.is_none() {
+            let (candidate, disabled) = self.unattributed_compatibility_floor();
+            if disabled {
+                floor = "block";
+                reason = "native_command_permission_disabled";
+            } else if uncertain_floor.is_none_or(|current| rank(candidate) > rank(current)) {
+                uncertain_floor = Some(candidate);
+            }
+        }
         if let Some(candidate) = uncertain_floor {
             if rank(candidate) > rank(floor) {
                 floor = candidate;
@@ -364,7 +387,8 @@ impl CompiledNativeCommandControls {
                     .iter()
                     .filter(|observation| !observation.uncertainty_reasons.is_empty())
                     .count()
-                + usize::from(batch.evaluation_error.is_some()),
+                + usize::from(batch.evaluation_error.is_some())
+                + usize::from(compatibility_unattributed),
         };
         if result.reason_code == "native_command_review_required"
             && result.minimum_action == "review"

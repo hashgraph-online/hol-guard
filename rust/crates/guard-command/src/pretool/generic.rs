@@ -133,26 +133,53 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     )
 }
 
-fn payload_with_command(payload: &Value, command: &str) -> Value {
+const PROJECTED_COMMAND_KEYS: [&str; 7] = [
+    "command",
+    "cmd",
+    "command_line",
+    "commandLine",
+    "shell_command",
+    "shellCommand",
+    "commands",
+];
+
+/// Rewrite every command string the generic extractor reads, in every map.
+///
+/// Harnesses such as ZCode send the same tool input under both `tool_input`
+/// and `toolInput`; projecting only one copy made extraction see two
+/// different commands and block the call as ambiguous. Only values equal to
+/// the extracted command are replaced, so unrelated strings and non-string
+/// command shapes stay untouched and keep failing closed.
+fn payload_with_command(payload: &Value, original: &str, command: &str) -> Value {
     let mut projected = payload.clone();
-    let Some(object) = projected.as_object_mut() else {
-        return projected;
-    };
-    for key in ["tool_input", "arguments", "input"] {
-        if let Some(nested) = object.get_mut(key).and_then(|value| value.as_object_mut()) {
-            for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
-                if nested.contains_key(command_key) {
-                    nested.insert(command_key.to_owned(), command.into());
+    rewrite_command_values(&mut projected, original, command, 0);
+    projected
+}
+
+fn rewrite_command_values(value: &mut Value, original: &str, command: &str, depth: usize) {
+    if depth > extract::MAX_PRE_TOOL_DEPTH {
+        return;
+    }
+    match value {
+        Value::Object(record) => {
+            for key in PROJECTED_COMMAND_KEYS {
+                if let Some(slot @ Value::String(_)) = record.get_mut(key) {
+                    if slot.as_str().map(str::trim) == Some(original) {
+                        *slot = command.into();
+                    }
                 }
             }
+            for child in record.values_mut() {
+                rewrite_command_values(child, original, command, depth.saturating_add(1));
+            }
         }
-    }
-    for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
-        if object.contains_key(command_key) {
-            object.insert(command_key.to_owned(), command.into());
+        Value::Array(items) => {
+            for child in items {
+                rewrite_command_values(child, original, command, depth.saturating_add(1));
+            }
         }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
-    projected
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -184,7 +211,11 @@ fn evaluate_envelope(
         .filter(|_| project_redirects && !search_scope_proven)
         .and_then(|command| redirect_projection::project(command, context))
     {
-        let projected_payload = payload_with_command(payload, &projection.command);
+        let projected_payload = payload_with_command(
+            payload,
+            signals.command.as_deref().unwrap_or_default(),
+            &projection.command,
+        );
         let projected = evaluate_envelope(
             harness,
             event,

@@ -144,6 +144,10 @@ pub struct ProgramRule {
 }
 
 impl ProgramRule {
+    pub(crate) fn is_compatibility_owned(&self) -> bool {
+        self.matcher.is_none()
+    }
+
     pub(crate) fn is_compatibility_attribution_only(&self) -> bool {
         self.matcher.is_none() && self.default_mode == "disabled"
     }
