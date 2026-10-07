@@ -2,25 +2,29 @@
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from hashlib import sha256
-from ipaddress import ip_address
-from pathlib import Path, PurePath
-from typing import Literal
+from pathlib import Path
+from typing import Literal, cast
 
 from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
-from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
+from .config import GuardConfig
 from .local_cli_trust import apply_local_mcp_extension_decision
+from .mcp_fresh_approval import fresh_local_tool_approval_matches, fresh_lookup_preserves_claim
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
+from .native_context import (
+    context_mcp_tool_approval_hash,
+    context_mcp_tool_policy,
+    context_mcp_tool_risk,
+    context_opaque_digest,
+)
 from .receipts import build_receipt
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
-    build_approval_context_token,
+    current_extension_control_binding_digest,
 )
 from .runtime.approval_context import (
     saved_allow_context_validation_reason as _tool_call_saved_allow_validation_reason,  # noqa: F401 - evaluation compatibility
@@ -48,8 +52,6 @@ from .runtime.mcp_protection import (
 from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
-
-_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v4"  # bump with risk/action semantics
 
 _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "review": ("runtime_tool_call_review_required", "runtime tool call awaiting review"),
@@ -266,7 +268,11 @@ def build_tool_call_artifact(
     elif server_identity is not None:
         server_hash = server_identity.identity_hash
     else:
-        server_hash = server_id or sha256(f"{harness}:{source_scope}:{server_name}".encode()).hexdigest()
+        server_hash = server_id or context_opaque_digest(
+            f"{harness}:{source_scope}:{server_name}",
+            unbound_label="mcp-server",
+            strict=False,  # identity hash; stored rows share this producer
+        )
     tool_identity = build_mcp_tool_identity(
         server_hash=server_hash,
         tool_name=tool_name,
@@ -306,131 +312,52 @@ def build_tool_call_hash(
     workspace: Path | str | None = None,
     config: GuardConfig | None = None,
 ) -> str:
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    content_arguments: object = arguments
-    if browser_intent is not None:
-        content_arguments = {
-            "intent": browser_intent.intent,
-            "operation": browser_intent.operation,
-            "target_origin": browser_intent.target_origin,
-            "target_path_prefix": browser_intent.target_path_prefix,
-            "method": browser_intent.method,
-            "profile_mode": browser_intent.profile_mode,
-            "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-            "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-            "mcp_schema_hash": browser_intent.mcp_schema_hash,
-            "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-        }
-        exact_arguments = arguments
-        if isinstance(arguments, Mapping):
-            exact_arguments = {
-                key: value for key, value in arguments.items() if key not in browser_intent.volatile_fields_dropped
-            }
-        content_arguments["exact_arguments_hash"] = sha256(
-            json.dumps(exact_arguments, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
-        if browser_intent.sensitive_surface_flags:
-            sensitive_arguments = arguments
-            if isinstance(arguments, Mapping):
-                sensitive_arguments = {
-                    key: value for key, value in arguments.items() if key not in browser_intent.volatile_fields_dropped
-                }
-            content_arguments["sensitive_arguments_hash"] = sha256(
-                json.dumps(sensitive_arguments, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest()
-    legacy_material: dict[str, object] = {
+    request: dict[str, object] = {
+        "artifact": {
+            "name": artifact.name,
+            "command": artifact.command,
+            "metadata": dict(artifact.metadata),
+        },
         "artifact_id": artifact.artifact_id,
         "config_path": artifact.config_path,
+        "harness": artifact.harness,
+        "publisher": artifact.publisher,
+        "source_scope": artifact.source_scope,
         "transport": artifact.transport,
-        "server_fingerprint": artifact.metadata.get("server_fingerprint"),
-        "server_identity": artifact.metadata.get("mcp_server_identity"),
-        "tool_identity": artifact.metadata.get("mcp_tool_identity"),
-        "arguments": content_arguments,
+        "arguments": arguments,
+        "config": None
+        if config is None
+        else {
+            **_tool_call_configuration(config),
+            "managed_policy_hash": config.managed_policy_hash,
+            "managed_policy_status": config.managed_policy_status,
+            "sandbox_analysis": config.sandbox_analysis,
+        },
+        "workspace": _normalized_tool_call_workspace(workspace) if workspace is not None else None,
     }
-    authority_hash = artifact.metadata.get("mcp_tool_authority_hash")
-    if authority_hash is not None:
-        legacy_material["tool_authority_hash"] = authority_hash
-    provider_hash = artifact.metadata.get("mcp_provider_catalog_hash")
-    if provider_hash is not None:
-        legacy_material["provider_catalog_hash"] = provider_hash
-    # Keep the legacy digest for callers that genuinely have no workspace,
-    # while binding every workspace-aware runtime call to its effective cwd.
-    # Artifact-scope policy rows intentionally discard their workspace column,
-    # so the digest itself must carry this part of the security identity.
-    if workspace is not None:
-        legacy_material["workspace"] = _normalized_tool_call_workspace(workspace)
-    legacy_payload = json.dumps(legacy_material, sort_keys=True)
-    legacy_hash = sha256(legacy_payload.encode()).hexdigest()
-    if config is None:
-        return legacy_hash
-    normalized_workspace = _normalized_tool_call_workspace(workspace) if workspace is not None else None
-    server_fingerprint = artifact.metadata.get("server_fingerprint")
-    resolved_executable = (
-        server_fingerprint.get("resolved_executable") if isinstance(server_fingerprint, Mapping) else None
-    )
-    tool_catalog_fingerprint = (
-        server_fingerprint.get("tool_catalog_fingerprint") if isinstance(server_fingerprint, Mapping) else None
-    )
-    content_hash = sha256(
-        json.dumps(
-            {
-                "arguments": content_arguments,
-                "artifact_id": artifact.artifact_id,
-                "config_path": artifact.config_path,
-            },
-            sort_keys=True,
-        ).encode()
-    ).hexdigest()
-    return build_approval_context_token(
-        identity={
-            "artifact_id": artifact.artifact_id,
-            "config_path": artifact.config_path,
-            "harness": artifact.harness,
-            "publisher": artifact.publisher,
-            "source_scope": artifact.source_scope,
-            "workspace": normalized_workspace,
-            "resolved_executable": resolved_executable,
-        },
-        content=content_hash,
-        capabilities={
-            "risk_categories": list(tool_call_risk_categories(artifact, arguments)),
-            "server_identity": artifact.metadata.get("mcp_server_identity"),
-            "tool_catalog_fingerprint": tool_catalog_fingerprint,
-            "tool_identity": artifact.metadata.get("mcp_tool_identity"),
-            "transport": artifact.transport,
-            **({"tool_authority_hash": authority_hash} if authority_hash is not None else {}),
-            **({"provider_catalog_hash": provider_hash} if provider_hash is not None else {}),
-        },
-        policy=_tool_call_policy_context(config, artifact),
-        sandbox={"analysis": config.sandbox_analysis},
-    )
+    if config is not None:
+        request["extension_control_digest"] = current_extension_control_binding_digest()
+    token_or_digest, _risk_categories = context_mcp_tool_approval_hash(request, expect_token=config is not None)
+    return token_or_digest
 
 
-def _tool_call_policy_context(config: GuardConfig, artifact: GuardArtifact) -> dict[str, object]:
-    explicit_risk_action = _configured_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness)
+def _tool_call_configuration(config: GuardConfig) -> dict[str, object]:
+    """Raw configuration DTO; policy resolution and versioning are native."""
     return {
-        "artifact_override": config.resolve_action_override(
-            artifact.harness,
-            artifact.artifact_id,
-            artifact.publisher,
-        ),
-        "default_action": config.default_action,
-        "effective_risk_action": explicit_risk_action
-        or resolve_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness),
-        "evaluator_policy_version": _MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION,
-        "managed_locked_settings": list(config.managed_locked_settings),
-        "managed_policy_hash": config.managed_policy_hash,
-        "managed_policy_status": config.managed_policy_status,
-        "mode": config.mode,
-        **(
-            {
-                "protection_posture": config.protection_posture,
-                "protection_posture_explicit": True,
-            }
-            if config.protection_posture_explicit
-            else {}
-        ),
-        "security_level": config.security_level,
+        field: getattr(config, field)
+        for field in (
+            "mode",
+            "default_action",
+            "artifact_actions",
+            "publisher_actions",
+            "harness_actions",
+            "risk_actions",
+            "harness_risk_actions",
+            "security_level",
+            "protection_posture",
+            "protection_posture_explicit",
+            "managed_locked_settings",
+        )
     }
 
 
@@ -565,6 +492,9 @@ def _revalidate_claimed_tool_call_approval(
     all of those inputs before returning an executable allow.
     """
 
+    from .native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     refresh_failed = False
     if fresh_authority_provider is None:
         fresh_config = initial_config
@@ -614,6 +544,10 @@ def _revalidate_claimed_tool_call_approval(
         validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM if context_changed is not None else None
     if fresh_decision.approval_reuse_reason_code == "approval_reuse_integrity_failure":
         validation_reason = "approval_reuse_integrity_failure"
+    elif fresh_decision.approval_reuse_status == "rejected" and not fresh_lookup_preserves_claim(
+        fresh_decision.approval_reuse_reason_code
+    ):
+        validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
 
     # A fresh unclaimed allow is not launch authority. Reuse the freshly
     # computed current action, while preserving a newly observed saved block or
@@ -646,6 +580,12 @@ def _revalidate_claimed_tool_call_approval(
         "allow",
         saved_decision_present=True,
         validation_reason=validation_reason,
+        fresh_local_approval=(
+            claim_disposition == "consumed"
+            and fresh_local_tool_approval_matches(
+                claimed_decision, artifact=fresh_artifact, artifact_hash=fresh_artifact_hash
+            )
+        ),
     )
     return replace(
         _tool_call_decision_with_reuse(post_claim_current, reuse),
@@ -718,91 +658,32 @@ def _evaluate_current_tool_call(
     artifact: GuardArtifact,
     arguments: object,
 ) -> ToolCallDecision:
-    """Evaluate current configuration and call shape without saved state."""
-
-    configured_override = config.resolve_action_override(
-        artifact.harness,
-        artifact.artifact_id,
-        artifact.publisher,
+    """Present the native recommendation; saved approval authority is separate."""
+    policy = context_mcp_tool_policy(
+        {
+            "artifact": {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)},
+            "arguments": arguments,
+            "harness": artifact.harness,
+            "artifact_id": artifact.artifact_id,
+            "publisher": artifact.publisher,
+            "config": _tool_call_configuration(config),
+        }
     )
-    current_config_action = configured_override if configured_override is not None else config.default_action
-
-    def with_current_config(decision: ToolCallDecision) -> ToolCallDecision:
-        effective_action = most_restrictive_guard_action(decision.action, current_config_action)
-        if effective_action == decision.action:
-            return decision
-        return replace(
-            decision,
-            action=effective_action,
-            source="policy",
-            summary=("Local Guard's current configuration is stricter than the tool-call-specific recommendation."),
-        )
-
-    signals = tool_call_risk_signals(artifact, arguments)
-    risk_categories = tool_call_risk_categories(artifact, arguments)
-    explicit_risk_action = _configured_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness)
-
-    if len(signals) == 0:
-        return with_current_config(
-            ToolCallDecision(
-                action="allow",
-                source="heuristic",
-                signals=(),
-                summary="Guard did not detect a high-risk signal in this tool call.",
-                risk_categories=(),
-            )
-        )
-    if explicit_risk_action is None and _routine_browser_call_is_safe_by_default(risk_categories):
-        return with_current_config(
-            ToolCallDecision(
-                action="allow",
-                source="browser-routine",
-                signals=signals,
-                summary=tool_call_risk_summary(artifact, arguments),
-                risk_categories=risk_categories,
-            )
-        )
-    configured_risk_action = explicit_risk_action or resolve_risk_action(
-        config,
-        "mcp_dangerous_tool",
-        harness=artifact.harness,
-    )
-    if configured_risk_action is not None:
-        source = "policy"
-        if (
-            explicit_risk_action is None
-            and not config.protection_posture_explicit
-            and config.mode == "prompt"
-            and config.security_level == DEFAULT_SECURITY_LEVEL
-        ):
-            configured_risk_action = "review"
-            source = "risk-policy"
-        return with_current_config(
-            ToolCallDecision(
-                action=configured_risk_action,
-                source=source,
-                signals=signals,
-                summary=tool_call_risk_summary(artifact, arguments),
-                risk_categories=risk_categories,
-            )
-        )
-    return with_current_config(
-        ToolCallDecision(
-            action="review" if config.mode == "prompt" else "block",
-            source="heuristic",
-            signals=signals,
-            summary=tool_call_risk_summary(artifact, arguments),
-            risk_categories=risk_categories,
-        )
-    )
-
-
-def _routine_browser_call_is_safe_by_default(risk_categories: tuple[str, ...]) -> bool:
-    categories = set(risk_categories)
-    routine_categories = {"browser_navigation", "browser_inspection"}
-    informational_categories = {"browser_external_domain"}
-    return bool(categories.intersection(routine_categories)) and categories.issubset(
-        routine_categories | informational_categories
+    categories = tuple(policy["risk_categories"])
+    signals = _risk_signals_from_categories(artifact, arguments, categories)
+    summary = {
+        "no_risk": "Guard did not detect a high-risk signal in this tool call.",
+        "configuration_stricter": (
+            "Local Guard's current configuration is stricter than the tool-call-specific recommendation."
+        ),
+        "risk": _risk_summary_from_signals(signals),
+    }[policy["summary_code"]]
+    return ToolCallDecision(
+        action=cast(GuardAction, policy["action"]),
+        source=policy["source"],
+        signals=signals,
+        summary=summary,
+        risk_categories=categories,
     )
 
 
@@ -850,17 +731,15 @@ def _tool_call_decision_with_reuse(
     )
 
 
-def _configured_risk_action(config: GuardConfig, risk_class: str, *, harness: str) -> GuardAction | None:
-    if config.harness_risk_actions is not None:
-        harness_actions = config.harness_risk_actions.get(harness)
-        if harness_actions is not None and risk_class in harness_actions:
-            return harness_actions[risk_class]
-    if config.risk_actions is not None and risk_class in config.risk_actions:
-        return config.risk_actions[risk_class]
-    return None
-
-
 def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
+    return _risk_signals_from_categories(artifact, arguments, tool_call_risk_categories(artifact, arguments))
+
+
+def _risk_signals_from_categories(
+    artifact: GuardArtifact,
+    arguments: object,
+    categories: tuple[str, ...],
+) -> tuple[str, ...]:
     browser_intent = normalize_browser_mcp_intent(artifact, arguments)
     signals_by_category: dict[str, str] = {
         "filesystem_access": "call shape implies filesystem path access",
@@ -887,450 +766,22 @@ def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[
                 ),
             }
         )
-    return tuple(signals_by_category[category] for category in tool_call_risk_categories(artifact, arguments))
+    return tuple(signals_by_category[category] for category in categories)
 
 
 def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
-    """Return normalized Cloud risk categories for one MCP tool call."""
-
-    categories = _tool_call_risk_category_set(artifact, arguments)
-    order = (
-        "filesystem_access",
-        "command_execution",
-        "destructive_mutation",
-        "outbound_network",
-        "privileged_system_mutation",
-        "secret_access",
-        "tool_schema_mismatch",
-        "browser_navigation",
-        "browser_inspection",
-        "browser_interaction",
-        "browser_transfer",
-        "browser_privileged",
-        "browser_external_domain",
-        "browser_shared_profile",
-        "browser_sensitive_surface",
+    """Return Rust-owned Cloud risk categories for one MCP tool call."""
+    return context_mcp_tool_risk(
+        {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)},
+        arguments,
     )
-    return tuple(category for category in order if category in categories)
-
-
-def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> set[str]:
-    tool_name = PurePath(artifact.command or artifact.name).name
-    serialized_arguments = _serialized_tool_arguments(arguments)
-    combined = _risk_match_text(f"{artifact.name} {serialized_arguments}")
-    tool_name_tokens = set(_tool_name_tokens(tool_name))
-    categories: set[str] = set()
-    argument_categories = _argument_key_risk_categories(arguments)
-    schema_categories = _schema_risk_categories(artifact.metadata.get("tool_schema"))
-    description_categories = _description_risk_categories(artifact.metadata.get("tool_description"))
-
-    # Extract browser intent early so we can suppress outbound_network for
-    # browser navigation targets.
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    is_browser_navigation = browser_intent is not None and browser_intent.intent == "browser.navigation"
-
-    if len(tool_name_tokens.intersection({"delete", "remove", "rm", "destroy", "erase"})) > 0:
-        categories.add("destructive_mutation")
-    if len(
-        tool_name_tokens.intersection({"shell", "bash", "exec", "execute", "command", "powershell"})
-    ) > 0 or _matches_any(
-        combined,
-        (
-            r"(?<![a-z0-9_])(subprocess|child_process|childprocess|popen|os\.system|runtime\.exec)(?![a-z0-9_])",
-            r"(?<![a-z0-9_])(spawn|execfile|system)(?:_sync)?\s*\(",
-        ),
-    ):
-        categories.add("command_execution")
-    network_patterns = (
-        r"https?://",
-        _token_pattern("curl", "wget", "fetch", "axios", "requests"),
-        r"(?<![a-z0-9_])(?:socket|net|dns)\s*[.(]",
-        r"(?<![a-z0-9_])(?:create_connection|getaddrinfo|gethostbyname|sendto|recvfrom)\s*\(",
-        r"(?<![a-z0-9_])(?:urllib(?:\.request)?|http\.client|https?)\s*\.",
-        r"(?<![a-z0-9_])(udp|tcp|socks|proxy|tunnel|port_forward|port-forward)(?![a-z0-9_])",
-    )
-    if (_matches_any(combined, network_patterns) or _contains_ip_address(combined)) and not is_browser_navigation:
-        # Browser navigation intent suppresses generic outbound_network;
-        # browser-specific categories below capture the actual risk surface.
-        categories.add("outbound_network")
-    if _matches_any(
-        combined,
-        (
-            r"(?<![a-z0-9_-])\.env(?![a-z0-9_-])",
-            r"(?<![a-z0-9_-])\.ssh(?![a-z0-9_-])",
-            r"(?<![a-z0-9])(id[_-]?rsa|credentials|token|secret|passwd)(?![a-z0-9])",
-            r"(?<![a-z0-9_-])\.(npmrc|pypirc)(?![a-z0-9_-])",
-        ),
-    ):
-        categories.add("secret_access")
-    if _matches_any(
-        combined,
-        (_token_pattern("sudo", "chmod", "chown", "launchctl", "systemctl"),),
-    ):
-        categories.add("privileged_system_mutation")
-    categories.update(argument_categories)
-    categories.update(schema_categories)
-    categories.update(description_categories)
-    if (
-        browser_intent is not None
-        and "filesystem_access" not in argument_categories
-        and "filesystem_access" not in description_categories
-    ):
-        categories.discard("filesystem_access")
-    mismatch_schema_categories = set(schema_categories)
-    if browser_intent is not None and browser_intent.intent == "browser.navigation":
-        mismatch_schema_categories.discard("outbound_network")
-    if _tool_schema_understates_name(tool_name_tokens, mismatch_schema_categories):
-        categories.add("tool_schema_mismatch")
-
-    # Browser intent categories (HGBM034-HGBM043)
-    if browser_intent is not None:
-        if browser_intent.intent == "browser.navigation":
-            categories.add("browser_navigation")
-            # Suppress outbound_network for browser navigation — argument
-            # keys like 'url' would otherwise re-add it.
-            categories.discard("outbound_network")
-            # External domain = public and not localhost/loopback
-            if browser_intent.target_domain and browser_intent.target_domain not in (
-                "localhost",
-                "127.0.0.1",
-                "::1",
-            ):
-                categories.add("browser_external_domain")
-        elif browser_intent.intent == "browser.inspect":
-            categories.add("browser_inspection")
-        elif browser_intent.intent == "browser.interact":
-            categories.add("browser_interaction")
-        elif browser_intent.intent == "browser.transfer":
-            categories.add("browser_transfer")
-        elif browser_intent.intent == "browser.privileged":
-            categories.add("browser_privileged")
-
-        if browser_intent.profile_mode in ("shared", "remote-debugging"):
-            categories.add("browser_shared_profile")
-
-        if browser_intent.sensitive_surface_flags:
-            categories.add("browser_sensitive_surface")
-
-    return categories
-
-
-def _serialized_tool_arguments(arguments: object) -> str:
-    if arguments is None:
-        return ""
-    try:
-        return json.dumps(arguments, sort_keys=True, default=str)
-    except (TypeError, ValueError):
-        return str(arguments)
-
-
-def _contains_ip_address(value: str) -> bool:
-    for match in re.finditer(r"(?<![0-9a-z])\[?([0-9a-f:.]{3,})\]?(?![0-9a-z])", value, flags=re.IGNORECASE):
-        candidate = match.group(1)
-        if candidate.count(":") == 1 and "." in candidate:
-            candidate = candidate.partition(":")[0]
-        try:
-            ip_address(candidate)
-        except ValueError:
-            continue
-        return True
-    return False
-
-
-def _matches_any(value: str, patterns: tuple[str, ...]) -> bool:
-    return any(re.search(pattern, value) is not None for pattern in patterns)
-
-
-def _token_pattern(*tokens: str) -> str:
-    alternatives = "|".join(re.escape(token) for token in tokens)
-    return rf"(?<![a-z0-9])({alternatives})(?![a-z0-9])"
-
-
-def _argument_key_risk_categories(arguments: object) -> set[str]:
-    if not isinstance(arguments, Mapping):
-        return set()
-    categories: set[str] = set()
-    keys = _argument_key_names(arguments)
-    if keys.intersection(
-        {
-            "file",
-            "filepath",
-            "filepaths",
-            "files",
-            "path",
-            "paths",
-            "source",
-            "sourcepath",
-            "sourcepaths",
-            "sources",
-            "target",
-            "targetpath",
-            "targetpaths",
-            "targets",
-        }
-    ):
-        categories.add("filesystem_access")
-    if keys.intersection({"command", "cmd", "script", "shell"}):
-        categories.add("command_execution")
-    if keys.intersection({"callback", "endpoint", "uri", "url", "urls", "webhook"}):
-        categories.add("outbound_network")
-    return categories
-
-
-def _argument_key_names(value: object) -> set[str]:
-    names: set[str] = set()
-    pending: list[object] = [value]
-    visited_ids: set[int] = set()
-    while pending:
-        current = pending.pop()
-        if isinstance(current, Mapping):
-            current_id = id(current)
-            if current_id in visited_ids:
-                continue
-            visited_ids.add(current_id)
-            for key, item in current.items():
-                names.add(_normalized_argument_key(str(key)))
-                pending.append(item)
-        elif isinstance(current, list | tuple):
-            current_id = id(current)
-            if current_id in visited_ids:
-                continue
-            visited_ids.add(current_id)
-            pending.extend(current)
-    return names
-
-
-def _schema_risk_categories(schema: object) -> set[str]:
-    keys = _schema_property_key_names(schema)
-    categories: set[str] = set()
-    if keys.intersection(
-        {
-            "file",
-            "filepath",
-            "filepaths",
-            "files",
-            "path",
-            "paths",
-            "source",
-            "sourcepath",
-            "sourcepaths",
-            "sources",
-            "target",
-            "targetpath",
-            "targetpaths",
-            "targets",
-        }
-    ):
-        categories.add("filesystem_access")
-    if keys.intersection({"command", "cmd", "script", "shell"}):
-        categories.add("command_execution")
-    if keys.intersection({"callback", "endpoint", "uri", "url", "urls", "webhook"}):
-        categories.add("outbound_network")
-    return categories
-
-
-def _schema_property_key_names(
-    value: object,
-    *,
-    _root_schema: Mapping[str, object] | None = None,
-    _visited_refs: set[str] | None = None,
-    _visited_ids: set[int] | None = None,
-) -> set[str]:
-    names: set[str] = set()
-    if isinstance(value, Mapping):
-        root_schema = value if _root_schema is None else _root_schema
-        visited_refs = set() if _visited_refs is None else _visited_refs
-        visited_ids = set() if _visited_ids is None else _visited_ids
-        val_id = id(value)
-        if val_id in visited_ids:
-            return names
-        visited_ids.add(val_id)
-        ref_value = value.get("$ref")
-        if isinstance(ref_value, str) and ref_value not in visited_refs:
-            visited_refs.add(ref_value)
-            resolved = _resolve_local_schema_ref(root_schema, ref_value)
-            if resolved is not None:
-                names.update(
-                    _schema_property_key_names(
-                        resolved,
-                        _root_schema=root_schema,
-                        _visited_refs=visited_refs,
-                        _visited_ids=visited_ids,
-                    )
-                )
-        properties = value.get("properties")
-        if isinstance(properties, Mapping):
-            for key, item in properties.items():
-                names.add(_normalized_argument_key(str(key)))
-                names.update(
-                    _schema_property_key_names(
-                        item,
-                        _root_schema=root_schema,
-                        _visited_refs=visited_refs,
-                        _visited_ids=visited_ids,
-                    )
-                )
-        for collection_key in (
-            "additionalProperties",
-            "allOf",
-            "anyOf",
-            "contains",
-            "else",
-            "if",
-            "items",
-            "oneOf",
-            "prefixItems",
-            "propertyNames",
-            "then",
-            "unevaluatedItems",
-            "unevaluatedProperties",
-        ):
-            child = value.get(collection_key)
-            names.update(
-                _schema_property_key_names(
-                    child,
-                    _root_schema=root_schema,
-                    _visited_refs=visited_refs,
-                    _visited_ids=visited_ids,
-                )
-            )
-        dependent_schemas = value.get("dependentSchemas")
-        if isinstance(dependent_schemas, Mapping):
-            for child in dependent_schemas.values():
-                names.update(
-                    _schema_property_key_names(
-                        child,
-                        _root_schema=root_schema,
-                        _visited_refs=visited_refs,
-                        _visited_ids=visited_ids,
-                    )
-                )
-        pattern_properties = value.get("patternProperties")
-        if isinstance(pattern_properties, Mapping):
-            for child in pattern_properties.values():
-                names.update(
-                    _schema_property_key_names(
-                        child,
-                        _root_schema=root_schema,
-                        _visited_refs=visited_refs,
-                        _visited_ids=visited_ids,
-                    )
-                )
-        return names
-    if isinstance(value, list | tuple):
-        root_schema = _root_schema
-        visited_refs = set() if _visited_refs is None else _visited_refs
-        visited_ids = set() if _visited_ids is None else _visited_ids
-        for item in value:
-            names.update(
-                _schema_property_key_names(
-                    item,
-                    _root_schema=root_schema,
-                    _visited_refs=visited_refs,
-                    _visited_ids=visited_ids,
-                )
-            )
-    return names
-
-
-def _resolve_local_schema_ref(root_schema: Mapping[str, object], reference: str) -> object | None:
-    if reference.startswith("#/"):
-        current: object = root_schema
-        for part in reference[2:].split("/"):
-            token = part.replace("~1", "/").replace("~0", "~")
-            if isinstance(current, Mapping):
-                if token not in current:
-                    return None
-                current = current[token]
-            elif isinstance(current, list | tuple):
-                if not token.isdigit():
-                    return None
-                index = int(token)
-                if index >= len(current):
-                    return None
-                current = current[index]
-            else:
-                return None
-        return current
-    if not reference.startswith("#"):
-        return None
-    anchor_name = reference[1:]
-    if not anchor_name:
-        return root_schema
-    return _resolve_local_schema_anchor(root_schema, anchor_name)
-
-
-def _resolve_local_schema_anchor(root_schema: object, anchor_name: str) -> object | None:
-    pending: list[object] = [root_schema]
-    visited_ids: set[int] = set()
-    while pending:
-        current = pending.pop()
-        current_id = id(current)
-        if current_id in visited_ids:
-            continue
-        visited_ids.add(current_id)
-        if not isinstance(current, Mapping):
-            if isinstance(current, list | tuple):
-                pending.extend(item for item in current if isinstance(item, (Mapping, list, tuple)))
-            continue
-        anchor = current.get("$anchor")
-        dynamic_anchor = current.get("$dynamicAnchor")
-        if anchor == anchor_name or dynamic_anchor == anchor_name:
-            return current
-        pending.extend(item for item in current.values() if isinstance(item, (Mapping, list, tuple)))
-    return None
-
-
-def _description_risk_categories(description: object) -> set[str]:
-    if not isinstance(description, str):
-        return set()
-    normalized = _risk_match_text(description)
-    categories: set[str] = set()
-    if _matches_any(normalized, (r"\bread files?\b", r"\bopen files?\b", r"\bview files?\b")):
-        categories.add("filesystem_access")
-    if _matches_any(normalized, (_token_pattern("delete", "remove", "write"),)):
-        categories.add("destructive_mutation")
-    if _matches_any(normalized, (r"\brun command", _token_pattern("execute", "shell"))):
-        categories.add("command_execution")
-    return categories
-
-
-def _tool_schema_understates_name(tool_name_tokens: set[str], schema_categories: set[str]) -> bool:
-    dangerous_categories = {"command_execution", "destructive_mutation", "outbound_network"}
-    if len(schema_categories.intersection(dangerous_categories)) == 0:
-        return False
-    name_sounds_dangerous = (
-        len(
-            tool_name_tokens.intersection(
-                {
-                    "bash",
-                    "cmd",
-                    "command",
-                    "delete",
-                    "destroy",
-                    "exec",
-                    "execute",
-                    "patch",
-                    "remove",
-                    "rm",
-                    "run",
-                    "script",
-                    "shell",
-                    "write",
-                }
-            )
-        )
-        > 0
-    )
-    return not name_sounds_dangerous
-
-
-def _normalized_argument_key(value: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", _risk_match_text(value))
 
 
 def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
-    signals = tool_call_risk_signals(artifact, arguments)
+    return _risk_summary_from_signals(tool_call_risk_signals(artifact, arguments))
+
+
+def _risk_summary_from_signals(signals: tuple[str, ...]) -> str:
     if len(signals) == 0:
         return "No high-risk signal was detected in this tool call."
     if len(signals) == 1:
@@ -1515,16 +966,3 @@ def block_tool_call(
 
 
 _dedupe = dedupe_preserving_order
-
-
-def _tool_name_tokens(tool_name: str) -> tuple[str, ...]:
-    camel_normalized = _camel_token_normalized(tool_name)
-    return tuple(token for token in re.findall(r"[a-z0-9]+", camel_normalized.lower()) if token)
-
-
-def _risk_match_text(value: str) -> str:
-    return _camel_token_normalized(value).lower()
-
-
-def _camel_token_normalized(value: str) -> str:
-    return re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)

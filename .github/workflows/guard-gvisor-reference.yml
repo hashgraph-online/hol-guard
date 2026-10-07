@@ -23,6 +23,7 @@ jobs:
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "0.9.26"
+      - uses: ./.github/actions/stage-command-projections
       - name: Install Python dependencies
         run: uv sync --extra dev --frozen
       - name: Install pinned gVisor and static BusyBox

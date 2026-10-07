@@ -1,3 +1,21 @@
 # Deterministic SHA-256 digests of canonical source files, not credentials.
 8cca7abdb8f27a4ed1070d1f15e383806a4010ef:contributions/command-sources/migration-manifest.json:generic-api-key:7
 8cca7abdb8f27a4ed1070d1f15e383806a4010ef:contributions/command-sources/migration-manifest.json:generic-api-key:41
+5554b7b0dce523b7097bfd4824d06c4e3d082767:rust/crates/guard-scanner/src/staged_scanner.rs:aws-access-token:425
+714d2b368b10ae81c7aed9cd3b4b07234e325215:rust/crates/guard-scanner/src/staged_scanner.rs:aws-access-token:405
+0a9f170ca8479b4064e6db7e4d2eb1a34204b03d:rust/crates/guard-runtime/testdata/policy_integrity_resolver_oracle.json:generic-api-key:30
+d36bfd985c2532f55d09cddc2ae54154d99c891a:rust/crates/guard-runtime/testdata/secret_store_oracle.json:generic-api-key:2
+d36bfd985c2532f55d09cddc2ae54154d99c891a:rust/crates/guard-runtime/testdata/secret_store_oracle.json:generic-api-key:3
+d36bfd985c2532f55d09cddc2ae54154d99c891a:rust/crates/guard-runtime/testdata/secret_store_oracle.json:generic-api-key:8
+d36bfd985c2532f55d09cddc2ae54154d99c891a:rust/crates/guard-runtime/testdata/secret_store_oracle.json:generic-api-key:9
+8c16404c4b0b06eec5d2c32c49125d336aa1c100:rust/crates/guard-runtime/testdata/claim_reuse_seed.json:generic-api-key:2
+8c16404c4b0b06eec5d2c32c49125d336aa1c100:rust/crates/guard-policy-snapshot/testdata/policy_integrity_oracle.json:generic-api-key:118
+db9265495c6b4932809d5604e82bb1ba522c0414:rust/crates/guard-runtime/src/totp.rs:generic-api-key:394
+f37d56c979d76221d7a0e869eaac5ff381384e58:rust/crates/guard-scanner/src/secret_detection.rs:generic-api-key:1329
+f37d56c979d76221d7a0e869eaac5ff381384e58:rust/crates/guard-scanner/src/secret_detection.rs:generic-api-key:1519
+f37d56c979d76221d7a0e869eaac5ff381384e58:rust/crates/guard-scanner/src/secret_detection.rs:generic-api-key:1524
+f37d56c979d76221d7a0e869eaac5ff381384e58:rust/crates/guard-scanner/src/secret_detection.rs:generic-api-key:1553
+f37d56c979d76221d7a0e869eaac5ff381384e58:rust/crates/guard-scanner/src/secret_detection.rs:generic-api-key:1581
+d4b88a05b21b63adafc99151e0c99ac4deb343d8:rust/crates/guard-scanner/src/secret_detection.rs:generic-api-key:1620
+d4b88a05b21b63adafc99151e0c99ac4deb343d8:rust/crates/guard-scanner/src/secret_detection.rs:generic-api-key:1627
+d4b88a05b21b63adafc99151e0c99ac4deb343d8:rust/crates/guard-scanner/src/secret_detection.rs:generic-api-key:1633

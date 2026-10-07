@@ -52,15 +52,22 @@ jobs:
           uv run --no-sync python scripts/ci/rust_io_ownership_gate.py \
             --root . --json rust-io-ownership.json
       - name: Prove route and evidence privacy
+        uses: ./.github/actions/stage-command-projections
+      - name: Prove route and evidence privacy
         run: |
           uv run --no-sync python scripts/ci/rust_io_privacy_gate.py \
             --root . --json rust-io-privacy.json
+      - name: Build the native runtime for evidence-writer tests
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
       - name: Check native I/O formatting and focused tests
+        env:
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: |
           cargo fmt --manifest-path rust/Cargo.toml --all --check
           cargo test --manifest-path rust/Cargo.toml --locked -p guard-secure-fs -p guard-hook-core
           uv run --no-sync pytest -q \
             tests/test_rust_io_ownership_gate.py \
+            tests/test_rust_io_ownership_cache.py \
             tests/test_rust_io_privacy_gate.py \
             tests/test_hook_enrichment_queue.py \
             tests/test_guard_runtime_hook_evidence_writer.py \

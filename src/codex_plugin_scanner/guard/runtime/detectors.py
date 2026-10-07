@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.native_prompt import NativePromptAnalysisError
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.cisco_preflight import CiscoMcpPreflightDetector, CiscoSkillPreflightDetector
 from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
@@ -158,6 +159,8 @@ class DetectorRegistry:
             try:
                 detector_signals = detector.detect(action, context)
                 elapsed_ms = _elapsed_ms(started_at, self._clock())
+            except NativePromptAnalysisError:
+                raise
             except Exception as error:
                 elapsed_ms = _elapsed_ms(started_at, self._clock())
                 telemetry.append(_telemetry(detector, "error", elapsed_ms=elapsed_ms, error_type=type(error).__name__))
@@ -194,10 +197,9 @@ class PromptInjectionDetector:
     categories: tuple[RiskSignalCategory, ...] = ("prompt", "secret", "network", "bypass", "filesystem", "execution")
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
-        del context
         if action.action_type != "prompt" or action.prompt_excerpt is None:
             return ()
-        requests = detect_prompt_injection_requests(action.prompt_excerpt)
+        requests = detect_prompt_injection_requests(action.prompt_excerpt, guard_home=context.config.guard_home)
         return tuple(_prompt_request_signal(request) for request in requests)
 
 

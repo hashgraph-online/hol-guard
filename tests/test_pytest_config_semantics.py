@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -390,7 +391,10 @@ def test_pytest_config_changed_during_read_fails_closed(
             _write(config_path, "[pytest]\naddopts = -v\n")
         return original_fstat(descriptor)
 
-    monkeypatch.setattr(pytest_config_module.os, "fstat", racing_fstat)
+    # Scope the race to this reader. Other threads may call process-wide
+    # os.fstat and consume the injected mutation before the config is read.
+    reader_os = SimpleNamespace(**(vars(os) | {"fstat": racing_fstat}))
+    monkeypatch.setattr(pytest_config_module, "os", reader_os)
 
     result = parse_pytest_config(tmp_path, "pytest.ini")
 

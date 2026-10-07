@@ -160,11 +160,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "dispatcher.ts").write_text(
-                "const message = `failed ${reason}`;\n"
-                "switch (kind) {\n"
-                "  case 'spawn':\n"
-                "    return message;\n"
-                "}\n",
+                "const message = `failed ${reason}`;\nswitch (kind) {\n  case 'spawn':\n    return message;\n}\n",
                 encoding="utf-8",
             )
 
@@ -232,8 +228,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.js").write_text(
-                "const cmd = `echo ${userInput}`;\n"
-                'require("node:child_process").exec(cmd);\n',
+                'const cmd = `echo ${userInput}`;\nrequire("node:child_process").exec(cmd);\n',
                 encoding="utf-8",
             )
 
@@ -247,8 +242,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.ts").write_text(
-                "export const command: string = `echo ${userInput}`;\n"
-                "child_process.exec(command);\n",
+                "export const command: string = `echo ${userInput}`;\nchild_process.exec(command);\n",
                 encoding="utf-8",
             )
 
@@ -263,8 +257,7 @@ class TestCheckNoShellInjection:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "runner.ts").write_text(
-                f"const cmd = `echo ${{userInput}}` {suffix};\n"
-                "child_process.exec(cmd);\n",
+                f"const cmd = `echo ${{userInput}}` {suffix};\nchild_process.exec(cmd);\n",
                 encoding="utf-8",
             )
 

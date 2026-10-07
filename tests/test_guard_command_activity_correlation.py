@@ -15,12 +15,33 @@ from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
     COMMAND_ACTIVITY_CORRELATION_KEY_SCHEMA_VERSION,
     derive_proven_request_correlation,
+    load_existing_installation_correlation_key,
     load_or_create_installation_correlation_key,
     rotate_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.runtime.command_activity_privacy import InstallationCorrelationKey
 
 _STRONG_ID = "01J3ABCD9XYZ7NATIVEID"
+
+
+def test_existing_key_read_is_private_bounded_and_does_not_create_or_repair(tmp_path):
+    guard = tmp_path / "guard"
+    assert load_existing_installation_correlation_key(guard) is None
+    assert not guard.exists()
+    key = load_or_create_installation_correlation_key(guard)
+    path = guard / COMMAND_ACTIVITY_CORRELATION_KEY_FILE
+    before = path.stat()
+    loaded = load_existing_installation_correlation_key(guard)
+    assert loaded is not None and loaded.derive(b"probe") == key.derive(b"probe")
+    after = path.stat()
+    assert (after.st_ino, after.st_mtime_ns, after.st_mode) == (before.st_ino, before.st_mtime_ns, before.st_mode)
+    if os.name != "nt":
+        path.chmod(0o644)
+        assert load_existing_installation_correlation_key(guard) is None
+        assert stat.S_IMODE(path.stat().st_mode) == 0o644
+        path.chmod(0o600)
+    path.write_bytes(b"x" * 4097)
+    assert load_existing_installation_correlation_key(guard) is None
 
 
 def _fixed_key() -> InstallationCorrelationKey:

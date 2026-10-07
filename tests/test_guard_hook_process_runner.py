@@ -39,6 +39,7 @@ from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.hook_process_protocol import capture_hook_command
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
+from codex_plugin_scanner.guard.daemon.hook_process_runner_lifecycle import hook_worker_ready_timeout
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview, HookWorkerSlot
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -94,6 +95,127 @@ def test_daemon_start_budget_contains_initial_worker_readiness() -> None:
         hook_runner_module._HOOK_PROCESS_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
         > hook_entrypoint_module._HOOK_EVALUATOR_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
     )
+
+
+def test_daemon_start_timeout_scales_with_worker_ready_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
+    margin = daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS
+    # The client deadline always carries a margin over the worker floor so the
+    # daemon can finish binding and writing state before the poll gives up.
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == max(  # pyright: ignore[reportPrivateUsage]
+        daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS,
+        14.0 + margin,
+    )
+
+    # Raised worker floor (QEMU / cold host): the client poll must outlast it
+    # or the nested budget just fails one level higher.
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "45")
+    scaled = daemon_manager_module._default_guard_daemon_start_timeout()  # pyright: ignore[reportPrivateUsage]
+    assert scaled > 45.0
+    assert scaled == 45.0 + margin
+
+
+def test_hook_worker_ready_timeout_honors_environment_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
+    assert hook_worker_ready_timeout(14.0) == 14.0
+
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "45")
+    assert hook_worker_ready_timeout(14.0) == 45.0
+    # An operator override larger than the start ceiling raises the ceiling with it.
+    assert hook_worker_ready_timeout(200.0) == 45.0
+
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "2")
+    assert hook_worker_ready_timeout(14.0) == 14.0
+
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "not-a-number")
+    assert hook_worker_ready_timeout(14.0) == 14.0
+
+
+def test_hook_evaluator_ready_timeout_honors_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
+    assert hook_entrypoint_module._hook_evaluator_ready_timeout_seconds() == 12.0  # pyright: ignore[reportPrivateUsage]
+
+    monkeypatch.setenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", "60")
+    assert hook_entrypoint_module._hook_evaluator_ready_timeout_seconds() == 60.0  # pyright: ignore[reportPrivateUsage]
+
+    # A sub-floor value cannot deadlock the nested handshake budget.
+    monkeypatch.setenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", "3")
+    assert hook_entrypoint_module._hook_evaluator_ready_timeout_seconds() == 12.0  # pyright: ignore[reportPrivateUsage]
+
+
+def test_hook_evaluator_ready_timeout_derives_from_outer_worker_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    # One operator knob raises the whole nested chain: the worker inherits the
+    # daemon's env via "spawn", so the inner evaluator poll stays below the
+    # outer daemon->worker deadline with enough slack for the "ready" reply.
+    monkeypatch.delenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "45")
+    derived = hook_entrypoint_module._hook_evaluator_ready_timeout_seconds()  # pyright: ignore[reportPrivateUsage]
+    assert derived == 45.0 - hook_entrypoint_module._EVALUATOR_TO_WORKER_READY_MARGIN_SECONDS  # pyright: ignore[reportPrivateUsage]
+    assert derived < 45.0
+
+    # An explicit inner override still wins over the derived floor.
+    monkeypatch.setenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", "30")
+    assert hook_entrypoint_module._hook_evaluator_ready_timeout_seconds() == 30.0  # pyright: ignore[reportPrivateUsage]
+
+
+def test_timeout_env_keys_reach_detached_daemon() -> None:
+    # The detached daemon is launched with a minimal allowlisted environment.
+    # If the readiness knobs are not in that allowlist the operator override is
+    # silently dropped before the daemon spawns and the fix is inert.
+    allowlist = daemon_manager_module._GUARD_DAEMON_ENV_KEYS  # pyright: ignore[reportPrivateUsage]
+    assert "HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS" in allowlist
+    assert "HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS" in allowlist
+
+
+def test_evaluator_bootstrap_imports_only_resident_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = MagicMock()
+    connection.recv.return_value = ("stop", None)
+    imported: list[str] = []
+    monkeypatch.setenv("HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS", "250")
+    monkeypatch.setattr(hook_entrypoint_module.importlib, "import_module", imported.append)
+
+    hook_entrypoint_module._hook_evaluator_main(connection, None)  # pyright: ignore[reportPrivateUsage]
+
+    assert imported == [
+        "codex_plugin_scanner.guard.adapters.base",
+        "codex_plugin_scanner.guard.config",
+        "codex_plugin_scanner.guard.daemon.hook_worker",
+        "codex_plugin_scanner.guard.store",
+    ]
+    connection.send.assert_called_once_with(("ready", None))
+
+
+def test_isolated_requests_reuse_daemon_owned_policy_without_publishing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.daemon import hook_worker as worker_module
+
+    store = MagicMock()
+    worker = MagicMock()
+    worker.review_http_payload.return_value = {"decision": "allow"}
+    factory = MagicMock(return_value=worker)
+    monkeypatch.setattr(worker_module, "HookWorker", factory)
+    monkeypatch.setattr(
+        hook_entrypoint_module, "resident_hook_store_and_context", lambda _request, _stores: (store, None)
+    )
+    request = {
+        "payload": {"hook_event_name": "PreToolUse", "tool_name": "bash", "tool_input": {"command": "echo ok"}},
+        "harness": "omp",
+        "home_dir": str(tmp_path),
+        "guard_home": str(tmp_path),
+        "workspace": str(tmp_path),
+    }
+    workers = {}
+    for _ in range(2):
+        result = hook_entrypoint_module._run_resident_hook_request(  # pyright: ignore[reportPrivateUsage]
+            request, stores={}, hook_workers=workers, configured_guard_home=str(tmp_path)
+        )
+        assert result["reason_code"] is None
+    factory.assert_called_once_with(store=store, wait_for_native_policy=False, publish_native_policy=False)
+    assert worker.review_http_payload.call_count == 2
 
 
 def test_evaluator_becomes_ready_when_store_prewarm_fails(
@@ -1018,6 +1140,9 @@ def test_transient_initial_worker_failure_replenishes_capacity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The daemon initializes storage before starting isolated workers. Keep
+    # first-request schema migration outside this capacity-recovery contract.
+    _ = GuardStore(tmp_path)
     runner = HookProcessRunner(guard_home=tmp_path, process_limit=1)
     original_ready = hook_spawner_module.hook_worker_became_ready
     attempts = 0
@@ -1030,25 +1155,30 @@ def test_transient_initial_worker_failure_replenishes_capacity(
 
     monkeypatch.setattr(hook_runner_module, "hook_worker_became_ready", transient_ready)
     ready_workers = 0
-    review_payload: dict[str, object] | None = None
+    review_result: HookProcessReview | None = None
     try:
         runner.start()
         assert runner.wait_for_capacity(minimum_workers=1, timeout_seconds=10)
         ready_workers = runner.stats()["ready"]
-        review_payload = runner.review(
+        review_result = runner.review(
             payload={"hook_event_name": "SessionStart"},
             harness="pi",
             home_dir=tmp_path,
             guard_home=tmp_path,
             workspace=tmp_path,
             hook_env={},
-        ).payload
+        )
     finally:
         runner.close()
 
     assert attempts >= 2
     assert ready_workers == 1
-    assert review_payload is not None
+    assert review_result is not None
+    assert review_result.payload is not None, {
+        "reason_code": review_result.reason_code,
+        "runner_stats": runner.stats(),
+    }
+    assert review_result.reason_code is None
     assert runner.stats()["workers"] == 0
 
 
@@ -1385,7 +1515,7 @@ def test_review_returns_immediately_without_prepared_worker_capacity(tmp_path: P
         runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
         runner.close()
 
-    assert elapsed < 0.04
+    assert elapsed < 0.04 * under_coverage_scale(4.0)
     assert result.payload is None
     assert result.reason_code == "daemon_hook_process_not_ready"
 
@@ -1443,10 +1573,12 @@ def test_trusted_recovery_overlays_only_valid_failure_kind(
         cwd: Path,
         environment: Mapping[str, str],
         timeout_seconds: float,
+        deadline_monotonic: float | None = None,
         output_limit: int = 1_000_000,
         allow_windows_breakaway: bool = False,
     ) -> BoundedHookProcessResult:
         del command, input_text, cwd, timeout_seconds, output_limit
+        assert deadline_monotonic is None
         assert allow_windows_breakaway
         environments.append(dict(environment))
         return BoundedHookProcessResult(0, "", False, False)

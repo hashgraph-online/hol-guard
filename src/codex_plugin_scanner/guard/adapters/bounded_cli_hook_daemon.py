@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -13,7 +14,9 @@ from urllib.parse import urlparse
 from ..action_lattice import is_guard_action
 from ..daemon.hook_availability_policy import hook_event_pauses_when_unavailable, hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
-from .bounded_cli_hook_bridge import _event_name, _json_object
+from .bounded_cli_hook_envelope import _canonical_event_token, _event_name, _json_object
+from .bounded_cli_hook_failure import grok_observe_event
+from .bounded_hook_http import post_hook_json, prepare_grok_prompt
 from .zcode_hooks import zcode_authority_block_reason, zcode_hook_process_exit
 
 _MAX_HOOK_RESPONSE_BYTES = 1_000_000
@@ -231,11 +234,12 @@ def _daemon_response_to_native(
     event_name: str,
 ) -> tuple[str, str, int]:
     """Transform daemon policy data into harness-native output."""
+    event_name = _canonical_event_token(event_name) or event_name
     canonical = harness.strip().lower().replace("_", "-")
     if canonical == "grok" and not daemon_response:
         from .grok_hooks import is_grok_observe_only_event
 
-        if is_grok_observe_only_event(event_name):
+        if is_grok_observe_only_event(event_name) or event_name == "UserPromptSubmit":
             return "{}", "", 0
 
     if "hookSpecificOutput" in daemon_response or "decision" in daemon_response:
@@ -371,55 +375,65 @@ def try_daemon_hook(
     harness: str,
     input_text: str,
     timeout_seconds: float,
+    deadline_monotonic: float | None = None,
     _endpoint_loader: Callable[[Path, str], str | None] | None = None,
     _token_loader: Callable[[Path], str | None] | None = None,
     _opener_builder: Callable[[], urllib.request.OpenerDirector] | None = None,
 ) -> tuple[str, str, int] | None:
     """POST the hook payload to the running daemon; return native stdout or None."""
+    started = time.monotonic()
+    from .hook_http_deadline import deadline_http_handler
+
+    deadline = started + timeout_seconds if deadline_monotonic is None else deadline_monotonic
+    if started >= deadline:
+        return None
     endpoint = (_endpoint_loader or _daemon_hook_endpoint)(guard_home, harness)
-    if endpoint is None:
+    if endpoint is None or time.monotonic() >= deadline:
         return None
     try:
         _assert_loopback_http_url(endpoint)
     except ValueError:
         return None
     token = (_token_loader or _read_daemon_auth_token)(guard_home)
-    if token is None:
-        return None
-    timeout = min(float(timeout_seconds) * 0.5, _DAEMON_TIMEOUT_BUDGET_SECONDS)
-    request = urllib.request.Request(
-        endpoint,
-        data=input_text.encode("utf-8"),
-        headers={"Content-Type": "application/json", "X-Guard-Token": token},
-        method="POST",
-    )
-    try:
-        opener = (_opener_builder or _build_loopback_opener)()
-        with opener.open(request, timeout=timeout) as response:
-            final_url = response.geturl()
-            if final_url:
-                _assert_loopback_http_url(final_url)
-            if response.status != 200:
-                return None
-            body = response.read(_MAX_HOOK_RESPONSE_BYTES + 1)
-    except (OSError, urllib.error.URLError, TimeoutError, ValueError):
-        return None
-    if len(body) > _MAX_HOOK_RESPONSE_BYTES:
-        return None
-    try:
-        text = body.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-    candidate = text.strip()
-    if not candidate:
-        return None
-    try:
-        parsed = json.loads(candidate)
-    except ValueError:
-        return None
-    if not isinstance(parsed, dict):
+    if token is None or time.monotonic() >= deadline:
         return None
     event_name = _event_name(input_text)
+    grok_prompt = harness.strip().lower().replace("_", "-") == "grok" and event_name == "UserPromptSubmit"
+    timeout = min(float(timeout_seconds) * 0.5, 10.0 if grok_prompt else _DAEMON_TIMEOUT_BUDGET_SECONDS)
+    if grok_observe_event(harness, _event_name(input_text)):
+        timeout = min(timeout, 1.0)
+    transport_deadline = min(deadline, time.monotonic() + timeout)
+    timeout = transport_deadline - time.monotonic()
+    if timeout <= 0:
+        return None
+    try:
+        opener = (_opener_builder or _build_loopback_opener)()
+        if isinstance(opener, urllib.request.OpenerDirector):
+            opener.add_handler(deadline_http_handler(transport_deadline))
+    except (OSError, urllib.error.URLError, TimeoutError, ValueError):
+        return None
+    if grok_prompt:
+        prepared_input = prepare_grok_prompt(
+            endpoint,
+            token,
+            input_text,
+            opener=opener,
+            deadline=transport_deadline,
+            max_bytes=_MAX_HOOK_RESPONSE_BYTES,
+        )
+        if prepared_input is None:
+            return None
+        input_text = prepared_input
+    parsed = post_hook_json(
+        endpoint,
+        token,
+        input_text.encode("utf-8"),
+        opener=opener,
+        deadline=transport_deadline,
+        max_bytes=_MAX_HOOK_RESPONSE_BYTES,
+    )
+    if parsed is None:
+        return None
     if harness.strip().lower().replace("_", "-") == "hermes":
         from .hermes_runtime_hooks import hermes_bridge_response
 

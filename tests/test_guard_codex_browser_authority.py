@@ -138,6 +138,7 @@ def test_block_or_changed_context_resolution_remains_blocked(
     resolution_action: str,
     current_token: str,
     expected_validation: str | None,
+    native_context_digest: Path,
 ) -> None:
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     store = GuardStore(tmp_path / "guard-home")
@@ -235,6 +236,7 @@ def test_browser_allow_is_revalidated_against_context_recomputed_after_wait(
     fresh_action: str,
     change_context: bool,
     expected_validation: str,
+    native_context_digest: Path,
 ) -> None:
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     store = GuardStore(tmp_path / "guard-home")
@@ -294,6 +296,7 @@ def test_browser_allow_requires_fresh_authoritative_allow_after_atomic_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fresh_authoritative_action: str,
+    native_context_digest: Path,
 ) -> None:
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     store = GuardStore(tmp_path / "guard-home")
@@ -337,6 +340,7 @@ def test_browser_allow_requires_fresh_authoritative_allow_after_atomic_claim(
 def test_browser_allow_without_fresh_context_provider_fails_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     store = GuardStore(tmp_path / "guard-home")

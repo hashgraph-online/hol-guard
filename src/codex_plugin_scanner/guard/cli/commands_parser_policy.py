@@ -78,6 +78,13 @@ def _configure_guard_policy_parsers(
     _add_guard_common_args(policy_export_parser)
     policy_export_parser.add_argument("--json", action="store_true")
 
+    recovery_parser = policy_subparsers.add_parser(
+        "recover-business-source", help="Resume an interrupted business policy installation with fresh approval"
+    )
+    recovery_parser.add_argument("file", help="The exact document from the interrupted installation")
+    _add_guard_common_args(recovery_parser)
+    recovery_parser.add_argument("--json", action="store_true")
+
     policy_import_parser = policy_subparsers.add_parser("import", help="Import a policy document")
     policy_import_parser.add_argument("file")
     import_mode = policy_import_parser.add_mutually_exclusive_group(required=True)

@@ -8,6 +8,7 @@ import shlex
 import socket
 import sys
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -139,7 +140,12 @@ def test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow(tmp_path: P
     assert _runtime_artifact_policy_action(config, artifact, "codex") == "sandbox-required"
 
 
-def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("read_only_workspace", (False, True))
+def test_pytest_contained_cli_dispatches_exact_argv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    read_only_workspace: bool,
+) -> None:
     observed: dict[str, object] = {}
 
     def fake_run_restricted_pytest(command, **kwargs):
@@ -159,6 +165,7 @@ def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPa
             str(tmp_path),
             "--timeout-seconds",
             "45",
+            *(["--read-only-workspace"] if read_only_workspace else []),
             "--",
             sys.executable,
             "-m",
@@ -173,6 +180,7 @@ def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPa
         "workspace": tmp_path,
         "cwd": tmp_path,
         "timeout_seconds": 45,
+        "read_only_workspace": read_only_workspace,
     }
 
 
@@ -259,6 +267,10 @@ def test_macos_profile_grants_only_root_metadata_and_bounded_runtime_reads(tmp_p
     assert f'(subpath "{Path.home()}")' not in profile
     process_exec_rule = next(line for line in profile.splitlines() if line.startswith("(allow process-exec "))
     assert "(subpath " not in process_exec_rule
+
+    image = tmp_path / "esbuild"
+    profile = _macos_profile(replace(plan, allowed_executables=(image,)), private_root=tmp_path)
+    assert f'(deny file-write* (literal "{image}"))' in profile
 
 
 def test_prepare_restricted_pytest_rejects_non_pytest_command() -> None:

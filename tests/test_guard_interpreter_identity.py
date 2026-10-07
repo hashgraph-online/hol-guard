@@ -336,7 +336,9 @@ def test_same_python_basename_at_different_paths_cannot_collide(tmp_path: Path) 
     assert first_evidence["executable"]["sha256"] != second_evidence["executable"]["sha256"]
 
 
-def test_local_interpreter_cannot_reuse_trusted_interpreter_approval(tmp_path: Path) -> None:
+def test_local_interpreter_cannot_reuse_trusted_interpreter_approval(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     local_interpreter = workspace / "python"
     _write_interpreter(local_interpreter)

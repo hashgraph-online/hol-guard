@@ -10,6 +10,45 @@ use guard_policy_snapshot::{
 use serde_json::{json, Map};
 use std::collections::BTreeMap;
 
+#[test]
+fn test_containment_never_overrides_installed_policy_denies() {
+    let payload = json!({"tool_name":"bash","tool_input":{"command":"python3 -m pytest -q"}});
+    let result = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &payload,
+        None,
+        None,
+        Some("/home/tester"),
+        Some("/home/tester/project"),
+    );
+    let expected_floor = if cfg!(target_os = "macos") {
+        "sandbox-required"
+    } else {
+        "review"
+    };
+    let expected_reason = result.reason_code.clone();
+    assert_eq!(result.minimum_action, expected_floor);
+    let ordinary =
+        apply_pre_tool_policy(&snapshot(policy("allow")), &payload, result.clone()).unwrap();
+    assert_eq!(ordinary.minimum_action, expected_floor);
+    assert_eq!(ordinary.decision, "deny");
+    assert_eq!(ordinary.reason_code, expected_reason);
+    let blocked =
+        apply_pre_tool_policy(&snapshot(policy("block")), &payload, result.clone()).unwrap();
+    assert_eq!(blocked.minimum_action, "block");
+    assert_ne!(
+        blocked.reason_code,
+        "native_pytest_readonly_containment_required"
+    );
+    let mut harness_denied = policy("allow");
+    harness_denied
+        .harness_actions
+        .insert("omp".into(), "block".into());
+    let blocked = apply_pre_tool_policy(&snapshot(harness_denied), &payload, result).unwrap();
+    assert_eq!(blocked.minimum_action, "block");
+}
+
 fn apply_pre_tool_policy(
     snapshot: &PolicySnapshotV3,
     payload: &Value,
@@ -36,7 +75,7 @@ fn apply_post_tool_policy(
     )
 }
 
-fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
+pub(super) fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
     EffectiveNativePolicyV3 {
         protection_posture: "protected".into(),
         security_level: "balanced".into(),
@@ -58,7 +97,7 @@ fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
     }
 }
 
-fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
+pub(super) fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
     PolicySnapshotV3 {
         schema: POLICY_SNAPSHOT_SCHEMA.into(),
         version: 3,
@@ -77,6 +116,7 @@ fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
         },
         effective_policy: policy,
         command_extensions: None,
+        business_policy: None,
         issued_at_ms: 1,
         expires_at_ms: 2,
         integrity: SnapshotIntegrityV3 {
@@ -109,7 +149,7 @@ mod observed_mcp;
 #[path = "policy_enforcement_codex_budget_tests.rs"]
 mod codex_budget;
 
-fn generic_result(minimum_action: &str) -> PreToolResultV1 {
+pub(super) fn generic_result(minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {
         schema: "guard-pre-tool-result.v1".into(),
         version: 1,

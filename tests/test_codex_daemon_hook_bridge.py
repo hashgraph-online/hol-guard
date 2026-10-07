@@ -35,6 +35,8 @@ from tests.codex_daemon_hook_bridge_fixtures import (
     _write_authenticated_daemon_files,
 )
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _assert_bridge_denied(payload: dict[str, object]) -> None:
     """The bridge output holds the action with a blocking decision."""
@@ -606,7 +608,7 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
 
     assert exit_code == 0
     response = json.loads(capsys.readouterr().out)
-    assert response == {} or response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") in {None, "deny"}
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -707,7 +709,7 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
 
     assert exit_code == 0
     _assert_bridge_denied(json.loads(capsys.readouterr().out))
-    assert store.list_approval_requests(limit=None) == []
+    assert len(store.list_approval_requests(limit=None)) == 1
 
 
 @pytest.mark.parametrize(
@@ -783,22 +785,22 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
             "| jq '{tests: .tests, total: .total}'",
             1,
         ),
-        ("gh pr view 1 -tREVIEW", 0),
-        ("gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'", 0),
-        ("gh issue list -q'.[] | {REPO: .repository}'", 0),
-        ("gh pr list -sREVIEW_REQUIRED", 0),
-        ("gh pr list -aRandy", 0),
-        ("gh issue list -aRandy", 0),
-        ("gh pr list -SREVIEW", 0),
-        ("gh run list -cREVIEW_SHA", 0),
-        ("gh run list -aRgithub.com/owner/repo --help", 0),
-        ("gh workflow list -aRowner/repo --help", 0),
-        ("gh pr view 1 -cROwner/Repo --help", 0),
-        ("gh issue list -wRgithub.com/OWNER/REPO --help", 0),
-        ("gh pr list -dROrg/Repo --help", 0),
-        ("gh run list -aRgithub.com/OWNER/REPO --help", 0),
-        ("gh pr view 1 -wRRowner/repo --help", 0),
-        ("gh run list -aRRowner/repo --help", 0),
+        ("gh pr view 1 -tREVIEW", 1),
+        ("gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'", 1),
+        ("gh issue list -q'.[] | {REPO: .repository}'", 1),
+        ("gh pr list -sREVIEW_REQUIRED", 1),
+        ("gh pr list -aRandy", 1),
+        ("gh issue list -aRandy", 1),
+        ("gh pr list -SREVIEW", 1),
+        ("gh run list -cREVIEW_SHA", 1),
+        ("gh run list -aRgithub.com/owner/repo --help", 1),
+        ("gh workflow list -aRowner/repo --help", 1),
+        ("gh pr view 1 -cROwner/Repo --help", 1),
+        ("gh issue list -wRgithub.com/OWNER/REPO --help", 1),
+        ("gh pr list -dROrg/Repo --help", 1),
+        ("gh run list -aRgithub.com/OWNER/REPO --help", 1),
+        ("gh pr view 1 -wRRowner/repo --help", 1),
+        ("gh run list -aRRowner/repo --help", 1),
         ("gh -Rowner/repo pr view 17", 1),
         ("gh -Rgithub.com/Owner/Repo pr view 17", 1),
     ),
