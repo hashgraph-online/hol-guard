@@ -1,5 +1,5 @@
 {
+  "extension": "command.mcp-authyouragent",
   "schemaVersion": "guard.extension-trust-binding.v1",
-  "id": "command.mcp-authyouragent",
   "trustClass": "external"
 }

@@ -1,5 +1,5 @@
 {
+  "extension": "command.mcp-enola",
   "schemaVersion": "guard.extension-trust-binding.v1",
-  "id": "command.mcp-enola",
   "trustClass": "external"
 }
