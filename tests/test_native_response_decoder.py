@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from codex_plugin_scanner.guard.native_approval_protocol import (
     decode_native_approval_artifact,
 )
@@ -177,3 +179,24 @@ def test_native_error_accepts_exact_lifecycle_codes_only() -> None:
     )
     assert native_error({"error": "native_resident_start_in_progress:/private/request", "retryable": True}) is None
     assert native_error({"error": "native_policy_snapshot_future_unregistered_code", "retryable": False}) is None
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "native_business_policy_floor_invalid",
+        "native_business_policy_removal_requires_authority",
+        "native_business_source_authority_invalid",
+        "native_business_source_authority_missing",
+        "native_business_source_authority_not_current",
+        "native_business_source_enforce_required",
+        "native_business_source_mutation_in_progress",
+    ],
+)
+def test_native_error_preserves_registered_business_rejection_without_private_detail(code: str) -> None:
+    assert native_error({"error": code, "retryable": False}) == code
+    assert native_error({"error": code + ":/private/request", "retryable": False}) is None
+
+
+def test_native_error_rejects_unregistered_business_codes() -> None:
+    assert native_error({"error": "native_business_source_future_unregistered_code", "retryable": False}) is None

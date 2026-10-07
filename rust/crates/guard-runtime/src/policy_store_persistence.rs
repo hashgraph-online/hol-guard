@@ -142,22 +142,31 @@ pub(super) fn read_generation_floor(
     Ok(Some(floor))
 }
 
-pub(super) fn persist_authority(
+pub(super) fn persist_loaded_authority(
     path: &Path,
-    generation_floor: u64,
-    policy_digest: &str,
-    snapshot: Option<&PolicySnapshotV3>,
+    loaded: &LoadedAuthority,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
 ) -> Result<(), String> {
-    let floor = super::policy_store_command_floor::snapshot_floor(snapshot);
-    persist_authority_with_control_floor(
-        path,
-        generation_floor,
-        policy_digest,
-        snapshot,
-        verifier_key,
-        floor.as_ref(),
-    )
+    if let Some(digest) = loaded.policy_digest.as_deref() {
+        let snapshot = loaded
+            .snapshot
+            .as_ref()
+            .or(loaded.recovered_snapshot.as_ref());
+        let controls = loaded
+            .command_control_floor
+            .clone()
+            .or_else(|| super::policy_store_command_floor::snapshot_floor(snapshot));
+        persist_authority_with_control_floor(
+            path,
+            loaded.generation_floor,
+            digest,
+            snapshot,
+            verifier_key,
+            controls.as_ref(),
+            loaded.business_policy_floor.as_deref(),
+        )?;
+    }
+    Ok(())
 }
 
 pub(super) fn persist_authority_with_control_floor(
@@ -167,6 +176,7 @@ pub(super) fn persist_authority_with_control_floor(
     snapshot: Option<&PolicySnapshotV3>,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
     command_control_floor: Option<&super::policy_store_command_floor::CommandControlFloor>,
+    business_policy_floor: Option<&str>,
 ) -> Result<(), String> {
     let private_root = path
         .parent()
@@ -185,13 +195,15 @@ pub(super) fn persist_authority_with_control_floor(
         generation_floor,
         policy_digest: policy_digest.to_owned(),
         snapshot: snapshot.cloned(),
-        floor_mac: super::policy_store_command_floor::authority_floor_mac(
+        floor_mac: super::policy_store_business_floor::authority_floor_mac(
             generation_floor,
             policy_digest,
             command_control_floor,
+            business_policy_floor,
             verifier_key,
         )?,
         command_control_floor: command_control_floor.cloned(),
+        business_policy_floor: business_policy_floor.map(str::to_owned),
     };
     let value = serde_json::to_value(record)
         .map_err(|_| "native_policy_snapshot_authority_encode_failed".to_owned())?;
@@ -464,83 +476,5 @@ pub(super) fn replace_temporary(
 }
 
 #[cfg(all(test, windows))]
-mod windows_recovery_tests {
-    use super::*;
-    use std::io::Write;
-
-    fn test_root(label: &str) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "hol-guard-policy-recovery-{label}-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        crate::resident_state::ensure_private_directory(&root, true).unwrap();
-        root
-    }
-
-    fn private_bytes(path: &Path, bytes: &[u8]) {
-        let private_root = path.parent().unwrap_or(path);
-        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
-        file.write_all(bytes).unwrap();
-        file.sync_all().unwrap();
-    }
-
-    #[test]
-    fn authority_recovery_replaces_only_valid_private_backup() {
-        let root = test_root("backup");
-        let target = root.join("policy-snapshot-v3.json");
-        let backup = root.join(".policy-snapshot-v3.json.previous");
-        private_bytes(&backup, b"previous");
-
-        recover_authority_replacement(&target).unwrap();
-
-        assert!(crate::resident_state::open_private_read(
-            &target,
-            AUTHORITY_RECORD_MAX_BYTES,
-            "authority",
-            &root,
-        )
-        .unwrap()
-        .is_some());
-        assert!(crate::resident_state::open_private_read(
-            &backup,
-            AUTHORITY_RECORD_MAX_BYTES,
-            "authority",
-            &root,
-        )
-        .unwrap()
-        .is_none());
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn authority_replace_succeeds_while_a_reader_holds_the_target() {
-        let root = test_root("replace-reader");
-        let target = root.join("policy-snapshot-v3.json");
-        let temporary = root.join(".policy-snapshot-v3.json.tmp");
-        private_bytes(&target, b"before");
-        private_bytes(&temporary, b"after-replace");
-        let reader = std::fs::File::open(&target).unwrap();
-        crate::resident_state::replace_windows_private_file(&temporary, &target, &root).unwrap();
-        drop(reader);
-        assert_eq!(std::fs::read(&target).unwrap(), b"after-replace");
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn authority_recovery_rejects_non_file_backup() {
-        let root = test_root("reparse-or-directory");
-        let target = root.join("policy-snapshot-v3.json");
-        let backup = root.join(".policy-snapshot-v3.json.previous");
-        crate::resident_state::ensure_private_directory(&backup, true).unwrap();
-
-        assert_eq!(
-            recover_authority_replacement(&target).unwrap_err(),
-            "native_policy_snapshot_authority_recovery_failed"
-        );
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
+#[path = "policy_store_windows_recovery_tests.rs"]
+mod windows_recovery_tests;

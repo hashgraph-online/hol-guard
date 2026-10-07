@@ -10,7 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from .stable_guard_cli import desktop_core_shim_for_executable
+from .stable_guard_cli import desktop_core_shim_for_executable, durable_desktop_current_hol_guard
 
 
 class HarnessContextLike(Protocol):
@@ -39,14 +39,15 @@ def build_harness_shim(
     home_override_args: Sequence[str],
     is_transient_path: Callable[[Path], bool],
 ) -> str:
-    if getattr(sys, "frozen", False) or is_transient_appimage_path(executable):
+    desktop_cli = durable_desktop_current_hol_guard(context.home_dir)
+    if desktop_cli is not None or getattr(sys, "frozen", False) or is_transient_appimage_path(executable):
         return build_durable_cli_shim(
             harness,
             context,
             workspace_args,
             home_override_args=home_override_args,
             is_transient_path=is_transient_path,
-            runtime_executable=executable,
+            runtime_executable=str(desktop_cli) if desktop_cli is not None else executable,
         )
     command_args = [
         executable,
@@ -207,6 +208,7 @@ def durable_guard_cli_path(
     runtime_executable: str | None = None,
 ) -> Path | None:
     candidates = (
+        durable_desktop_current_hol_guard(context.home_dir),
         os.environ.get("HOL_GUARD_DESKTOP_RUNTIME_OWNER"),
         str(context.home_dir / ".local" / "bin" / "hol-guard"),
         runtime_executable,

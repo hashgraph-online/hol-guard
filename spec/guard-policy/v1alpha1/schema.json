@@ -254,9 +254,213 @@
       },
       "additionalProperties": false
     },
+    "businessMatch": {
+      "type": "object",
+      "description": "Versioned business selectors for drafts. Publication requires an authenticated native consumer; parsing alone never authorizes business operations.",
+      "required": [
+        "schema",
+        "version",
+        "services",
+        "operations"
+      ],
+      "properties": {
+        "schema": {
+          "const": "guard.business-policy-match.v1"
+        },
+        "version": {
+          "const": 1
+        },
+        "services": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "google_gmail",
+              "google_drive",
+              "google_calendar"
+            ]
+          }
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 11,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "mail_read",
+              "mail_draft",
+              "mail_send",
+              "mail_label",
+              "mail_permanent_delete",
+              "mail_settings",
+              "drive_read",
+              "drive_edit",
+              "drive_share",
+              "calendar_read",
+              "calendar_invite"
+            ]
+          }
+        },
+        "accountBindings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "description": "Opaque tenant-scoped account bindings established by the trusted account resolver. Raw identities and unsalted account hashes are not valid bindings.",
+          "items": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "recipientDomains": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "description": "Exact canonical ASCII DNS-name syntax, including single-label names that never match fully qualified recipient domains. Native enforcement requires a nonempty named audience and every resolved recipient domain to match, including Cc/Bcc and expanded groups. This selector is not identity or organization membership evidence.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$",
+            "not": {
+              "pattern": "[^a-z0-9.-]"
+            },
+            "$comment": "ECMAScript $ also matches before a final line terminator; the independent character check rejects trailing LF, U+2028 and other non-domain characters."
+          }
+        },
+        "audienceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "private",
+              "named",
+              "public"
+            ]
+          }
+        },
+        "sensitivityLabels": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "public",
+              "personal",
+              "confidential",
+              "secret"
+            ]
+          }
+        },
+        "minRecipientCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "minRecordCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "minByteCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operations": {
+                "contains": {
+                  "enum": [
+                    "mail_read",
+                    "mail_draft",
+                    "mail_send",
+                    "mail_label",
+                    "mail_permanent_delete",
+                    "mail_settings"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "services": {
+                "contains": {
+                  "const": "google_gmail"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operations": {
+                "contains": {
+                  "enum": [
+                    "drive_read",
+                    "drive_edit",
+                    "drive_share"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "services": {
+                "contains": {
+                  "const": "google_drive"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operations": {
+                "contains": {
+                  "enum": [
+                    "calendar_read",
+                    "calendar_invite"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "services": {
+                "contains": {
+                  "const": "google_calendar"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "match": {
       "type": "object",
       "properties": {
+        "business": {
+          "$ref": "#/$defs/businessMatch"
+        },
         "operations": {
           "$ref": "#/$defs/stringSet"
         },

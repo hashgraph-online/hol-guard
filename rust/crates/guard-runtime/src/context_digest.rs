@@ -119,12 +119,12 @@ fn base64_url_decode(encoded: &str) -> Option<Vec<u8>> {
 }
 
 /// Parsed non-secret approval-context component digests.
-struct ParsedContextToken {
-    identity: String,
-    content: String,
-    capabilities: String,
-    policy: String,
-    sandbox: String,
+pub(crate) struct ParsedContextToken {
+    pub(crate) identity: String,
+    pub(crate) content: String,
+    pub(crate) capabilities: String,
+    pub(crate) policy: String,
+    pub(crate) sandbox: String,
 }
 
 fn is_sha256_hex(value: &Value) -> Option<String> {
@@ -140,7 +140,7 @@ fn is_sha256_hex(value: &Value) -> Option<String> {
     }
 }
 
-fn parse_context_token(token: &Value) -> Option<ParsedContextToken> {
+pub(crate) fn parse_context_token(token: &Value) -> Option<ParsedContextToken> {
     let text = token.as_str()?;
     let encoded = text.strip_prefix(APPROVAL_CONTEXT_TOKEN_PREFIX)?;
     if text.len() > guard_contracts::APPROVAL_CONTEXT_TOKEN_MAX_BYTES
@@ -179,7 +179,9 @@ fn parse_context_token(token: &Value) -> Option<ParsedContextToken> {
     })
 }
 
-fn build_context_token(components: &ContextDigestComponentsV1) -> Result<String, &'static str> {
+pub(crate) fn build_context_token(
+    components: &ContextDigestComponentsV1,
+) -> Result<String, &'static str> {
     build_context_token_fields(
         &components.identity,
         &components.content,
@@ -242,7 +244,7 @@ fn build_context_token_fields(
 
 /// First-difference validation over two opaque tokens; malformed input fails
 /// closed as changed content, matching the legacy contract exactly.
-fn validate_context_tokens(saved: &Value, current: &Value) -> Option<String> {
+pub(crate) fn validate_context_tokens(saved: &Value, current: &Value) -> Option<String> {
     let saved = parse_context_token(saved);
     let current = parse_context_token(current);
     let (Some(saved), Some(current)) = (saved, current) else {

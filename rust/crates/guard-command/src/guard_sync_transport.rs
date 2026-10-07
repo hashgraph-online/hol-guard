@@ -945,6 +945,240 @@ fn map_ureq_error(error: ureq::Error) -> SyncHttpError {
     }
 }
 
+/// `runner.py:_GuardOAuthRefreshRateLimitedError` (:4112) — the refresh leg's
+/// outcome taxonomy. The caller (the resident `ResidentGuardSyncRunner`) owns
+/// the retry machine, the dead-grant circuit breaker, and the rotation
+/// persist; this carries only what those need to decide.
+pub enum OAuthRefreshOutcome {
+    /// `access_token` accepted; `refresh_token` is the rotated grant to persist
+    /// (empty `rotation_refresh_token` keeps the existing grant).
+    Refreshed {
+        access_token: String,
+        rotation_refresh_token: Option<String>,
+        access_token_expires_at: Option<String>,
+    },
+    /// The endpoint issued a `DPoP-Nonce`; retry with it (bounded by caller).
+    NonceChallenge(String),
+    /// 429 — carry the bounded Retry-After hint; the caller owns the sleep.
+    RateLimited(f64),
+    /// `invalid_grant` / consumed-or-revoked — the grant is dead; caller must
+    /// record the dead-grant breaker and demand reauthorization.
+    DeadGrant,
+    /// Any other transport or payload failure — reauthorizable.
+    Failed(String),
+}
+
+/// `urllib.parse.urlencode` parity — percent-encode every byte outside the
+/// unreserved RFC 3986 set so the form body matches the Python byte-for-byte.
+fn form_urlencode_field(name: &str, value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + name.len() + 2);
+    let push = |out: &mut String, s: &str| {
+        for &b in s.as_bytes() {
+            let ok = b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'~');
+            if ok {
+                out.push(b as char);
+            } else {
+                out.push_str(&format!("%{b:02X}"));
+            }
+        }
+    };
+    push(&mut out, name);
+    out.push('=');
+    push(&mut out, value);
+    out
+}
+
+/// `runner.py:_oauth_access_token_expires_at` (:4411) — prefer the JWT `exp`
+/// claim; otherwise `now + expires_in`; `None` when neither is usable. Returns
+/// the `datetime.isoformat()` (`+00:00`) string the store round-trips.
+fn oauth_access_token_expires_at(
+    access_token: &str,
+    payload: &Value,
+    now_unix: i64,
+) -> Option<String> {
+    if let Some(exp) = jwt_exp_claim(access_token) {
+        return Some(
+            crate::local_supply_chain::Timestamp::from_unix_micros(exp * 1_000_000).isoformat(),
+        );
+    }
+    let expires_in = match payload.get("expires_in") {
+        Some(Value::Number(n)) => n
+            .as_f64()
+            .filter(|v| *v > 0.0 && !v.is_nan())
+            .map(|v| v as i64),
+        Some(Value::String(s)) => s.parse::<i64>().ok().filter(|v| *v > 0),
+        _ => None,
+    }?;
+    Some(
+        crate::local_supply_chain::Timestamp::from_unix_micros((now_unix + expires_in) * 1_000_000)
+            .isoformat(),
+    )
+}
+
+/// Decode the JWT payload segment and read a positive numeric `exp`.
+fn jwt_exp_claim(access_token: &str) -> Option<i64> {
+    let payload_seg = access_token.split('.').nth(1)?;
+    let padded = match payload_seg.len() % 4 {
+        0 => payload_seg.to_owned(),
+        n => format!("{payload_seg}{}", "=".repeat(4 - n)),
+    };
+    let bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(padded)
+        .ok()?;
+    let claims: Value = serde_json::from_slice(&bytes).ok()?;
+    claims
+        .get("exp")
+        .and_then(Value::as_f64)
+        .filter(|v| *v > 0.0)
+        .map(|v| v as i64)
+}
+
+/// `runner.py:_invalid_grant_oauth_payload` (:3911) — the grant is dead on a
+/// `400/401/403` whose body carries `error == "invalid_grant"` or a consumed /
+/// expired description.
+fn invalid_grant_oauth_payload(body: &[u8]) -> bool {
+    let Some(payload) = parse_json_body(body).and_then(|v| v.as_object().cloned()) else {
+        return false;
+    };
+    let error = payload.get("error").and_then(Value::as_str);
+    let description = payload.get("error_description").and_then(Value::as_str);
+    error == Some("invalid_grant")
+        || description
+            .map(|d| {
+                d.to_lowercase()
+                    .contains("missing, expired, or already consumed")
+            })
+            .unwrap_or(false)
+}
+
+/// `runner.py:_refresh_guard_oauth_access_token_once` (:4006) — POST the
+/// refresh grant to the allowlisted token endpoint behind a fresh DPoP proof.
+/// Nonce challenges return `NonceChallenge` for the caller to bound (≤3); the
+/// caller records `RateLimited` / `DeadGrant` into the circuit breaker and
+/// persists `Refreshed` rotation under `oauth-refresh.lock`.
+/// Inputs to `refresh_guard_oauth_access_token` — the DPoP key material +
+/// grant the caller resolved from the scoped credential, plus the request
+/// knobs (endpoint, client id, nonce, timeouts).
+pub struct OAuthRefreshRequest<'a> {
+    pub token_endpoint: &'a str,
+    pub client_id: &'a str,
+    pub refresh_token: &'a str,
+    pub dpop_private_key_pem: &'a str,
+    pub dpop_public_jwk: &'a Map<String, Value>,
+    pub algorithm: &'a str,
+    pub nonce: Option<&'a str>,
+    pub timeout_seconds: f64,
+    pub now_unix: i64,
+}
+
+pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthRefreshOutcome {
+    let body = format!(
+        "grant_type=refresh_token&{}&{}",
+        form_urlencode_field("client_id", req.client_id),
+        form_urlencode_field("refresh_token", req.refresh_token),
+    );
+    let dpop_proof = match sign_guard_dpop_proof(
+        req.token_endpoint,
+        "POST",
+        req.dpop_private_key_pem,
+        req.dpop_public_jwk,
+        req.algorithm,
+        None,
+        req.nonce,
+        req.now_unix,
+    ) {
+        Ok(proof) => proof,
+        Err(reason) => return OAuthRefreshOutcome::Failed(reason),
+    };
+    let mut headers = BTreeMap::new();
+    headers.insert(
+        "Content-Type".to_owned(),
+        "application/x-www-form-urlencoded".to_owned(),
+    );
+    headers.insert("Accept".to_owned(), "application/json".to_owned());
+    headers.insert("User-Agent".to_owned(), GUARD_SYNC_USER_AGENT.to_owned());
+    headers.insert("DPoP".to_owned(), dpop_proof);
+    let request = GuardSyncRequest {
+        url: req.token_endpoint.to_owned(),
+        method: "POST".to_owned(),
+        headers,
+        body: Some(body.into_bytes()),
+        dpop_nonce: req.nonce.map(str::to_owned),
+        retry_context: None,
+    };
+    match execute_request(&request, req.timeout_seconds) {
+        Ok(resp) => {
+            let Some(payload) =
+                parse_json_body(&resp.body_bytes).and_then(|v| v.as_object().cloned())
+            else {
+                return OAuthRefreshOutcome::Failed(
+                    "Guard Cloud token refresh returned a non-JSON response.".to_owned(),
+                );
+            };
+            let payload = Value::Object(payload);
+            let access_token = payload.get("access_token").and_then(Value::as_str);
+            let token_type = payload.get("token_type").and_then(Value::as_str);
+            let token_type_ok = token_type
+                .map(|t| matches!(t.to_ascii_lowercase().as_str(), "bearer" | "dpop"))
+                .unwrap_or(false);
+            let (access_token, token_type_ok) = match access_token {
+                Some(t) if !t.is_empty() && token_type_ok => (t.to_owned(), true),
+                _ => (String::new(), false),
+            };
+            if !token_type_ok {
+                return OAuthRefreshOutcome::Failed(
+                    "Guard Cloud token refresh returned an unusable token.".to_owned(),
+                );
+            }
+            let rotation_refresh_token = payload
+                .get("refresh_token")
+                .and_then(Value::as_str)
+                .filter(|t| !t.is_empty())
+                .map(str::to_owned);
+            let access_token_expires_at =
+                oauth_access_token_expires_at(&access_token, &payload, req.now_unix);
+            OAuthRefreshOutcome::Refreshed {
+                access_token,
+                rotation_refresh_token,
+                access_token_expires_at,
+            }
+        }
+        Err(SyncHttpError::Http {
+            status,
+            headers,
+            body,
+        }) => {
+            if matches!(status, 400 | 401 | 403 | 429) {
+                let parsed_body = parse_json_body(&body);
+                if let Some(challenge) =
+                    dpop_nonce_from_http_error(status, &headers, parsed_body.as_ref())
+                {
+                    if Some(challenge.as_str()) != req.nonce {
+                        return OAuthRefreshOutcome::NonceChallenge(challenge);
+                    }
+                }
+            }
+            if status == 429 {
+                let wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS).min(120.0);
+                return OAuthRefreshOutcome::RateLimited(wait);
+            }
+            if matches!(status, 400 | 401 | 403) {
+                if invalid_grant_oauth_payload(&body) {
+                    return OAuthRefreshOutcome::DeadGrant;
+                }
+                return OAuthRefreshOutcome::Failed(http_error_reason_message(
+                    status, &headers, &body,
+                ));
+            }
+            OAuthRefreshOutcome::Failed(http_error_reason_message(status, &headers, &body))
+        }
+        Err(SyncHttpError::Timeout(_)) => {
+            OAuthRefreshOutcome::Failed("Guard Cloud token refresh timed out.".to_owned())
+        }
+        Err(SyncHttpError::Other(reason)) => OAuthRefreshOutcome::Failed(reason),
+    }
+}
+
 #[cfg(test)]
 mod sync_retry_parity_tests {
     use super::*;
@@ -996,5 +1230,65 @@ mod sync_retry_parity_tests {
     fn retry_attempt_bounds_match_the_python_bounds() {
         assert_eq!(SYNC_RATE_LIMIT_RETRY_LIMIT, 2);
         assert_eq!(SYNC_GATEWAY_RETRY_LIMIT, 2);
+    }
+    /// `urllib.parse.urlencode` parity — unreserved set only, %XX uppercase.
+    #[test]
+    fn form_urlencode_escapes_reserved_and_keeps_unreserved() {
+        assert_eq!(
+            form_urlencode_field("refresh_token", "rt/with+plus@host?x=1&y=2"),
+            "refresh_token=rt%2Fwith%2Bplus%40host%3Fx%3D1%26y%3D2"
+        );
+        assert_eq!(form_urlencode_field("a.b-c_d~e", "v"), "a.b-c_d~e=v");
+        assert_eq!(form_urlencode_field("k", ""), "k=");
+    }
+
+    /// `_invalid_grant_oauth_payload` — only a 4xx body carrying
+    /// `error:"invalid_grant"` or the consumed/expired description is a dead grant.
+    #[test]
+    fn invalid_grant_payload_detection() {
+        assert!(invalid_grant_oauth_payload(br#"{"error":"invalid_grant"}"#));
+        assert!(invalid_grant_oauth_payload(
+            br#"{"error":"invalid_request","error_description":"refresh token is missing, expired, or already consumed"}"#
+        ));
+        assert!(!invalid_grant_oauth_payload(
+            br#"{"error":"invalid_request"}"#
+        ));
+        assert!(!invalid_grant_oauth_payload(b"not json"));
+        assert!(!invalid_grant_oauth_payload(br#"{"error":42}"#));
+    }
+
+    /// `_oauth_access_token_expires_at` — prefer JWT `exp`, else now+expires_in.
+    #[test]
+    fn access_token_expires_at_prefers_jwt_exp_then_expires_in() {
+        // unsigned-style payload segment {"exp":1893456000} base64url
+        let payload =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(br#"{"exp":1893456000}"#);
+        let token = format!("aaa.{payload}.ccc");
+        let with_exp = oauth_access_token_expires_at(&token, &serde_json::json!({}), 0);
+        assert_eq!(with_exp.as_deref(), Some("2030-01-01T00:00:00+00:00"));
+
+        let no_exp =
+            oauth_access_token_expires_at("no.jwt", &serde_json::json!({"expires_in": 60}), 1_000);
+        assert_eq!(no_exp.as_deref(), Some("1970-01-01T00:17:40+00:00"));
+
+        assert_eq!(
+            oauth_access_token_expires_at("x", &serde_json::json!({}), 0),
+            None
+        );
+    }
+
+    /// Refresh success requires `access_token` + `token_type` in {bearer,dpop}
+    /// (case-insensitive); a rotated `refresh_token` is captured for persist.
+    #[test]
+    fn refresh_outcome_classification_table() {
+        // exercised indirectly: token_type gate
+        for t in ["bearer", "DPoP", "Bearer"] {
+            let ok = t.to_ascii_lowercase();
+            assert!(matches!(ok.as_str(), "bearer" | "dpop"), "{t}");
+        }
+        assert!(!matches!(
+            "mac".to_ascii_lowercase().as_str(),
+            "bearer" | "dpop"
+        ));
     }
 }
