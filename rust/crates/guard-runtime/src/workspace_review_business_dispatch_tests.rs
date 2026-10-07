@@ -63,6 +63,13 @@ fn owned_send_starts_durable_attempt_before_exactly_one_call_and_retains_ack() {
         .unwrap();
     assert_eq!(count.get(), 1);
     assert!(result.journal_recorded);
+    let receipt = serde_json::to_value(result.receipt().unwrap()).unwrap();
+    assert_eq!(receipt["attempt"], "api_accepted");
+    assert_eq!(receipt["journal"], "recorded");
+    assert_eq!(receipt["provider_effect"], "not_checked");
+    assert_eq!(receipt["retry_authority"], "none");
+    assert_eq!(receipt["acknowledgement_binding"], "e".repeat(64));
+    assert!(!receipt.to_string().contains("private-owned-send"));
     assert!(matches!(
         result.attempt,
         GoogleSendAttempt::ApiAccepted { .. }
@@ -232,6 +239,19 @@ fn unknown_outcome_and_sdk_error_never_retry() {
         );
         assert_eq!(count.get(), 1);
         assert_eq!(result.is_err(), rejected);
+        if let Ok(outcome) = result {
+            let receipt = outcome.receipt().unwrap();
+            assert_eq!(receipt.attempt, BusinessDispatchAttemptV1::OutcomeUnknown);
+            assert_eq!(
+                receipt.provider_effect,
+                BusinessProviderEffectV1::NotChecked
+            );
+            assert_eq!(
+                receipt.retry_authority,
+                BusinessDispatchRetryAuthorityV1::None
+            );
+            assert_eq!(receipt.acknowledgement_binding, None);
+        }
         assert_eq!(
             status(&f)["status"],
             if rejected {
@@ -267,6 +287,13 @@ fn outcome_persistence_failure_is_reported_without_a_second_send() {
         .unwrap();
     assert_eq!(count.get(), 1);
     assert!(!result.journal_recorded);
+    let receipt = result.receipt().unwrap();
+    assert_eq!(receipt.attempt, BusinessDispatchAttemptV1::OutcomeUnknown);
+    assert_eq!(receipt.journal, BusinessDispatchJournalV1::Unconfirmed);
+    assert_eq!(
+        receipt.retry_authority,
+        BusinessDispatchRetryAuthorityV1::None
+    );
     assert_eq!(result.attempt, GoogleSendAttempt::Unconfirmed);
 }
 

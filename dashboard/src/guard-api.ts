@@ -1,3 +1,4 @@
+import { recordBusinessQueueReadResult } from "./business-review-queue-status";
 import {
   GUARD_ACTION_TYPES,
   GUARD_DECISION_V2_ACTIONS,
@@ -151,6 +152,8 @@ type RawGuardInventoryItem = Omit<GuardInventoryItem, "last_policy_action"> & {
 };
 
 type ApprovalRequestListPayload = {
+  native_business_queue_error?: unknown;
+  native_business_queue_checked?: unknown;
   items?: RawGuardApprovalRequest[] | null;
   next_cursor?: unknown;
   total_pending_count?: unknown;
@@ -1565,6 +1568,7 @@ function normalizeApprovalPage(
   payload: ApprovalRequestListPayload,
   statusFallback: GuardApprovalPageStatus = "pending"
 ): GuardApprovalPage {
+  recordBusinessQueueReadResult(payload);
   return {
     items: normalizeApprovalRequests(payload.items),
     next_cursor: isStringOrNull(payload.next_cursor) ? payload.next_cursor : null,
@@ -2339,6 +2343,24 @@ export async function resetSettings(proof?: ApprovalGateWriteProof): Promise<Gua
       ...(proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}),
     })
   });
+}
+
+export async function fetchBusinessReviewSummary(
+  requestId: string, signal?: AbortSignal,
+): Promise<import("./business-review-summary").BusinessReviewSummary | null> {
+  if (isGuardDemoMode()) return null;
+  const response = await fetchWithGuardAuth(
+    `/v1/requests/${encodeURIComponent(requestId)}/business-summary`,
+    { signal, cache: "no-store" },
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) throw new Error("Saved business details are unavailable.");
+  const { parseBusinessReviewSummary } = await import("./business-review-summary");
+  const summary = parseBusinessReviewSummary(await response.json(), requestId);
+  if (!summary) throw new Error("Saved business details are unavailable.");
+  return summary;
 }
 
 export async function fetchRequest(requestId: string): Promise<GuardApprovalRequest> {

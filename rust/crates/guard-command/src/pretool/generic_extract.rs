@@ -316,8 +316,8 @@ use prompt::{
 
 #[path = "generic_nested_json.rs"]
 mod nested_json;
-use nested_json::parse_strict_nested_json;
+pub(super) use nested_json::parse_strict_nested_json;
 
 #[path = "generic_signals.rs"]
 mod signals;
-pub(super) use signals::extract_generic_signals;
+pub(super) use signals::{extract_generic_signals, EMBEDDED_ARGUMENT_KEYS};

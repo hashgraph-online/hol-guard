@@ -276,6 +276,24 @@ def test_post_input_resolution_does_not_hide_mutation_or_traversal(tool, path):
     assert not post_input_matches(tool, {"path": path}, {"path": "{{workspace}}/" + path})
 
 
+def test_windows_resolved_read_paths_bind_only_whole_backslash_form():
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    reviewed = {"path": "src/settings.ts"}
+    assert post_input_matches("read", reviewed, {"path": "{{workspace}}\\src\\settings.ts"})
+    assert post_input_matches("read", {"path": "~/notes.md"}, {"path": "{{home}}\\notes.md"})
+    for altered in [
+        "{{workspace}}\\.env",
+        "{{workspace}}\\src/settings.ts",
+        "{{workspace}}\\src\\..\\settings.ts",
+        "{{workspace}}/src\\settings.ts",
+    ]:
+        assert not post_input_matches("read", reviewed, {"path": altered})
+    # On POSIX, a reviewed backslash is part of a file name, not a separator.
+    windows_form = {"path": "{{workspace}}\\src\\settings.ts"}
+    assert not post_input_matches("read", {"path": "src\\settings.ts"}, windows_form)
+
+
 def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
     """Verify raw input digests before redacting paths and recomputing the public digest."""
     import hashlib

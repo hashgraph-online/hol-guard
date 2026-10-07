@@ -2,12 +2,15 @@
 mod evaluate;
 use evaluate::evaluate_signals;
 
+#[path = "generic_command_rewrite.rs"]
+mod command_rewrite;
 #[path = "generic_extract.rs"]
 mod extract;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
 mod result;
+use command_rewrite::payload_with_command;
 
 use crate::native_command_controls::CompiledNativeCommandControls;
 use crate::CommandModelRequestV1;
@@ -133,28 +136,6 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     )
 }
 
-fn payload_with_command(payload: &Value, command: &str) -> Value {
-    let mut projected = payload.clone();
-    let Some(object) = projected.as_object_mut() else {
-        return projected;
-    };
-    for key in ["tool_input", "arguments", "input"] {
-        if let Some(nested) = object.get_mut(key).and_then(|value| value.as_object_mut()) {
-            for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
-                if nested.contains_key(command_key) {
-                    nested.insert(command_key.to_owned(), command.into());
-                }
-            }
-        }
-    }
-    for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
-        if object.contains_key(command_key) {
-            object.insert(command_key.to_owned(), command.into());
-        }
-    }
-    projected
-}
-
 #[allow(clippy::too_many_arguments)]
 fn evaluate_envelope(
     harness: &str,
@@ -184,7 +165,11 @@ fn evaluate_envelope(
         .filter(|_| project_redirects && !search_scope_proven)
         .and_then(|command| redirect_projection::project(command, context))
     {
-        let projected_payload = payload_with_command(payload, &projection.command);
+        let projected_payload = payload_with_command(
+            payload,
+            signals.command.as_deref().unwrap_or_default(),
+            &projection.command,
+        );
         let projected = evaluate_envelope(
             harness,
             event,

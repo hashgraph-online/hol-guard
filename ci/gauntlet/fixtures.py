@@ -87,7 +87,15 @@ def create_fixture(root: Path) -> Fixture:
         encoding="utf-8",
     )
     sentinel.chmod(0o700)
-    (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
+    try:
+        (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
+    except OSError as error:
+        if os.name != "nt":
+            raise
+        # The alias scenarios need a real symlink; never weaken them with a copy.
+        raise RuntimeError(
+            "Gauntlet on Windows needs symlink creation: enable Developer Mode or run elevated"
+        ) from error
     os.link(workspace / ".env", workspace / "aliases/linked.txt")
     environment = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR") if k in os.environ}
     environment.update(HOME=str(home), USERPROFILE=str(home), GIT_CONFIG_NOSYSTEM="1")

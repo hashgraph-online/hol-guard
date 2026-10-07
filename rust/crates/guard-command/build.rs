@@ -152,7 +152,7 @@ fn main() {
         request.len() as u64 <= MAX_ENVELOPE_BYTES,
         "canonical source envelope exceeds budget"
     );
-    let compiled = guard_command_build::native_command_program::source::compile_build_request(
+    let mut compiled = guard_command_build::native_command_program::source::compile_build_request(
         request.as_bytes(),
     )
     .unwrap_or_else(|error| panic!("canonical source compilation failed: {error}"));
@@ -175,6 +175,9 @@ fn main() {
             "source_digest":compiled.source_digest, "implementation_digest":compiled.implementation_digest,
         }),
     );
+    // The export front end reuses the admitted program rather than embedding a
+    // second complete copy inside the build envelope.
+    compiled.program = Value::Null;
     write_json(
         &out.join("native-command-build.v1.json"),
         &serde_json::to_value(compiled).expect("compiled output"),
