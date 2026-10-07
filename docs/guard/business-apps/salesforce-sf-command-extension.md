@@ -8,10 +8,10 @@ Both executables published by the CLI, `sf` and `sfdx`, are covered.
 
 | Rule | Routes | Native result |
 | --- | --- | --- |
-| `delete` | `data delete record`, `data delete bulk`, `force:data:bulk:delete` | review |
-| `update` | `data update record`, `data update bulk`, `data upsert bulk`, `force:data:bulk:upsert` | review |
-| `create` | `data create record`, `data create file`, `data import bulk`, `data import tree` | review |
-| `export` | `data export bulk`, `data export tree`, `data bulk results` | review |
+| `delete` | `data delete record`, `data delete bulk`, `force:data:record:delete`, `force:data:bulk:delete` | review |
+| `update` | `data update record`, `data update bulk`, `data upsert bulk`, `force:data:record:update`, `force:data:bulk:upsert` | review |
+| `create` | `data create record`, `data create file`, `data import bulk`, `data import tree`, `force:data:record:create`, `force:data:tree:import` | review |
+| `export` | `data export bulk`, `data export tree`, `data bulk results`, `force:data:tree:export` | review |
 | `resume` | `data delete/import/update/upsert/export resume` with a job ID | review |
 | `resume-unbound` | the same resumes with `--use-most-recent` or `--flags-dir` | block |
 | `hard-delete` | any `sf` invocation with `--hard-delete`, or a bulk delete with `--flags-dir` | block |
@@ -24,7 +24,8 @@ show, so it can add `--hard-delete` or `--use-most-recent`; it is blocked on bul
 deletes and resumes. `--flags-dir=<dir>` is detected the same way as the spaced form.
 
 Reads emit no observation: `data query`, `data search`, `data get record`,
-`data resume` and `force:data:bulk:status`. A query that writes to
+`data resume`, `force:data:soql:query`, `force:data:record:get` and
+`force:data:bulk:status`. A query that writes to
 `--output-file` is still a read of an org the CLI is already authorized for.
 Help is not a safe variant here, so `--help` on a covered route is still reviewed.
 
