@@ -420,6 +420,9 @@ pub fn harness_json_from_native_prompt(
         .as_object()
         .cloned()
         .unwrap_or_default();
+        if canonical == "pi" || canonical == "omp" {
+            output.insert("decision".to_string(), json!("allow"));
+        }
         if !risk_signals.is_empty() && canonical != "copilot" {
             output.insert("risk_signals".to_string(), json!(risk_signals));
         }
@@ -747,4 +750,47 @@ pub fn harness_json_from_review_response(
         .and_then(Value::as_str)
         .unwrap_or("fast_path_block");
     post_tool_native_block_response(reason, reason_code)
+}
+
+#[cfg(test)]
+mod prompt_response_tests {
+    use super::*;
+
+    struct RiskClasses;
+
+    impl PromptRiskClassesApi for RiskClasses {
+        fn valid_prompt_risk_classes(&self, value: &Value) -> bool {
+            value.as_array().is_some_and(Vec::is_empty)
+        }
+    }
+
+    #[test]
+    fn pi_prompt_allow_and_warn_are_explicit_decisions() {
+        for harness in ["pi", "omp"] {
+            for action in ["allow", "warn"] {
+                let response = json!({
+                    "decision": "allow",
+                    "minimum_action": action,
+                    "reason_code": "native_policy_warning",
+                    "prompt_risk_classes": [],
+                });
+                let output = harness_json_from_native_prompt(
+                    harness,
+                    response.as_object().unwrap(),
+                    &RiskClasses,
+                );
+                assert_eq!(output.get("decision"), Some(&json!("allow")));
+                assert_eq!(output.get("policy_action"), Some(&json!(action)));
+            }
+        }
+    }
+
+    #[test]
+    fn pi_prompt_missing_authority_does_not_allow() {
+        for harness in ["pi", "omp"] {
+            let output = harness_json_from_native_prompt(harness, &Map::new(), &RiskClasses);
+            assert_ne!(output.get("decision"), Some(&json!("allow")));
+            assert_eq!(output.get("policy_action"), Some(&json!("block")));
+        }
+    }
 }

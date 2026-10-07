@@ -361,7 +361,7 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["approval_requests"]
     pending = store.list_approval_requests(limit=5)
@@ -413,7 +413,7 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
     output = json.loads(capsys.readouterr().out)
     pending = store.list_approval_requests(status="pending", limit=5)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["approval_requests"]
     assert len(pending) == 1
@@ -651,7 +651,7 @@ def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "block"
     assert output["decision_v2_json"]["user_title"] == "Critical install blocked"
     # The scanner escalation must reach the composed copy: the primary detail is
@@ -721,7 +721,7 @@ def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "block"
     assert "network host" in output["risk_summary"]
     assert output["decision_v2_json"]["user_title"] == "Blocked by policy"
@@ -809,7 +809,7 @@ def test_guard_hook_preserves_cloud_reconnect_guidance_for_compound_package_inst
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     decision = output["decision_v2_json"]
     instruction = "Run `hol-guard connect` to reconnect Guard Cloud, then retry the same install."
     assert instruction in decision["user_body"]

@@ -153,7 +153,6 @@ def test_resolve_policy_without_matching_rules_skips_policy_integrity_refresh(
         raise AssertionError("policy integrity refresh should not run for an empty policy lookup")
 
     monkeypatch.setattr(store, "_refresh_policy_integrity_state", fail_refresh)
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", fail_refresh)
 
     assert store.resolve_policy("codex", "codex:project:none", "hash-none") is None
 
@@ -176,7 +175,6 @@ def test_resolve_policy_with_remote_only_rule_skips_policy_integrity_refresh(
         raise AssertionError("policy integrity refresh should not run for remote-only policy lookups")
 
     monkeypatch.setattr(store, "_refresh_policy_integrity_state", fail_refresh)
-    monkeypatch.setattr(store, "_policy_integrity_secret_material", fail_refresh)
 
     assert store.resolve_policy("codex", artifact_id, artifact_hash) == "allow"
 

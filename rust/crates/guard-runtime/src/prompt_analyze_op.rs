@@ -38,7 +38,7 @@ pub(crate) fn evaluate_prompt_analyze(request: &PromptAnalyzeRequestV1) -> Resul
                 .prompt_text
                 .as_deref()
                 .ok_or_else(|| "missing_prompt_text".to_owned())?;
-            let requests = guard_run_launch::extract_prompt_requests(prompt_text);
+            let requests = guard_run_launch::extract_prompt_requests(prompt_text)?;
             Value::Array(requests.iter().map(|r| r.to_dict()).collect())
         }
         "detect_injection" => {
@@ -46,7 +46,7 @@ pub(crate) fn evaluate_prompt_analyze(request: &PromptAnalyzeRequestV1) -> Resul
                 .prompt_text
                 .as_deref()
                 .ok_or_else(|| "missing_prompt_text".to_owned())?;
-            let requests = guard_run_launch::detect_prompt_injection_requests(prompt_text);
+            let requests = guard_run_launch::detect_prompt_injection_requests(prompt_text)?;
             Value::Array(requests.iter().map(|r| r.to_dict()).collect())
         }
         "to_artifacts" => {
@@ -78,7 +78,7 @@ pub(crate) fn evaluate_prompt_analyze(request: &PromptAnalyzeRequestV1) -> Resul
                 .prompt_text
                 .as_deref()
                 .ok_or_else(|| "missing_prompt_text".to_owned())?;
-            serde_json::json!({"state": guard_run_launch::trailing_secret_read_state(text)})
+            serde_json::json!({"state": guard_run_launch::trailing_secret_read_state(text)?})
         }
         "request_id" => {
             let request_class = request

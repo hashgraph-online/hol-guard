@@ -1,23 +1,19 @@
-"""Resident bridge for the ``package_authority`` ops (RTM-029).
+"""Resident transport and DTO adapters for native package operations.
 
-Mirrors ``native_approval_gate.approval_gate_native``: each caller invokes
-:func:`package_authority_native` first; when the resident answers it returns
-the decoded payload, and when the resident is unavailable/mismatched it returns
-``None`` so the caller falls back to the in-process Python body.
-
-The bridge returns ``None`` only for transport failures (resident missing,
-timeout, malformed envelope, capability absent). A well-formed ``error``
-envelope is treated like the local path raising — the caller sees the
-``status``/``code`` in the envelope and falls back only when the payload is
-missing entirely, matching the approval-gate bridge contract.
+Cached advisory matching is terminal: missing or invalid native authority
+raises ``NativePackageAdvisoryAuthorityError`` instead of evaluating in Python.
+The older intent/authority/evaluation adapters still expose optional transport
+results; their production caller cutover remains tracked under RTM-028.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
 from collections.abc import Mapping
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +38,15 @@ def _request_id() -> str:
     return f"package-authority-{_request_counter}-{time.monotonic_ns()}"
 
 
+def _unique_response_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate native response field")
+        result[key] = value
+    return result
+
+
 def _resident_request(
     *,
     operation: str,
@@ -49,7 +54,7 @@ def _resident_request(
     guard_home: Path,
     timeout_seconds: float,
 ) -> dict[str, object] | None:
-    """Envelope + transport shared by the three package-authority ops."""
+    """Transport shared by package-authority operations; callers own failure handling."""
     status = native_runtime_status()
     if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
         return None
@@ -57,7 +62,11 @@ def _resident_request(
     if _RESIDENT_PROTOCOL_FEATURE not in features or _PACKAGE_AUTHORITY_FEATURE not in features:
         return None
 
-    envelope = {"operation": operation, "request": request}
+    envelope = {
+        "operation": operation,
+        "request": request,
+        "deadline_budget_ms": max(1, int(timeout_seconds * 1000)),
+    }
     try:
         payload = json.dumps(envelope).encode("utf-8")
     except (TypeError, ValueError):
@@ -76,8 +85,8 @@ def _resident_request(
         native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_transport")
         return None
     try:
-        decoded = json.loads(response.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        decoded = json.loads(response.decode("utf-8"), object_pairs_hook=_unique_response_object)
+    except (UnicodeDecodeError, ValueError):
         native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
         return None
     if not isinstance(decoded, dict):
@@ -86,12 +95,31 @@ def _resident_request(
         native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
         return None
     if decoded.get("status") != "ok":
-        # Business-rule rejection or deterministic eval failure — surface the
-        # code so callers can distinguish, but still fall back to Python so the
-        # legacy path produces the authoritative decision.
+        # No successful native result. Terminal callers must not reinterpret
+        # this as permission to reuse a cached Python decision.
         return None
     native_record_resident_success(status.identity.sha256, guard_home)
     return decoded if isinstance(decoded, dict) else None
+
+
+def _resident_environment(environment: Mapping[str, str] | None) -> dict[str, str] | None:
+    """The environment the resident must resolve the launch in.
+
+    The resident is long-lived, so its own ``PATH`` is the one it was spawned
+    with.  A caller that passes no environment still means the ambient one this
+    decision is being made in — the Python baseline resolves the manager from
+    ``os.environ`` — and a manager the resident cannot reproduce (`npx` absent
+    from a spawn-time ``PATH``) makes the launch evidence incomplete and sends
+    a contained TypeScript typecheck back to review.  Bind the caller's ``PATH``
+    whenever it is not already part of the request.
+    """
+
+    ambient_path = os.environ.get("PATH")
+    if environment is None:
+        return {"PATH": ambient_path} if ambient_path else None
+    if "PATH" in environment or not ambient_path:
+        return dict(environment)
+    return {**environment, "PATH": ambient_path}
 
 
 def package_intent_parse_native(
@@ -112,7 +140,7 @@ def package_intent_parse_native(
         "workspace": str(workspace) if workspace is not None else None,
         "home_dir": str(home_dir) if home_dir is not None else None,
         "canonical_command": dict(canonical_command) if canonical_command else None,
-        "environment": dict(environment) if environment else None,
+        "environment": _resident_environment(environment),
     }
     response = _resident_request(
         operation="package_intent_parse",
@@ -238,6 +266,95 @@ def package_authority_decide_native(
         return None
     payload = response.get("payload")
     return payload if isinstance(payload, dict) else None
+
+
+def apply_stored_package_policy_native(
+    evaluation: Mapping[str, object],
+    artifact: Mapping[str, object],
+    *,
+    store_path: Path,
+    guard_home: Path,
+    artifact_hash: str,
+    workspace_dir: Path,
+    now: str,
+    current_action: object | None = None,
+    claim_saved_approval: bool = True,
+    timeout_seconds: float = 10.0,
+) -> dict[str, object] | None:
+    """``apply_stored_package_policy`` op — returns the updated evaluation dict."""
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": _request_id(),
+        "store_path": str(store_path),
+        "guard_home": str(guard_home),
+        "evaluation": dict(evaluation),
+        "artifact": dict(artifact),
+        "artifact_hash": artifact_hash,
+        "workspace_dir": str(workspace_dir),
+        "now": now,
+        "claim_saved_approval": bool(claim_saved_approval),
+    }
+    if current_action is not None:
+        request["current_action"] = current_action
+    response = _resident_request(
+        operation="apply_stored_package_policy",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=timeout_seconds,
+    )
+    if response is None:
+        return None
+    payload = response.get("payload")
+    return payload if isinstance(payload, dict) else None
+
+
+class NativePackageAdvisoryAuthorityError(RuntimeError):
+    """No authoritative native cached-feed result was available."""
+
+
+def package_advisory_ids_native(
+    *,
+    artifact: Mapping[str, object],
+    store_path: Path,
+    guard_home: Path,
+) -> tuple[str, ...]:
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": _request_id(),
+        "store_path": str(store_path),
+        "guard_home": str(guard_home),
+        "artifact": dict(artifact),
+    }
+    request_digest = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        ).hexdigest()
+    )
+    response = _resident_request(
+        operation="package_advisory_ids",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=2.0,
+    )
+    if (
+        not isinstance(response, dict)
+        or response.get("schema") != _RESULT_SCHEMA
+        or response.get("request_id") != request["request_id"]
+        or response.get("request_sha256") != request_digest
+        or response.get("status") != "ok"
+        or response.get("code") != "ok"
+    ):
+        raise NativePackageAdvisoryAuthorityError("Native package advisory authority unavailable or invalid")
+    payload = response.get("payload")
+    ids = payload.get("matched_advisory_ids") if isinstance(payload, dict) else None
+    if (
+        not isinstance(ids, list)
+        or any(not isinstance(item, str) or not item for item in ids)
+        or any(left >= right for left, right in pairwise(ids))
+    ):
+        raise NativePackageAdvisoryAuthorityError("Native package advisory result invalid")
+    return tuple(ids)
 
 
 def evaluation_from_native_payload(payload: Mapping[str, object]) -> Any:

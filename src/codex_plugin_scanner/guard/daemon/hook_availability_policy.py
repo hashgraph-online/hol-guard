@@ -10,6 +10,7 @@ from .hook_availability_floor import (
     EMERGENCY_SAFE_REASON_CODE,
     hook_action_is_emergency_safe,
 )
+from .hook_request_parsing import runtime_hook_event_name
 
 _CURSOR_UNAVAILABLE_MESSAGE = (
     "HOL Guard paused this action because native review was unavailable "
@@ -219,7 +220,7 @@ def availability_harness_response(
             reason=reason,
             reason_code=reason_code,
         )
-    compact = _compact_hook_event_name(event_name)
+    compact = _compact_hook_event_name(runtime_hook_event_name({"hook_event_name": event_name}))
     pre_tool_event = compact in {"pretooluse", "pretool"} or compact.startswith("before")
     if pre_tool_event:
         if recording_only and reason_code.strip() not in _INTEGRITY_FAIL_CLOSED_REASON_CODES:

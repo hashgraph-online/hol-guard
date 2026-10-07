@@ -8,18 +8,6 @@ nested under ``hooks.events`` (current ZCode rejects the legacy flat
 migrates legacy groups on install). Plugins are cached under
 ``~/.zcode/cli/plugins/cache/<marketplace>/<plugin>/<version>/``.
 
-Two ZCode behaviors shape hook installs:
-
-* Each surface only registers hooks when its own config sets
-  ``hooks.enabled: true`` at the root; without that opt-in flag parsed hook
-  entries are listed in settings but never execute. Guard sets the flag on
-  install and restores the prior value on uninstall.
-* Current ZCode splits hook loading per surface: the Desktop app reads user
-  hooks from ``~/.zcode/cli/config.json`` while the npm CLI reads them from
-  its ``~/.zcode/cli/setting.json`` file-config (the CLI migrates
-  config.json content there once). No runtime loads both files, so Guard
-  maintains managed hooks in both.
-
 This adapter discovers MCP servers, enabled plugins, plugin manifests and
 provenance, plugin hooks, skills, commands, and marketplaces; installs
 Guard-managed ``PreToolUse`` and ``UserPromptSubmit`` hooks into the CLI
@@ -82,9 +70,7 @@ _ZCODE_HOME_ENV_VAR = "ZCODE_HOME"
 # Current ZCode renders this label beside the hook in its Hooks settings UI
 # instead of the full managed command string.
 _GUARD_HOOK_STATUS_MESSAGE = "HOL Guard runtime policy enforcement"
-# The npm CLI's file-config (plugins, locale, related settings) and its
-# hook surface: the CLI loads user hooks from here while the Desktop app
-# loads them from config.json, so Guard maintains managed hooks in both.
+# The npm CLI's file-config and hook surface; the Desktop app reads config.json.
 _ZCODE_CLI_FILE_CONFIG = "setting.json"
 _ZCODE_PRETOOL_TIMEOUT_SECONDS = 30
 _ZCODE_PROMPT_TIMEOUT_SECONDS = 30
@@ -366,6 +352,12 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                 (path, payload, _snapshot(path), (path.stat().st_mode & 0o777) if path.is_file() else 0o644)
             )
 
+        file_config = self._file_config_path(context)
+        if str(file_config) not in enabled_history and str(config_path) in enabled_history:
+            # The CLI migration will copy config.json (including Guard's opt-in)
+            # into setting.json; remember the pre-install value for it too.
+            enabled_history[str(file_config)] = enabled_history[str(config_path)]
+
         config_before = _snapshot(config_path)
         state_mode = state_path.stat().st_mode & 0o777 if state_before is not None else 0o644
         backup_mode = backup_path.stat().st_mode & 0o777 if backup_before is not None else 0o644
@@ -462,6 +454,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
 
         surfaces: list[tuple[Path, dict[str, object]]] = []
         for path in (self._config_path(context), self._file_config_path(context)):
+            _ensure_path_within_root(self._zcode_home_dir(context), path, label="ZCode")
             if not path.is_file():
                 if path == self._config_path(context):
                     surfaces.append((path, {}))
@@ -470,7 +463,6 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                 # strand the user's config.json settings. The CLI's own
                 # migration copies Guard's config.json hooks over instead.
                 continue
-            _ensure_path_within_root(self._zcode_home_dir(context), path, label="ZCode")
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
             except json.JSONDecodeError as error:
@@ -509,14 +501,13 @@ class ZCodeHarnessAdapter(HarnessAdapter):
     def _recorded_enabled_for(
         self, state: dict[str, object], path: Path, hooks: dict[str, object]
     ) -> dict[str, object]:
-        """Guard's recorded pre-install value wins over the live file, which a
-        previous install force-enabled. New state records per file; legacy
-        single-file state maps onto the one file it managed.
+        """Return the pre-install enabled preference for one hook surface.
 
         A record only applies while Guard-managed entries are still present in
         the file: once the user removes Guard's hooks, their own live value is
-        the freshest choice and wins. Uninstall therefore captures the record
-        before pruning managed entries."""
+        the freshest choice and wins. Legacy single-file state maps only onto
+        the file it managed.
+        """
 
         if not self._hooks_have_managed_entries(hooks):
             return {"present": "enabled" in hooks, "value": hooks.get("enabled")}
@@ -524,13 +515,6 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         if isinstance(history, dict) and self._valid_enabled_record(history.get(str(path))):
             recorded = history[str(path)]
             return {"present": recorded["present"], "value": recorded["value"]}
-        # Deliberately no cross-file mapping of managed_config_path's record
-        # onto the CLI file-config: an install made before setting.json
-        # existed leaves no record for it, and applying config.json's record
-        # there later strips an enabled flag the user set after the CLI's own
-        # migration created the file. Only values recorded for this exact
-        # path (branch above) or the legacy single-file state (branch below)
-        # are restored.
         legacy = state.get("hooks_enabled_before")
         if state.get("managed_config_path") == str(path) and self._valid_enabled_record(legacy):
             return {"present": legacy["present"], "value": legacy["value"]}
@@ -538,11 +522,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _hooks_have_handlers(hooks: dict[str, object]) -> bool:
-        """Return True when the ``hooks`` object still carries event handlers.
-
-        Root-only leftovers (a lone ``enabled`` flag) carry no runnable
-        configuration, so callers drop the whole object when this is False.
-        """
+        """Return True when ``hooks`` still carries event handlers."""
 
         return any(isinstance(entries, list) and entries for entries in hook_event_groups(hooks).values())
 
@@ -576,9 +556,6 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                 elif not original["present"] and hooks.get("enabled") is True:
                     hooks.pop("enabled", None)
                 if not original["present"]:
-                    # Guard introduced the enabled flag here; keep the user's
-                    # own root settings (timeoutMs, maxOutputBytes, the CLI
-                    # skeleton's empty events) and drop only Guard's litter.
                     events = hooks.get(ZCODE_HOOKS_EVENTS_KEY)
                     if isinstance(events, dict) and not events:
                         hooks.pop(ZCODE_HOOKS_EVENTS_KEY, None)

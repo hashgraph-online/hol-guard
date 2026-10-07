@@ -10,48 +10,50 @@ from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as eval
 from codex_plugin_scanner.guard.runtime import supply_chain_package_services as services
 
 
-def test_every_dynamic_evaluator_seam_is_available():
-    tree = ast.parse(Path(services.__file__).read_text())
+def test_evaluator_service_dependencies_are_available():
+    tree = ast.parse(Path(evaluator.__file__).read_text())
     names = {
         node.attr
         for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Name)
-        and node.value.func.id == "_pe"
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "package_services"
     }
     assert names
-    assert not sorted(name for name in names if not hasattr(evaluator, name))
+    assert not sorted(name for name in names if not hasattr(services, name))
 
 
-def test_every_moved_service_keeps_its_evaluator_export():
-    tree = ast.parse(Path(services.__file__).read_text())
-    names = [node.name for node in tree.body if isinstance(node, ast.FunctionDef) and node.name != "_pe"]
-    assert len(names) == 14
-    for name in names:
-        assert getattr(evaluator, name) is getattr(services, name), name
+def test_moved_service_helpers_are_owned_by_the_services_module():
+    for name in ("_build_request_payload", "_lockfile_context", "_workspace_fingerprint"):
+        assert callable(getattr(services, name)), name
 
 
-def test_request_payload_uses_the_evaluator_lockfile_seam(monkeypatch):
+def test_request_payload_uses_the_services_lockfile_seam(monkeypatch):
     calls = []
     artifact = SimpleNamespace(metadata={}, harness="claude-code")
 
-    def lockfile(workspace, current):
-        calls.append((workspace, current))
+    def lockfile(workspace, current, *, parse_text_result):
+        calls.append((workspace, current, parse_text_result))
         return {"dependencyCount": 2, "fileName": "package-lock.json", "manifestHash": None}
 
-    monkeypatch.setattr(evaluator, "_lockfile_context", lockfile)
-    payload = evaluator._build_request_payload(
-        artifact=artifact, targets=(), workspace_dir=None, workspace_fingerprint="fingerprint", policy_version="1"
+    def parser(_filename, _text):
+        return None
+
+    monkeypatch.setattr(services, "_lockfile_context", lockfile)
+    payload = services._build_request_payload(
+        artifact=artifact,
+        targets=(),
+        workspace_dir=None,
+        workspace_fingerprint="fingerprint",
+        policy_version="1",
+        parse_text_result=parser,
     )
-    assert calls == [(None, artifact)]
+    assert calls == [(None, artifact, parser)]
     assert payload["lockfileContext"] == {"dependencyCount": 2, "fileName": "package-lock.json"}
     assert payload["policyVersion"] == "1"
 
 
 def test_workspace_fingerprint_retains_parser_version_dependency():
-    result = evaluator._workspace_fingerprint(
+    result = services._workspace_fingerprint(
         "workspace", workspace_dir=None, artifact=SimpleNamespace(metadata={}), bundle_meta=None
     )
     assert len(result) == 64
-    assert evaluator.LOCKFILE_PARSER_VERSION
+    assert services.LOCKFILE_PARSER_VERSION

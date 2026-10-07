@@ -25,6 +25,12 @@ def test_native_worker_unavailable_preserves_explicit_protection_mode(
     )
     config.write_bytes(config_bytes)
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
+    # The stub bypasses the transport that normally replaces each request's
+    # failure code. Do not inherit a previous request's control-binding error.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker_native.native_resident_client_failure_code",
+        lambda: "native_client_process_failed",
+    )
     observed_modes: list[bool] = []
 
     def unavailable_native(**kwargs):

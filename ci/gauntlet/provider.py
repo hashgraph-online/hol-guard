@@ -76,6 +76,7 @@ class InferenceRelay:
         self.rounds: list[dict[str, Any]] = []
         self.export_violations = 0
         self._lock = threading.Lock()
+        self._settled = threading.Condition(self._lock)
         self._opener = urllib.request.build_opener(NoRedirect)
         relay = self
 
@@ -152,6 +153,10 @@ class InferenceRelay:
                             self.wfile.write(line)
                             self.wfile.flush()
                             row["delivered_bytes"] += len(line)
+                            # DONE terminates an SSE event, even when the provider
+                            # keeps its HTTP connection open after the delimiter.
+                            if completed and not line.strip():
+                                break
                     with relay._lock:
                         row.update(
                             status="completed" if completed else "incomplete-stream",
@@ -160,6 +165,7 @@ class InferenceRelay:
                             response_bytes=size,
                             response_models=sorted(models),
                         )
+                        relay._settled.notify_all()
                 except Exception as exc:
                     with relay._lock:
                         if "row" in locals() and row["status"] == "started":
@@ -167,6 +173,7 @@ class InferenceRelay:
                             row["error_type"] = type(exc).__name__
                             if isinstance(exc, urllib.error.HTTPError):
                                 row["http_status"] = exc.code
+                            relay._settled.notify_all()
                     with suppress(OSError):
                         self.send_error(502, "Gauntlet live inference failed")
 
@@ -203,9 +210,13 @@ class InferenceRelay:
         self.thread.join(timeout=3)
         self._api_key = None
 
-    def evidence(self) -> dict[str, Any]:
-        """Return metadata, never credentials or conversation bodies."""
-        with self._lock:
+    def evidence(self, *, wait_seconds: float = 0) -> dict[str, Any]:
+        """Optionally await active requests; pending streams never become completed."""
+        with self._settled:
+            self._settled.wait_for(
+                lambda: all(row["status"] != "started" for row in self.rounds),
+                timeout=min(3.0, max(0.0, wait_seconds)),
+            )
             return {
                 "identity": self.identity,
                 "requested_model": self.model,

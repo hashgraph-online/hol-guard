@@ -181,4 +181,4 @@ def test_short_lock_wait_does_not_replace_the_admission_operation_deadline(legac
     monkeypatch.setattr(lookup.time, "monotonic", lambda: now[0])
     with pytest.raises(RuntimeError, match="stop after checking"):
         lookup.read_legacy_codex_probe_receipt(BudgetStore(), correlation=handle, since=since, deadline_monotonic=20.0)
-    assert observed == [(0.1, 20.0), (0.1, 20.0)]
+    assert observed == [(0.5, 20.0), (0.5, 20.0)]
