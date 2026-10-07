@@ -49,6 +49,12 @@ from ..edge_events import build_runtime_session_event
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
 from ..models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
+from ..native_prompt import NativePromptAnalysisError
+from ..native_prompt import analyze as _prompt_analyze_native
+from ..native_prompt import artifact_from_dict as _guard_artifact_from_dict
+from ..native_prompt import extract_prompt_requests as extract_prompt_requests
+from ..native_prompt import request_from_dict as _prompt_request_from_dict  # noqa: F401
+from ..native_prompt import should_force_reapproval as should_force_reapproval
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
 from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
 from ..package_firewall_defaults import extract_cloud_user_profile
@@ -91,7 +97,7 @@ from ..review_contracts import validated_review_verification_keys_from_sync
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
-from ..types import PromptRequest, RemediationAction
+from ..types import PromptRequest
 from .actions import GuardActionEnvelope, redacted_workspace_label
 from .approval_context import (
     build_runtime_launch_identity,
@@ -136,7 +142,6 @@ from .managed_controls_sync import (
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
-from .prompt_injection import detect_prompt_injection_requests
 from .signals import RiskSignalV2
 from .supply_chain_bundle import (
     SupplyChainBundleError,
@@ -262,8 +267,10 @@ def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
     "approval_delivery",
+    "approval_queue_unavailable",
     "approval_requests",
     "approval_wait",
+    "daemon_queue_unavailable",
     "review_hint",
 )
 
@@ -788,147 +795,6 @@ _PAIN_SIGNAL_EVENTS = frozenset(
     }
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
-_SECRET_REQUEST_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"(?<![\w-])\.env(?!\.example\b)(?:\.[\w.-]+)?\b"), "local .env file"),
-    (re.compile(r"(?:^|[\s'\"`])~?/.ssh(?:/|\b)"), "SSH material"),
-    (re.compile(r"(?:^|[\s'\"`])~?/.aws/(?:credentials|config)\b"), "AWS credentials"),
-    (re.compile(r"(?:^|[\s'\"`])~?/.kube/config\b"), "kubeconfig"),
-    (re.compile(r"(?:^|[\s'\"`])~?/.docker/config\.json\b"), "Docker credentials"),
-    (re.compile(r"(?<![\w-])\.npmrc\b"), "npm registry credentials"),
-    (re.compile(r"(?<![\w-])\.pypirc\b"), "Python package credentials"),
-    (re.compile(r"(?<![\w-])\.git-credentials\b"), "Git credential store"),
-)
-_SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
-    ("/.ssh/", "SSH material"),
-    ("/.aws/credentials", "AWS credentials"),
-    ("/.aws/config", "AWS credentials"),
-    ("/.kube/config", "kubeconfig"),
-    ("/.docker/config.json", "Docker credentials"),
-)
-_SECRET_READ_INTENT_PATTERN = re.compile(
-    r"\b("
-    r"read|open|print|show|dump|cat|head|tail|less|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
-    r"use|include|grab|"
-    r"contain(?:s)?|contents?\s+of|what(?:'s| is)\s+in"
-    r")\b",
-    re.IGNORECASE,
-)
-_NEGATED_SECRET_READ_PATTERN = re.compile(
-    r"\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not|cannot|can't)\b[^.!?;\n]{0,80}"
-    r"\b(?:read|open|print|show|dump|cat|head|tail|less|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
-    r"use|include|grab)\b",
-    re.IGNORECASE,
-)
-_FOLLOWING_SECRET_REFERENCE_PATTERN = re.compile(
-    r"\b(?:it|them|these|those|file|files|secret|secrets|contents?|credentials?|tokens?|key|keys)\b",
-    re.IGNORECASE,
-)
-_EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"
-_EXFIL_ARTIFACTS = r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)"
-_EXFIL_DESTINATIONS = r"(?:to|into|onto|via|through|over|at)"
-_EXFIL_NAMED_REMOTE_TARGETS = r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)"
-_EXFIL_REMOTE_TARGETS = (
-    r"(?:(?:[a-z][a-z0-9+.-]*://)|(?:[a-z0-9-]+\.)+[a-z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|"
-    rf"{_EXFIL_NAMED_REMOTE_TARGETS})"
-)
-_SAME_SENTENCE_80 = r"[^.!?;\n]{0,80}"
-_SAME_SENTENCE_40 = r"[^.!?;\n]{0,40}"
-_EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(
-        rf"\b(?:upload|exfiltrate|transfer|paste|gist|webhook)\b{_SAME_SENTENCE_80}\b"
-        rf"{_EXFIL_ARTIFACTS}\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        rf"\b{_EXFIL_ACTIONS}\b{_SAME_SENTENCE_80}\b"
-        rf"{_EXFIL_ARTIFACTS}\b"
-        rf"{_SAME_SENTENCE_40}\b{_EXFIL_DESTINATIONS}\b{_SAME_SENTENCE_40}\b"
-        rf"{_EXFIL_REMOTE_TARGETS}\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        rf"\b{_EXFIL_ACTIONS}\b{_SAME_SENTENCE_80}\b"
-        rf"{_EXFIL_DESTINATIONS}\b{_SAME_SENTENCE_40}\b"
-        rf"{_EXFIL_NAMED_REMOTE_TARGETS}\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,120}"
-        r"(?:"
-        r"(?<![\w-])\.env(?:\.[\w.-]+)?\b|"
-        r"(?:^|[\s'\"`])~?/.ssh(?:/|\b)|"
-        r"(?:^|[\s'\"`])~?/.aws/(?:credentials|config)\b|"
-        r"(?:^|[\s'\"`])~?/.kube/config\b|"
-        r"(?:^|[\s'\"`])~?/.docker/config\.json\b|"
-        r"(?<![\w-])\.npmrc\b|"
-        r"(?<![\w-])\.pypirc\b|"
-        r"(?<![\w-])\.git-credentials\b|"
-        r"/.ssh/|"
-        r"/.aws/credentials|"
-        r"/.aws/config|"
-        r"/.kube/config|"
-        r"/.docker/config\.json"
-        r")"
-        r".{0,80}\b(?:to|into|onto|via|through)\b.{0,80}"
-        r"(?:[a-z][a-z0-9+.-]*://|webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
-        re.IGNORECASE,
-    ),
-)
-_DESTRUCTIVE_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(
-        r"\b(?:run|execute|use|call|invoke)\b.{0,40}\b(?:rm\s+-rf|rm\s+|del\s+|truncate\s+|chmod\s+|chown\s+|mv\s+)",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"(?:^|[\s'\"`(])(?:rm\s+-rf|rm\s+\S|del\s+\S|truncate\s+\S|chmod\s+\S|chown\s+\S|mv\s+\S)",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(?:delete|remove|overwrite|truncate)\b.{0,60}\b(?:file|directory|repo|workspace|contents?)\b",
-        re.IGNORECASE,
-    ),
-)
-_SUBPROCESS_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(
-        r"\b(?:run|execute|use|call|invoke|launch|spawn)\b.{0,60}\b"
-        r"(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess|exec\(|spawn\()",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"(?:^|[\s'\"`(])(?:bash\s+-c\b|sh\s+-c\b|zsh\s+-c\b|powershell(?:\.exe)?(?:\s|$)|cmd\s+/c(?:\s|$)|subprocess\.(?:run|Popen|call|check_call|check_output)\b|exec\(|spawn\()",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(?:use|call|invoke)\b.{0,40}\bsubprocess\b",
-        re.IGNORECASE,
-    ),
-)
-_GUARD_BYPASS_PROMPT_PATTERN = re.compile(
-    r"\b(hol-guard\s+(?:disable|off|uninstall)|disable\s+hol-guard|approval_policy\s*=\s*\"never\"|guard[_-]?bypass)\b",
-    re.IGNORECASE,
-)
-_DOCUMENT_PROMPT_ACTION_PATTERN = re.compile(
-    r"\b(?:create|draft|document|generate|outline|plan|update|write)\b",
-    re.IGNORECASE,
-)
-_DOCUMENT_PROMPT_TARGET_PATTERN = re.compile(
-    r"\b(?:checklist|docs?|documentation|file|files|guide|markdown|notes?|plan(?:ning)?|prd|prompt|report|runbook|spec|todo)\b",
-    re.IGNORECASE,
-)
-_DOCUMENT_PROMPT_CONTEXT_PATTERN = re.compile(
-    r"\b(?:checklist|command|commands|document|documentation|example|examples|regression|test|tests|validate|verify)\b",
-    re.IGNORECASE,
-)
-_DOCUMENT_PROMPT_GUARDRAIL_PATTERN = re.compile(
-    r"\b(?:approval|block(?:ed)?|guard|guardrail|policy|protection|require(?:s|d)?\s+approval)\b",
-    re.IGNORECASE,
-)
-_DOCUMENT_PROMPT_STRONG_GUARDRAIL_PATTERN = re.compile(
-    r"(?:do\s+not|must\s+not|must\s+stay\s+blocked|must\s+remain\s+blocked|never|"
-    r"require(?:s|d)?\s+approval|should\s+stay\s+blocked|should\s+remain\s+blocked|stay\s+blocked)",
-    re.IGNORECASE,
-)
-_PROMPT_SENTENCE_BOUNDARY_PATTERN = re.compile(r"[!?;]|[.](?=\s|$)")
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
@@ -968,143 +834,6 @@ class GuardSyncAuthorizationExpiredError(GuardSyncNotConfiguredError):
     """Raised when local OAuth material can no longer mint a runtime access token."""
 
 
-def _prompt_sentence_start(text: str, index: int) -> int:
-    matches = list(_PROMPT_SENTENCE_BOUNDARY_PATTERN.finditer(text, 0, index))
-    return matches[-1].end() if matches else 0
-
-
-def _prompt_sentence_end(text: str, index: int) -> int:
-    match = _PROMPT_SENTENCE_BOUNDARY_PATTERN.search(text, index)
-    return match.end() if match is not None else len(text)
-
-
-def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
-    current_sentence_start = _prompt_sentence_start(text, start)
-    region_start = _prompt_sentence_start(text, max(0, current_sentence_start - 1))
-    first_sentence_end = _prompt_sentence_end(text, end)
-    second_sentence_end = (
-        _prompt_sentence_end(text, first_sentence_end) if first_sentence_end < len(text) else first_sentence_end
-    )
-    return text[region_start:second_sentence_end]
-
-
-def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
-    if _prompt_match_is_documented_example(prompt_text, start=start, end=end):
-        return False
-    sentence = _secret_match_sentence(prompt_text, start=start, end=end)
-    sentence_end = _prompt_sentence_end(prompt_text, end)
-    sentence_intents = tuple(_SECRET_READ_INTENT_PATTERN.finditer(sentence))
-    if sentence_intents:
-        if any(not _secret_read_intent_is_negated(sentence, match.start(), match.end()) for match in sentence_intents):
-            return True
-        return _following_sentence_has_secret_read_intent(prompt_text, sentence_end)
-    if _NEGATED_SECRET_READ_PATTERN.search(sentence) is not None:
-        return _following_sentence_has_secret_read_intent(prompt_text, sentence_end)
-    region = _prompt_secret_intent_region(prompt_text, start=start, end=end)
-    for match in _SECRET_READ_INTENT_PATTERN.finditer(region):
-        if not _secret_read_intent_is_negated(region, match.start(), match.end()):
-            return True
-    return False
-
-
-def _secret_match_sentence(prompt_text: str, *, start: int, end: int) -> str:
-    sentence_start = _prompt_sentence_start(prompt_text, start)
-    sentence_end = _prompt_sentence_end(prompt_text, end)
-    return prompt_text[sentence_start:sentence_end]
-
-
-def _following_sentence_has_secret_read_intent(prompt_text: str, sentence_end: int) -> bool:
-    if sentence_end >= len(prompt_text):
-        return False
-    next_end = _prompt_sentence_end(prompt_text, sentence_end)
-    following = prompt_text[sentence_end:next_end]
-    has_positive_intent = any(
-        not _secret_read_intent_is_negated(following, match.start(), match.end())
-        for match in _SECRET_READ_INTENT_PATTERN.finditer(following)
-    )
-    if not has_positive_intent:
-        return False
-    return _FOLLOWING_SECRET_REFERENCE_PATTERN.search(following) is not None
-
-
-def _secret_read_intent_is_negated(region: str, intent_start: int, intent_end: int) -> bool:
-    window_start = max(0, intent_start - 90)
-    prefix = region[window_start:intent_start]
-    clause_start = window_start
-    for boundary in (".", "!", "?", ";", ",", " and ", " but ", " then "):
-        boundary_index = prefix.rfind(boundary)
-        if boundary_index >= 0:
-            clause_start = max(clause_start, window_start + boundary_index + len(boundary))
-    scoped_start = clause_start
-    scoped_region = region[scoped_start:intent_end]
-    return _NEGATED_SECRET_READ_PATTERN.search(scoped_region) is not None
-
-
-def _prompt_match_is_documented_example(prompt_text: str, *, start: int, end: int) -> bool:
-    region = _prompt_secret_intent_region(prompt_text, start=start, end=end)
-    if _DOCUMENT_PROMPT_ACTION_PATTERN.search(region) is None:
-        return False
-    if _DOCUMENT_PROMPT_TARGET_PATTERN.search(region) is None:
-        return False
-    if _DOCUMENT_PROMPT_GUARDRAIL_PATTERN.search(region) is None:
-        return False
-    if _DOCUMENT_PROMPT_CONTEXT_PATTERN.search(region) is None and not _prompt_match_is_wrapped_literal(
-        prompt_text,
-        start=start,
-        end=end,
-    ):
-        return False
-    return _DOCUMENT_PROMPT_STRONG_GUARDRAIL_PATTERN.search(region) is not None or _prompt_match_is_wrapped_literal(
-        prompt_text,
-        start=start,
-        end=end,
-    )
-
-
-def _prompt_match_is_wrapped_literal(prompt_text: str, *, start: int, end: int) -> bool:
-    if start < len(prompt_text) and prompt_text[start] in {"`", "'", '"'}:
-        delimiter = prompt_text[start]
-        return _next_non_whitespace_character(prompt_text, end) == delimiter
-    delimiter = _previous_non_whitespace_character(prompt_text, start)
-    if delimiter not in {"`", "'", '"'}:
-        return False
-    return _next_non_whitespace_character(prompt_text, end) == delimiter
-
-
-def _previous_non_whitespace_character(text: str, index: int) -> str | None:
-    for position in range(index - 1, -1, -1):
-        if not text[position].isspace():
-            return text[position]
-    return None
-
-
-def _next_non_whitespace_character(text: str, index: int) -> str | None:
-    for position in range(index, len(text)):
-        if not text[position].isspace():
-            return text[position]
-    return None
-
-
-def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[str] | None:
-    for pattern in patterns:
-        match = pattern.search(text)
-        if match is not None:
-            return match
-    return None
-
-
-def _iter_hint_occurrences(text: str, hint: str) -> list[tuple[int, int]]:
-    occurrences: list[tuple[int, int]] = []
-    current_pos = 0
-    while True:
-        start = text.find(hint, current_pos)
-        if start == -1:
-            return occurrences
-        end = start + len(hint)
-        occurrences.append((start, end))
-        current_pos = start + 1
-
-
 def _resolve_hermes_guard_access_token(store: GuardStore) -> str | None:
     return best_effort_access_token(lambda: _resolve_guard_sync_auth_context(store))
 
@@ -1123,6 +852,18 @@ def guard_run(
 ) -> dict[str, Any]:
     """Evaluate local harness state and optionally launch the harness."""
 
+    # `guard run` is usually the first native caller in a fresh install: the
+    # detection review (including bare `--dry-run`) resolves package-intent and
+    # launch identities through the resident, and the resident refuses every
+    # request until this store's verifier key exists. Reuse the publisher's
+    # store-derived bootstrap; never create a separate authority or substitute
+    # Python when the resident is absent. The digest home is bound too, so those
+    # calls resolve against this store instead of `$HOME`.
+    from ..native_context import bind_context_digest_home
+    from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+
+    provision_native_verifier_key_for_store(store)
+    bind_context_digest_home(getattr(store, "guard_home", None))
     detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
     launch_plan: _GuardRunLaunchPlan | None = None
     pending_approval_claims: list[tuple[Mapping[str, object], str, str]] = []
@@ -2091,7 +1832,9 @@ def _detection_with_prompt_artifacts(
             ),
         )
     prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
-    prompt_requests = extract_prompt_requests(prompt_text)
+    if not passthrough_args:
+        return detection
+    prompt_requests = extract_prompt_requests(prompt_text, guard_home=context.guard_home)
     if not prompt_requests:
         return detection
     prompt_artifacts = prompt_requests_to_artifacts(
@@ -2109,224 +1852,29 @@ def _detection_with_prompt_artifacts(
     )
 
 
-def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
-    """Extract structured prompt intent requests from passthrough arguments."""
-
-    normalized_prompt = " ".join(prompt_text.split())
-    lowered = normalized_prompt.lower()
-    if not lowered:
-        return []
-    requests: list[PromptRequest] = []
-    seen_secret_labels: set[str] = set()
-
-    def add_secret_request(*, label: str, matched: str) -> None:
-        if label in seen_secret_labels:
-            return
-        seen_secret_labels.add(label)
-        summary = (
-            "Prompt asks the harness to read a local .env file directly."
-            if label == "local .env file"
-            else f"Prompt asks for direct access to {label}."
-        )
-        requests.append(
-            PromptRequest(
-                request_id=_prompt_request_id("secret_read", matched, lowered),
-                request_class="secret_read",
-                summary=summary,
-                matched_text=matched,
-                severity=8,
-                confidence=0.9,
-                remediation=(
-                    RemediationAction(kind="approve_once", label="Approve once", detail="Allow a one-time access."),
-                    RemediationAction(
-                        kind="rotate_exposed_secret",
-                        label="Rotate secret",
-                        detail="Rotate credentials if this read is unexpected.",
-                    ),
-                ),
-            )
-        )
-
-    for pattern, label in _SECRET_REQUEST_PATTERNS:
-        for match in pattern.finditer(normalized_prompt):
-            if not _prompt_has_secret_read_intent(normalized_prompt, start=match.start(), end=match.end()):
-                continue
-            add_secret_request(label=label, matched=match.group(0).strip())
-            break
-    for hint, label in _SECRET_ABSOLUTE_HINTS:
-        for start, end in _iter_hint_occurrences(lowered, hint):
-            if _prompt_has_secret_read_intent(normalized_prompt, start=start, end=end):
-                add_secret_request(label=label, matched=hint)
-                break
-    exfil_match = _first_match(_EXFIL_PROMPT_PATTERNS, normalized_prompt)
-    if exfil_match is not None:
-        matched_text = exfil_match.group(0).strip()
-        requests.append(
-            PromptRequest(
-                request_id=_prompt_request_id("exfil_intent", matched_text, lowered),
-                request_class="exfil_intent",
-                summary="Prompt includes exfiltration-oriented transfer intent.",
-                matched_text=matched_text,
-                severity=8,
-                confidence=0.84,
-                remediation=(
-                    RemediationAction(
-                        kind="review_network_destination",
-                        label="Review destination",
-                        detail="Validate destination before data transfer.",
-                    ),
-                    RemediationAction(kind="defer_and_notify_team", label="Notify team", detail="Escalate for review."),
-                ),
-            )
-        )
-    destructive_match = _first_match(_DESTRUCTIVE_PROMPT_PATTERNS, normalized_prompt)
-    if destructive_match is not None:
-        matched_text = destructive_match.group(0).strip()
-        requests.append(
-            PromptRequest(
-                request_id=_prompt_request_id(
-                    "destructive_intent",
-                    matched_text,
-                    lowered,
-                ),
-                request_class="destructive_intent",
-                summary="Prompt includes destructive filesystem mutation intent.",
-                matched_text=matched_text,
-                severity=8,
-                confidence=0.87,
-                remediation=(
-                    RemediationAction(
-                        kind="approve_once",
-                        label="Approve once",
-                        detail="Require explicit one-time approval.",
-                    ),
-                    RemediationAction(
-                        kind="open_investigation",
-                        label="Open investigation",
-                        detail="Track destructive intent.",
-                    ),
-                ),
-            )
-        )
-    subprocess_match = _first_match(_SUBPROCESS_PROMPT_PATTERNS, normalized_prompt)
-    if subprocess_match is not None:
-        matched_text = subprocess_match.group(0).strip()
-        requests.append(
-            PromptRequest(
-                request_id=_prompt_request_id(
-                    "subprocess_intent",
-                    matched_text,
-                    lowered,
-                ),
-                request_class="subprocess_intent",
-                summary="Prompt asks for subprocess or shell-wrapper execution.",
-                matched_text=matched_text,
-                severity=7,
-                confidence=0.8,
-                remediation=(
-                    RemediationAction(
-                        kind="approve_once",
-                        label="Approve once",
-                        detail="Constrain this run to one approval.",
-                    ),
-                    RemediationAction(
-                        kind="run_in_sandbox",
-                        label="Run in sandbox",
-                        detail="Execute in isolated mode.",
-                    ),
-                ),
-            )
-        )
-    if _GUARD_BYPASS_PROMPT_PATTERN.search(normalized_prompt):
-        requests.append(
-            PromptRequest(
-                request_id=_prompt_request_id("guard_bypass_intent", "guard-bypass", lowered),
-                request_class="guard_bypass_intent",
-                summary="Prompt includes Guard bypass or disable intent.",
-                matched_text="guard-bypass",
-                severity=10,
-                confidence=0.93,
-                remediation=(
-                    RemediationAction(
-                        kind="block_and_remove",
-                        label="Block",
-                        detail="Do not allow bypass behavior.",
-                    ),
-                    RemediationAction(
-                        kind="open_investigation",
-                        label="Investigate",
-                        detail="Escalate bypass attempt.",
-                    ),
-                ),
-            )
-        )
-    existing_classes = {request.request_class for request in requests}
-    for request in detect_prompt_injection_requests(normalized_prompt):
-        if request.request_class in existing_classes:
-            continue
-        requests.append(request)
-        existing_classes.add(request.request_class)
-    deduped: dict[str, PromptRequest] = {}
-    for request in requests:
-        deduped[request.request_id] = request
-    return list(deduped.values())
-
-
 def prompt_requests_to_artifacts(
     *,
     detection: HarnessDetection,
     context: HarnessContext,
     requests: list[PromptRequest],
 ) -> list[GuardArtifact]:
-    """Convert typed prompt requests into pseudo-artifacts for policy evaluation."""
+    """Convert typed prompt requests into pseudo-artifacts for policy evaluation.
 
+    Rust constructs the artifacts; an unavailable or invalid result stops launch.
+    """
     config_path = str(_prompt_policy_path(detection, context))
-    artifacts: list[GuardArtifact] = []
-    for request in requests:
-        if request.request_class == "secret_read" and ".env" in request.matched_text.lower():
-            artifact_id = f"{detection.harness}:session:prompt-env-read:{request.request_id[:24]}"
-        else:
-            artifact_id = f"{detection.harness}:session:prompt:{request.request_class}:{request.request_id[:24]}"
-        artifacts.append(
-            GuardArtifact(
-                artifact_id=artifact_id,
-                name=f"prompt {request.request_class.replace('_', ' ')}",
-                harness=detection.harness,
-                artifact_type="prompt_request",
-                source_scope="session",
-                config_path=config_path,
-                metadata={
-                    "prompt_signals": [request.summary],
-                    "prompt_summary": request.summary,
-                    "prompt_matched_text": request.matched_text,
-                    "prompt_request_class": request.request_class,
-                    "prompt_confidence": request.confidence,
-                    "prompt_severity": request.severity,
-                },
-            )
-        )
-    return artifacts
-
-
-def should_force_reapproval(prompt_reqs: list[PromptRequest], prior_policy: dict[str, object] | None) -> bool:
-    """Return whether current prompt requests exceed prior approved scope."""
-
-    if not prompt_reqs:
-        return False
-    if prior_policy is None:
-        return True
-    approved_classes = prior_policy.get("approved_prompt_classes")
-    approved = (
-        {str(item) for item in approved_classes if isinstance(item, str)}
-        if isinstance(approved_classes, list)
-        else set()
+    native = _prompt_analyze_native(
+        "to_artifacts",
+        harness=str(detection.harness),
+        config_path=config_path,
+        requests=[r.to_dict() for r in requests],
+        guard_home=context.guard_home,
     )
-    return any(request.request_class not in approved or request.severity >= 8 for request in prompt_reqs)
-
-
-def _prompt_request_id(request_class: str, matched_text: str, normalized_prompt: str) -> str:
-    fingerprint = hashlib.sha256(f"{request_class}:{matched_text}:{normalized_prompt}".encode()).hexdigest()
-    return fingerprint
+    if isinstance(native, list):
+        rebuilt = [a for a in (_guard_artifact_from_dict(item) for item in native) if a is not None]
+        if len(rebuilt) == len(native) == len(requests):
+            return rebuilt
+    raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
 
 
 def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
@@ -5167,6 +4715,14 @@ def _test_sync_auth_context_from_env() -> dict[str, object] | None:
         return None
     if not isinstance(payload, dict):
         return None
+    # Error form: `{"error": "authorization_expired"}` makes the resolver raise
+    # `GuardSyncAuthorizationExpiredError`, mirroring a resident seam where the
+    # same JSON is forwarded as `sync_auth_context_override` and surfaces as
+    # `EvalError::Validation` → `cloud_auth_error` fail-closed.
+    if payload.get("error") == "authorization_expired":
+        raise GuardSyncAuthorizationExpiredError(
+            "Guard authorization expired (test override). Run `hol-guard connect` to sign in again."
+        )
     sync_url = payload.get("sync_url")
     access_token = payload.get("access_token")
     if not isinstance(sync_url, str) or not isinstance(access_token, str):

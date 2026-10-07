@@ -11,12 +11,61 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
 from codex_plugin_scanner.guard.daemon import server as daemon
+from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
 from codex_plugin_scanner.guard.store import GuardStore
 
 from .native_policy_snapshot_test_fixtures import _config
 from .test_native_policy_snapshot_cache_binding import _write_resident_authority
+
+
+def test_hermes_pre_tool_worker_failure_never_allows_execution() -> None:
+    response = availability_harness_response(
+        {"hook_event_name": "pre_tool_call", "tool_name": "terminal", "tool_input": {"command": "rm -rf ./build"}},
+        harness="hermes",
+        event_name="pre_tool_call",
+        reason_code="native_hook_worker_exception",
+        reason="Native hook worker failed.",
+    )
+
+    assert response["decision"] == "block"
+    assert response["policy_action"] == "block"
+
+
+@pytest.mark.parametrize("failure", ["start", "submit", "stop"])
+def test_disabled_cli_evidence_failure_never_changes_denial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    writer = Mock()
+    if failure != "start":
+        getattr(writer, "submit_command_activity" if failure == "submit" else "stop").side_effect = RuntimeError(
+            "injected evidence failure"
+        )
+    factory = (
+        Mock(side_effect=RuntimeError("injected evidence failure")) if failure == "start" else Mock(return_value=writer)
+    )
+    monkeypatch.setattr(cli, "RuntimeHookEvidenceWriter", factory)
+    monkeypatch.setattr(cli, "_native_mode_requires_rust", lambda: False)
+    monkeypatch.setattr(cli, "native_mode_is_fail_safe_disabled", lambda: True)
+    responses = []
+    monkeypatch.setattr(cli, "_emit", lambda _name, value, _json: responses.append(value))
+    status = cli.route_native_hook(
+        Mock(harness="opencode", json=True),
+        config=None,
+        context=HarnessContext(home_dir=tmp_path, guard_home=guard_home, workspace_dir=None),
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git diff --stat"}},
+        runtime_workspace=None,
+        store=store,
+    )
+    # opencode is rc-driven: its pretool plugin maps exitCode 1 -> block.
+    assert status == 1
+    assert responses[0]["policy_action"] == "block"
+    assert responses[0]["hookSpecificOutput"]["permissionDecision"] == "deny"
+    if failure != "start":
+        writer.stop.assert_called_once_with(timeout_seconds=0.25)
 
 
 @pytest.mark.parametrize("state", ["observe", "enforce", "missing", "expired", "tampered"])
@@ -50,7 +99,10 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
         if state == "tampered":
             snapshot["mode"] = "observe"
         _write_resident_authority(guard_home, snapshot, master)
-    payload = {"hook_event_name": "PreToolUse", "tool_input": {"command": "printf fixture > output.txt"}}
+    payload: dict[str, object] = {
+        "hook_event_name": "PreToolUse",
+        "tool_input": {"command": "printf fixture > output.txt"},
+    }
     if failure == "disabled_legacy_path":
         worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
         monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker_native.native_mode", lambda: "off")
@@ -103,9 +155,14 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
             runtime_workspace=None,
             store=store,
         )
+        # codex denies via the hookSpecificOutput.permissionDecision envelope;
+        # rc stays 0 whether the outage resolves allow (observe+acked snapshot)
+        # or deny, because a nonzero rc would read as a hook error and permit.
         assert status == 0
         assert len(responses) == 1
         response = responses[0]
-    assert response["hookSpecificOutput"]["permissionDecision"] == (
+    hook_output = response["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == (
         "allow" if state == "observe" and failure not in {"disabled_legacy_path", "cli_disabled"} else "deny"
     )

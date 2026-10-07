@@ -7,6 +7,8 @@ from typing import cast
 
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_BRANCH = "release/3.2"
 
@@ -23,9 +25,10 @@ PR_GATE_WORKFLOWS = (
 
 
 def _triggers(relative_path: str) -> dict[str, object]:
+    """Read workflow triggers using the YAML loader handling of the Actions on key."""
     workflow = cast(
         dict[object, object],
-        yaml.safe_load((ROOT / relative_path).read_text(encoding="utf-8")),
+        expand_ci_job_actions(yaml.safe_load((ROOT / relative_path).read_text(encoding="utf-8"))),
     )
     return cast(dict[str, object], workflow[True])
 

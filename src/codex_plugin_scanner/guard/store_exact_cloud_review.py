@@ -14,7 +14,10 @@ from .runtime.time_support import parse_utc_timestamp
 from .store_approvals import get_approval_request as load_approval_request
 from .store_approvals import resolve_one_request_only as persist_one_resolution
 from .store_approvals import resolve_request_with_queue_result as persist_queue_resolution
-from .store_local_once_authority import persist_local_once_approval
+from .store_local_once_authority import (
+    EXACT_CLOUD_AUTHORITY_KIND,
+    persist_local_once_approval,
+)
 
 _CAPABILITY_KEY = "guard_exact_cloud_review_capability"
 _OAUTH_KEY = "oauth_local_credentials"
@@ -204,6 +207,7 @@ class StoreExactCloudReviewMixin:
         expected_capability: dict[str, object] | None,
         expected_oauth_binding: dict[str, object],
         expected_request: dict[str, object],
+        expected_raw_request: dict[str, object],
         receipt_expires_at: str,
         skip_exact_capability: bool = False,
     ) -> dict[str, object]:
@@ -269,6 +273,21 @@ class StoreExactCloudReviewMixin:
                     now=resolved_at,
                 )
                 return _exact_error("remote_exact_request_stale", now=resolved_at)
+            raw_row = connection.execute(
+                "select * from approval_requests where request_id = ?",
+                (request_id,),
+            ).fetchone()
+            if raw_row is None:
+                return _exact_error("remote_exact_request_not_pending", now=resolved_at)
+            changed_raw_fields = _changed_request_fields(dict(raw_row), expected_raw_request)
+            if changed_raw_fields:
+                StoreExactCloudReviewMixin._record_exact_event(
+                    connection,
+                    "cloud_review.exact_request_stale",
+                    {"changed_fields": changed_raw_fields, "request_id": request_id},
+                    now=resolved_at,
+                )
+                return _exact_error("remote_exact_request_stale", now=resolved_at)
             try:
                 connection.execute(
                     """
@@ -314,6 +333,7 @@ class StoreExactCloudReviewMixin:
                     ).isoformat(),
                     integrity_key=local_integrity_key,
                     integrity_key_id=local_integrity_key_id,
+                    authority_kind=EXACT_CLOUD_AUTHORITY_KIND,
                 )
                 if authority_id is None:
                     raise RuntimeError("exact Cloud Review request has no exact local authority target")

@@ -29,6 +29,7 @@ from packaging.version import InvalidVersion, Version
 from ..macos_code_signing import verified_macos_signing_team
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
+from .desktop_core_paths import executable_is_desktop_core
 
 UPDATE_SCHEMA = "hol-guard-core-update.v1"
 ONEDIR_UPDATE_SCHEMA = "hol-guard-core-update.v2"
@@ -174,7 +175,7 @@ def select_desktop_core_latest(
             parsed = Version(candidate)
         except InvalidVersion:
             continue
-        if (parsed.major, parsed.minor) != series:
+        if parsed.major != series[0] or (include_alpha and parsed.minor != series[1]):
             continue
         if not _version_matches_channel(parsed, include_alpha=include_alpha):
             continue
@@ -276,20 +277,6 @@ def desktop_core_root() -> Path:
     xdg = os.environ.get("XDG_DATA_HOME", "").strip()
     base = Path(xdg) if xdg else Path.home() / ".local" / "share"
     return base / _DESKTOP_APP_ID / "core"
-
-
-def executable_is_desktop_core(executable: Path) -> bool:
-    try:
-        resolved = executable.expanduser().resolve()
-    except (OSError, RuntimeError):
-        return False
-    posix = resolved.as_posix().lower()
-    if f"{_DESKTOP_APP_ID.lower()}/core/versions/" in posix:
-        return True
-    if "hol guard.app/" in posix:
-        return True
-    parent = resolved.parent
-    return any((parent / sibling).is_file() for sibling in ("hol-guard-desktop", "hol-guard-desktop.exe"))
 
 
 def _version_matches_channel(version: Version, *, include_alpha: bool) -> bool:

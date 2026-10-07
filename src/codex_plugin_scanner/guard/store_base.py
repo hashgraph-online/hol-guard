@@ -35,6 +35,7 @@ from .approval_gate import ApprovalGateGrant, require_policy_clear, require_poli
 from .approval_resolution import require_resolvable_approval_request
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
+from .fork_safety import forget_in_child
 from .local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
     POLICY_INTEGRITY_MODE_DEGRADED,
@@ -349,6 +350,7 @@ _SYSTEM_KEYRING_AVAILABILITY_CACHE_TTL_SECONDS = 86_400.0
 _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES = frozenset({"missing_integrity", "unknown_key"})
 _ENCRYPTED_SECRET_INIT_LOCKS_GUARD = threading.Lock()
 _ENCRYPTED_SECRET_INIT_LOCKS: dict[str, threading.Lock] = {}
+forget_in_child(_ENCRYPTED_SECRET_INIT_LOCKS)
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -1179,11 +1181,24 @@ def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
 
 def _set_private_mode(path: Path, mode: int) -> None:
     if os.name == "nt":
+        if path.is_dir():
+            _set_windows_private_directory(path)
         return
     try:
         os.chmod(path, mode)
     except OSError as exc:
         _store_logger.debug("Could not set private mode %o on %s: %s", mode, path, exc)
+        return
+
+
+def _set_windows_private_directory(path: Path) -> None:
+    from .native_policy_snapshot import NativePolicySnapshotError
+    from .native_policy_snapshot_windows_state import _windows_ensure_private_directory
+
+    try:
+        _windows_ensure_private_directory(path)
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _store_logger.debug("Could not set Windows private directory on %s: %s", path, exc)
         return
 
 

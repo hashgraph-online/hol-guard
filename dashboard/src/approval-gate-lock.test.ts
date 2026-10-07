@@ -102,6 +102,15 @@ assert(
   "inline proof countdown refreshes until the lock expires",
 );
 const reviewCardsSource = readFileSync(new URL("./approval-center-review-cards.tsx", import.meta.url), "utf8");
+assert(markup.includes("<form") && markup.includes('type="submit"'), "proof modal uses native form submission");
+assert(!reviewCardsSource.includes("onKeyDown={handleKeyDown}"), "dialog does not hijack Enter on cancel controls");
+const busyMarkup = renderToStaticMarkup(createElement(ApprovalPasswordModal, {
+  gate: { ...lockedGate, locked_until: null }, approvalPassword: "fixture-proof", approvalTotpCode: "",
+  useCooldown: false, busy: true, onApprovalPasswordChange: () => undefined,
+  onApprovalTotpCodeChange: () => undefined, onUseCooldownChange: () => undefined,
+  onSubmit: () => undefined, onCancel: () => undefined, submitLabel: "Approve once",
+}));
+assert(/type="submit" disabled=""/.test(busyMarkup), "in-flight approval cannot be submitted twice");
 assert(
   /window\.setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\);\s*return \(\) => window\.clearInterval\(timer\);\s*}, \[gateLocked\]\);/.test(
     reviewCardsSource,

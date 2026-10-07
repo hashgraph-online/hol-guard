@@ -12,11 +12,17 @@ from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.hook_native_review_approval import pause_native_pre_tool_for_approval
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_native_review_approvals import consume_native_review_approval
 from tests.test_native_command_observations import _edge, _observations, _receipt, _rehash
 from tests.test_native_review_policy_binding import _resign_identity
+
+
+@pytest.fixture(autouse=True)
+def questionnaire_mode(tmp_path: Path) -> None:
+    update_guard_settings(tmp_path / "guard-home", {"blocked_request_mode": "ask"})
 
 
 def _review_fixture() -> tuple[dict[str, Any], dict[str, Any]]:

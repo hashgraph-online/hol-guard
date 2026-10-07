@@ -4,9 +4,11 @@ import base64
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import approval_context
 from codex_plugin_scanner.guard.runtime.approval_context import (
     APPROVAL_CONTEXT_TOKEN_PREFIX,
     ApprovalContextToken,
@@ -48,7 +50,7 @@ def _encoded_payload(payload: object) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
-def test_token_is_deterministic_for_equivalent_structured_context() -> None:
+def test_token_is_deterministic_for_equivalent_structured_context(native_context_digest: Path) -> None:
     first = _token(
         identity={"workspace": "/private/workspace", "artifact_id": "codex:project:tool:read"},
         sandbox={"network": False, "mode": "workspace-write"},
@@ -142,7 +144,7 @@ def test_runtime_launch_without_matching_trusted_home_fails_closed(
     assert isinstance(executable_identity["reuse_nonce"], str)
 
 
-def test_token_serializes_only_component_hashes_and_not_source_values() -> None:
+def test_token_serializes_only_component_hashes_and_not_source_values(native_context_digest: Path) -> None:
     source_values = (
         "codex:project:tool:read",
         "/private/workspace",
@@ -168,7 +170,7 @@ def test_token_serializes_only_component_hashes_and_not_source_values() -> None:
     )
 
 
-def test_token_is_invalidated_when_extension_control_snapshot_changes() -> None:
+def test_token_is_invalidated_when_extension_control_snapshot_changes(native_context_digest: Path) -> None:
     first_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, "a" * 64, ())
     )
@@ -185,7 +187,7 @@ def test_token_is_invalidated_when_extension_control_snapshot_changes() -> None:
     assert approval_context_tokens_validation_reason(saved, current) == "approval_reuse_policy_changed"
 
 
-def test_arbitrary_artifact_hash_text_is_bound_without_interpretation() -> None:
+def test_arbitrary_artifact_hash_text_is_bound_without_interpretation(native_context_digest: Path) -> None:
     artifact_hash = "not-sha256:guard-approval-context:v1:\n☃\x00"
     saved = _token(content=artifact_hash)
 
@@ -209,13 +211,14 @@ def test_arbitrary_artifact_hash_text_is_bound_without_interpretation() -> None:
 def test_validator_reports_stable_changed_dimension(
     changed_context: dict[str, object],
     expected_reason: str,
+    native_context_digest: Path,
 ) -> None:
     saved = _token()
 
     assert approval_context_validation_reason(saved, **_context(**changed_context)) == expected_reason
 
 
-def test_validator_uses_stable_security_precedence_when_multiple_dimensions_change() -> None:
+def test_validator_uses_stable_security_precedence_when_multiple_dimensions_change(native_context_digest: Path) -> None:
     saved = _token()
 
     assert (
@@ -227,7 +230,7 @@ def test_validator_uses_stable_security_precedence_when_multiple_dimensions_chan
     )
 
 
-def test_opaque_token_comparison_accepts_unchanged_context() -> None:
+def test_opaque_token_comparison_accepts_unchanged_context(native_context_digest: Path) -> None:
     saved = _token()
     current = _token()
 
@@ -245,17 +248,19 @@ def test_opaque_token_comparison_accepts_unchanged_context() -> None:
         f"{APPROVAL_CONTEXT_TOKEN_PREFIX}{_encoded_payload({'version': 1, 'identity': '0' * 64})}",
     ),
 )
-def test_legacy_or_malformed_saved_value_fails_closed_as_changed_content(legacy_or_malformed: object) -> None:
+def test_legacy_or_malformed_saved_value_fails_closed_as_changed_content(
+    legacy_or_malformed: object, native_context_digest: Path
+) -> None:
     assert approval_context_tokens_validation_reason(legacy_or_malformed, _token()) == "approval_reuse_content_changed"
 
 
-def test_even_equal_legacy_values_cannot_prove_structured_context_is_unchanged() -> None:
+def test_even_equal_legacy_values_cannot_prove_structured_context_is_unchanged(native_context_digest: Path) -> None:
     assert (
         approval_context_tokens_validation_reason("sha256:legacy", "sha256:legacy") == "approval_reuse_content_changed"
     )
 
 
-def test_parser_rejects_payload_with_unexpected_fields() -> None:
+def test_parser_rejects_payload_with_unexpected_fields(native_context_digest: Path) -> None:
     parsed = parse_approval_context_token(_token())
     assert isinstance(parsed, ApprovalContextToken)
     payload = {

@@ -2,12 +2,26 @@
 
 use guard_command::native_command_program::source::{
     compare_programs, compile_build_request, descriptor_schema, evaluate_batch, run_fixtures,
-    source_schema,
+    source_schema, MAX_SOURCE_INPUT_BYTES,
 };
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 
 fn run(arguments: &[String]) -> Result<Value, &'static str> {
+    if arguments == ["export-trust"] {
+        return serde_json::from_slice(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/trust-class-map.v1.json"
+        )))
+        .map_err(|_| "command_source_trust_output_invalid");
+    }
+    if arguments == ["export-built"] {
+        return serde_json::from_slice(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/native-command-build.v1.json"
+        )))
+        .map_err(|_| "command_source_build_output_invalid");
+    }
     if arguments == ["schema"] {
         return Ok(source_schema());
     }
@@ -34,9 +48,12 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     }
     let mut bytes = Vec::new();
     std::io::stdin()
-        .take(4 * 1024 * 1024 + 1)
+        .take(MAX_SOURCE_INPUT_BYTES as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "command_source_input_read_failed")?;
+    if bytes.len() > MAX_SOURCE_INPUT_BYTES {
+        return Err("command_source_bytes_invalid");
+    }
     if operation == "test" {
         return run_fixtures(&bytes);
     }

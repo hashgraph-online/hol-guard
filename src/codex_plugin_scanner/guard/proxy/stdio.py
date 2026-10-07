@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import queue
 import select
 import subprocess
@@ -12,8 +13,8 @@ from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from typing import TYPE_CHECKING, Any, Protocol, cast
+from uuid import uuid4
 
 from ..action_lattice import most_restrictive_guard_action
 from ..approvals import (
@@ -23,11 +24,17 @@ from ..approvals import (
     first_approval_url,
     queue_blocked_approvals,
 )
+from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig, resolve_risk_action
 from ..consumer import artifact_hash
 from ..daemon.manager import load_guard_daemon_auth_token
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..native_execution import (
+    _native_session_feature_available,
+    mcp_stdio_session_close_native,
+    mcp_stdio_session_open_native,
+)
 from ..receipts import build_receipt
 from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -51,6 +58,9 @@ from ..runtime.secret_file_requests import build_file_read_request_artifact, ext
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ._env import _build_scrubbed_env
+
+if TYPE_CHECKING:
+    from .runtime_mcp import _NativeChildProcess
 
 _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0
 _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
@@ -177,36 +187,16 @@ class ProxyLaunchIdentityChangedError(RuntimeError):
     """Raised when launch identity changes across subprocess creation."""
 
 
-def _redact_scalar(value: str) -> str:
-    lower_value = value.lower()
-    if any(token in lower_value for token in ("authorization", "api-key", "bearer ", "token", "secret")):
-        return "*****"
-    return value
-
-
 def _redact_json(value: Any) -> Any:
-    if isinstance(value, str):
-        parsed = urlsplit(value)
-        if parsed.scheme and parsed.netloc and parsed.query:
-            pairs = []
-            for key, item in parse_qsl(parsed.query, keep_blank_values=True):
-                if any(token in key.lower() for token in ("key", "token", "auth", "secret")):
-                    pairs.append((key, "*****"))
-                    continue
-                pairs.append((key, item))
-            return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(pairs), parsed.fragment))
-        return _redact_scalar(value)
-    if isinstance(value, list):
-        return [_redact_json(item) for item in value]
-    if isinstance(value, dict):
-        redacted: dict[str, Any] = {}
-        for key, item in value.items():
-            if any(token in key.lower() for token in ("authorization", "api-key", "token", "secret")):
-                redacted[key] = "*****"
-                continue
-            redacted[str(key)] = _redact_json(item)
-        return redacted
-    return value
+    """Redact recorded traffic for display; native authority only.
+
+    The resident `mcp_redact_json` op owns the scalar/query/map-key fragment
+    tables. A native failure is terminal — silent Python fallback could persist
+    secrets unredacted.
+    """
+    from ..native_context import context_mcp_redact_json
+
+    return context_mcp_redact_json(value)
 
 
 def _blocked_tool_response(
@@ -348,7 +338,16 @@ def _readline_with_timeout(
     raise RuntimeError("guard_proxy_io_failed")
 
 
-def _quarantine_process(process: subprocess.Popen[str]) -> None:
+class _ChildLifecycle(Protocol):
+    """Lifecycle operations shared by native sessions and stdio children."""
+
+    def poll(self) -> int | None: ...
+    def terminate(self) -> None: ...
+    def kill(self) -> None: ...
+    def wait(self, timeout: float | None = None) -> int: ...
+
+
+def _quarantine_process(process: _ChildLifecycle) -> None:
     if process.poll() is not None:
         return
     with suppress(Exception):
@@ -390,6 +389,16 @@ class StdioGuardProxy:
         self._current_config_provider = current_config_provider
         self._active_launch_identity: dict[str, object] | None = None
         self._active_env_values_hash: str | None = None
+        if guard_store is not None:
+            from ..native_context import bind_context_digest_home
+            from ..native_policy_snapshot_publisher import ensure_native_launch_resident_verifier
+
+            bind_context_digest_home(getattr(guard_store, "guard_home", None))
+            # A standalone stdio proxy never starts the snapshot publisher, so
+            # it owns the same one-time verifier prerequisite before the
+            # resident will serve `mcp_stdio_session_*`. A failure here must
+            # raise: there is no Python fallback for the resident session.
+            ensure_native_launch_resident_verifier(guard_store)
 
     def _response_timeout_seconds(self) -> float:
         configured = getattr(self.guard_config, "approval_wait_timeout_seconds", None)
@@ -498,15 +507,66 @@ class StdioGuardProxy:
             self._active_env_values_hash = None
         return responses, events, process.returncode
 
-    def _start_process(self) -> subprocess.Popen[str]:
+    def _start_process(self) -> subprocess.Popen[str] | _NativeChildProcess:
         launch_env = _build_scrubbed_env(self.env)
-        self._active_launch_identity = self._build_launch_identity(launch_env)
-        self._active_env_values_hash = build_configured_environment_hash(
-            launch_env,
-            configured_keys=tuple(self.env),
-        )
         process: subprocess.Popen[str] | None = None
+        native_session_id: str | None = None
+        native_guard_home: Path | None = None
+        # Assigned before the failure boundary so the cleanup path can name the
+        # home a half-opened native session belongs to.
+        guard_home = cast("Path | None", getattr(self.guard_store, "guard_home", None))
         try:
+            # Digest calls raise when the native resident is unreachable; keep
+            # them inside the failure boundary so partial state is unwound.
+            self._active_launch_identity = self._build_launch_identity(launch_env)
+            self._active_env_values_hash = build_configured_environment_hash(
+                launch_env,
+                configured_keys=tuple(self.env),
+            )
+            executable = resolved_runtime_launch_executable(self._active_launch_identity)
+            # RTM-024: the resident owns the stdio child (spawn, framing,
+            # teardown). argv is None when the launch identity did not yield a
+            # verified executable, so the resident cannot take the child —
+            # keep the Python pipe transport for that case only.
+            argv = [executable] + [str(a) for a in self.command[1:]] if isinstance(executable, str) else None
+            if argv is not None and guard_home is not None:
+                native_session_id = f"stdio-{self.harness}-{os.getpid()}-{uuid4().hex[:8]}"
+                native_guard_home = guard_home
+                opened = mcp_stdio_session_open_native(
+                    argv,
+                    session_id=native_session_id,
+                    home_dir=native_guard_home,
+                    cwd=self.cwd,
+                    extra_env=launch_env,
+                    guard_home=native_guard_home,
+                )
+            else:
+                opened = None
+            if native_session_id is not None and opened is None and _native_session_feature_available():
+                raise RuntimeError("Native stdio session authority is unavailable.")
+            if opened is not None:
+                if native_session_id is None or native_guard_home is None:
+                    raise RuntimeError("Native stdio session authority is unavailable.")
+                # Resident owns the child (RTM-024 data plane). A non-"opened"
+                # status is terminal — never fall back to the Python transport
+                # on a real open failure.
+                if opened.get("status") != "opened":
+                    raise RuntimeError(f"native stdio session open failed: {opened.get('payload')}")
+                # Resident echoes the caller-supplied session id in `payload`
+                # (same contract the runtime MCP proxy relies on). Keep our own
+                # id and cross-check the echo rather than inventing a field the
+                # result schema does not carry.
+                if opened.get("payload") != native_session_id:
+                    raise RuntimeError("native stdio session open returned an unexpected session id")
+                if not self._active_launch_identity_matches(launch_env):
+                    raise ProxyLaunchIdentityChangedError(
+                        "Guard stdio proxy launch identity changed while starting the MCP server."
+                    )
+                from .runtime_mcp import _NativeChildProcess
+
+                return _NativeChildProcess(native_session_id, native_guard_home)
+            # The native open was not attempted or the session feature is
+            # unsupported; only those cases may use the Python pipe transport.
             process = subprocess.Popen(
                 self.command,
                 stdin=subprocess.PIPE,
@@ -515,7 +575,7 @@ class StdioGuardProxy:
                 text=True,
                 cwd=self.cwd,
                 env=launch_env,
-                executable=resolved_runtime_launch_executable(self._active_launch_identity),
+                executable=executable,
             )
             if not self._active_launch_identity_matches(launch_env):
                 raise ProxyLaunchIdentityChangedError(
@@ -525,6 +585,8 @@ class StdioGuardProxy:
         except BaseException:
             if process is not None:
                 _quarantine_process(process)
+            elif native_session_id is not None and native_guard_home is not None:
+                mcp_stdio_session_close_native(native_session_id, guard_home=native_guard_home)
             self._active_launch_identity = None
             self._active_env_values_hash = None
             raise
@@ -569,7 +631,7 @@ class StdioGuardProxy:
     def _forward_message(
         self,
         *,
-        process: subprocess.Popen[str],
+        process: subprocess.Popen[str] | _NativeChildProcess,
         message: dict[str, Any],
         responses: list[dict[str, Any]],
         events: list[dict[str, Any]],
@@ -814,7 +876,9 @@ class StdioGuardProxy:
                             source_scope=runtime_artifact.source_scope,
                             approval_source=(
                                 "approval_center"
-                                if policy_action == "require-reapproval" and self.approval_center_url is not None
+                                if policy_action == "require-reapproval"
+                                and self.approval_center_url is not None
+                                and asks_for_approval(self.guard_config)
                                 else "policy"
                             ),
                             scanner_evidence=reuse_evidence,
@@ -834,10 +898,55 @@ class StdioGuardProxy:
                         "guardPolicyAction": policy_action,
                         "transportOutcome": "not-forwarded",
                     }
+                    if not asks_for_approval(self.guard_config):
+                        non_forward_message = safe_alternative_reason(
+                            _sensitive_read_non_forward_message(
+                                "block",
+                                tool_name=tool_name,
+                                path_class=sensitive_request.path_match.path_class,
+                            )
+                        )
+                        response_data["guardPolicyAction"] = "block"
+                        if (
+                            self.guard_store is not None
+                            and not terminal_policy_action
+                            and policy_action in {"review", "require-reapproval"}
+                        ):
+                            from ..approvals import record_unprompted_review
+
+                            record_unprompted_review(
+                                detection=HarnessDetection(
+                                    harness=self.harness,
+                                    installed=True,
+                                    command_available=True,
+                                    config_paths=(runtime_artifact.config_path,),
+                                    artifacts=(runtime_artifact,),
+                                ),
+                                evaluation={
+                                    "artifacts": [
+                                        {
+                                            "artifact_id": runtime_artifact.artifact_id,
+                                            "artifact_name": runtime_artifact.name,
+                                            "artifact_hash": runtime_artifact_hash,
+                                            "policy_action": policy_action,
+                                            "changed_fields": ["file_read_request"],
+                                            "artifact_type": runtime_artifact.artifact_type,
+                                            "source_scope": runtime_artifact.source_scope,
+                                            "config_path": runtime_artifact.config_path,
+                                            "launch_target": runtime_artifact.metadata.get("request_summary"),
+                                            "scanner_evidence": list(reuse_evidence),
+                                        }
+                                    ]
+                                },
+                                store=self.guard_store,
+                                approval_center_url=self.approval_center_url,
+                                redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),
+                            )
                     if (
                         self.guard_store is not None
                         and self.approval_center_url is not None
                         and not terminal_policy_action
+                        and asks_for_approval(self.guard_config)
                     ):
                         event["approval_requests"] = queue_blocked_approvals(
                             redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),
@@ -935,7 +1044,7 @@ class StdioGuardProxy:
     def _read_response(
         self,
         *,
-        process: subprocess.Popen[str],
+        process: subprocess.Popen[str] | _NativeChildProcess,
         message_id: Any,
         output_stream: Any | None = None,
     ) -> dict[str, Any] | None:
@@ -945,7 +1054,19 @@ class StdioGuardProxy:
         while True:
             timeout_seconds = self._response_timeout_seconds()
             try:
-                line = _readline_with_timeout(process.stdout, timeout_seconds, source="child_response")
+                from .runtime_mcp import _NativeMcpChildIo
+
+                if isinstance(process.stdout, _NativeMcpChildIo):
+                    # Native session (RTM-024): the resident already frames
+                    # lines; ask it for the next one with the same timeout.
+                    frame = process.stdout.next_frame(timeout_seconds, required=True)
+                    if frame is None:
+                        raise ProxyIoTimeoutError(source="child_response", timeout_seconds=timeout_seconds)
+                    if frame.error is not None:
+                        raise frame.error
+                    line = frame.line
+                else:
+                    line = _readline_with_timeout(process.stdout, timeout_seconds, source="child_response")
             except ProxyIoTimeoutError:
                 _quarantine_process(process)
                 return _timeout_response(
