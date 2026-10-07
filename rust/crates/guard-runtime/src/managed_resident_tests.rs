@@ -244,8 +244,6 @@ fn retire_clients_for_update_terminates_exact_process() {
     use std::path::PathBuf;
     use std::process::{Command, Stdio};
 
-    // Budget debug hashing under parallel CI; production timing is unchanged.
-    const TEST_BUDGET: Duration = Duration::from_secs(60);
     if let Some(root) = std::env::var_os("HOL_GUARD_LEASE_RETIRE_CHILD") {
         let root = PathBuf::from(root);
         let _lease = lease::acquire(&root).expect("child lease should be acquired");
