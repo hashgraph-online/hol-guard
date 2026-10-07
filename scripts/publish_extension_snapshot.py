@@ -65,12 +65,15 @@ def publish(directory: Path, expected_sha: str) -> None:
     if release.get("target_commitish") != expected_sha or release.get("prerelease") is not True:
         raise ValueError("snapshot release does not match its source")
     try:
-        commit = json.loads(github("api", f"repos/{REPOSITORY}/commits/{tag}"))
+        # The ref endpoint reports an absent tag as 404; commit resolution uses
+        # 422 for the same state, which is ambiguous with other invalid requests.
+        github("api", f"repos/{REPOSITORY}/git/ref/tags/{tag}")
     except RuntimeError as error:
         # GitHub may defer creating a new tag until a draft is published.
         if not release["draft"] or "HTTP 404" not in str(error):
             raise
     else:
+        commit = json.loads(github("api", f"repos/{REPOSITORY}/commits/{tag}"))
         if commit.get("sha") != expected_sha:
             raise ValueError("snapshot tag does not match its source")
     assets = {asset["name"] for asset in release["assets"]}

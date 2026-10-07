@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import urllib.error
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -211,7 +212,12 @@ class _FailingAccessGraphEventStore(GuardStore):
 def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_path: Path) -> None:
     store = _FailingAccessGraphEventStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
-    artifact = _artifact(tmp_path)
+    # Exercise real native launch identity without depending on a host Node
+    # installation; this test isolates event-queue failure, not launcher speed.
+    launcher = tmp_path / "mcp-launcher"
+    launcher.write_text("#!/bin/sh\nexit 0\n")
+    launcher.chmod(0o700)
+    artifact = replace(_artifact(tmp_path), command=str(launcher), args=())
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
     evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)

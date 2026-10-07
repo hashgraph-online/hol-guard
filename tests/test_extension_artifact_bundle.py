@@ -175,9 +175,11 @@ def test_new_snapshot_stays_draft_until_downloaded_assets_verify(snapshot, monke
         nonlocal created, published
         calls.append(args)
         if args[0] == "api":
+            if "/git/ref/tags/" in args[1] and not published:
+                raise RuntimeError("HTTP 404")
             if "/commits/" in args[1]:
                 if not published:
-                    raise RuntimeError("HTTP 404")
+                    raise RuntimeError("No commit found for SHA (HTTP 422)")
                 return json.dumps({"sha": SHA})
             if not created:
                 if "/releases/tags/" in args[1]:
@@ -213,6 +215,46 @@ def test_new_snapshot_stays_draft_until_downloaded_assets_verify(snapshot, monke
     publisher.publish(output, SHA)
     assert published
     assert not any("--clobber" in call for call in calls)
+    assert len([call for call in calls if call[0] == "api" and "/commits/" in call[1]]) == 1
+
+
+@pytest.mark.parametrize("draft,status", [(False, 404), (True, 403), (True, 503)])
+def test_tag_lookup_failures_are_only_tolerated_for_missing_draft_tags(snapshot, monkeypatch, draft, status):
+    _, output = snapshot
+    calls = []
+
+    def github(*args):
+        calls.append(args)
+        if "/git/ref/tags/" in args[1]:
+            raise RuntimeError(f"HTTP {status}")
+        return json.dumps({"draft": draft, "target_commitish": SHA, "prerelease": True, "assets": []})
+
+    monkeypatch.setattr(publisher, "github", github)
+    with pytest.raises(RuntimeError, match=str(status)):
+        publisher.publish(output, SHA)
+    assert not any(call[0] == "release" for call in calls)
+
+
+@pytest.mark.parametrize("commit_result", ["HTTP 404", "HTTP 503", "different-sha"])
+def test_existing_draft_tag_must_resolve_to_its_verified_source(snapshot, monkeypatch, commit_result):
+    _, output = snapshot
+    calls = []
+
+    def github(*args):
+        calls.append(args)
+        if "/git/ref/tags/" in args[1]:
+            return json.dumps({"object": {"sha": SHA, "type": "commit"}})
+        if "/commits/" in args[1]:
+            if commit_result.startswith("HTTP"):
+                raise RuntimeError(commit_result)
+            return json.dumps({"sha": "b" * 40})
+        return json.dumps({"draft": True, "target_commitish": SHA, "prerelease": True, "assets": []})
+
+    monkeypatch.setattr(publisher, "github", github)
+    error = RuntimeError if commit_result.startswith("HTTP") else ValueError
+    with pytest.raises(error):
+        publisher.publish(output, SHA)
+    assert not any(call[0] == "release" for call in calls)
 
 
 def test_api_outage_does_not_create_a_replacement_release(snapshot, monkeypatch):
