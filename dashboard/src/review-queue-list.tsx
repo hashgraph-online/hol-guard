@@ -225,7 +225,7 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
                 : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`
             }
             onClick={() => readState.markAllRead(allFilteredRequests.map((item) => item.request_id))}
-            className={`text-xs font-medium transition-colors ${
+            className={`min-h-11 min-w-11 text-xs font-medium transition-colors ${
               allFilteredRequests.length +
                 readState.readCount -
                 allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length >
@@ -251,13 +251,13 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
             value={searchTerm}
             onChange={handleSearchChange}
             placeholder="Search queue..."
-            className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
         <button
           type="button"
           onClick={handleToggleFilters}
-          className="flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+          className="flex min-h-11 min-w-11 items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
         >
           {showFilters ? "Hide filters" : "Show filters"}
           {isFiltered && !showFilters && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" />}
@@ -282,7 +282,7 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
                 value={sortDirection}
                 onChange={handleSortChange}
                 aria-label="Sort review queue"
-                className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               >
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
@@ -300,7 +300,7 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
                   value={dateFrom}
                   onChange={handleDateFromChange}
                   aria-label="Filter requests from date"
-                  className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                 />
               </label>
               <label className="block">
@@ -312,7 +312,7 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
                   value={dateTo}
                   onChange={handleDateToChange}
                   aria-label="Filter requests to date"
-                  className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                 />
               </label>
             </div>
@@ -320,7 +320,7 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+                className="min-h-11 min-w-11 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
               >
                 Clear all filters
               </button>
@@ -335,7 +335,7 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
       >
         {selectionMode && pageSelectableItems.length > 0 && (
           <div className="flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1">
-            <label className="flex shrink-0 cursor-pointer items-center gap-2">
+            <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-2">
               <input
                 type="checkbox"
                 checked={pageAllSelected}
@@ -387,7 +387,7 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
               type="button"
               onClick={handlePreviousPage}
               disabled={page <= 1}
-              className="min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40"
+              className="min-h-11 min-w-11 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40"
             >
               Previous
             </button>
@@ -398,7 +398,7 @@ export const ReviewQueueList = forwardRef<HTMLDivElement, {
               type="button"
               onClick={handleNextPage}
               disabled={page >= totalPages}
-              className="min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40"
+              className="min-h-11 min-w-11 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40"
             >
               Next
             </button>
@@ -424,7 +424,7 @@ function SemanticFilterButton(props: {
     <button
       type="button"
       onClick={handleSelect}
-      className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+      className={`min-h-11 min-w-11 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
         selected
           ? "bg-brand-blue text-white"
           : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"

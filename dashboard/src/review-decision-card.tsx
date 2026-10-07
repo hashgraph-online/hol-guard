@@ -456,8 +456,8 @@ export function ReviewDecisionCard(props: {
       <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <SectionLabel>{sectionLabel}</SectionLabel>
-            <h2 className="mt-2 text-lg font-semibold text-brand-dark">{plainTitle}</h2>
+            {!nativeDisplayOnly && <SectionLabel>{sectionLabel}</SectionLabel>}
+            <h2 className={`${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`}>{plainTitle}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               From {harnessName}
             </p>

@@ -91,7 +91,7 @@ test(`native projected detail is explicitly read-only on ${name}`, async ({ page
   await expect(page.getByText("From Native business workflow", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Approve|Block once|Stop this/ })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Saved business action details" })).toBeVisible();
-  await expect(page.getByText("Saved request", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved request", { exact: true })).toHaveCount(0);
   await expect(page.getByText("What was stopped", { exact: false })).toHaveCount(0);
   await expect(page.getByText("What would happen without Guard?", { exact: true })).toHaveCount(0);
   const panel = page.getByRole("region", { name: "Saved business action details" });
@@ -114,6 +114,25 @@ for (const [name, width, height] of [["desktop", 1280, 900], ["phone", 390, 844]
     await expect(panel).not.toContainText("a".repeat(64));
     await expect(panel.getByRole("button")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    if (name === "phone") {
+      const queue = page.getByRole("button", { name: /^Queue \(/ });
+      expect((await queue.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await queue.click();
+      const search = page.getByRole("searchbox", { name: "Search review queue" });
+      expect((await search.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await page.getByRole("button", { name: "Show filters", exact: true }).click();
+      for (const label of ["Sort review queue", "Filter requests from date", "Filter requests to date"]) {
+        expect((await page.getByLabel(label).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
+      await queue.click();
+      const notice = page.getByText("This saved business request is read-only.", { exact: false });
+      await notice.scrollIntoViewIfNeeded();
+      const noticeBounds = (await notice.boundingBox())!;
+      const navigationBounds = (await page.getByTestId("mobile-bottom-navigation").boundingBox())!;
+      expect(noticeBounds.y + noticeBounds.height).toBeLessThanOrEqual(navigationBounds.y);
+      await page.screenshot({ path: `${resolveProofDir()}/business-summary-phone-bottom.png`, fullPage: true });
+      await page.locator(".guard-shell-content").evaluate(element => { element.scrollTop = 0; });
+    }
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `${resolveProofDir()}/business-summary-${name}.png`, fullPage: true });
   });

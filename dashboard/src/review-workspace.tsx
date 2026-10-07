@@ -291,7 +291,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       <div className="md:hidden">
         <button
           onClick={handleToggleMobileQueue}
-          className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark"
+          className="flex min-h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark"
         >
           <span>Queue ({filteredRequests.length})</span>
           <HiMiniChevronDown className={`h-4 w-4 transition-transform ${mobileQueueOpen ? "rotate-180" : ""}`} />

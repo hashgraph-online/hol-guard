@@ -30468,8 +30468,8 @@ function ReviewDecisionCard(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: sectionLabel }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "mt-2 text-lg font-semibold text-brand-dark", children: plainTitle }),
+          !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: sectionLabel }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: `${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`, children: plainTitle }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
             "From ",
             harnessName
@@ -30993,7 +30993,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             disabled: allFilteredRequests.length > 0 && allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT,
             title: allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? `Cannot mark all read: doing so would exceed the read-state storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Reduce filters to shrink the visible queue, or mark requests read one by one.` : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`,
             onClick: () => readState.markAllRead(allFilteredRequests.map((item) => item.request_id)),
-            className: `text-xs font-medium transition-colors ${allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
+            className: `min-h-11 min-w-11 text-xs font-medium transition-colors ${allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
             children: "Mark all read"
           }
         ),
@@ -31016,7 +31016,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             value: searchTerm,
             onChange: handleSearchChange,
             placeholder: "Search queue...",
-            className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           }
         )
       ] }),
@@ -31025,7 +31025,7 @@ const ReviewQueueList = reactExports.forwardRef(({
         {
           type: "button",
           onClick: handleToggleFilters,
-          className: "flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+          className: "flex min-h-11 min-w-11 items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
           children: [
             showFilters ? "Hide filters" : "Show filters",
             isFiltered && !showFilters && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" })
@@ -31050,7 +31050,7 @@ const ReviewQueueList = reactExports.forwardRef(({
               value: sortDirection,
               onChange: handleSortChange,
               "aria-label": "Sort review queue",
-              className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "newest", children: "Newest first" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "oldest", children: "Oldest first" }),
@@ -31070,7 +31070,7 @@ const ReviewQueueList = reactExports.forwardRef(({
                 value: dateFrom,
                 onChange: handleDateFromChange,
                 "aria-label": "Filter requests from date",
-                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
           ] }),
@@ -31083,7 +31083,7 @@ const ReviewQueueList = reactExports.forwardRef(({
                 value: dateTo,
                 onChange: handleDateToChange,
                 "aria-label": "Filter requests to date",
-                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
           ] })
@@ -31093,7 +31093,7 @@ const ReviewQueueList = reactExports.forwardRef(({
           {
             type: "button",
             onClick: handleClearFilters,
-            className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+            className: "min-h-11 min-w-11 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
             children: "Clear all filters"
           }
         )
@@ -31106,7 +31106,7 @@ const ReviewQueueList = reactExports.forwardRef(({
         "aria-label": "Review queue",
         className: "space-y-2 rounded-lg border border-slate-100 bg-white p-1.5",
         children: [
-          selectionMode && pageSelectableItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex shrink-0 cursor-pointer items-center gap-2", children: [
+          selectionMode && pageSelectableItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 shrink-0 cursor-pointer items-center gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
               {
@@ -31153,7 +31153,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             type: "button",
             onClick: handlePreviousPage,
             disabled: page <= 1,
-            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
+            className: "min-h-11 min-w-11 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
             children: "Previous"
           }
         ),
@@ -31168,7 +31168,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             type: "button",
             onClick: handleNextPage,
             disabled: page >= totalPages,
-            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
+            className: "min-h-11 min-w-11 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
             children: "Next"
           }
         )
@@ -31187,7 +31187,7 @@ function SemanticFilterButton(props) {
     {
       type: "button",
       onClick: handleSelect,
-      className: `rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${selected ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+      className: `min-h-11 min-w-11 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${selected ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
       children: group.label
     }
   );
@@ -31373,7 +31373,7 @@ function ReviewWorkspace(props) {
       "button",
       {
         onClick: handleToggleMobileQueue,
-        className: "flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark",
+        className: "flex min-h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark",
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
             "Queue (",
