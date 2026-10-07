@@ -7,6 +7,8 @@ import pytest
 from codex_plugin_scanner.guard.runtime.prompt_injection import detect_prompt_injection_requests
 from codex_plugin_scanner.guard.runtime.runner import extract_prompt_requests
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 def _request_classes(prompt: str) -> set[str]:
     return {request.request_class for request in detect_prompt_injection_requests(prompt)}

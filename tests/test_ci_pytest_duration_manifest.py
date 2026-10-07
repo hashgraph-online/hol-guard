@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_duration_manifest.py"
 sys.path.insert(0, str(SCRIPT_PATH.parent))
@@ -42,7 +44,8 @@ def test_manifest_merges_reports_deterministically_and_rejects_duplicate_nodes(t
 
 
 def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    """Verify CI duration artifacts cannot mix rerun attempts."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     upload = next(
         step
         for step in workflow["jobs"]["coverage"]["steps"]
@@ -67,13 +70,14 @@ def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None
     merged = duration_manifest.merge_duration_reports(reports)
     assert len(merged) == 128
     assert set(merged.values()) == {3.0}
-    assert 'if [ "${#reports[@]}" -ne 128 ]; then' in next(
+    assert 'if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ]; then' in next(
         step["run"] for step in candidate if step.get("name") == "Build duration manifest candidate"
     )
 
 
 def test_partial_rerun_retains_previous_manifest_without_publishing(tmp_path: Path) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    """Verify partial rerun retains previous manifest without publishing."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     steps = workflow["jobs"]["duration-manifest-candidate"]["steps"]
     build = next(step for step in steps if step.get("name") == "Build duration manifest candidate")
     upload = next(step for step in steps if step.get("name") == "Upload pytest duration manifest candidate")
@@ -82,7 +86,16 @@ def test_partial_rerun_retains_previous_manifest_without_publishing(tmp_path: Pa
     _write_report(artifact / "pytest-durations.json", {"tests/test_fixture.py::test_7": 2.0})
     output = tmp_path / "step-output"
     result = subprocess.run(
-        ["bash", "-c", build["run"]],
+        [
+            "bash",
+            "-c",
+            build["run"]
+            .replace(
+                "scripts/ci/build_pytest_duration_manifest.py",
+                str(ROOT / "scripts" / "ci" / "build_pytest_duration_manifest.py"),
+            )
+            .replace("${{ needs.coverage-plan.outputs.shard-count }}", "128"),
+        ],
         cwd=tmp_path,
         env={"GITHUB_OUTPUT": str(output)},
         text=True,

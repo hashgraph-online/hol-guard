@@ -136,6 +136,10 @@ def test_observe_mode_uses_native_nonblocking_claude_responses(
 ) -> None:
     # This contract exercises the isolated compatibility worker. The stable
     # default fast path handles PostToolUse before that worker is consulted.
+    # Under HOL_GUARD_NATIVE=force the daemon routes runtime hooks through the
+    # native fast path regardless of the fast-path flag, so pin native off to
+    # keep the compat lane deterministic.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
     monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"

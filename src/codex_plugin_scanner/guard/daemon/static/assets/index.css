@@ -1131,6 +1131,10 @@
     max-height: calc(var(--spacing) * 48);
   }
 
+  .max-h-80 {
+    max-height: calc(var(--spacing) * 80);
+  }
+
   .max-h-96 {
     max-height: calc(var(--spacing) * 96);
   }
@@ -5517,6 +5521,19 @@
     }
   }
 
+  .focus-within\:outline-2:focus-within {
+    outline-style: var(--tw-outline-style);
+    outline-width: 2px;
+  }
+
+  .focus-within\:outline-offset-2:focus-within {
+    outline-offset: 2px;
+  }
+
+  .focus-within\:outline-brand-blue:focus-within {
+    outline-color: var(--brand-blue);
+  }
+
   @media (hover: hover) {
     .hover\:border-amber-300:hover {
       border-color: var(--color-amber-300);
@@ -6397,10 +6414,6 @@
       width: calc(var(--spacing) * 44);
     }
 
-    .sm\:w-64 {
-      width: calc(var(--spacing) * 64);
-    }
-
     .sm\:w-auto {
       width: auto;
     }
@@ -6527,6 +6540,10 @@
 
     .sm\:gap-y-3 {
       row-gap: calc(var(--spacing) * 3);
+    }
+
+    .sm\:self-end {
+      align-self: flex-end;
     }
 
     .sm\:truncate {

@@ -23,6 +23,8 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
@@ -83,7 +85,7 @@ def _fingerprint(public_key_pem: bytes) -> str:
 def _bundle_response(
     *, package_name: str, version: str, namespace: str | None = None, action: str = "block"
 ) -> dict[str, object]:
-    generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = generated_at + timedelta(hours=12)
     purl_name = f"{namespace}/{package_name}" if namespace is not None else package_name
     bundle = {
@@ -285,6 +287,9 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
     _write_codex_pre_tool_payload(payload_path, workspace_dir, command)
     store = GuardStore(home_dir)
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    token_path = home_dir / "daemon-auth-token"
+    token_path.write_text("synthetic-daemon-token", encoding="utf-8")
+    token_path.chmod(0o600)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(package_name="vitest", version="4.1.8", action="allow"),

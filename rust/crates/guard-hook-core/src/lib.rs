@@ -8,7 +8,7 @@ use guard_rules::{
     OUTPUT_TEXT_KEYS, PAYLOAD_OUTPUT_KEYS, REVIEWED_EXCERPT_CHARS,
 };
 use guard_scanner::scan_text;
-use guard_secure_fs::{classify_source_path, read_bounded, sensitive_path_family};
+use guard_secure_fs::{classify_scannable_source_path, read_bounded, sensitive_path_family};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -173,6 +173,19 @@ fn envelope_target(payload: &Value) -> Option<String> {
         }
     }
     None
+}
+
+fn sensitive_envelope_target(payload: &Value) -> bool {
+    let target = envelope_target(payload);
+    let resolved_directory_target = payload
+        .get("resolved_directory_target")
+        .and_then(Value::as_str);
+    let is_sensitive = |target: &str| {
+        let path = Path::new(target.trim());
+        sensitive_path_family(path).is_some() || guard_secure_fs::credential_named_path(path)
+    };
+    target.as_deref().is_some_and(is_sensitive)
+        || resolved_directory_target.is_some_and(is_sensitive)
 }
 
 fn inline_local_content(payload: &Value) -> bool {
@@ -379,11 +392,12 @@ fn review_source(
     }
     let allow_external =
         matches!(request.harness.as_str(), "pi" | "omp") && request.source_ref_external_allowed;
-    let candidate_decision = classify_source_path(candidate, cwd, Some(home), allow_external);
+    let candidate_decision =
+        classify_scannable_source_path(candidate, cwd, Some(home), allow_external);
     if !candidate_decision.allowed {
         return inconclusive_source();
     }
-    let target_decision = classify_source_path(&target, cwd, Some(home), allow_external);
+    let target_decision = classify_scannable_source_path(&target, cwd, Some(home), allow_external);
     if !target_decision.allowed {
         return inconclusive_source();
     }
@@ -406,9 +420,7 @@ fn review_source(
     let Ok(text) = std::str::from_utf8(&read.bytes) else {
         return inconclusive_source();
     };
-    if !output_equivalent(text, &source.output_sha256, source.output_chars) {
-        return inconclusive_source();
-    }
+    let raw_output_matches = output_equivalent(text, &source.output_sha256, source.output_chars);
     let scan = scan_text(
         text,
         local_samples_should_be_unsuppressed(&source.path),
@@ -424,6 +436,30 @@ fn review_source(
             "source_secret_match",
             "HOL Guard blocked this output because it contains sensitive content.",
         );
+    }
+    if !raw_output_matches {
+        // A logical skill URI claims this exact installed document, rather
+        // than a host-formatted ordinary file presentation.
+        if source.path.starts_with("skill://") {
+            return inconclusive_source();
+        }
+        // Hosts may add line anchors or headers. Scan the entire presentation
+        // independently, but never promote a partial excerpt to original output.
+        let output = extract_payload_output(&request.payload);
+        let excerpt_truncated = request
+            .payload
+            .get("tool_response_summary")
+            .and_then(|summary| summary.get("excerpt_truncated"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if output.truncated
+            || excerpt_truncated
+            || output.text.chars().count() != source.output_chars as usize
+            || sha256_text(&output.text) != source.output_sha256
+        {
+            return inconclusive_source();
+        }
+        return review_inline(request);
     }
     let mut response = HookReviewResponseV1::allow("source_full_scan_allow");
     response.reviewed_output_sha256 = Some(source.output_sha256.clone());
@@ -498,6 +534,18 @@ pub fn review_post_tool(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             "HOL Guard could not complete local hook review safely.",
         );
     }
+    // OMP directory reads are names-only and intentionally have no source-file
+    // proof. Recheck the host-resolved target here so a directory swapped after
+    // PreToolUse cannot make a sensitive root's listing model-visible.
+    if request.harness == "omp"
+        && source_ref(&request.payload).is_none()
+        && sensitive_envelope_target(&request.payload)
+    {
+        return HookReviewResponseV1::deny(
+            "sensitive_path",
+            "HOL Guard blocked this output because the resolved tool target is sensitive.",
+        );
+    }
     let source = source_ref(&request.payload);
     let response = if let Some(source) = source.as_ref() {
         review_source(request, source)
@@ -557,6 +605,48 @@ mod tests {
         assert_eq!(response.decision, "allow");
         assert_eq!(response.reason_code, "output_scan_allow");
         assert_eq!(response.reviewed_output_sha256, Some(sha256_text("hello")));
+    }
+
+    #[test]
+    fn structured_edit_source_is_scanned_instead_of_treated_as_empty() {
+        let payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "src/ordinary.ts"},
+            "tool_response": {
+                "originalFile": "export const value = 1;",
+                "oldString": "value = 1",
+                "newString": "value = 2",
+                "structuredPatch": [{"lines": ["-value = 1", "+value = 2"]}]
+            }
+        });
+        let extracted = extract_payload_output(&payload);
+        assert!(extracted.text.contains("export const value = 1;"));
+        assert!(extracted.text.contains("+value = 2"));
+        let response = review_post_tool(&request(payload));
+        assert_eq!(response.decision, "allow");
+        assert_eq!(response.reason_code, "output_scan_allow");
+        assert_eq!(
+            response.reviewed_output_sha256,
+            Some(sha256_text(&extracted.text))
+        );
+        for key in [
+            "originalFile",
+            "original_file",
+            "oldString",
+            "old_string",
+            "newString",
+            "new_string",
+        ] {
+            let mut output = serde_json::Map::new();
+            output.insert(key.into(), json!(github_like_token()));
+            let response = review_post_tool(&request(json!({"tool_response": output})));
+            assert_eq!(response.decision, "deny", "{key}");
+            assert_eq!(response.reason_code, "output_secret_match");
+        }
+        let response = review_post_tool(&request(json!({
+            "tool_response": {"structuredPatch": [{"lines": [github_like_token()]}]}
+        })));
+        assert_eq!(response.decision, "deny");
     }
 
     #[test]

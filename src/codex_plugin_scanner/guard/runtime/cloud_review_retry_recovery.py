@@ -5,8 +5,56 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ..store import GuardStore
+from .local_request_snapshots import _cloud_scrub_text
 
 _REPLAY_MARKER = "guard_cloud_review_retry_identity_replay"
+
+
+def retry_result_message(items: list[dict[str, object]]) -> str:
+    details: list[str] = []
+    for item in items:
+        detail = ": ".join(
+            _cloud_scrub_text(value)
+            for value in (item.get("code"), item.get("error"))
+            if isinstance(value, str) and value.strip()
+        )
+        if detail and detail not in details:
+            details.append(detail)
+    message = f"{len(items)} Cloud Review events require retry."
+    if details:
+        return f"{message} Cloud reported: {'; '.join(details[:3])}."
+    return message
+
+
+def recover_rejected_review_events(
+    store: GuardStore,
+    *,
+    sequences: list[int],
+    results: list[dict[str, object]],
+    events: dict[int, dict[str, object]],
+    binding: dict[str, str],
+    acknowledged_through: object,
+) -> tuple[list[int], list[dict[str, object]]]:
+    collisions = {
+        sequence: event_id
+        for sequence, result in zip(sequences, results, strict=True)
+        if result.get("code") == "review_event_snapshot_sequence_collision"
+        and isinstance(event_id := result.get("eventId"), str)
+        and event_id == events.get(sequence, {}).get("eventId")
+    }
+    repaired: dict[int, int] = {}
+    # Zero is a valid Cloud high-water mark for a fresh rejected stream.
+    if collisions and type(acknowledged_through) is int and 0 <= acknowledged_through <= 2**53 - 1:
+        repaired = store.recover_review_snapshot_sequences(
+            collisions=collisions, acknowledged_through=acknowledged_through, binding=binding
+        )
+    retained = [(s, r) for s, r in zip(sequences, results, strict=True) if s not in repaired]
+    sequences, results = repair_retry_identity_failures(
+        store, sequences=[s for s, _ in retained], results=[r for _, r in retained], binding=binding
+    )
+    return quarantine_terminal_binding_failures(
+        store, sequences=sequences, results=results, events=events, binding=binding
+    )
 
 
 def prepare_retry_identity_replay(store: GuardStore, *, binding: dict[str, str]) -> int:

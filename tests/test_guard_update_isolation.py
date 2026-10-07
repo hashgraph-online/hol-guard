@@ -78,6 +78,7 @@ def _configure_update_orchestrator(
         lambda: (_ for _ in ()).throw(AssertionError("direct_url lookup escaped trusted context")),
     )
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "uv")
+    monkeypatch.setattr(update_commands, "_retire_native_resident_before_update", lambda _guard_home: True)
     monkeypatch.setattr(
         update_commands,
         "load_managed_policy",
@@ -161,6 +162,9 @@ def test_run_guard_update_isolates_hostile_workspaces_and_redacts_managed_source
     trusted_bin.mkdir(parents=True)
     guard_home = tmp_path / "guard-home"
     trusted_uv = trusted_bin / "uv"
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"test-runtime")
+    runtime.chmod(0o700)
     _write_python_executable(
         trusted_uv,
         "import json\n"
@@ -178,6 +182,7 @@ def test_run_guard_update_isolates_hostile_workspaces_and_redacts_managed_source
         "print('already at latest version; source=' + source_index)\n",
     )
     monkeypatch.setattr(update_subprocess.sys, "prefix", str(fake_prefix))
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: runtime)
     _configure_update_orchestrator(
         monkeypatch,
         managed_index_url=managed_index_url,

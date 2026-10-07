@@ -138,8 +138,9 @@ def _cyclic_value() -> list[object]:
 def test_malformed_present_claim_value_fails_closed(invalid_value: object) -> None:
     signed = sign_workflow_capability(_claim(capability_id="wc-malformed-claim-value"), key=_KEY, key_id=_KEY_ID)
     object.__setattr__(signed.claim, "capability_id", invalid_value)
-    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_capability"):
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_capability") as caught:
         verify_workflow_capability_signature(signed, key=_KEY, key_id=_KEY_ID)
+    assert not isinstance(caught.value.__cause__, RecursionError)
 
 
 @pytest.mark.parametrize("invalid_value", [object(), _cyclic_value()])
@@ -149,8 +150,9 @@ def test_malformed_present_receipt_value_fails_closed(tmp_path, invalid_value: o
     _issue(store, claim)
     signed = _claim_capability(store, claim, invocation_id="invocation-malformed-receipt-value")
     object.__setattr__(signed.receipt, "capability_id", invalid_value)
-    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_receipt"):
+    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_receipt") as caught:
         verify_workflow_capability_receipt(signed, key=_KEY, key_id=_KEY_ID)
+    assert not isinstance(caught.value.__cause__, RecursionError)
 
 
 @pytest.mark.parametrize("invalid_value", [object(), _cyclic_value()])
