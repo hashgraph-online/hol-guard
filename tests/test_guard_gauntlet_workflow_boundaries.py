@@ -293,7 +293,9 @@ def test_discovery_requires_source_output_from_every_command(tmp_path, command_i
     fixture = create_fixture(tmp_path / "fixture")
     scenario = CATALOG["bounded-source-discovery"]
     checks = filesystem_checks(fixture, scenario.oracle, scenario.id)
-    case = _case(scenario, checks, [b"src/one.ts\n"] * 3)
+    complete = "\n".join(SOURCE_FILES).encode() + b"\n"
+    bounded = "\n".join(list(SOURCE_FILES)[:5]).encode() + b"\n"
+    case = _case(scenario, checks, [complete, complete, bounded])
     assert assess_case(scenario, case)["outcome"] == "pass"
     ends = [event for event in case["events"] if event["type"] == "tool_execution_end"]
     ends[command_index]["result"] = result

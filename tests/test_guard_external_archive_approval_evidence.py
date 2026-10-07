@@ -242,9 +242,11 @@ def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_pat
 
     assert secret not in repr(result.to_dict())
 
-
+@pytest.mark.parametrize("explicit_guard_home", (False, True))
 def test_external_archive_credentials_stay_private_across_artifact_and_receipt_surfaces(
     tmp_path: Path,
+    archive_package_intent_native: Path,
+    explicit_guard_home: bool,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -253,7 +255,11 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     password = "VERY_SECRET_PASSWORD"
     source_url = f"https://user:{password}@packages.example.com/demo.tgz?token={secret}"
     command = ["npm", "install", f"demo@{source_url}"]
-    intent = parse_package_intent(shlex.join(command), workspace=workspace)
+    intent = parse_package_intent(
+        shlex.join(command),
+        workspace=workspace,
+        guard_home=archive_package_intent_native if explicit_guard_home else None,
+    )
     assert intent is not None
     artifact = build_package_request_artifact(
         "guard-cli",
@@ -263,6 +269,7 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     )
     private_targets = artifact.runtime_private_metadata["package_targets"]
     assert isinstance(private_targets, list)
+    # Only enforcement-only metadata retains the exact download URL.
     assert private_targets[0]["source_url"] == source_url
 
     store = GuardStore(tmp_path / "guard-home")

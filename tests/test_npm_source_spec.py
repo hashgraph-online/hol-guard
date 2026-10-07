@@ -187,11 +187,17 @@ def test_deeply_nested_npm_aliases_fail_without_recursion() -> None:
 
 
 @pytest.mark.usefixtures("package_intent_native")
-def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit() -> None:
+@pytest.mark.parametrize(
+    "source",
+    [
+        f"git+https://GITHUB.com:443/hashgraph-online/hol-guard.git?token=ROTATING_SECRET#{COMMIT}",
+        f"git+ssh://git@github.com:22/hashgraph-online/hol-guard.git#{COMMIT}",
+        f"git@github.com:hashgraph-online/hol-guard.git#{COMMIT}",
+    ],
+)
+def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit(source: str) -> None:
     first = _artifact_for_source(f"github:Hashgraph-Online/hol-guard.git#{COMMIT}")
-    equivalent = _artifact_for_source(
-        f"git+https://GITHUB.com:443/hashgraph-online/hol-guard.git?token=ROTATING_SECRET#{COMMIT}"
-    )
+    equivalent = _artifact_for_source(source)
     different_commit = _artifact_for_source(
         "git+https://github.com/hashgraph-online/hol-guard.git#ffffffffffffffffffffffffffffffffffffffff"
     )

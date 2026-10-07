@@ -336,8 +336,10 @@ fn truncated_scope_listing_fails_closed() {
             .unwrap();
     fixture_file(&scope.join("generation-00000000000000000001.json"), b"{}");
     // One past MAX_DIRECTORY_ENTRIES so the scan cannot prove it saw every file.
+    // Unrelated entries are counted without opening their contents. Keep the
+    // state file private, but avoid per-file private ACL setup for ignored names.
     for index in 0..4096 {
-        fixture_file(&scope.join(format!("unrelated-{index:05}")), b"x");
+        fs::write(scope.join(format!("unrelated-{index:05}")), b"x").unwrap();
     }
 
     assert_eq!(

@@ -10,6 +10,7 @@ export function permittedWatchInput(toolName: string, input: unknown, cwd = proc
   if (toolName !== "bash" || !isRecord(input)) return false;
   const args = input;
   if (args.command !== WATCH_COMMAND || Object.keys(args).some(key => !["command", "timeout", "cwd", "env", "pty", "async"].includes(key))) return false;
+  // The pinned bash schema may emit these defaults even when no override was requested.
   if (args.env !== undefined && (!isRecord(args.env) || Object.keys(args.env).length !== 0)) return false;
   if (args.pty !== undefined && args.pty !== false) return false;
   if (args.async !== undefined && args.async !== false) return false;

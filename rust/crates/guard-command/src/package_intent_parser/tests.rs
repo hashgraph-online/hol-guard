@@ -55,6 +55,59 @@ fn control_labels() {
     assert_eq!(control_context_label(None), "end");
 }
 
+#[test]
+fn source_redaction_preserves_git_identity_without_credentials() {
+    let tokens = vec![
+        "npm".to_owned(),
+        "install".to_owned(),
+        "git+https://GITHUB.com:443/owner/repo.git?token=secret#commit".to_owned(),
+    ];
+    assert_eq!(
+        redact_local_source_tokens(&tokens),
+        vec![
+            "npm",
+            "install",
+            "git+https://GITHUB.com:443/owner/repo.git"
+        ]
+    );
+    assert_eq!(
+        redact_local_source_tokens(&["file:/private/project".to_owned()]),
+        vec!["[REDACTED_URL]"]
+    );
+    assert_eq!(
+        redact_local_source_tokens(&[
+            "npm".to_owned(),
+            "install".to_owned(),
+            "git+ssh://git@github.com/owner/repo.git#commit".to_owned()
+        ]),
+        vec!["npm", "install", "git+ssh://github.com/owner/repo.git"]
+    );
+    assert_eq!(
+        redact_local_source_tokens(&[
+            "npm".to_owned(),
+            "install".to_owned(),
+            "git@github.com:owner/repo.git#commit".to_owned()
+        ]),
+        vec!["npm", "install", "git@github.com:owner/repo.git#commit"]
+    );
+    assert_eq!(
+        redact_local_source_tokens(&[
+            "pip".to_owned(),
+            "install".to_owned(),
+            "--index-url=https://user:password@example.com/simple".to_owned()
+        ]),
+        vec!["pip", "install", "[REDACTED_URL]"]
+    );
+    assert_eq!(
+        redact_local_source_tokens(&[
+            "npm".to_owned(),
+            "install".to_owned(),
+            "git+https://user:password@github.com/owner/repo.git".to_owned()
+        ]),
+        vec!["npm", "install", "[REDACTED_URL]"]
+    );
+}
+
 // package_intent_parser.py `_redact_local_source_tokens`
 #[test]
 fn redact_local_source_tokens_hides_cargo_local_path() {
