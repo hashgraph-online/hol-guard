@@ -39,6 +39,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if prepared.returncode:
             return prepared.returncode
+        # Directory preparation needs runtime validation dependencies, available
+        # in the coverage environment but not in isolated wheel builds.
+        for script in ("export_extension_directory.py", "render_command_extension_directory.py"):
+            for arguments in ([], ["--check"]):
+                prepared = subprocess.run(
+                    [sys.executable, f"scripts/{script}", *arguments], cwd=ROOT, check=False
+                )
+                if prepared.returncode:
+                    return prepared.returncode
     pytest_args = args.pytest_args
     if pytest_args[:1] == ["--"]:
         pytest_args = pytest_args[1:]

@@ -161,10 +161,8 @@ def main() -> int:
         for identities in request_value["trust"]["classes"].values()
         for identity in identities
     }
-    from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
-
     contribution_ids = {descriptor["id"] for descriptor in compiled["descriptors"]}
-    contribution_ids.update(catalog_id_for_mcp_id(source["id"]) for source in request_value["mcp_sources"])
+    contribution_ids.update(extension["extension_id"] for extension in compiled["program"]["extensions"])
     missing_bindings = sorted(contribution_ids - bound_ids)
     if missing_bindings:
         raise ValueError(
