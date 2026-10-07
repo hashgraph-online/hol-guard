@@ -57,6 +57,7 @@ def _native_package_intent(
     guard_home: Path | None,
     canonical_command: CanonicalCommand | None,
     environment: Mapping[str, str] | None,
+    deadline: float | None = None,
 ) -> PackageIntent | None:
     """Resolve ``package_intent_parse`` through the resident authority.
 
@@ -77,6 +78,7 @@ def _native_package_intent(
             canonical_command=_canonical_command_mapping(canonical_command),
             environment=environment,
             guard_home=guard_home if guard_home is not None else resolve_guard_home(),
+            deadline_monotonic=deadline,
         )
     except Exception:
         return None
@@ -96,6 +98,7 @@ def parse_package_intent(
     canonical_command: CanonicalCommand | None = None,
     environment: Mapping[str, str] | None = None,
     guard_home: Path | None = None,
+    deadline: float | None = None,
 ) -> PackageIntent | None:
     """Parse a shell command for package install/execute intent.
 
@@ -110,6 +113,7 @@ def parse_package_intent(
         guard_home=guard_home,
         canonical_command=canonical_command,
         environment=environment,
+        deadline=deadline,
     )
 
 

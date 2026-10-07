@@ -5,9 +5,11 @@ import sys
 import threading
 import time
 from queue import Queue
+from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import native_package_authority as package_authority
 from codex_plugin_scanner.guard import native_resident_client as pools
 from codex_plugin_scanner.guard import native_resident_stream as streams
 from codex_plugin_scanner.guard import native_resident_transport as transport
@@ -56,6 +58,51 @@ def test_expired_request_does_not_start_helper(tmp_path, monkeypatch):
 
     monkeypatch.setattr(client, "_request_snapshot", forbidden_snapshot)
     assert client.request(b"fixture", deadline_monotonic=time.monotonic() - 1) is None
+
+
+@pytest.mark.parametrize(
+    ("inherited_budget_seconds", "timeout_seconds"),
+    [(0.05, 2.0), (2.0, 0.05)],
+)
+def test_package_intent_capacity_wait_uses_the_earlier_deadline(
+    tmp_path, monkeypatch, inherited_budget_seconds, timeout_seconds
+):
+    home = tmp_path / "guard-home"
+    runtime = tmp_path / "runtime"
+    pool = pools._PersistentNativeClientPool(
+        executable=runtime, state_dir=home / "native-runtime", environment={}
+    )
+    pool._clients = {
+        streams._PersistentNativeClient(
+            executable=runtime, state_dir=home / "native-runtime", environment={}
+        )
+        for _ in range(pools._MAX_PERSISTENT_CLIENTS)
+    }
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=runtime, sha256="a" * 64),
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", "package-authority-v1")),
+    )
+    monkeypatch.setattr(package_authority, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(package_authority, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(package_authority, "native_record_resident_failure", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pools, "_client_pool_for", lambda *args: pool)
+    failure_token = pools._LAST_FAILURE_CODE.set(None)
+    try:
+        started = time.monotonic()
+        result = package_authority.package_intent_parse_native(
+            "npm install fixture@1.0.0",
+            guard_home=home,
+            environment={"PATH": "/fixture/bin"},
+            timeout_seconds=timeout_seconds,
+            deadline_monotonic=started + inherited_budget_seconds,
+        )
+        assert result is None
+        assert pools.native_resident_client_failure_code() == "native_client_pool_exhausted"
+        assert time.monotonic() - started < 0.5
+    finally:
+        pools._LAST_FAILURE_CODE.reset(failure_token)
 
 
 def test_close_lock_contention_is_bounded_and_recoverable(tmp_path):
