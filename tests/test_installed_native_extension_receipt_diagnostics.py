@@ -203,7 +203,7 @@ def test_receipt_timeout_preserves_failure_and_emits_only_bounded_counters(
             store, {"prior"}, writer=writer, receipt_processed_before=2, timeout_seconds=0
         )
     assert json.loads(capsys.readouterr().out) == {
-        "schema": "guard.installed-native-receipt-persistence-failure.v1",
+        "schema": "guard.installed-native-receipt-persistence-failure.v2",
         "processed_before": 2,
         "writer_counters": {"receipt_accepted": 3, "receipt_processed": 2, "receipt_failures": 1},
     }
@@ -214,10 +214,39 @@ def test_receipt_timeout_diagnostic_survives_unavailable_writer() -> None:
         raise RuntimeError("sensitive-value")
 
     assert probe._support.receipt_persistence_diagnostic(SimpleNamespace(stats=failed_stats), True) == {
-        "schema": "guard.installed-native-receipt-persistence-failure.v1",
+        "schema": "guard.installed-native-receipt-persistence-failure.v2",
         "processed_before": None,
         "writer_counters": {},
     }
+
+
+def test_receipt_diagnostic_keeps_safe_case_context_and_rejects_private_fields() -> None:
+    diagnostic = probe._support.receipt_persistence_diagnostic(
+        None,
+        9,
+        diagnostic_context={
+            "case": "mcp-write-blocked",
+            "http_reason_code": "native_runtime_unavailable",
+            "http_decision": "deny",
+            "command": "sensitive-value",
+            "approval_url": "https://example.invalid/private",
+        },
+    )
+    assert diagnostic["context"] == {
+        "case": "mcp-write-blocked",
+        "http_reason_code": "native_runtime_unavailable",
+        "http_decision": "deny",
+    }
+    assert "sensitive-value" not in json.dumps(diagnostic)
+    assert "private" not in json.dumps(diagnostic)
+
+
+@pytest.mark.parametrize("value", [None, 3, "", "x" * 97, "unsafe/path", "unsafe\ntext"])
+def test_receipt_diagnostic_rejects_unbounded_or_invalid_context(value: object) -> None:
+    diagnostic = probe._support.receipt_persistence_diagnostic(
+        None, None, diagnostic_context={"case": value, "http_reason_code": value, "http_decision": value}
+    )
+    assert "context" not in diagnostic
 
 
 def test_persisted_receipt_correlation_recovers_when_writer_counter_stalls(tmp_path: Path) -> None:

@@ -191,9 +191,7 @@ def test_wait_until_health_ready_retries_until_ready(monkeypatch: pytest.MonkeyP
     stress_runtime.wait_until_health_ready("http://127.0.0.1:1")
 
 
-def test_wait_until_daemon_lifecycle_ready_retries_until_ready(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_wait_until_daemon_lifecycle_ready_retries_until_ready(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     states = iter((False, True))
 
     monkeypatch.setattr(stress_script, "_daemon_lifecycle_is_ready", lambda _home: next(states))

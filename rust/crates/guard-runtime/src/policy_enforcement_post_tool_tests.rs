@@ -1,6 +1,118 @@
 use super::*;
 
 #[test]
+fn scanned_structured_edit_output_does_not_invent_a_persistence_review() {
+    let request = post_request(json!({
+        "tool_name": "Edit", "tool_input": {"file_path": "src/ordinary.ts"},
+        "tool_response": {
+            "originalFile": "export const value = 1;",
+            "oldString": "value = 1", "newString": "value = 2",
+            "structuredPatch": [{"lines": ["-value = 1", "+value = 2"]}]
+        }
+    }));
+    let mut effective = policy("warn");
+    effective
+        .risk_actions
+        .insert("persistence".into(), "require-reapproval".into());
+    let native = guard_hook_core::review_post_tool(&request);
+    assert_eq!(native.reason_code, "output_scan_allow");
+    let result = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        native,
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow");
+    assert_eq!(result.policy_action.as_deref(), Some("warn"));
+    effective.default_action = "block".into();
+    let denied = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        guard_hook_core::review_post_tool(&request),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+}
+
+#[test]
+fn bounded_task_outputs_keep_input_proof_without_lowering_security_floors() {
+    let payload = json!({
+        "tool_name": "TodoWrite",
+        "tool_input": {"todos": [{"content": "Validate tests", "status": "completed"}]},
+        "tool_response": "Task list updated"
+    });
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "block".into());
+    let result = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &post_request(payload.clone()),
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow");
+    assert_eq!(result.policy_action.as_deref(), Some("allow"));
+    let output_risk = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &post_request(payload.clone()),
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("native_output_subprocess_review"),
+    )
+    .unwrap();
+    assert_eq!(output_risk.decision, "deny");
+    effective
+        .harness_actions
+        .insert("claude-code".into(), "block".into());
+    let harness_denied = apply_post_tool_policy(
+        &snapshot(effective),
+        &post_request(payload.clone()),
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(harness_denied.decision, "deny");
+    for tool in ["TodoWrite", "TaskOutput"] {
+        let input = if tool == "TodoWrite" {
+            json!({"todos": []})
+        } else {
+            json!({"task_id": "existing-task", "block": true, "timeout": 1000})
+        };
+        let request =
+            post_request(json!({"tool_name": tool, "tool_input": input, "tool_response": "safe"}));
+        let denied = apply_post_tool_policy(
+            &snapshot(policy("allow")),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            HookReviewResponseV1::deny("source_secret_match", "output contains sensitive material"),
+        )
+        .unwrap();
+        assert_eq!(denied.decision, "deny");
+        let denied = apply_post_tool_policy(
+            &snapshot(policy("block")),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            HookReviewResponseV1::allow("output_scan_allow"),
+        )
+        .unwrap();
+        assert_eq!(denied.decision, "deny");
+    }
+    for other in [
+        json!({"tool_name": "TodoWrite", "tool_input": {"todos": [], "command": "run something"}}),
+        json!({"tool_name": "mcp__server__TodoWrite", "tool_input": {"todos": []}}),
+        json!({"tool_name": "TodoWrite", "toolName": "TaskOutput", "tool_input": {"todos": []}}),
+        json!({"tool_name": "TaskOutput", "tool_input": {"task_id": "../credentials"}}),
+    ] {
+        assert!(!guard_command::pretool::bounded_task_metadata_output(
+            &other
+        ));
+    }
+}
+
+#[test]
 fn policy_allow_cannot_lower_intrinsic_review_or_block() {
     let snapshot = snapshot(policy("allow"));
     for action in ["review", "block"] {
@@ -107,6 +219,41 @@ fn post_warning_policy_preserves_allow_with_warning() {
     assert_eq!(result.decision, "allow");
     assert_eq!(result.policy_action.as_deref(), Some("warn"));
     assert_eq!(result.notice, "warning");
+}
+
+#[test]
+fn scanned_write_output_does_not_invent_persistence_but_preserves_denials() {
+    let request = post_request(json!({"tool_name": "write", "tool_response": "wrote source file"}));
+    let mut effective = policy("warn");
+    effective
+        .risk_actions
+        .insert("persistence".into(), "require-reapproval".into());
+    let result = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow");
+    assert_eq!(result.policy_action.as_deref(), Some("warn"));
+    effective.default_action = "block".into();
+    let result = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "deny");
+    let result = apply_post_tool_policy(
+        &snapshot(policy("allow")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::deny("sensitive_output", "synthetic protected content"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "deny");
 }
 
 #[test]

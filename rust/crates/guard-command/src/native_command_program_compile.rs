@@ -110,6 +110,7 @@ pub(super) fn compile_node(
                 | "php-artisan-script.v1"
                 | "curl-elasticsearch-delete.v1"
                 | "repo2nb-expansion.v1"
+                | "tui-runner-expansion.v1"
                 | "reviewed-literal.v1" => {
                     Matcher::Specialized(SpecializedMatcher::from_config(operation, node.config)?)
                 }
@@ -148,10 +149,13 @@ fn compile_executable(operation: &str, mut config: Value) -> Result<ExecutableNo
         .as_object_mut()
         .ok_or("native_command_executable_invalid")?;
     let mut paths: Vec<Vec<String>> = if operation == "executable.v1" {
+        // A missing `subcommands` list means the matcher applies to every
+        // invocation of the executable; the rendered unclassified fallback
+        // uses the same empty path for that semantic.
         vec![serde_json::from_value(
             object
                 .remove("subcommands")
-                .ok_or("native_command_subcommands_missing")?,
+                .unwrap_or_else(|| Value::Array(Vec::new())),
         )
         .map_err(|_| "native_command_subcommands_invalid")?]
     } else {

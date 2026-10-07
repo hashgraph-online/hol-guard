@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -18,12 +19,19 @@ def managed_runtime(tmp_path: Path) -> Iterator[tuple[Path, Path]]:
     if not binary:
         pytest.fail("HOL_GUARD_NATIVE_BINARY must name the compiled Rust runtime; native retirement proof cannot skip")
     runtime = Path(binary).resolve(strict=True)
-    guard_home = tmp_path / "guard-home"
+    state_root = (
+        tempfile.TemporaryDirectory(prefix="hol-guard-managed-runtime-", dir=Path.home()) if os.name == "nt" else None
+    )
+    guard_home = Path(state_root.name) if state_root is not None else tmp_path / "guard-home"
     (guard_home / "native-runtime").mkdir(mode=0o700, parents=True)
     try:
         yield runtime, guard_home
     finally:
-        assert close_native_residents(guard_home), "managed native resident cleanup did not complete"
+        try:
+            assert close_native_residents(guard_home), "managed native resident cleanup did not complete"
+        finally:
+            if state_root is not None:
+                state_root.cleanup()
 
 
 def environment(guard_home: Path) -> dict[str, str]:

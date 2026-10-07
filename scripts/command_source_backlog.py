@@ -29,6 +29,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.extension_trust_projection import repository_trust_map
+
 SOURCE_SCHEMA = "guard.command-extension-source.v1"
 BUILD_SCHEMA = "guard.command-extension-build.v1"
 INVENTORY_SCHEMA = "guard.declarative-backlog-inventory.v1"
@@ -75,6 +78,7 @@ _REVIEWED_IMPORTS: dict[str, frozenset[str]] = {
             "PhpArtisanScriptMatcher",
             "CurlElasticsearchDeleteMatcher",
             "Repo2nbUnresolvedExpansionMatcher",
+            "TuiRunnerUnresolvedExpansionMatcher",
             "ReviewedLiteralCommandMatcher",
             "CommandSafetyRule",
             "CommandSafeVariant",
@@ -114,6 +118,7 @@ _REVIEWED_IMPORTS: dict[str, frozenset[str]] = {
     "command_framework_extensions": frozenset({"PhpArtisanScriptMatcher"}),
     "command_search_messaging_extensions": frozenset({"CurlElasticsearchDeleteMatcher"}),
     "command_repo2nb_extensions": frozenset({"Repo2nbUnresolvedExpansionMatcher"}),
+    "command_tui_runner_extensions": frozenset({"TuiRunnerUnresolvedExpansionMatcher"}),
     "command_reviewed_literal_matcher": frozenset({"ReviewedLiteralCommandMatcher"}),
 }
 
@@ -283,6 +288,7 @@ class _RestrictedEvaluator:
         "PhpArtisanScriptMatcher",
         "CurlElasticsearchDeleteMatcher",
         "Repo2nbUnresolvedExpansionMatcher",
+        "TuiRunnerUnresolvedExpansionMatcher",
         "ReviewedLiteralCommandMatcher",
     }
     _NATIVE_MATCHER_SPECS: ClassVar[dict[str, tuple[object, ...]]] = {
@@ -425,6 +431,11 @@ class _RestrictedEvaluator:
         "Repo2nbUnresolvedExpansionMatcher": (
             "repo2nb-expansion.v1",
             ("subcommand", "launchers", "leading_options_with_values", "expansion_markers"),
+            (),
+        ),
+        "TuiRunnerUnresolvedExpansionMatcher": (
+            "tui-runner-expansion.v1",
+            ("launchers", "leading_options_with_values", "expansion_markers"),
             (),
         ),
         "ReviewedLiteralCommandMatcher": (
@@ -1839,7 +1850,7 @@ def convert_backlog(
     inventory = _load_json(inventory_path)
     if not isinstance(inventory, dict) or inventory.get("schema") != INVENTORY_SCHEMA:
         raise ValueError("unsupported backlog inventory schema")
-    trust = _load_json(trust_path or repository / "contracts/extensions/trust-class-map.v1.json")
+    trust = _load_json(trust_path) if trust_path else repository_trust_map(repository)
     if not isinstance(trust, dict):
         raise ValueError("trust map must be an object")
     pinned_heads: dict[str, str] = {}

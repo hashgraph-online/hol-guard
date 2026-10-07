@@ -12,7 +12,7 @@ import threading
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from .approval_gate_state import (
     APPROVAL_GATE_ALLOWED_COOLDOWNS,
@@ -63,6 +63,7 @@ from .approval_gate_state import (
 )
 from .local_authority_integrity import sign_local_authority_payload, verify_local_authority_payload
 from .models import PolicyDecision
+from .native_approval_gate import approval_gate_native as _approval_gate_native
 from .totp import TotpSecretStore, build_otpauth_uri, generate_totp_secret, verify_totp_code
 
 APPROVAL_GATE_MIN_PASSWORD_LENGTH = 8
@@ -158,6 +159,77 @@ class ApprovalGateGrant:
     totp_verified: bool
 
 
+def _grant_from_wire(payload: object) -> ApprovalGateGrant | None:
+    """Reconstruct an ``ApprovalGateGrant`` from a resident op grant dict."""
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return ApprovalGateGrant(
+            grant_id=str(payload["grant_id"]),
+            purpose=cast(ApprovalGatePurpose, str(payload["purpose"])),
+            issued_at=str(payload["issued_at"]),
+            expires_at=str(payload["expires_at"]),
+            action=str(payload["action"]),
+            scope=str(payload["scope"]),
+            subject=str(payload["subject"]),
+            session_nonce=str(payload["session_nonce"]),
+            factor_set=tuple(str(f) for f in payload["factor_set"]),
+            strict=bool(payload["strict"]),
+            used_cooldown=bool(payload["used_cooldown"]),
+            cooldown_expires_at=(
+                None if payload.get("cooldown_expires_at") is None else str(payload["cooldown_expires_at"])
+            ),
+            password_verified=bool(payload["password_verified"]),
+            totp_verified=bool(payload["totp_verified"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _mirror_native_grant(guard_home: Path, grant: ApprovalGateGrant, now: str | None) -> None:
+    state = _load_state(guard_home)
+    with _APPROVAL_GATE_LOCK:
+        _ACTIVE_GRANTS[grant.grant_id] = {
+            "guard_home": str(guard_home),
+            "origin": "native",
+            "expires_epoch": _epoch(grant.expires_at),
+            "purpose": grant.purpose,
+            "strict": grant.strict,
+            "used_cooldown": grant.used_cooldown,
+            "password_verified": grant.password_verified,
+            "totp_verified": grant.totp_verified,
+            "action": grant.action,
+            "scope": grant.scope,
+            "subject": grant.subject,
+            "session_nonce": grant.session_nonce,
+            "factor_set": grant.factor_set,
+            "factor_generation": _factor_generation(state),
+        }
+        _prune_grants(_ACTIVE_GRANTS, _epoch(now))
+
+
+def _config_from_wire(payload: object) -> ApprovalGatePublicConfig | None:
+    """Reconstruct ``ApprovalGatePublicConfig`` from a resident op dict."""
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return ApprovalGatePublicConfig(
+            enabled=bool(payload["enabled"]),
+            configured=bool(payload["configured"]),
+            cooldown_seconds=int(payload["cooldown_seconds"]),
+            cooldown_active=bool(payload["cooldown_active"]),
+            cooldown_expires_at=payload.get("cooldown_expires_at"),
+            locked_until=payload.get("locked_until"),
+            fail_closed=bool(payload["fail_closed"]),
+            strict_all_decisions=bool(payload["strict_all_decisions"]),
+            totp_enabled=bool(payload["totp_enabled"]),
+            totp_pending=bool(payload["totp_pending"]),
+            totp_recent_satisfied=bool(payload.get("totp_recent_satisfied", False)),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def input_from_mapping(payload: object) -> ApprovalGateInput | None:
     """Build gate input from daemon or dashboard payload without retaining extras."""
 
@@ -179,6 +251,11 @@ def input_from_mapping(payload: object) -> ApprovalGateInput | None:
 
 
 def public_config(guard_home: Path, *, now: str | None = None) -> ApprovalGatePublicConfig:
+    native = _approval_gate_native("public_config", guard_home, now=now)
+    if native is not None:
+        config = _config_from_wire(native)
+        if config is not None:
+            return config
     with _APPROVAL_GATE_LOCK:
         state = _load_state(guard_home)
         now_epoch = _epoch(now)
@@ -201,6 +278,9 @@ def public_config(guard_home: Path, *, now: str | None = None) -> ApprovalGatePu
 
 def recent_totp_satisfied(guard_home: Path, *, now: str | None = None) -> bool:
     """Return whether this local OS session has a valid recent TOTP proof."""
+    native = _approval_gate_native("recent_totp_satisfied", guard_home, now=now)
+    if native is not None and "satisfied" in native:
+        return bool(native["satisfied"])
     with _APPROVAL_GATE_LOCK:
         state = _load_state(guard_home)
         if not _enabled(state) or not _totp_enabled(state):
@@ -215,6 +295,19 @@ def update_settings(
     approval_gate_grant: ApprovalGateGrant | None = None,
     now: str | None = None,
 ) -> ApprovalGatePublicConfig:
+    native = _approval_gate_native(
+        "update_settings",
+        guard_home,
+        params=payload if isinstance(payload, dict) else {},
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+    if native is not None:
+        config = _config_from_wire(native)
+        if config is not None:
+            if not config.enabled:
+                _invalidate_active_grants(guard_home)
+            return config
     with _APPROVAL_GATE_LOCK:
         previous_generation = _factor_generation(_load_state(guard_home))
         next_state = _next_settings_state(
@@ -237,6 +330,17 @@ def validate_settings_update(
     approval_gate_grant: ApprovalGateGrant | None = None,
     now: str | None = None,
 ) -> None:
+    if (
+        _approval_gate_native(
+            "validate_settings_update",
+            guard_home,
+            params=payload if isinstance(payload, dict) else {},
+            approval_gate_grant=approval_gate_grant,
+            now=now,
+        )
+        is not None
+    ):
+        return
     with _APPROVAL_GATE_LOCK:
         _next_settings_state(
             guard_home,
@@ -294,6 +398,11 @@ def _next_settings_state(
 
 
 def revoke_cooldown(guard_home: Path, *, now: str | None = None) -> ApprovalGatePublicConfig:
+    native = _approval_gate_native("revoke_cooldown", guard_home, now=now)
+    if native is not None:
+        config = _config_from_wire(native)
+        if config is not None:
+            return config
     with _APPROVAL_GATE_LOCK:
         state = _load_state(guard_home)
         state.pop("cooldown_expires_at", None)
@@ -308,6 +417,17 @@ def unlock_cooldown(
     approval_gate_input: ApprovalGateInput | None = None,
     now: str | None = None,
 ) -> ApprovalGatePublicConfig:
+    native = _approval_gate_native(
+        "unlock_cooldown",
+        guard_home,
+        duration_seconds=duration_seconds,
+        approval_gate_input=approval_gate_input,
+        now=now,
+    )
+    if native is not None:
+        config = _config_from_wire(native)
+        if config is not None:
+            return config
     with _APPROVAL_GATE_LOCK:
         return _unlock_cooldown_locked(
             guard_home,
@@ -355,6 +475,15 @@ def begin_totp_enrollment(
     device_label: str = "local-device",
     now: str | None = None,
 ) -> dict[str, object]:
+    native = _approval_gate_native(
+        "begin_totp_enrollment",
+        guard_home,
+        approval_gate_input=approval_gate_input,
+        device_label=device_label,
+        now=now,
+    )
+    if native is not None:
+        return native
     with _APPROVAL_GATE_LOCK:
         return _begin_totp_enrollment_locked(
             guard_home,
@@ -409,6 +538,16 @@ def confirm_totp_enrollment(
     approval_gate_input: ApprovalGateInput | None = None,
     now: str | None = None,
 ) -> ApprovalGatePublicConfig:
+    native = _approval_gate_native(
+        "confirm_totp_enrollment",
+        guard_home,
+        approval_gate_input=approval_gate_input,
+        now=now,
+    )
+    if native is not None:
+        config = _config_from_wire(native)
+        if config is not None:
+            return config
     with _APPROVAL_GATE_LOCK:
         return _confirm_totp_enrollment_locked(
             guard_home,
@@ -479,6 +618,16 @@ def disable_totp(
     approval_gate_input: ApprovalGateInput | None = None,
     now: str | None = None,
 ) -> ApprovalGatePublicConfig:
+    native = _approval_gate_native(
+        "disable_totp",
+        guard_home,
+        approval_gate_input=approval_gate_input,
+        now=now,
+    )
+    if native is not None:
+        config = _config_from_wire(native)
+        if config is not None:
+            return config
     with _APPROVAL_GATE_LOCK:
         return _disable_totp_locked(
             guard_home,
@@ -560,6 +709,26 @@ def require_approval_decision(
     session_nonce: str | None = None,
     now: str | None = None,
 ) -> ApprovalGateGrant | None:
+    native = _approval_gate_native(
+        "require_approval_decision",
+        guard_home,
+        params={"action": action, "scope": scope, "subject": subject, "session_nonce": session_nonce},
+        approval_gate_input=approval_gate_input,
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+    if native is not None:
+        # "grant" present-and-null = resident answered "no gate required".
+        # Absent key or a malformed grant dict is NOT that answer — fall
+        # through to the fail-closed Python body rather than treat a
+        # decode failure as authorization.
+        grant_payload = native.get("grant")
+        if grant_payload is None and "grant" in native:
+            return None
+        grant = _grant_from_wire(grant_payload)
+        if grant is not None:
+            _mirror_native_grant(guard_home, grant, now)
+            return grant
     state = _load_state(guard_home)
     if not _requires_decision_gate(state, action=action, scope=scope):
         return None
@@ -597,6 +766,15 @@ def require_policy_write(
     approval_gate_grant: ApprovalGateGrant | None = None,
     now: str | None = None,
 ) -> None:
+    native = _approval_gate_native(
+        "require_policy_write",
+        guard_home,
+        params={"action": decision.action, "scope": decision.scope},
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+    if native is not None:
+        return
     state = _load_state(guard_home)
     if not _requires_decision_gate(state, action=decision.action, scope=decision.scope):
         return
@@ -617,6 +795,15 @@ def require_request_resolution(
     approval_gate_grant: ApprovalGateGrant | None = None,
     now: str | None = None,
 ) -> None:
+    native = _approval_gate_native(
+        "require_request_resolution",
+        guard_home,
+        params={"action": resolution_action, "scope": resolution_scope},
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+    if native is not None:
+        return
     state = _load_state(guard_home)
     if not _requires_decision_gate(state, action=resolution_action, scope=resolution_scope):
         return
@@ -635,6 +822,9 @@ def require_policy_clear(
     approval_gate_grant: ApprovalGateGrant | None = None,
     now: str | None = None,
 ) -> None:
+    native = _approval_gate_native("require_policy_clear", guard_home, approval_gate_grant=approval_gate_grant, now=now)
+    if native is not None:
+        return
     if not _enabled(_load_state(guard_home)):
         return
     validate_grant(guard_home, approval_gate_grant, purpose="policy_clear", strict=True, now=now)
@@ -646,6 +836,11 @@ def require_settings_write(
     approval_gate_grant: ApprovalGateGrant | None = None,
     now: str | None = None,
 ) -> None:
+    native = _approval_gate_native(
+        "require_settings_write", guard_home, approval_gate_grant=approval_gate_grant, now=now
+    )
+    if native is not None:
+        return
     if not _enabled(_load_state(guard_home)):
         return
     validate_grant(guard_home, approval_gate_grant, purpose="settings_write", strict=True, now=now)
@@ -663,6 +858,23 @@ def require_high_risk(
     session_nonce: str | None = None,
     now: str | None = None,
 ) -> ApprovalGateGrant | None:
+    native = _approval_gate_native(
+        "require_high_risk",
+        guard_home,
+        params={"action": action, "scope": scope, "subject": subject, "session_nonce": session_nonce},
+        approval_gate_input=approval_gate_input,
+        approval_gate_grant=approval_gate_grant,
+        purpose=purpose,
+        now=now,
+    )
+    if native is not None:
+        grant_payload = native.get("grant")
+        if grant_payload is None and "grant" in native:
+            return None
+        grant = _grant_from_wire(grant_payload)
+        if grant is not None:
+            _mirror_native_grant(guard_home, grant, now)
+            return grant
     state = _load_state(guard_home)
     if not _enabled(state):
         return None
@@ -703,6 +915,19 @@ def require_extension_control(
 ) -> ApprovalGateGrant:
     """Issue a strict proof for one exact extension-control mutation."""
 
+    native = _approval_gate_native(
+        "require_extension_control",
+        guard_home,
+        params={"action": action, "subject": subject, "session_nonce": session_nonce},
+        approval_gate_input=approval_gate_input,
+        now=now,
+    )
+    if native is not None:
+        grant = _grant_from_wire(native.get("grant"))
+        if grant is not None:
+            _mirror_native_grant(guard_home, grant, now)
+            return grant
+
     if not _enabled(_load_state(guard_home)):
         raise ApprovalGateError(
             "approval_gate_configuration_required",
@@ -733,6 +958,24 @@ def consume_extension_control_grant(
 ) -> None:
     """Atomically validate and consume one extension-control approval grant."""
 
+    native = _approval_gate_native(
+        "consume_extension_control_grant",
+        guard_home,
+        params={"action": action, "subject": subject, "session_nonce": session_nonce},
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+    if native is not None:
+        with _APPROVAL_GATE_LOCK:
+            _ACTIVE_GRANTS.pop(approval_gate_grant.grant_id, None)
+        return
+
+    with _APPROVAL_GATE_LOCK:
+        meta = _ACTIVE_GRANTS.get(approval_gate_grant.grant_id) if approval_gate_grant else None
+        if meta is not None and meta.get("origin") == "native":
+            _ACTIVE_GRANTS.pop(approval_gate_grant.grant_id, None)
+            raise ApprovalGateError("approval_gate_required", "Approval proof is required.")
+
     with _APPROVAL_GATE_LOCK:
         _validate_grant_locked(
             guard_home,
@@ -758,6 +1001,19 @@ def require_local_cli_trust(
     now: str | None = None,
 ) -> ApprovalGateGrant:
     """Issue a strict proof for one unlisted-CLI allow-list mutation."""
+
+    native = _approval_gate_native(
+        "require_local_cli_trust",
+        guard_home,
+        params={"action": action, "subject": subject, "session_nonce": session_nonce},
+        approval_gate_input=approval_gate_input,
+        now=now,
+    )
+    if native is not None:
+        grant = _grant_from_wire(native.get("grant"))
+        if grant is not None:
+            _mirror_native_grant(guard_home, grant, now)
+            return grant
 
     if not _enabled(_load_state(guard_home)):
         raise ApprovalGateError(
@@ -788,6 +1044,24 @@ def consume_local_cli_trust_grant(
     now: str | None = None,
 ) -> None:
     """Atomically validate and consume one unlisted-CLI allow-list grant."""
+
+    native = _approval_gate_native(
+        "consume_local_cli_trust_grant",
+        guard_home,
+        params={"action": action, "subject": subject, "session_nonce": session_nonce},
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+    if native is not None:
+        with _APPROVAL_GATE_LOCK:
+            _ACTIVE_GRANTS.pop(approval_gate_grant.grant_id, None)
+        return
+
+    with _APPROVAL_GATE_LOCK:
+        meta = _ACTIVE_GRANTS.get(approval_gate_grant.grant_id) if approval_gate_grant else None
+        if meta is not None and meta.get("origin") == "native":
+            _ACTIVE_GRANTS.pop(approval_gate_grant.grant_id, None)
+            raise ApprovalGateError("approval_gate_required", "Approval proof is required.")
 
     with _APPROVAL_GATE_LOCK:
         _validate_grant_locked(
@@ -829,6 +1103,26 @@ def validate_grant(
     session_nonce: str | None = None,
     now: str | None = None,
 ) -> None:
+    try:
+        native = _approval_gate_native(
+            "validate_grant",
+            guard_home,
+            params={"action": action, "scope": scope, "subject": subject, "session_nonce": session_nonce},
+            approval_gate_grant=approval_gate_grant,
+            strict=strict,
+            purpose=purpose,
+            now=now,
+        )
+    except ApprovalGateError as error:
+        # A resident that started after Python issued the proof has an empty
+        # table. That is not a rejection of a resident-issued grant. If the
+        # gate is still enabled, Python still holds those proofs and must
+        # validate them. A disabled gate is a real revocation.
+        if error.code != "approval_gate_required" or _load_state(guard_home).get("enabled") is not True:
+            raise
+        native = None
+    if native is not None:
+        return
     with _APPROVAL_GATE_LOCK:
         _validate_grant_locked(
             guard_home,
@@ -1137,8 +1431,11 @@ def _rotate_authentication_state(state: dict[str, object]) -> None:
 
 def _invalidate_active_grants(guard_home: Path) -> None:
     home = str(guard_home)
-    for grant_id in [grant_id for grant_id, metadata in _ACTIVE_GRANTS.items() if metadata.get("guard_home") == home]:
-        _ACTIVE_GRANTS.pop(grant_id, None)
+    with _APPROVAL_GATE_LOCK:
+        for grant_id in [
+            grant_id for grant_id, metadata in _ACTIVE_GRANTS.items() if metadata.get("guard_home") == home
+        ]:
+            _ACTIVE_GRANTS.pop(grant_id, None)
 
 
 def _raise_if_locked(state: dict[str, object], now_epoch: float) -> None:

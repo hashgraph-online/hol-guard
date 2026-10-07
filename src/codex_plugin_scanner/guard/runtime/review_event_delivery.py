@@ -76,6 +76,7 @@ class StoredReviewEvent:
     continuation_result: dict[str, object] | None
     event_id: str
     event_type: str
+    native_replay: bool | None
     payload: dict[str, object]
     payload_hash: str
     payload_json: str
@@ -246,6 +247,14 @@ def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
             "payload_source_binding_mismatch",
             "Stored Review event OAuth source does not match its delivery binding.",
         )
+    native_replay = payload.get("nativeReplay")
+    if native_replay is not None and (
+        not isinstance(native_replay, bool) or event_type != "review.request.snapshot_requeued"
+    ):
+        raise StoredReviewEventError(
+            "payload_native_replay_invalid",
+            "Stored Review event native replay discriminator is invalid.",
+        )
     snapshot = _decode_snapshot(payload)
     continuation_result = _decode_continuation_result(payload, event_type=event_type)
     if snapshot["request_id"] != local_request_id:
@@ -267,6 +276,7 @@ def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
         continuation_result=continuation_result,
         event_id=event_id,
         event_type=event_type,
+        native_replay=native_replay if isinstance(native_replay, bool) else None,
         payload=payload,
         payload_hash=payload_hash,
         payload_json=payload_json,

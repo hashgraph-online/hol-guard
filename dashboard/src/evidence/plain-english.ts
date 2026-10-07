@@ -417,7 +417,7 @@ export function whyPaused(request: GuardApprovalRequest): string {
     case "hidden":
       return "This code is hidden or encoded. Guard stops this by default.";
     case "file-write":
-      return "This writes to a file on your computer. Guard stops this by default.";
+      return "Guard could not verify this file change as routine under the current policy. Review the target and changes before approving.";
     case "tool-call":
       if ((request.artifact_name ?? "").startsWith("chrome-devtools:")
         || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {

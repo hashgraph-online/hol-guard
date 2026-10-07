@@ -1,0 +1,13 @@
+[pr_reviewer]
+extra_instructions = """\
+Follow the repository review guidance in AGENTS.md.
+The 500-line/file-size maintainability rule applies to source code, not JSON.
+Never raise line-count, file-length, oversized-file, or split-the-file findings for *.json files, including declarative command-extension sources, fixtures, generated JSON, schemas, manifests, and contracts.
+Continue reviewing JSON for correctness, security, schema validity, trust-boundary mistakes, and unnecessary generated churn.
+"""
+
+[pr_code_suggestions]
+extra_instructions = """\
+Follow the repository review guidance in AGENTS.md.
+Do not suggest splitting or shrinking *.json files solely because of line count or file size.
+"""
