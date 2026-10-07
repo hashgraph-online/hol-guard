@@ -96,6 +96,30 @@ def test_provenance_update_and_import_fields_round_trip() -> None:
     assert document.rules[0].provenance.to_mapping() == provenance
 
 
+@pytest.mark.parametrize(
+    "fraction",
+    ["", ".1", ".12", ".123", ".1234", ".12345", ".123456", ".1234567", ".12345678", ".123456789"],
+)
+def test_utc_fractional_timestamps_preserve_expiry_and_provenance(fraction: str) -> None:
+    mapping = _basic_mapping()
+    spec = mapping["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    timestamp = f"2024-02-29T12:00:00{fraction}Z"
+    rule["lifetime"] = {"mode": "until", "expiresAt": timestamp}
+    provenance = rule["provenance"]
+    assert isinstance(provenance, dict)
+    provenance["createdAt"] = timestamp
+
+    document = parse_policy_document_yaml(_yaml(mapping))
+
+    assert document.rules[0].lifetime.expires_at == timestamp
+    assert document.rules[0].provenance.to_mapping()["createdAt"] == timestamp
+
+
 def test_yaml_11_ambiguous_scalars_remain_strings() -> None:
     document = parse_policy_document_yaml((FIXTURES / "valid" / "extensions-and-scalars.yaml").read_bytes())
 
