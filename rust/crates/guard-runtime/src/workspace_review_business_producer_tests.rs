@@ -3,6 +3,42 @@ use super::*;
 use guard_policy_snapshot::{integrity_mac, policy_digest};
 
 #[test]
+fn rollback_between_verification_and_claim_callback_spends_without_callback() {
+    let fixture = Fixture::new("business-claim-callback-rollback");
+    let prepared = prepare(input(b"private-worker-body", &[])).unwrap();
+    persist_prepared_review(&fixture.store, "business-test", &prepared, || true).unwrap();
+    let value = super::super::tests::owned_input_tests::owned_decision(&fixture);
+    let now = value["issued_at_ms"].as_u64().unwrap();
+    let bytes = canonical_json_bytes(&value).unwrap();
+    let mut times = [now, now + 1, now, now].into_iter();
+    let callbacks = std::cell::Cell::new(0);
+    let result =
+        super::super::super::workspace_review_decision::claim_owned_business_request_with_clock(
+            &fixture.store,
+            "business-test",
+            &bytes,
+            || times.next().ok_or_else(|| "test_clock_exhausted".into()),
+            |_, _| {
+                callbacks.set(callbacks.get() + 1);
+                Ok(())
+            },
+        );
+    assert_eq!(
+        result.err().unwrap(),
+        "native_workspace_review_clock_rollback"
+    );
+    assert_eq!(callbacks.get(), 0);
+    assert!(
+        super::super::super::workspace_review_decision::claim_owned_business_request(
+            &fixture.store,
+            "business-test",
+            &bytes
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn expiry_and_clock_rollback_during_journal_persistence_spend_without_release() {
     for rollback in [false, true] {
         let fixture = Fixture::new(if rollback {
@@ -23,7 +59,7 @@ fn expiry_and_clock_rollback_during_journal_persistence_spend_without_release() 
                 "business-test",
                 &bytes,
                 || times.next().ok_or_else(|| "test_clock_exhausted".into()),
-                |owned| {
+                |owned, _| {
                     journal::Journal::claimed_unlocked(
                         &fixture.store,
                         "business-test",

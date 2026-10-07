@@ -449,8 +449,15 @@ jobs:
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions
+        env:
+          RELEASE_REPAIR: ${{ steps.version.outputs.release_repair }}
         run: |
           uv run --no-sync twine check dist/*
+          if [[ "$RELEASE_REPAIR" == 'true' && ! -f scripts/ci/check_wheel_size.py ]]; then
+            echo "Legacy release source predates package-size budgets"
+          else
+            python scripts/ci/check_wheel_size.py --dist-dir dist
+          fi
           python3 scripts/verify_guard_wheel_entrypoints.py dist
       - name: Record immutable distribution hashes
         run: |
@@ -691,6 +698,7 @@ jobs:
           SOURCE_COMPILER: ${{ matrix.source_compiler }}
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
         run: |
           RULE_DIGEST=$("$RUNTIME" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
           python scripts/build_native_hol_guard_wheel.py \
@@ -705,6 +713,11 @@ jobs:
             --source-compiler "$SOURCE_COMPILER" \
             --implementation-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["implementation_digest"])')" \
             --base-program-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["base_program_digest"])')"
+          if [[ "$RELEASE_REPAIR" == 'true' && ! -f scripts/ci/check_wheel_size.py ]]; then
+            echo "Legacy release source predates package-size budgets"
+          else
+            python scripts/ci/check_wheel_size.py --dist-dir native-dist
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-guard-wheel-${{ matrix.platform_tag }}

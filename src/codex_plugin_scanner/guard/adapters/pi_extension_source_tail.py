@@ -15,11 +15,19 @@ def build_extension_source_tail(
     tool_approval_continuation_source: str,
 ) -> str:
     workspace_readiness_source = (
-        "    const workspaceReadiness = await ensureGuardWorkspaceReady(snapshot.cwd, false);\n"
+        "    const hookDeadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;\n"
+        "    const workspaceSetup = toolWorkspaceReadiness(snapshot.cwd, hookDeadlineAt);\n"
+        "    const setupGeneration = approvalContinuationGeneration;\n"
+        "    const workspaceReadiness = await workspaceSetup;\n"
         "    if (!workspaceReadiness.ready) {\n"
         "      const reason = readinessFailureReason(workspaceReadiness);\n"
         '      ctx.ui.notify(reason, "warning");\n'
         "      return { block: true, reason };\n"
+        "    }\n"
+        "    if (setupGeneration !== approvalContinuationGeneration ||\n"
+        "        !toolCallStillMatches(event, ctx, GUARD_CONFIG_PATH, snapshot) ||\n"
+        "        handlerAbortSignal(ctx)?.aborted) {\n"
+        '      return { block: true, reason: "HOL Guard blocked a tool call whose context changed during setup." };\n'
         "    }\n"
     )
     shared_source = build_source_tail_shared_v1(
@@ -28,6 +36,11 @@ def build_extension_source_tail(
         lifecycle_abort_event_source=lifecycle_abort_event_source,
         tool_approval_continuation_source=tool_approval_continuation_source,
         workspace_readiness_source=workspace_readiness_source,
+    )
+    shared_source = shared_source.replace(
+        "const response = await runGuard(snapshot.payload, snapshot.cwd);",
+        "const response = await runGuard(snapshot.payload, snapshot.cwd, { deadlineAt: hookDeadlineAt });",
+        1,
     )
     input_start = shared_source.index('  pi.on("input",')
     input_end = shared_source.index('  pi.on("tool_call",', input_start)

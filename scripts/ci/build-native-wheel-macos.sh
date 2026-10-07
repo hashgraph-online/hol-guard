@@ -45,3 +45,4 @@ python scripts/build_native_hol_guard_wheel.py \
   --source-compiler "$source_compiler" \
   --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
   --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
+python scripts/ci/check_wheel_size.py --dist-dir native-dist

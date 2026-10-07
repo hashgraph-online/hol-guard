@@ -65,7 +65,7 @@ def _detector():
 
 
 def contribution_ids() -> list[str]:
-    """Extension ids declared by in-tree contribution sources."""
+    """Derive trust inventory from canonical inputs, never published descriptors."""
     return sorted(_detector().contribution_ids(include_legacy=False))
 
 
