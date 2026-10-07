@@ -459,8 +459,7 @@ mod tests {
 
     const EXAMPLE_SOURCE: &[u8] =
         include_bytes!("../tests/fixtures/command-source-example.v1.json");
-    const TRUST_MAP: &[u8] =
-        include_bytes!("../../../../contracts/extensions/trust-class-map.v1.json");
+    const TRUST_MAP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/trust-class-map.v1.json"));
 
     #[test]
     fn source_catalog_between_program_and_source_limits_compiles() {

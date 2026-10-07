@@ -57,7 +57,7 @@ def test_generic_pretool_review_blocks_without_queue(tmp_path, monkeypatch, caps
     )
     response = json.loads(capsys.readouterr().out)
     if as_json:
-        assert result == 1
+        assert result == (0 if harness == "copilot" else 1)
         assert response["policy_action"] == "block"
     else:
         assert result == 0

@@ -207,7 +207,7 @@ fn action_messages(
         GuardAction::RequireReapproval => (
             GuardDecisionAction::Ask,
             "Fresh approval required",
-            "HOL Guard needs a fresh approval because this action changed.",
+            "HOL Guard needs a fresh approval before this action can run.",
             "Choose the smallest approval scope that matches your intent, then retry.",
         ),
         GuardAction::Block => (

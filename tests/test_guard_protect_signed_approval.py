@@ -20,6 +20,7 @@ def test_guard_protect_human_output_signs_loopback_link_without_persisting_token
     tmp_path,
     capsys,
     monkeypatch,
+    native_context_digest,
 ) -> None:
     import codex_plugin_scanner.guard.cli.commands as commands_module
     import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module

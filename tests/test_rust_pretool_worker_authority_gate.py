@@ -74,4 +74,3 @@ def test_missing_native_authority_link_fails_closed(
     assert call in source
     path.write_text(source.replace(call, replacement, 1), encoding="utf-8")
     assert expected in GATE["_worker_failures"](worker_checkout)
-

@@ -26,7 +26,7 @@ def test_cleanup_attempts_both_steps_and_keeps_failure_details_private(
 
     result = lifecycle.cleanup_case_resources(object(), object(), tmp_path / "guard-home", tmp_path)
 
-    assert calls == ["daemon", "native"]
+    assert calls == ["native", "daemon"]
     if failed_steps:
         assert result == {"cleanup_ok": False, "cleanup_error": "RuntimeError"}
         diagnostic = (tmp_path / "cleanup-error.txt").read_text()
@@ -59,7 +59,7 @@ def test_diagnostic_write_failure_preserves_cleanup_failure(
 
     result = lifecycle.cleanup_case_resources(object(), object(), tmp_path / "guard-home", tmp_path)
 
-    assert calls == ["daemon", "native"]
+    assert calls == ["native", "daemon"]
     assert result == {
         "cleanup_ok": False,
         "cleanup_error": "RuntimeError",

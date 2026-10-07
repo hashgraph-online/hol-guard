@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling<1.31"]
+requires = ["hatchling<1.31", "jsonschema>=4.26.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.25.2"
+version = "3.29.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -159,7 +159,6 @@ path = "scripts/build_command_projection_hook.py"
 "contracts/guard-cloud-review/v2/command-result.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json"
 "contracts/guard-cloud-review/v2/fixtures.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
-"contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
 "contracts/extensions/contribution.v2.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v2.schema.json"
 "contributions/extensions" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions"

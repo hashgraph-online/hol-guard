@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,8 +63,20 @@ def build_request() -> dict:
         "schema": "guard.command-extension-build.v1",
         "sources": sources,
         "mcp_sources": [read_object(path) for path in mcp_paths],
-        "trust": read_object(ROOT / "contracts/extensions/trust-class-map.v1.json"),
+        "trust": _trust_request_payload(),
     }
+
+
+def _trust_request_payload() -> dict:
+    """Assemble the trust block from authored per-extension bindings.
+
+    The aggregate is an ignored package projection. Only authored bindings
+    determine the compiled program, catalog, and packaged trust classifications.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
+    return trust_map_from_bindings(ROOT / "contracts" / "extensions" / "trust")
 
 
 def _implementation_files(directory: Path) -> set[Path]:
@@ -133,7 +146,8 @@ def main() -> int:
             "compile",
         ]
     )
-    request = canonical_bytes(build_request())
+    request_value = build_request()
+    request = canonical_bytes(request_value)
     if len(request) > 8 * 1024 * 1024:
         raise ValueError("source build envelope exceeds native input budget")
     completed = subprocess.run(command, input=request, stdout=subprocess.PIPE, cwd=ROOT, timeout=600, check=False)
@@ -147,6 +161,9 @@ def main() -> int:
     built = subprocess.run([*command[:-1], "export-built"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
     if built.returncode or json.loads(built.stdout) != compiled:
         raise ValueError("source compiler does not embed the current authored sources; rebuild it before staging")
+    trust = subprocess.run([*command[:-1], "export-trust"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
+    if trust.returncode or json.loads(trust.stdout) != request_value["trust"]:
+        raise ValueError("source compiler trust map does not match the authored bindings; rebuild it before staging")
     program = compiled["program"]
     catalog = {
         "schema": "guard.command-catalog.v1",
@@ -157,6 +174,7 @@ def main() -> int:
         "implementation_digest": compiled["implementation_digest"],
     }
     outputs = {
+        ROOT / "contracts/extensions/trust-class-map.v1.json": canonical_bytes(request_value["trust"]),
         ARTIFACT: canonical_bytes(program),
         ROOT / "contracts/extensions/command-catalog.v1.json": canonical_bytes(catalog),
     }

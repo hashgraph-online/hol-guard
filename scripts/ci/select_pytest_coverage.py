@@ -272,8 +272,12 @@ def main(argv: list[str] | None = None) -> int:
         attempt = _positive_integer_env("GITHUB_RUN_ATTEMPT")
         # The barrier still requires all latest results to succeed. The selector
         # below then resolves inherited results to their actual source executions.
+        # The change planner only runs on pull_request; on push a skipped planner
+        # is expected and must not block coverage selection.
         barrier.wait_for_shards(
-            repository, run_id, attempt, poll_seconds=1, execution_validator=lambda _job, _label: None
+            repository, run_id, attempt, poll_seconds=1,
+            execution_validator=lambda _job, _label: None,
+            plan_skippable=os.environ.get("GITHUB_EVENT_NAME", "") != "pull_request",
         )
         selection = select_with_retries(repository, run_id, attempt)
         args.output.write_text(json.dumps(selection, sort_keys=True) + "\n")

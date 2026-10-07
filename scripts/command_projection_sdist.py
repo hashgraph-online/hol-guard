@@ -6,8 +6,24 @@ import hashlib
 import importlib.util
 from pathlib import Path
 
-NAMES = ("command-catalog.v1.json", "native-command-program.v1.json")
+NAMES = ("command-catalog.v1.json", "native-command-program.v1.json", "trust-class-map.v1.json")
 MANIFEST = "contracts/extensions/command-projection-build.v1.json"
+
+
+def _binding_fingerprint(root: Path) -> str:
+    """Fingerprint authored trust bindings byte-for-byte so any edit invalidates the archive."""
+    directory = root / "contracts/extensions/trust"
+    digest = hashlib.sha256(b"hol-guard.extension-trust-bindings.v1\0")
+    for path in sorted(directory.glob("*.v1.json")):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("invalid trust binding input")
+        name = path.name.encode()
+        content = path.read_bytes()
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
 
 
 def _generator(root: Path):
@@ -21,13 +37,17 @@ def _generator(root: Path):
 
 
 def projection_manifest(root: Path) -> dict:
-    """Fingerprint canonical sources, native implementation, and both outputs."""
+    """Fingerprint canonical sources, native implementation, and packaged outputs."""
     generator = _generator(root)
     for name in NAMES:
         generator.read_object(root / "contracts/extensions" / name)
+    request = generator.build_request()
+    if generator.read_object(root / "contracts/extensions/trust-class-map.v1.json") != request["trust"]:
+        raise ValueError("source-distribution trust map does not match authored bindings")
     return {
         "schema": "guard.command-projection-build.v1",
-        "request_sha256": hashlib.sha256(generator.canonical_bytes(generator.build_request())).hexdigest(),
+        "request_sha256": hashlib.sha256(generator.canonical_bytes(request)).hexdigest(),
+        "bindings_sha256": _binding_fingerprint(root),
         "implementation_digest": generator.implementation_digest(),
         "artifacts": {
             name: hashlib.sha256((root / "contracts/extensions" / name).read_bytes()).hexdigest() for name in NAMES

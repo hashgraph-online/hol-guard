@@ -70,7 +70,7 @@ def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None
     merged = duration_manifest.merge_duration_reports(reports)
     assert len(merged) == 128
     assert set(merged.values()) == {3.0}
-    assert 'if [ "${#reports[@]}" -ne 128 ]; then' in next(
+    assert 'if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ]; then' in next(
         step["run"] for step in candidate if step.get("name") == "Build duration manifest candidate"
     )
 
@@ -86,7 +86,16 @@ def test_partial_rerun_retains_previous_manifest_without_publishing(tmp_path: Pa
     _write_report(artifact / "pytest-durations.json", {"tests/test_fixture.py::test_7": 2.0})
     output = tmp_path / "step-output"
     result = subprocess.run(
-        ["bash", "-c", build["run"]],
+        [
+            "bash",
+            "-c",
+            build["run"]
+            .replace(
+                "scripts/ci/build_pytest_duration_manifest.py",
+                str(ROOT / "scripts" / "ci" / "build_pytest_duration_manifest.py"),
+            )
+            .replace("${{ needs.coverage-plan.outputs.shard-count }}", "128"),
+        ],
         cwd=tmp_path,
         env={"GITHUB_OUTPUT": str(output)},
         text=True,

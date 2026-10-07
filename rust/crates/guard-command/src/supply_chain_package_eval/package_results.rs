@@ -78,7 +78,24 @@ pub(super) fn heuristic_package_result(
     reason.insert("code".to_string(), Value::String(code.to_string()));
     reason.insert("message".to_string(), Value::String(message.to_string()));
     reason.insert("severity".to_string(), Value::String(severity.to_string()));
-    package_target_result(target, decision, vec![reason], None)
+    reason.insert(
+        "source".to_string(),
+        Value::String("guard-local".to_string()),
+    );
+    let mut r = package_target_result(target, decision, vec![reason], None);
+    for (key, src) in [
+        ("sourceIdentity", "source_identity"),
+        ("sourceRepository", "source_repository"),
+        ("sourceRevisionKind", "source_revision_kind"),
+    ] {
+        r.insert(
+            key.to_string(),
+            optional_string(target.get(src))
+                .map(Value::String)
+                .unwrap_or(Value::Null),
+        );
+    }
+    r
 }
 
 #[allow(dead_code)]

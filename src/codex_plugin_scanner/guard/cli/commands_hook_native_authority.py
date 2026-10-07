@@ -20,6 +20,7 @@ from ..native_mode import (
 )
 from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
 from ..store import GuardStore
+from .commands_hook_native_availability import _native_unavailable_exit_code
 from .commands_support_interaction import _emit
 
 _NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS = 0.25
@@ -133,21 +134,18 @@ def route_native_hook(
             if writer is not None:
                 with suppress(Exception):
                     writer.stop(timeout_seconds=_NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS)
-        _emit(
-            "hook",
-            availability_harness_response(
-                payload,
-                harness=args.harness,
-                event_name=runtime_hook_event_name(payload),
-                reason="HOL Guard could not complete the native hook decision safely.",
-                reason_code=reason_code,
-                workspace=runtime_workspace,
-                home_dir=context.home_dir,
-                guard_home=context.guard_home,
-            ),
-            True,
+        response = availability_harness_response(
+            payload,
+            harness=args.harness,
+            event_name=runtime_hook_event_name(payload),
+            reason="HOL Guard could not complete the native hook decision safely.",
+            reason_code=reason_code,
+            workspace=runtime_workspace,
+            home_dir=context.home_dir,
+            guard_home=context.guard_home,
         )
-        return 0
+        _emit("hook", response, True)
+        return _native_unavailable_exit_code(args, response, runtime_hook_event_name(payload))
     from .commands_hook_native_pipeline import run_native_hook_pipeline
 
     def run_pipeline(worker: HookWorker) -> int:
@@ -193,21 +191,20 @@ def route_native_hook(
         # Availability responses are already harness wire documents. A hook
         # caller need not pass --json to receive a parseable deny response.
         _emit("hook", native_result, True)
-        return 0
+        # rc mirrors the emitted verdict through the harness's adapter contract
+        # (per-harness deny code, recording-only allows keep 0).
+        return _native_unavailable_exit_code(args, native_result, runtime_hook_event_name(payload))
     except Exception:
-        _emit(
-            "hook",
-            availability_harness_response(
-                payload,
-                harness=args.harness,
-                event_name=runtime_hook_event_name(payload),
-                reason_code="native_hook_worker_exception",
-                reason="HOL Guard could not complete the native hook decision safely.",
-                workspace=runtime_workspace,
-                home_dir=context.home_dir,
-                guard_home=context.guard_home,
-                recording_only=recording_only_from_acked_snapshot(store),
-            ),
-            True,
+        response = availability_harness_response(
+            payload,
+            harness=args.harness,
+            event_name=runtime_hook_event_name(payload),
+            reason_code="native_hook_worker_exception",
+            reason="HOL Guard could not complete the native hook decision safely.",
+            workspace=runtime_workspace,
+            home_dir=context.home_dir,
+            guard_home=context.guard_home,
+            recording_only=recording_only_from_acked_snapshot(store),
         )
-        return 0
+        _emit("hook", response, True)
+        return _native_unavailable_exit_code(args, response, runtime_hook_event_name(payload))
