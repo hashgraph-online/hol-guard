@@ -255,7 +255,10 @@ function permission(value, extensionId, label) {
 }
 function mcpLaunch(value, label) {
   const item = record$1(value, label);
-  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "remote-http"]);
+  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "direct-command", "remote-http"]);
+  if (kind === "direct-command") {
+    return { kind, command: string$1(item.command, `${label}.command`) };
+  }
   if (kind === "package-launcher") {
     return {
       kind,

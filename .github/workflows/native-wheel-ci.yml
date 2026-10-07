@@ -3,6 +3,28 @@ name: Native wheel CI
 on:
   pull_request:
     branches: [main, release/3.2]
+    paths:
+      - "rust/**"
+      - "ci/native_runtime/**"
+      - "contracts/extensions/**"
+      - "contributions/**"
+      - "src/codex_plugin_scanner/guard/*native*.py"
+      - "src/codex_plugin_scanner/guard/runtime_transition*.py"
+      - "src/codex_plugin_scanner/guard/adapters/*native*.py"
+      - "scripts/ci/**"
+      - "scripts/build_command_projection_hook.py"
+      - "scripts/build_native_command_program.py"
+      - "scripts/build_native_hol_guard_wheel.py"
+      - "scripts/bench_guard_native_installed_slo.py"
+      - "scripts/stress_guard_daemon.py"
+      - "scripts/sync_repo_version.py"
+      - ".github/workflows/native-wheel-ci.yml"
+      - ".github/actions/native-regression/**"
+      - ".github/actions/setup-rust/**"
+      - ".github/actions/stage-command-projections/**"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "uv.lock"
   push:
     branches: [main]
   schedule:

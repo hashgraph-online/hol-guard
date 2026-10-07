@@ -329,7 +329,6 @@ def test_frozen_codex_install_and_runtime_trust_validate_without_source_files(
         launcher.chmod(0o700)
         monkeypatch.setattr(sys, "executable", str(executable))
         monkeypatch.setattr(sys, "frozen", True, raising=False)
-        monkeypatch.setattr(sys, "platform", "darwin")
     context = _context(tmp_path)
     codex_config = context.home_dir / ".codex" / "config.toml"
     codex_config.parent.mkdir(parents=True)
