@@ -111,6 +111,9 @@ def main() -> int:
             raise ValueError("live provider URL, model and provider identity are required; there is no mock fallback")
         if not 30 <= args.timeout <= 1800 or not 1 <= args.max_inference_rounds <= 128:
             raise ValueError("host timeout or inference-round budget is outside supported bounds")
+        # argparse does not apply choices to an environment-supplied default.
+        if args.reasoning_effort is not None and args.reasoning_effort not in REASONING_EFFORTS:
+            raise ValueError("unsupported reasoning effort; use " + ", ".join(REASONING_EFFORTS))
         if args.profile == "core" and args.contained_test_project is not None:
             raise ValueError("--contained-test-project requires --profile contained-bun-vitest")
         if args.profile == "contained-bun-vitest" and args.contained_test_project is None:

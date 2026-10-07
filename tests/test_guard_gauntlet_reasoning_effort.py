@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from ci.gauntlet.agent_configuration import write_agent_configuration
 from ci.gauntlet.provider import InferenceRelay
-from ci.gauntlet.runner import _agent_configuration
 
 
 def _relay_round(reasoning_effort, agent_payload):
@@ -96,6 +96,33 @@ def test_agent_output_budget_leaves_room_for_reasoning(tmp_path: Path, effort, m
         identity="unit-transport-only",
         reasoning_effort=effort,
     )
-    _agent_configuration(tmp_path / "agent", relay)
+    write_agent_configuration(tmp_path / "agent", relay)
     configuration = json.loads((tmp_path / "agent" / "models.yml").read_text())
     assert configuration["providers"]["gauntlet-live"]["models"][0]["maxTokens"] == max_tokens
+
+
+def test_invalid_environment_effort_fails_before_any_case(tmp_path: Path, monkeypatch, capsys):
+    from ci.gauntlet import __main__ as cli
+
+    monkeypatch.setenv("GUARD_GAUNTLET_REASONING_EFFORT", "max")
+    monkeypatch.setenv("GUARD_GAUNTLET_API_KEY", "test-only-key")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "gauntlet",
+            "run",
+            "--expected-source-sha",
+            "0" * 40,
+            "--output",
+            str(tmp_path / "evidence"),
+            "--provider-url",
+            "https://provider.invalid/v1",
+            "--model",
+            "unit-transport-only",
+            "--provider-identity",
+            "unit-transport-only",
+        ],
+    )
+    assert cli.main() != 0
+    assert "unsupported reasoning effort" in capsys.readouterr().err
+    assert not (tmp_path / "evidence").exists()

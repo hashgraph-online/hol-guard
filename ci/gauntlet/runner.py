@@ -21,6 +21,7 @@ from typing import Any
 
 from ci.native_runtime import probe_installed_pi_output as probe
 
+from .agent_configuration import write_agent_configuration
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
 from .evidence import TRANSCRIPT_LIMIT, assess_case, public_events, read_events, sha256_bytes
@@ -118,33 +119,6 @@ def run_process(
             finally:
                 signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
     return process.returncode, timed_out
-
-
-def _agent_configuration(path: Path, relay: InferenceRelay) -> None:
-    """Point the actual OMP provider at the transparent live relay."""
-    path.mkdir(mode=0o700)
-    configuration = {
-        "providers": {
-            "gauntlet-live": {
-                "baseUrl": relay.base_url,
-                "api": "openai-completions",
-                "auth": "none",
-                "models": [
-                    {
-                        "id": "agent",
-                        "name": "Guard Gauntlet live inference",
-                        "reasoning": False,
-                        "input": ["text"],
-                        "contextWindow": 128000,
-                        # Pinned reasoning spends output tokens before the tool call.
-                        "maxTokens": 8192 if relay.reasoning_effort is None else 32768,
-                    }
-                ],
-            }
-        }
-    }
-    # JSON is a YAML subset; this avoids another serialization dependency.
-    (path / "models.yml").write_text(json.dumps(configuration, indent=2), encoding="utf-8")
 
 
 def _configure_ollama_permission_denial(daemon: Any, guard_home: Path) -> dict[str, Any]:
@@ -322,7 +296,7 @@ def run_case(
                 prompt += "\n\n" + "\n".join(rendered.commands)
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             agent_dir = private / "agent"
-            _agent_configuration(agent_dir, relay)
+            write_agent_configuration(agent_dir, relay)
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
                     raise ValueError("Watch fixture contract changed")

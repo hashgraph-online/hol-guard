@@ -20,6 +20,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_workflow_matrix import _workflow_prompt, contained_vitest_cases
 
+from .agent_configuration import write_agent_configuration
 from .catalog import catalog_digest
 from .cleanup import cleanup_case_resources
 from .contained_judge import (
@@ -36,7 +37,6 @@ from .provider import InferenceRelay, LoopbackCollector
 from .runner import (
     HERE,
     REPO,
-    _agent_configuration,
     clean_environment,
     run_process,
 )
@@ -211,7 +211,7 @@ def run_contained_profile(
     try:
         with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
             agent_dir = private / "agent"
-            _agent_configuration(agent_dir, relay)
+            write_agent_configuration(agent_dir, relay)
             daemon = probe._start_installed_daemon(
                 guard_home=guard_home,
                 home=fixture.home,
