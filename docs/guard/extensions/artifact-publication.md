@@ -69,3 +69,10 @@ must migrate to snapshots to receive subsequent generated directory updates.
 No contributor refactor, automatic branch rewrite, or mandatory rebase is part
 of this transition. Maintainers own compatibility cleanup after readers and
 existing PRs have migrated.
+
+## Compatibility trust map
+
+The tracked aggregate remains a legacy compatibility copy while open PRs still
+modify it. Rust builds read reviewed bindings, and package builds derive a new
+map from those bindings. Unbound canonical contributions default to external.
+Edits to the compatibility copy cannot grant trust or enable an extension.

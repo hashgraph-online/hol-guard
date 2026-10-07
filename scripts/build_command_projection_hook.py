@@ -40,7 +40,6 @@ class CommandProjectionBuildHook(BuildHookInterface):
             archive.verify_projection_manifest(root)
         else:
             descriptors = root / "contracts/extensions/build-descriptors"
-            trust_map = root / "contracts/extensions/build-trust-class-map.v1.json"
             command = [
                 sys.executable,
                 str(root / "scripts/build_native_command_program.py"),
@@ -72,7 +71,7 @@ class CommandProjectionBuildHook(BuildHookInterface):
         )
         # Register only after generation so editable dependency setup works
         # with absent outputs. Ignored files still travel in both artifacts.
-        for name in ("command-catalog.v1.json", "native-command-program.v1.json"):
+        for name in archive.NAMES:
             relative = f"contracts/extensions/{name}"
             destination = (
                 relative

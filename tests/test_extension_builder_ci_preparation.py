@@ -157,6 +157,26 @@ def test_reviewed_binding_changes_regenerate_a_stale_legacy_map(checkout):
     assert "command.existing" not in classes["external"]
 
 
+def test_absent_aggregate_is_generated_from_bindings(checkout):
+    root, _bindings_dir = checkout
+    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    trust.unlink()
+    assert refresh.main(["--trust-only"]) == 0
+    assert json.loads(trust.read_bytes()) == refresh._projected_aggregate()
+
+
+def test_refresh_uses_build_generator_bytes_without_rewrite_churn(checkout):
+    """A build-produced aggregate remains current across trust-only refreshes."""
+    from scripts.build_native_command_program import canonical_bytes
+
+    root, _bindings_dir = checkout
+    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    expected = canonical_bytes(refresh._projected_aggregate())
+    trust.write_bytes(expected)
+    assert refresh.sync_trust_map() is False
+    assert trust.read_bytes() == expected
+
+
 def test_stale_contributor_branch_prepares_on_merge_without_rebase(checkout):
     root, bindings_dir = checkout
 

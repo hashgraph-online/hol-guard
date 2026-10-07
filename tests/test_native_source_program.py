@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 import runpy
@@ -11,6 +12,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"
@@ -70,6 +73,45 @@ def build() -> dict:
 @pytest.fixture(scope="module")
 def compiled(compiler: Path, build: dict) -> dict:
     return compile_request(compiler, build)
+
+
+def test_extension_directory_renders_all_canonical_sources(
+    build: dict, compiled: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pending sources must render even when the committed directory awaits regeneration."""
+    program = compiled["program"]
+    catalog = {
+        "schema": "guard.command-catalog.v1",
+        "catalog": compiled["catalog"],
+        "catalog_digest": program["catalog_digest"],
+        "program_digest": program["program_digest"],
+        "source_digest": compiled["source_digest"],
+        "implementation_digest": compiled["implementation_digest"],
+    }
+    registry = load_generated_command_catalog_bytes(canonical(catalog), canonical(program))
+    spec = importlib.util.spec_from_file_location(
+        "render_pending_extension_directory", ROOT / "scripts/render_command_extension_directory.py"
+    )
+    assert spec is not None and spec.loader is not None
+    renderer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(renderer)
+    monkeypatch.setattr(renderer, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", registry)
+    current = (ROOT / "docs/guard/extensions/README.md").read_text(encoding="utf-8")
+    rendered = renderer.render_document(current)
+    assert renderer.render_document(rendered) == rendered
+    # Canonical trust classes are required schema fields; missing metadata must fail.
+    for source in build["sources"]:
+        extension = source["extension"]
+        identity = extension["extension_id"]
+        description = " ".join(extension["description"].split()).replace("|", "\\|")
+        assert rendered.count(f"`{identity}`") == 1
+        assert f"| `{identity}` | {description} | {len(extension['rules'])} |" in rendered
+        if identity in build["trust"]["classes"]["external"]:
+            assert f"| `{identity}` | {description} | {len(extension['rules'])} | External opt-in |" in rendered
+    # Exactly one marker pair is part of the directory contract.
+    assert rendered.count(renderer.START_MARKER) == rendered.count(renderer.END_MARKER) == 1
+    assert rendered.split(renderer.START_MARKER, 1)[0] == current.split(renderer.START_MARKER, 1)[0]
+    assert rendered.split(renderer.END_MARKER, 1)[1] == current.split(renderer.END_MARKER, 1)[1]
 
 
 @pytest.fixture
