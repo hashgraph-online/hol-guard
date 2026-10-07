@@ -8,8 +8,7 @@ WORKSPACE_READINESS_CACHE_SOURCE = r"""  let workspaceReadiness = null;
       if (workspaceReadiness.daemonStateId === null && !workspaceReadiness.settled) {
         return workspaceReadiness.result;
       }
-      if (workspaceReadiness.daemonStateId !== null &&
-          currentConnection?.stateId === workspaceReadiness.daemonStateId &&
+      if ((currentConnection?.stateId ?? null) === workspaceReadiness.daemonStateId &&
           (!workspaceReadiness.settled || workspaceReadiness.ready || !allowSetup ||
             (!retryFailed && Date.now() < workspaceReadiness.retryAfter))) {
         return workspaceReadiness.result;
@@ -17,8 +16,11 @@ WORKSPACE_READINESS_CACHE_SOURCE = r"""  let workspaceReadiness = null;
       if (!allowSetup) {
         return Promise.resolve({ ready: false, reasonCode: "daemon_restarted_requires_session_setup" });
       }
-      // Old pending approvals must not resume under a replacement daemon.
-      invalidateApprovalContinuations();
+      if (workspaceReadiness.daemonStateId !== null &&
+          currentConnection?.stateId !== workspaceReadiness.daemonStateId) {
+        // Old pending approvals must not resume under a replacement daemon.
+        invalidateApprovalContinuations();
+      }
       workspaceReadiness = null;
     }
     if (!allowSetup) {

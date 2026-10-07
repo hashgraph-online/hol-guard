@@ -11,7 +11,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 
 
-@pytest.mark.parametrize("mode", ["ready", "unready", "replaced", "cancelled", "mutated"])
+@pytest.mark.parametrize("mode", ["ready", "unready", "replaced", "cancelled", "mutated", "same-unready", "missing"])
 def test_tool_call_reprepares_replaced_daemon_without_replaying_authority(tmp_path: Path, mode: str) -> None:
     source = managed_extension_source(
         guard_home=tmp_path / "guard-home",
@@ -47,7 +47,8 @@ async function daemonWorkspaceReadiness() {
   if (mode === 'replaced') connection = {stateId: 'replacement-' + calls};
   if (mode === 'cancelled') invalidateApprovalContinuations();
   if (mode === 'mutated') event.arguments += 'changed';
-  return {ready: mode !== 'unready', reasonCode: 'native_policy_not_ready', daemonStateId: stateId};
+  return {ready: !['unready', 'same-unready', 'missing'].includes(mode),
+    reasonCode: 'native_policy_not_ready', daemonStateId: stateId};
 }
 """
         + cache
@@ -64,8 +65,16 @@ connection = {stateId: 'b'};
 event = {arguments: 'byte-exact original'};
 const ctx = {cwd: '/fixture', ui: {notify() {}}};
 const first = await callbacks.tool_call(event, ctx);
-const second = ['ready', 'unready', 'replaced'].includes(mode)
+if (mode === 'same-unready' || mode === 'missing') {
+  connection = {stateId: mode === 'missing' ? null : 'b'};
+  await prepareGuardWorkspaceForTurn('/fixture');
+  invalidations = 0;
+}
+const second = ['ready', 'unready', 'replaced', 'same-unready', 'missing'].includes(mode)
   ? await callbacks.tool_call(event, ctx) : first;
+if (mode === 'same-unready' || mode === 'missing') {
+  await ensureGuardWorkspaceReady('/fixture', true, true);
+}
 console.log(JSON.stringify({first, second, calls, invalidations, reviews}));
 """
     )
@@ -82,4 +91,6 @@ console.log(JSON.stringify({first, second, calls, invalidations, reviews}));
         assert output["reviews"] == 0
         assert output["first"]["block"] is True
         assert output["second"]["block"] is True
-        assert output["calls"] <= 3
+        assert output["calls"] <= (4 if mode in {"same-unready", "missing"} else 3)
+    if mode in {"same-unready", "missing"}:
+        assert output["invalidations"] == 0
