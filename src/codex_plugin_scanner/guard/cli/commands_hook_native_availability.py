@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from ..adapters.base import HarnessContext
 from ..daemon.hook_availability_policy import availability_harness_response
-from .commands_support_interaction import _emit
+from .commands_support_interaction import _emit_hook_response
 
 if TYPE_CHECKING:
     from ..daemon.hook_worker import HookWorker
@@ -118,7 +118,7 @@ def _emit_native_unavailable(
         guard_home=context.guard_home,
         workspace=workspace,
     )
-    _emit("hook", response, True)
+    _emit_hook_response(args, response)
     # rc mirrors the emitted verdict through the harness's own adapter contract:
     # unavailable authority cannot permit a protected action, but recording-only
     # allow responses keep rc=0 so an outage does not fabricate a block.
