@@ -39,21 +39,21 @@ def _generator(root: Path):
 def projection_manifest(root: Path, *, descriptors: Path | None = None, trust_map: Path | None = None) -> dict:
     """Fingerprint canonical sources, native implementation, and packaged outputs."""
     generator = _generator(root)
+    trust_map = trust_map or root / "contracts/extensions/trust-class-map.v1.json"
+    paths = {
+        name: trust_map if name == "trust-class-map.v1.json" else root / "contracts/extensions" / name for name in NAMES
+    }
     for name in NAMES:
-        generator.read_object(root / "contracts/extensions" / name)
+        generator.read_object(paths[name])
     request = generator.build_request()
-    if generator.read_object(root / "contracts/extensions/trust-class-map.v1.json") != generator.packaged_trust_map(
-        request
-    ):
+    if generator.read_object(trust_map) != generator.packaged_trust_map(request):
         raise ValueError("source-distribution trust map does not match authored bindings")
     result = {
         "schema": "guard.command-projection-build.v1",
         "request_sha256": hashlib.sha256(generator.canonical_bytes(request)).hexdigest(),
         "bindings_sha256": _binding_fingerprint(root),
         "implementation_digest": generator.implementation_digest(),
-        "artifacts": {
-            name: hashlib.sha256((root / "contracts/extensions" / name).read_bytes()).hexdigest() for name in NAMES
-        },
+        "artifacts": {name: hashlib.sha256(paths[name].read_bytes()).hexdigest() for name in NAMES},
     }
     if descriptors is not None:
         if descriptors.is_symlink():

@@ -114,6 +114,10 @@ def test_generation_and_staging_use_attested_compiler_fixture(tmp_path: Path, mo
     staged_trust = staged_root / "extensions/trust-class-map.v1.json"
     assert json.loads(staged_trust.read_bytes()) == trust
     assert staged_trust.read_bytes() == (source_root / "contracts/extensions/trust-class-map.v1.json").read_bytes()
+    for name in ("native-command-program.v1.json", "command-catalog.v1.json", "trust-class-map.v1.json"):
+        assert (source_root / "src/codex_plugin_scanner/guard/contracts/data/extensions" / name).read_bytes() == (
+            source_root / "contracts/extensions" / name
+        ).read_bytes()
     assert (staged_root / "extensions/contributions/command.blitcp.json").is_file()
 
 

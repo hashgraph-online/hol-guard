@@ -187,14 +187,23 @@ def main() -> int:
         "source_digest": compiled["source_digest"],
         "implementation_digest": compiled["implementation_digest"],
     }
+    trust_path = (
+        ROOT
+        / "contracts/extensions"
+        / ("build-trust-class-map.v1.json" if args.descriptor_dir else "trust-class-map.v1.json")
+    )
     outputs = {
-        ROOT / "contracts/extensions/trust-class-map.v1.json": canonical_bytes(packaged_trust_map(request_value)),
+        trust_path: canonical_bytes(packaged_trust_map(request_value)),
         ARTIFACT: canonical_bytes(program),
         ROOT / "contracts/extensions/command-catalog.v1.json": canonical_bytes(catalog),
     }
     package_directory = ROOT / "src/codex_plugin_scanner/guard/contracts/data/extensions"
     if any(parent.is_symlink() for parent in (package_directory, *package_directory.parents) if parent != ROOT):
         raise ValueError("package resource directory cannot traverse a symlink")
+    outputs.update(
+        {package_directory / path.name: content for path, content in tuple(outputs.items()) if path != trust_path}
+    )
+    outputs[package_directory / "trust-class-map.v1.json"] = outputs[trust_path]
     descriptor_directory = args.descriptor_dir or ROOT / "contributions/extensions"
     if not descriptor_directory.is_absolute():
         descriptor_directory = ROOT / descriptor_directory

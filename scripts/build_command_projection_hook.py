@@ -40,6 +40,7 @@ class CommandProjectionBuildHook(BuildHookInterface):
             archive.verify_projection_manifest(root)
         else:
             descriptors = root / "contracts/extensions/build-descriptors"
+            trust_map = root / "contracts/extensions/build-trust-class-map.v1.json"
             command = [
                 sys.executable,
                 str(root / "scripts/build_native_command_program.py"),
@@ -64,11 +65,6 @@ class CommandProjectionBuildHook(BuildHookInterface):
             else "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
         )
         build_data["force_include"].pop("contracts/extensions/trust-class-map.v1.json", None)
-        build_data["force_include"][str(trust_map)] = (
-            "contracts/extensions/trust-class-map.v1.json"
-            if self.target_name == "sdist"
-            else "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
-        )
         # Register only after generation so editable dependency setup works
         # with absent outputs. Ignored files still travel in both artifacts.
         for name in archive.NAMES:
@@ -78,7 +74,8 @@ class CommandProjectionBuildHook(BuildHookInterface):
                 if self.target_name == "sdist"
                 else f"codex_plugin_scanner/guard/contracts/data/extensions/{name}"
             )
-            build_data["force_include"][str(root / relative)] = destination
+            source = trust_map if name == "trust-class-map.v1.json" else root / relative
+            build_data["force_include"][str(source)] = destination
         if self.target_name == "sdist":
             archive.write_projection_manifest(root, descriptors=descriptors, trust_map=trust_map)
             build_data["force_include"][str(root / archive.MANIFEST)] = archive.MANIFEST
