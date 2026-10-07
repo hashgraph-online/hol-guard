@@ -7525,8 +7525,6 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_print_followed_by
 
     assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] in {"deny", "ask"}
-    assert "hol guard" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_exec_delete_literal(

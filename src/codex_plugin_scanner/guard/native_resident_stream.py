@@ -8,15 +8,17 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import struct
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager, suppress
+from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 from queue import Empty, Full, Queue
-from typing import Protocol
+from typing import BinaryIO, Protocol
 
 from .codex_hook_launch_runtime import isolated_hook_environment
 from .native_mode import non_production_diagnostic_enabled
@@ -28,6 +30,19 @@ _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _STREAM_FRAME_HEADER_BYTES = 4
 _CLIENT_CLOSE_TIMEOUT_SECONDS = 0.5
+_MAX_DIAGNOSTIC_BYTES = 64 * 1024
+_NATIVE_DIAGNOSTIC_LINE = re.compile(
+    rb"native_resident_phase phase=("
+    rb"stream_lease|stream_dispatch|stream_response_write|"
+    rb"client_prepare|client_discovery|client_identity|client_startup_lock|"
+    rb"client_startup_wait|client_spawn|client_spawn_wait|"
+    rb"client_connect|client_authenticate|client_request_write|client_response_read|"
+    rb"resident_startup|resident_authenticate|resident_header_read|resident_payload_read|resident_dispatch_wait|"
+    rb"resident_evaluate|resident_response_write|context_digest|"
+    rb"context_runtime_executable_identity|context_runtime_launch_identity|"
+    rb"context_runtime_launch_identity_matches|executable_digest"
+    rb") status=(start|ok|error) elapsed_ms=[0-9]{1,20}"
+)
 
 
 class _TimedLock(Protocol):
@@ -95,6 +110,9 @@ class _PersistentNativeClient:
         self._responses: Queue[bytes | _StreamFailure] = Queue(maxsize=1)
         self._reader: threading.Thread | None = None
         self._writer: threading.Thread | None = None
+        self._diagnostic_output: BinaryIO | None = None
+        self._diagnostic_resources: ExitStack | None = None
+        self._diagnostic_tail = b""
         self._closing = False
         self._lock = threading.Lock()
         # Keep process teardown out of the response wait.  The process-state
@@ -112,6 +130,28 @@ class _PersistentNativeClient:
             with suppress(Exception):
                 if non_production_diagnostic_enabled():
                     logger.warning("native_client_timed_out phase=%s", phase)
+                    for line in self._read_diagnostic_tail().splitlines()[-64:]:
+                        if _NATIVE_DIAGNOSTIC_LINE.fullmatch(line):
+                            logger.warning("%s", line.decode("ascii"))
+
+    def _read_diagnostic_tail(self) -> bytes:
+        output = self._diagnostic_output
+        if output is not None:
+            with suppress(OSError, ValueError):
+                output.seek(0, os.SEEK_END)
+                output.seek(max(0, output.tell() - _MAX_DIAGNOSTIC_BYTES))
+                return output.read(_MAX_DIAGNOSTIC_BYTES)
+        return self._diagnostic_tail
+
+    def _close_diagnostic_output(self) -> None:
+        output = self._diagnostic_output
+        if output is not None:
+            self._diagnostic_tail = self._read_diagnostic_tail()
+        if self._diagnostic_resources is not None:
+            with suppress(OSError, ValueError):
+                self._diagnostic_resources.close()
+            self._diagnostic_resources = None
+        self._diagnostic_output = None
 
     def _start(self, *, deadline_monotonic: float | None = None) -> bool:
         if self._closing:
@@ -128,6 +168,12 @@ class _PersistentNativeClient:
         self._responses = responses
         if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
             return False
+        self._diagnostic_tail = b""
+        if non_production_diagnostic_enabled():
+            # Append mode keeps child writes independent of bounded tail reads.
+            with suppress(OSError), ExitStack() as resources:
+                self._diagnostic_output = resources.enter_context(tempfile.TemporaryFile(mode="a+b", buffering=0))
+                self._diagnostic_resources = resources.pop_all()
         try:
             process = subprocess.Popen(
                 (
@@ -140,11 +186,12 @@ class _PersistentNativeClient:
                 env=self._environment,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=self._diagnostic_output or subprocess.DEVNULL,
                 start_new_session=True,
             )
         except OSError:
             self._process = None
+            self._close_diagnostic_output()
             return False
         self._process = process
         self._reader = threading.Thread(
@@ -275,7 +322,7 @@ class _PersistentNativeClient:
                 return None
             if time.monotonic() >= deadline_monotonic:
                 self.close(deadline_monotonic=deadline_monotonic)
-                self._record_phase_failure("native_client_timed_out", "snapshot_start")
+                self._record_phase_failure("native_client_timed_out", "post_snapshot_deadline")
                 return None
             process, stdin, responses = snapshot
             if not self._request_is_current(process, responses, deadline_monotonic=deadline_monotonic):
@@ -405,6 +452,7 @@ class _PersistentNativeClient:
             if stream is not None:
                 with suppress(OSError, ValueError):
                     stream.close()
+        self._close_diagnostic_output()
         self._process = None
         self._reader = None
         self._writer = None

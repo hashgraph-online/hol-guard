@@ -82,7 +82,7 @@ pub(super) fn spawn_managed_for_owner(
             .arg(digest)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stderr(crate::resident_diagnostics::child_stderr());
         // The supervisor and serving child form one containment unit.  The
         // child inherits this group before it can run, closing the startup
         // timeout race that otherwise strands serve-managed at PID 1.

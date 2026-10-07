@@ -182,21 +182,30 @@ pub(crate) fn serve_managed(
     expected_digest: &str,
 ) -> Result<(), String> {
     MANAGED_SHUTDOWN_REQUESTED.store(false, Ordering::Release);
-    if generation == 0 || owner_process_id == 0 || runtime_digest()? != expected_digest {
-        return Err("native_resident_runtime_identity_mismatch".to_owned());
-    }
-    let owner_start_marker = process_start_marker(owner_process_id)?;
-    let scope = state_scope(state_base, expected_digest)?;
-    let _owner_lock = acquire_managed_owner_lock(state_base)?;
-    let policy_store = std::sync::Arc::new(
-        crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
-            state_base,
-            expected_digest,
-            generation,
-        )?,
-    );
-    let token = crate::read_resident_auth_token()?;
-    let owner_alive = combine_liveness(state_base, owner_process_id, owner_start_marker);
+    let (scope, _owner_lock, policy_store, token, owner_alive) =
+        crate::resident_diagnostics::observe(
+            crate::resident_diagnostics::Phase::ResidentStartup,
+            || -> Result<_, String> {
+                if generation == 0 || owner_process_id == 0 || runtime_digest()? != expected_digest
+                {
+                    return Err("native_resident_runtime_identity_mismatch".to_owned());
+                }
+                let owner_start_marker = process_start_marker(owner_process_id)?;
+                let scope = state_scope(state_base, expected_digest)?;
+                let owner_lock = acquire_managed_owner_lock(state_base)?;
+                let policy_store = std::sync::Arc::new(
+                    crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+                        state_base,
+                        expected_digest,
+                        generation,
+                    )?,
+                );
+                let token = crate::read_resident_auth_token()?;
+                let owner_alive =
+                    combine_liveness(state_base, owner_process_id, owner_start_marker);
+                Ok((scope, owner_lock, policy_store, token, owner_alive))
+            },
+        )?;
     if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
             (&scope, &_owner_lock),
@@ -265,7 +274,7 @@ pub(crate) fn supervise_managed_for_owner(
             .arg(expected_digest)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stderr(crate::resident_diagnostics::child_stderr());
         // Keep the serving child in the supervisor's group for joint containment.
         let mut child = child
             .spawn()
