@@ -12,9 +12,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[path = "workspace_review_owned_input_tests.rs"]
-mod owned_input_tests;
+pub(super) mod owned_input_tests;
 
-fn input(primary: &[u8], attachments: &[Vec<u8>]) -> Value {
+pub(super) fn input(primary: &[u8], attachments: &[Vec<u8>]) -> Value {
     let total = primary.len() + attachments.iter().map(Vec::len).sum::<usize>();
     json!({"schema":"guard.private-business-input.v1","version":1,
         "primary_base64":Base64::encode_string(primary),
@@ -45,21 +45,48 @@ fn receipt(snapshot: &PolicySnapshotV3) -> NativeHookDecisionReceiptV1 {
         "deadline_budget_ms":100})).unwrap()
 }
 
-fn write(root: &Path, path: &Path, value: &Value) {
+pub(super) fn write(root: &Path, path: &Path, value: &Value) {
     let mut file = crate::resident_state::private_file(path, false, root).unwrap();
     file.set_len(0).unwrap();
     file.write_all(&canonical_json_bytes(value).unwrap())
         .unwrap();
 }
 
-struct Fixture {
-    root: PathBuf,
-    store: super::super::PolicySnapshotStore,
-    snapshot: PolicySnapshotV3,
-    key: [u8; 32],
+pub(super) struct Fixture {
+    pub(super) root: PathBuf,
+    pub(super) store: super::super::PolicySnapshotStore,
+    pub(super) snapshot: PolicySnapshotV3,
+    pub(super) key: [u8; 32],
+    pub(super) source_document: Option<Value>,
 }
 impl Fixture {
-    fn new(label: &str) -> Self {
+    pub(super) fn new(label: &str) -> Self {
+        Self::with_effect(label, "review")
+    }
+
+    /// Installs no business source, so the store keeps an unarmed legacy policy.
+    pub(super) fn without_business_policy(label: &str) -> Self {
+        let root = super::super::tests::test_root(label);
+        let key = super::super::tests::install_test_key(&root, 29);
+        let store = super::super::PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+        let snapshot = super::super::tests::signed_snapshot(1, &key, &root);
+        assert!(snapshot.business_policy.is_none());
+        store
+            .push(&json!({"schema":"guard-policy-snapshot-push.v1","snapshot":snapshot}))
+            .unwrap();
+        for directory in [DIRECTORY, "workspace-review-requests"] {
+            crate::resident_state::ensure_private_directory(&root.join(directory), true).unwrap();
+        }
+        Self {
+            root,
+            store,
+            snapshot,
+            key,
+            source_document: None,
+        }
+    }
+
+    pub(super) fn with_effect(label: &str, effect: &str) -> Self {
         let root = super::super::tests::test_root(label);
         let key = super::super::tests::install_test_key(&root, 29);
         let store = super::super::PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
@@ -67,7 +94,7 @@ impl Fixture {
         let document = json!({"apiVersion":"guard.hashgraphonline.com/v1alpha1","kind":"GuardPolicy",
             "metadata":{"id":"policy.mail.review","name":"Review source fixture","revision":1},
             "spec":{"defaults":{"mode":"enforce","defaultAction":"block"},"rules":[{
-                "id":"mail.review","enabled":true,"effect":"review","match":{"business":{
+                "id":"mail.review","enabled":true,"effect":effect,"match":{"business":{
                     "schema":"guard.business-policy-match.v1","version":1,"services":["google_gmail"],
                     "operations":["mail_send"],"recipientDomains":["example.test"]}},
                 "lifetime":{"mode":"until","expiresAt":"2099-01-01T00:00:00Z"},
@@ -103,6 +130,7 @@ impl Fixture {
             store,
             snapshot,
             key,
+            source_document: Some(document),
         }
     }
     fn stage(&self, value: &Value) -> Value {

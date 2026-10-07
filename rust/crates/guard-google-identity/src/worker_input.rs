@@ -41,12 +41,7 @@ impl GoogleSendCredential {
         if !self.is_current() {
             return Err(GoogleWorkerInputError::Expired);
         }
-        if !self
-            .identity()
-            .sender
-            .as_ref()
-            .is_some_and(|sender| sender.matches(input.sender()))
-        {
+        if !self.sender_matches(input.sender()) {
             return Err(GoogleWorkerInputError::Sender);
         }
         let mut digest = Sha256::new();
@@ -69,6 +64,15 @@ impl GoogleSendCredential {
 }
 
 impl GoogleWorkerInput {
+    pub(crate) fn send_once(
+        self,
+        bytes: &[u8],
+    ) -> Result<crate::dispatch::RawSendAttempt, crate::dispatch::GoogleDispatchError> {
+        if bytes != self.input.wire_input().body_bytes() {
+            return Err(crate::dispatch::GoogleDispatchError::InputChanged);
+        }
+        self.credential.send_json_once(bytes)
+    }
     pub fn identity(&self) -> &GoogleIdentityEvidence {
         self.credential.identity()
     }

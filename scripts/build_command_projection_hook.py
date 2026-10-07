@@ -48,7 +48,7 @@ class CommandProjectionBuildHook(BuildHookInterface):
             subprocess.run([*command, "--check"], cwd=root, check=True)
         # Register only after generation so editable dependency setup works
         # with absent outputs. Ignored files still travel in both artifacts.
-        for name in ("command-catalog.v1.json", "native-command-program.v1.json"):
+        for name in archive.NAMES:
             relative = f"contracts/extensions/{name}"
             destination = (
                 relative

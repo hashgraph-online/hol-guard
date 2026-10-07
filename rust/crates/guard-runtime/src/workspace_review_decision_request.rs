@@ -36,6 +36,76 @@ pub(crate) fn claim_owned_business_request(
     ))
 }
 
+pub(crate) fn claim_owned_business_request_with<T>(
+    policy_store: &policy_store::PolicySnapshotStore,
+    request_id: &str,
+    decision: &[u8],
+    after_claim: impl FnOnce(
+        &guard_command::business_input::PreparedBusinessInputV1,
+    ) -> Result<T, String>,
+) -> Result<
+    (
+        VerifiedWorkspaceReviewDecision,
+        guard_command::business_input::PreparedBusinessInputV1,
+        T,
+    ),
+    String,
+> {
+    claim_owned_business_request_with_clock(policy_store, request_id, decision, now_ms, after_claim)
+}
+
+pub(crate) fn claim_owned_business_request_with_clock<T>(
+    policy_store: &policy_store::PolicySnapshotStore,
+    request_id: &str,
+    decision: &[u8],
+    clock: impl FnMut() -> Result<u64, String>,
+    after_claim: impl FnOnce(
+        &guard_command::business_input::PreparedBusinessInputV1,
+    ) -> Result<T, String>,
+) -> Result<
+    (
+        VerifiedWorkspaceReviewDecision,
+        guard_command::business_input::PreparedBusinessInputV1,
+        T,
+    ),
+    String,
+> {
+    let envelope = decode_canonical_decision(decision)?;
+    let clock = std::cell::RefCell::new(clock);
+    let (verified, input, after_claim) = claim_request_with_clock_and(
+        policy_store,
+        request_id,
+        decision,
+        true,
+        || clock.borrow_mut()(),
+        |input| {
+            let observed_time_ms = clock.borrow_mut()()?;
+            let result = after_claim(
+                input
+                    .as_ref()
+                    .ok_or_else(|| "native_workspace_review_business_input_missing".to_owned())?,
+            )?;
+            let release_time_ms = clock.borrow_mut()()?;
+            if release_time_ms < observed_time_ms {
+                return Err("native_workspace_review_clock_rollback".into());
+            }
+            if release_time_ms
+                >= envelope
+                    .expires_at_ms
+                    .min(policy_store.current_snapshot()?.expires_at_ms)
+            {
+                return Err("native_workspace_review_decision_expired".into());
+            }
+            Ok(result)
+        },
+    )?;
+    Ok((
+        verified,
+        input.ok_or_else(|| "native_workspace_review_business_input_missing".to_owned())?,
+        after_claim,
+    ))
+}
+
 fn claim_request(
     policy_store: &policy_store::PolicySnapshotStore,
     request_id: &str,
@@ -56,11 +126,39 @@ fn claim_request_with_clock(
     request_id: &str,
     decision: &[u8],
     owned_dispatch: bool,
-    mut clock: impl FnMut() -> Result<u64, String>,
+    clock: impl FnMut() -> Result<u64, String>,
 ) -> Result<
     (
         VerifiedWorkspaceReviewDecision,
         Option<guard_command::business_input::PreparedBusinessInputV1>,
+    ),
+    String,
+> {
+    claim_request_with_clock_and(
+        policy_store,
+        request_id,
+        decision,
+        owned_dispatch,
+        clock,
+        |_| Ok(()),
+    )
+    .map(|(verified, input, ())| (verified, input))
+}
+
+fn claim_request_with_clock_and<T>(
+    policy_store: &policy_store::PolicySnapshotStore,
+    request_id: &str,
+    decision: &[u8],
+    owned_dispatch: bool,
+    mut clock: impl FnMut() -> Result<u64, String>,
+    after_claim: impl FnOnce(
+        &Option<guard_command::business_input::PreparedBusinessInputV1>,
+    ) -> Result<T, String>,
+) -> Result<
+    (
+        VerifiedWorkspaceReviewDecision,
+        Option<guard_command::business_input::PreparedBusinessInputV1>,
+        T,
     ),
     String,
 > {
@@ -130,7 +228,8 @@ fn claim_request_with_clock(
             verify_and_claim_bytes_at(state_base, decision, &context, clock()?)?
         };
         verified.request_snapshot_digest = Some(request.request_snapshot_digest);
-        Ok((verified, request.business_input))
+        let after_claim = after_claim(&request.business_input)?;
+        Ok((verified, request.business_input, after_claim))
     })
 }
 

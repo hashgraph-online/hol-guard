@@ -4,7 +4,7 @@ use crate::worker_input::GoogleWorkerInputError;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use serde_json::json;
 
-fn credential(subject: &str) -> GoogleSendCredential {
+pub(crate) fn credential(subject: &str) -> GoogleSendCredential {
     let session = session();
     let state = session.state.to_string();
     let mut claims = claims(&session);
@@ -21,7 +21,7 @@ fn credential(subject: &str) -> GoogleSendCredential {
         .unwrap()
 }
 
-fn command(sender: &str, body: &str) -> String {
+pub(crate) fn command(sender: &str, body: &str) -> String {
     let mime = format!("From: {sender}\r\nTo: recipient@work.example\r\nSubject: Synthetic\r\nContent-Type: text/plain\r\n\r\n{body}");
     let raw = Base64UrlUnpadded::encode_string(mime.as_bytes());
     format!("gws gmail users messages send --params '{{\"userId\":\"me\"}}' --json '{{\"raw\":\"{raw}\"}}'")

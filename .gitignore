@@ -78,3 +78,5 @@ ci/pi-exact-continuation/node_modules/
 native-dist/
 source-build.json
 source-compiled.json
+contracts/extensions/trust-class-map.v1.json
+src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json

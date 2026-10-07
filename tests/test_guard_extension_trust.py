@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -320,12 +319,12 @@ def test_disabling_aws_still_blocks(tmp_path: Path) -> None:
 
 
 def test_frozen_trust_map_reads_meipass_package_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    source = Path(__file__).resolve().parents[1] / "contracts" / "extensions" / "trust-class-map.v1.json"
+    bindings = Path(__file__).resolve().parents[1] / "contracts" / "extensions" / "trust"
     target = (
         tmp_path / "codex_plugin_scanner" / "guard" / "contracts" / "data" / "extensions" / "trust-class-map.v1.json"
     )
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, target)
+    target.write_text(json.dumps(extension_trust_module.trust_map_from_bindings(bindings)))
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
 

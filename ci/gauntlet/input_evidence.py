@@ -116,3 +116,39 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
     if any(part in {".", "..", ""} for part in expected.split("/")[1:]):
         return False
     return completed == {**reviewed, key: expected}
+
+
+def public_native_receipt(receipt: object, replacements: dict[str, str]) -> dict[str, Any] | None:
+    """Keep only safe native denial metadata and structured extension binding."""
+    if not isinstance(receipt, dict):
+        return None
+    selected = {
+        key: receipt[key]
+        for key in (
+            "schema",
+            "version",
+            "authority",
+            "decision_id",
+            "request_id",
+            "harness",
+            "event_name",
+            "payload_kind",
+            "decision",
+            "policy_action",
+            "observed_policy_action",
+            "reason_code",
+            "command_extensions",
+        )
+        if key in receipt
+    }
+    return redact_value(selected, replacements)
+
+
+def public_native_extension_evidence(edge: object, replacements: dict[str, str]) -> dict[str, Any] | None:
+    """Export bounded full observations from an independent native expectation probe."""
+    if not isinstance(edge, dict):
+        return None
+    result = edge.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("command_extensions"), dict):
+        return None
+    return redact_value(result["command_extensions"], replacements)
