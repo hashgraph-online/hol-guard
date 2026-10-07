@@ -20,7 +20,7 @@ const approval = {
   created_at: "2026-10-05T00:00:00Z", resolved_at: null, action_envelope_json: null, decision_v2_json: null,
 };
 
-async function mount(page: Page, nextSummary: () => unknown, displayOnly = false, nativeFailure: "with-sql" | "empty" | null = null) {
+async function mount(page: Page, nextSummary: () => unknown, displayOnly = false, nativeFailure: "with-sql" | "empty" | null = null, summaryStatus = 200) {
   const request = displayOnly ? { ...approval, harness: "native-business", created_at: "",
     allowed_scopes: [], recommended_scope: null, native_business_review_display_only: true } : approval;
   await page.route("**/v1/**", async route => {
@@ -30,6 +30,10 @@ async function mount(page: Page, nextSummary: () => unknown, displayOnly = false
     else if (path.endsWith("/runtime")) body = { ...freeStateSnapshot, pending_count: 1 };
     else if (path.endsWith("/business-summary")) {
       body = nextSummary();
+      if (summaryStatus === 404) {
+        await route.fulfill({ status: 404, contentType: "text/html", body: "<h1>Not found</h1>" });
+        return;
+      }
       if (body && typeof body === "object" && "error" in body && body.error === "native_local_business_summary_read_failed") {
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify(body) });
         return;
@@ -114,6 +118,16 @@ test("malformed metadata is unavailable and refresh recovers", async ({ page }) 
   value = summary;
   await page.getByRole("button", { name: "Refresh details" }).click();
   await expect(page.getByRole("region", { name: "Saved business action details" })).toBeVisible();
+});
+
+test("non-JSON optional-summary 404 omits the panel without a read error", async ({ page }) => {
+  const summaryResponse = page.waitForResponse(response => response.url().endsWith("/business-summary"));
+  await mount(page, () => null, true, null, 404);
+  const response = await summaryResponse;
+  expect(response.status()).toBe(404);
+  await expect(page.getByText("Review is not connected yet")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Saved business action details" })).toHaveCount(0);
+  await expect(page.getByText("Saved business details could not be loaded.")).toHaveCount(0);
 });
 
 test("native read failure offers refresh instead of disappearing", async ({ page }) => {

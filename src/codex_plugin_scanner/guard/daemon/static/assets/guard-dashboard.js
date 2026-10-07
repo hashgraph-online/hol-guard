@@ -17786,8 +17786,7 @@ async function fetchBusinessReviewSummary(requestId, signal) {
     { signal, cache: "no-store" }
   );
   if (response.status === 404) {
-    const payload = await response.json();
-    if (payload.error === "native_local_business_summary_unavailable") return null;
+    return null;
   }
   if (!response.ok) throw new Error("Saved business details are unavailable.");
   const { parseBusinessReviewSummary: parseBusinessReviewSummary2 } = await __vitePreload(async () => {

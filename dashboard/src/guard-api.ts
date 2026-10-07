@@ -2354,8 +2354,7 @@ export async function fetchBusinessReviewSummary(
     { signal, cache: "no-store" },
   );
   if (response.status === 404) {
-    const payload = await response.json() as { error?: unknown };
-    if (payload.error === "native_local_business_summary_unavailable") return null;
+    return null;
   }
   if (!response.ok) throw new Error("Saved business details are unavailable.");
   const { parseBusinessReviewSummary } = await import("./business-review-summary");

@@ -46,7 +46,7 @@ def read_native_business_review_queue(guard_home: Path) -> list[dict[str, object
         if (
             isinstance(response, dict)
             and set(response) in ({"error"}, {"error", "retryable"})
-            and response.get("error") == "native_policy_snapshot_missing"
+            and response.get("error") in ("native_policy_snapshot_missing", "native_policy_snapshot_unavailable")
             and ("retryable" not in response or type(response["retryable"]) is bool)
         ):
             return []
