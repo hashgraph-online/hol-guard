@@ -1,0 +1,2235 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "base": "packaged",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "extension_id": "command.opencomms",
+          "version": "1.0.0",
+          "name": "OpenComms command protection",
+          "description": "Reviews OpenComms integration installation, removal, executable updates and doctor repairs. Exact standalone doctor and update --check variants contribute no mutation requirement; version is not matched. Other forms retain conservative review and independent Guard floors remain in effect. Coverage is based on OpenComms 1.5.0 at commit 8a6d8de7bffab21059ab4d63cfd0838ac074e361; package launchers and other OpenComms operations retain Guard's existing handling.",
+          "action_classes": [
+            "OpenComms integration installation command",
+            "OpenComms integration removal command",
+            "OpenComms executable update command",
+            "OpenComms integration repair command"
+          ],
+          "risk_classes": [
+            "destructive_shell",
+            "execution",
+            "network_egress"
+          ],
+          "safer_alternatives": [
+            "Run opencomms doctor before requesting repairs.",
+            "Run opencomms update --check before updating."
+          ],
+          "reference_urls": [
+            "https://github.com/CL-BAF/OpenComms/blob/8a6d8de7bffab21059ab4d63cfd0838ac074e361/src/cli/main.ts",
+            "https://github.com/CL-BAF/OpenComms/blob/8a6d8de7bffab21059ab4d63cfd0838ac074e361/src/cli/update.ts",
+            "https://github.com/CL-BAF/OpenComms/blob/8a6d8de7bffab21059ab4d63cfd0838ac074e361/src/cli/doctor.ts"
+          ],
+          "required": false,
+          "source": "built-in",
+          "aliases": [],
+          "dependencies": [],
+          "conflicts": [],
+          "ecosystem_ids": [],
+          "executables": [
+            "opencomms",
+            "opencomms.cmd",
+            "opencomms.exe"
+          ],
+          "project_markers": [],
+          "homepage": "https://github.com/CL-BAF/OpenComms",
+          "license": "MIT",
+          "icon": {
+            "kind": "none"
+          },
+          "publisher": {
+            "id": "community.opencomms",
+            "display_name": "Community",
+            "url": "https://github.com/CL-BAF/OpenComms"
+          },
+          "permissions": [
+            {
+              "permission_id": "command.opencomms.permission.install",
+              "implementation_version": "1.0.0",
+              "label": "OpenComms integration installation",
+              "description": "Reviews installation of OpenComms integrations, which writes agent configuration and project integration artifacts. Additional arguments never imply a preview.",
+              "risk_tier": "high",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "OpenComms integration installation command"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "3.25.1",
+              "deprecated": false,
+              "safer_guidance": [
+                "Inspect the selected host integration and project configuration before installing."
+              ],
+              "example_command": "opencomms install codex --project ./workspace"
+            },
+            {
+              "permission_id": "command.opencomms.permission.uninstall",
+              "implementation_version": "1.0.0",
+              "label": "OpenComms integration removal",
+              "description": "Reviews removal of OpenComms integration entries and artifacts from agent or project configuration.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "OpenComms integration removal command"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "3.25.1",
+              "deprecated": false,
+              "safer_guidance": [
+                "Inspect the selected integration and back up its configuration before removing it."
+              ],
+              "example_command": "opencomms uninstall codex --project ./workspace"
+            },
+            {
+              "permission_id": "command.opencomms.permission.update",
+              "implementation_version": "1.0.0",
+              "label": "OpenComms executable update",
+              "description": "Reviews self-update, which downloads and replaces the installed executable where supported. Only the exact standalone update --check invocation and its two --json orderings are reviewed safe variants. Quoting, wrappers, paths, extra arguments, assignments such as --check=true, and uncertain forms retain review because the generic flag matcher cannot prove OpenComms' exact argv.includes semantics.",
+              "risk_tier": "high",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "OpenComms executable update command"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "3.25.1",
+              "deprecated": false,
+              "safer_guidance": [
+                "Run opencomms update --check to inspect update availability without replacing the executable."
+              ],
+              "example_command": "opencomms update"
+            },
+            {
+              "permission_id": "command.opencomms.permission.doctor-fix",
+              "implementation_version": "1.0.0",
+              "label": "OpenComms integration repair",
+              "description": "Reviews doctor invocations that may repair integrations, including --fix after --, as an option value, or followed by an assignment. Only exact standalone plain doctor invocations are reviewed safe variants. Extra arguments, quoting, wrappers, paths and unresolved expansions retain review until the native matcher can prove OpenComms' exact argv.includes semantics.",
+              "risk_tier": "high",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "OpenComms integration repair command"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "3.25.1",
+              "deprecated": false,
+              "safer_guidance": [
+                "Run opencomms doctor without --fix to inspect integration health before repairing it."
+              ],
+              "example_command": "opencomms doctor --fix --project ./workspace"
+            }
+          ],
+          "rules": [
+            {
+              "rule_id": "command.opencomms.install",
+              "rule_version": "1.0.0",
+              "permission_id": "command.opencomms.permission.install",
+              "title": "OpenComms integration installation",
+              "description": "Reviews installation of OpenComms integrations, which writes agent configuration and project integration artifacts. Additional arguments never imply a preview.",
+              "severity": "high",
+              "risk_classes": [
+                "execution"
+              ],
+              "action_classes": [
+                "OpenComms integration installation command"
+              ],
+              "safer_alternatives": [
+                "Inspect the selected host integration and project configuration before installing."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "executable.v1",
+                "config": {
+                  "executables": [
+                    "opencomms",
+                    "opencomms.cmd",
+                    "opencomms.exe"
+                  ],
+                  "subcommands": [
+                    "install"
+                  ]
+                }
+              },
+              "safe_variants": []
+            },
+            {
+              "rule_id": "command.opencomms.uninstall",
+              "rule_version": "1.0.0",
+              "permission_id": "command.opencomms.permission.uninstall",
+              "title": "OpenComms integration removal",
+              "description": "Reviews removal of OpenComms integration entries and artifacts from agent or project configuration.",
+              "severity": "medium",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "OpenComms integration removal command"
+              ],
+              "safer_alternatives": [
+                "Inspect the selected integration and back up its configuration before removing it."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "executable.v1",
+                "config": {
+                  "executables": [
+                    "opencomms",
+                    "opencomms.cmd",
+                    "opencomms.exe"
+                  ],
+                  "subcommands": [
+                    "uninstall"
+                  ]
+                }
+              },
+              "safe_variants": []
+            },
+            {
+              "rule_id": "command.opencomms.update",
+              "rule_version": "1.0.0",
+              "permission_id": "command.opencomms.permission.update",
+              "title": "OpenComms executable update",
+              "description": "Reviews self-update, which downloads and replaces the installed executable where supported. Only the exact standalone update --check invocation and its two --json orderings are reviewed safe variants. Quoting, wrappers, paths, extra arguments, assignments such as --check=true, and uncertain forms retain review because the generic flag matcher cannot prove OpenComms' exact argv.includes semantics.",
+              "severity": "high",
+              "risk_classes": [
+                "execution",
+                "network_egress"
+              ],
+              "action_classes": [
+                "OpenComms executable update command"
+              ],
+              "safer_alternatives": [
+                "Run opencomms update --check to inspect update availability without replacing the executable."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "executable.v1",
+                "config": {
+                  "executables": [
+                    "opencomms",
+                    "opencomms.cmd",
+                    "opencomms.exe"
+                  ],
+                  "subcommands": [
+                    "update"
+                  ]
+                }
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "opencomms-check",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms",
+                      "arguments": [
+                        "update",
+                        "--check"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms-check-json",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms",
+                      "arguments": [
+                        "update",
+                        "--check",
+                        "--json"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms-json-check",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms",
+                      "arguments": [
+                        "update",
+                        "--json",
+                        "--check"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms.cmd-check",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms.cmd",
+                      "arguments": [
+                        "update",
+                        "--check"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms.cmd-check-json",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms.cmd",
+                      "arguments": [
+                        "update",
+                        "--check",
+                        "--json"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms.cmd-json-check",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms.cmd",
+                      "arguments": [
+                        "update",
+                        "--json",
+                        "--check"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms.exe-check",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms.exe",
+                      "arguments": [
+                        "update",
+                        "--check"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms.exe-check-json",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms.exe",
+                      "arguments": [
+                        "update",
+                        "--check",
+                        "--json"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms.exe-json-check",
+                  "title": "Check update availability without replacement",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms.exe",
+                      "arguments": [
+                        "update",
+                        "--json",
+                        "--check"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.opencomms.doctor-fix",
+              "rule_version": "1.0.0",
+              "permission_id": "command.opencomms.permission.doctor-fix",
+              "title": "OpenComms integration repair",
+              "description": "Reviews doctor invocations that may repair integrations, including --fix after --, as an option value, or followed by an assignment. Only exact standalone plain doctor invocations are reviewed safe variants. Extra arguments, quoting, wrappers, paths and unresolved expansions retain review until the native matcher can prove OpenComms' exact argv.includes semantics.",
+              "severity": "high",
+              "risk_classes": [
+                "execution",
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "OpenComms integration repair command"
+              ],
+              "safer_alternatives": [
+                "Run opencomms doctor without --fix to inspect integration health before repairing it."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "executable.v1",
+                "config": {
+                  "executables": [
+                    "opencomms",
+                    "opencomms.cmd",
+                    "opencomms.exe"
+                  ],
+                  "subcommands": [
+                    "doctor"
+                  ]
+                }
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "opencomms-diagnostic",
+                  "title": "Diagnose integration health without requesting repair",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms",
+                      "arguments": [
+                        "doctor"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms.cmd-diagnostic",
+                  "title": "Diagnose integration health without requesting repair",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms.cmd",
+                      "arguments": [
+                        "doctor"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "variant_id": "opencomms.exe-diagnostic",
+                  "title": "Diagnose integration health without requesting repair",
+                  "matcher": {
+                    "op": "reviewed-literal.v1",
+                    "config": {
+                      "executable": "opencomms.exe",
+                      "arguments": [
+                        "doctor"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
+      "classes": {
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ],
+        "external": [
+          "command.appimg",
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-contribos",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-loomdesk",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.opencomms",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge"
+        ]
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "install-opencode",
+      "command": "opencomms install opencode",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-claude-code",
+      "command": "opencomms install claude-code",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-claude-desktop",
+      "command": "opencomms install claude-desktop",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-codex",
+      "command": "opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-chatgpt",
+      "command": "opencomms install chatgpt",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-gemini-cli",
+      "command": "opencomms install gemini-cli",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-project",
+      "command": "opencomms install codex --project \"./project with spaces\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-project-before-host",
+      "command": "opencomms install --project \"./project with spaces\" codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-quoted",
+      "command": "\"opencomms\" \"install\" \"codex\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-exe",
+      "command": "opencomms.exe install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-cmd",
+      "command": "opencomms.cmd install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-path",
+      "command": "\"/opt/tools with spaces/opencomms\" install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-env",
+      "command": "env OPENCOMMS_MODE=local opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-sudo",
+      "command": "sudo opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "require-reapproval",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-command-wrapper",
+      "command": "command opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-exec",
+      "command": "exec opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-xargs",
+      "command": "xargs -n 1 opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-shell-wrapper",
+      "command": "bash -c 'opencomms install codex'",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-fake-preview",
+      "command": "opencomms install codex --check --dry-run",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-missing-host",
+      "command": "opencomms install",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-inactive",
+      "command": "opencomms install codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-disabled",
+      "command": "opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [
+        "command.opencomms.permission.install"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-opencode",
+      "command": "opencomms uninstall opencode",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-claude-code",
+      "command": "opencomms uninstall claude-code",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-claude-desktop",
+      "command": "opencomms uninstall claude-desktop",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-codex",
+      "command": "opencomms uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-chatgpt",
+      "command": "opencomms uninstall chatgpt",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-gemini-cli",
+      "command": "opencomms uninstall gemini-cli",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-project",
+      "command": "opencomms uninstall codex --project \"./project with spaces\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-project-before-host",
+      "command": "opencomms uninstall --project \"./project with spaces\" codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-quoted",
+      "command": "\"opencomms\" \"uninstall\" \"codex\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-exe",
+      "command": "opencomms.exe uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-cmd",
+      "command": "opencomms.cmd uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-path",
+      "command": "\"/opt/tools with spaces/opencomms\" uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-env",
+      "command": "env OPENCOMMS_MODE=local opencomms uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-sudo",
+      "command": "sudo opencomms uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "require-reapproval",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-command-wrapper",
+      "command": "command opencomms uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-exec",
+      "command": "exec opencomms uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-xargs",
+      "command": "xargs -n 1 opencomms uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-shell-wrapper",
+      "command": "bash -c 'opencomms uninstall codex'",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-fake-preview",
+      "command": "opencomms uninstall codex --check --dry-run",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-missing-host",
+      "command": "opencomms uninstall",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-inactive",
+      "command": "opencomms uninstall codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-disabled",
+      "command": "opencomms uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [
+        "command.opencomms.permission.uninstall"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-plain",
+      "command": "opencomms update",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-json",
+      "command": "opencomms update --json",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-assignment-true",
+      "command": "opencomms update --check=true",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-assignment-false",
+      "command": "opencomms update --check=false",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-assignment-empty",
+      "command": "opencomms update --check=",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-lookalike",
+      "command": "opencomms update --checking",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-unknown-option",
+      "command": "opencomms update --unknown --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-extra-operand",
+      "command": "opencomms update --check unexpected",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-delimiter",
+      "command": "opencomms update -- --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-duplicate",
+      "command": "opencomms update --check --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-quoted-check",
+      "command": "opencomms update \"--check\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-env-check",
+      "command": "env OPENCOMMS_MODE=local opencomms update --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-exec-check",
+      "command": "exec opencomms update --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-path-check",
+      "command": "/opt/bin/opencomms update --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-pipeline-check",
+      "command": "opencomms update --check | cat",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-opencomms-check",
+      "command": "opencomms update --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-opencomms-json-check",
+      "command": "opencomms update --json --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-opencomms-check-json",
+      "command": "opencomms update --check --json",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-opencomms.cmd-check",
+      "command": "opencomms.cmd update --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-opencomms.cmd-json-check",
+      "command": "opencomms.cmd update --json --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-opencomms.cmd-check-json",
+      "command": "opencomms.cmd update --check --json",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-opencomms.exe-check",
+      "command": "opencomms.exe update --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-opencomms.exe-json-check",
+      "command": "opencomms.exe update --json --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-opencomms.exe-check-json",
+      "command": "opencomms.exe update --check --json",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-inactive",
+      "command": "opencomms update",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-disabled",
+      "command": "opencomms update",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [
+        "command.opencomms.permission.update"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-check-disabled",
+      "command": "opencomms update --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [
+        "command.opencomms.permission.update"
+      ],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-fix",
+      "command": "opencomms doctor --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-project-before-fix",
+      "command": "opencomms doctor --project \"./project with spaces\" --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-project-after-fix",
+      "command": "opencomms doctor --fix --project \"./project with spaces\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-quoted-fix",
+      "command": "\"opencomms\" \"doctor\" \"--fix\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-delimiter-fix",
+      "command": "opencomms doctor -- --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-project-value-fix",
+      "command": "opencomms doctor --project --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-repeated-fix",
+      "command": "opencomms doctor --fix --fix=false",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-assignment-fix",
+      "command": "opencomms doctor --fix=true",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-lookalike-fix",
+      "command": "opencomms doctor --fix-later",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-expansion",
+      "command": "opencomms doctor \"$FLAGS\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-exe-fix",
+      "command": "opencomms.exe doctor --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-cmd-fix",
+      "command": "opencomms.cmd doctor --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-env-fix",
+      "command": "env OPENCOMMS_MODE=local opencomms doctor --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-exec-fix",
+      "command": "exec opencomms doctor --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-xargs-fix",
+      "command": "xargs -n 1 opencomms doctor --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "safe-plain",
+      "command": "opencomms doctor",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "safe-project",
+      "command": "opencomms doctor --project \"./project with spaces\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "safe-quoted",
+      "command": "\"opencomms\" \"doctor\"",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "safe-env",
+      "command": "env OPENCOMMS_MODE=local opencomms doctor",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "safe-version",
+      "command": "opencomms version",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-opencomms-diagnostic",
+      "command": "opencomms doctor",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-opencomms.cmd-diagnostic",
+      "command": "opencomms.cmd doctor",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-opencomms.exe-diagnostic",
+      "command": "opencomms.exe doctor",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-inactive",
+      "command": "opencomms doctor --fix",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-disabled",
+      "command": "opencomms doctor --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [
+        "command.opencomms.permission.doctor-fix"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "doctor-read-disabled",
+      "command": "opencomms doctor",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [
+        "command.opencomms.permission.doctor-fix"
+      ],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unrelated-permission-disabled",
+      "command": "opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [
+        "command.opencomms.permission.update"
+      ],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "lookalike-executable",
+      "command": "notopencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "suffix-executable",
+      "command": "opencomms-other update",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "string-only",
+      "command": "echo opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "quoted-string-only",
+      "command": "echo 'opencomms doctor --fix'",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "other-binary",
+      "command": "other-tool opencomms update",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unknown-subcommand",
+      "command": "opencomms unknown",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unsupported-leading-option",
+      "command": "opencomms --project ./workspace update",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unsupported-version-alias",
+      "command": "opencomms --version",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "malformed-quote",
+      "command": "opencomms install 'codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unrelated-malformed-quote",
+      "command": "other-tool 'argument",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "compound-check-update",
+      "command": "opencomms update --check && opencomms update",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "compound-doctor-fix",
+      "command": "opencomms doctor; opencomms doctor --fix",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "compound-version-install",
+      "command": "opencomms version && opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "compound-install-uninstall",
+      "command": "opencomms install codex; opencomms uninstall codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "compound-check-disabled-install",
+      "command": "opencomms update --check && opencomms install codex",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [
+        "command.opencomms.permission.install"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "compound-version-independent-delete",
+      "command": "opencomms version; rm -rf ./scratch",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "compound-check-independent-root-delete",
+      "command": "opencomms update --check; rm -rf /",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "update-path-override",
+      "command": "PATH=/tmp opencomms update --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-extra-space",
+      "command": "opencomms update  --check",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-env-inactive",
+      "command": "env OPENCOMMS_MODE=local opencomms install codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-command-wrapper-inactive",
+      "command": "command opencomms install codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-exec-inactive",
+      "command": "exec opencomms install codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-xargs-inactive",
+      "command": "xargs -n 1 opencomms install codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-shell-wrapper-inactive",
+      "command": "bash -c 'opencomms install codex'",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-env-inactive",
+      "command": "env OPENCOMMS_MODE=local opencomms uninstall codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-command-wrapper-inactive",
+      "command": "command opencomms uninstall codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-exec-inactive",
+      "command": "exec opencomms uninstall codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-xargs-inactive",
+      "command": "xargs -n 1 opencomms uninstall codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-shell-wrapper-inactive",
+      "command": "bash -c 'opencomms uninstall codex'",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-env-check-inactive",
+      "command": "env OPENCOMMS_MODE=local opencomms update --check",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "update-exec-check-inactive",
+      "command": "exec opencomms update --check",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-env-fix-inactive",
+      "command": "env OPENCOMMS_MODE=local opencomms doctor --fix",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-exec-fix-inactive",
+      "command": "exec opencomms doctor --fix",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-xargs-fix-inactive",
+      "command": "xargs -n 1 opencomms doctor --fix",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "safe-env-inactive",
+      "command": "env OPENCOMMS_MODE=local opencomms doctor",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "malformed-quote-inactive",
+      "command": "opencomms install 'codex",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unrelated-malformed-quote-inactive",
+      "command": "other-tool 'argument",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "compound-version-independent-delete-inactive",
+      "command": "opencomms version; rm -rf ./scratch",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.opencomms.doctor-fix",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "independent-delete-baseline",
+      "command": "rm -rf ./scratch",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.filesystem.recursive-delete",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "compound-version-independent-delete-filesystem",
+      "command": "opencomms version; rm -rf ./scratch",
+      "enabled_extensions": [
+        "command.opencomms"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.filesystem.recursive-delete",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "compound-version-independent-delete-filesystem-inactive",
+      "command": "opencomms version; rm -rf ./scratch",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.filesystem.recursive-delete",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "compound-check-independent-root-delete-inactive",
+      "command": "opencomms update --check; rm -rf /",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.filesystem.recursive-delete",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "update-path-override-inactive",
+      "command": "PATH=/tmp opencomms update --check",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.opencomms.update",
+      "expected_effective_segments": []
+    }
+  ]
+}
