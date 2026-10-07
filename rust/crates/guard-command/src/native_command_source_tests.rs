@@ -4,10 +4,7 @@ use crate::{parse_command, CommandModelRequestV1};
 use guard_contracts::NativeCommandControlBindingV1;
 
 const EXAMPLE: &[u8] = include_bytes!("../tests/fixtures/command-source-example.v1.json");
-const TRUST: &[u8] = include_bytes!(concat!(
-    env!("OUT_DIR"),
-    "/trust-class-map.v1.json"
-));
+const TRUST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/trust-class-map.v1.json"));
 
 #[test]
 fn offline_parity_compares_full_native_evidence_and_rejects_real_differences() {

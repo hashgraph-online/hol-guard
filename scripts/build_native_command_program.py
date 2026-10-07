@@ -146,7 +146,8 @@ def main() -> int:
             "compile",
         ]
     )
-    request = canonical_bytes(build_request())
+    request_value = build_request()
+    request = canonical_bytes(request_value)
     if len(request) > 8 * 1024 * 1024:
         raise ValueError("source build envelope exceeds native input budget")
     completed = subprocess.run(command, input=request, stdout=subprocess.PIPE, cwd=ROOT, timeout=600, check=False)
@@ -160,6 +161,9 @@ def main() -> int:
     built = subprocess.run([*command[:-1], "export-built"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
     if built.returncode or json.loads(built.stdout) != compiled:
         raise ValueError("source compiler does not embed the current authored sources; rebuild it before staging")
+    trust = subprocess.run([*command[:-1], "export-trust"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
+    if trust.returncode or json.loads(trust.stdout) != request_value["trust"]:
+        raise ValueError("source compiler trust map does not match the authored bindings; rebuild it before staging")
     program = compiled["program"]
     catalog = {
         "schema": "guard.command-catalog.v1",
@@ -170,7 +174,7 @@ def main() -> int:
         "implementation_digest": compiled["implementation_digest"],
     }
     outputs = {
-        ROOT / "contracts/extensions/trust-class-map.v1.json": canonical_bytes(build_request()["trust"]),
+        ROOT / "contracts/extensions/trust-class-map.v1.json": canonical_bytes(request_value["trust"]),
         ARTIFACT: canonical_bytes(program),
         ROOT / "contracts/extensions/command-catalog.v1.json": canonical_bytes(catalog),
     }

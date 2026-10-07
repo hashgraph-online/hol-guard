@@ -31,6 +31,25 @@ fn request() -> Vec<u8> {
 }
 
 #[test]
+fn offline_cli_exports_build_derived_trust_without_stdin() {
+    let output = invoke(&["export-trust"], &[]);
+    assert!(output.status.success());
+    let trust: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(trust["schemaVersion"], "guard.extension-trust-class-map.v1");
+    assert!(trust["classes"]["external"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("command.noodle")));
+    assert!(trust["classes"]["first-party"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("command.git")));
+    assert!(!invoke(&["export-trust", "arbitrary-file.json"], &[])
+        .status
+        .success());
+}
+
+#[test]
 fn offline_cli_compiles_deterministically_and_checks_exact_identity() {
     let input = request();
     let first = invoke(&["compile"], &input);

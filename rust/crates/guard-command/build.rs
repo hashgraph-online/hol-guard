@@ -49,6 +49,12 @@ fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
         .filter(|path| {
             path.extension().is_some_and(|v| v == "json")
                 && path.file_name().unwrap() != "migration-manifest.json"
+                && (directory != "contracts/extensions/trust"
+                    || path
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .ends_with(".v1.json"))
         })
         .collect();
     paths.sort();

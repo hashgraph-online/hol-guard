@@ -87,6 +87,7 @@ For a runnable source addition, use the checked-in synthetic source, the
 separately reviewed trust map, and the compiler's packaged baseline:
 
 ```sh
+rust/target/release/guard-command-source export-trust > contracts/extensions/trust-class-map.v1.json
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust contracts/extensions/trust-class-map.v1.json \
