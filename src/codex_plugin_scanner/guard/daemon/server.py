@@ -2895,7 +2895,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     native_detail = native_request_detail(store, unquote(path_parts[2]))
                 except NativeBusinessReviewQueueReadError:
                     self._write_json(
-                        {"error": "native_local_business_queue_read_failed"}, status=503,
+                        {"error": "native_local_business_queue_read_failed"},
+                        status=503,
                         extra_headers={"Cache-Control": "no-store"},
                     )
                     return
@@ -5160,8 +5161,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         from .business_review_queue import NativeBusinessReviewQueueReadError, local_request_page
 
         try:
-            read_page = self.server.store.list_approval_request_page if self._is_hosted_dashboard_origin() else (
-                lambda **options: local_request_page(self.server.store, **options)
+            read_page = (
+                self.server.store.list_approval_request_page
+                if self._is_hosted_dashboard_origin()
+                else (lambda **options: local_request_page(self.server.store, **options))
             )
             page = read_page(
                 status=status_filter,
@@ -5173,7 +5176,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         except NativeBusinessReviewQueueReadError:
             self._write_json(
-                {"error": "native_local_business_queue_read_failed"}, status=503,
+                {"error": "native_local_business_queue_read_failed"},
+                status=503,
                 extra_headers={"Cache-Control": "no-store"},
             )
             return

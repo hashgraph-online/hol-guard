@@ -123,10 +123,11 @@ impl Fixture {
             &root.join("business-source-anchor.v1.json"),
             &serde_json::from_slice(&marker).unwrap(),
         );
+        let private_root = crate::resident_state::private_root_for_state_base(&root).unwrap();
         let mut lock = crate::resident_state::private_file(
-            &root.join("extension-control-authority.lock"),
+            &private_root.join("extension-control-authority.lock"),
             false,
-            &root,
+            &private_root,
         )
         .unwrap();
         lock.write_all(b"0").unwrap();

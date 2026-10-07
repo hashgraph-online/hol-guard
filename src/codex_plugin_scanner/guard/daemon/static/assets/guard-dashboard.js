@@ -12544,11 +12544,18 @@ function recordBusinessQueueReadFailure(failed) {
   readFailed = failed;
   for (const listener of listeners) listener();
 }
+function businessQueueReadFailed() {
+  return readFailed;
+}
+function recordBusinessQueueReadResult(payload) {
+  if (payload.native_business_queue_error !== void 0) recordBusinessQueueReadFailure(true);
+  else if (payload.native_business_queue_checked === true) recordBusinessQueueReadFailure(false);
+}
 function useBusinessQueueReadFailure() {
   return reactExports.useSyncExternalStore((listener) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
-  }, () => readFailed, () => false);
+  }, businessQueueReadFailed, () => false);
 }
 function BusinessQueueReadNotice() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", children: [
@@ -17142,7 +17149,7 @@ function normalizeOptionalApprovalRequest(item) {
   return isRecord$2(item) ? normalizeApprovalRequest(item) : null;
 }
 function normalizeApprovalPage(payload, statusFallback = "pending") {
-  recordBusinessQueueReadFailure(payload.native_business_queue_error !== void 0);
+  recordBusinessQueueReadResult(payload);
   return {
     items: normalizeApprovalRequests(payload.items),
     next_cursor: isStringOrNull(payload.next_cursor) ? payload.next_cursor : null,
@@ -31178,7 +31185,7 @@ function SemanticFilterButton(props) {
 }
 const QUEUE_PAGE_SIZE = 10;
 function ReviewWorkspace(props) {
-  const businessQueueReadFailed = useBusinessQueueReadFailure();
+  const businessQueueReadFailed2 = useBusinessQueueReadFailure();
   const { requests, activeRequestId, detail } = props;
   const readState = useRequestReadState();
   const queueRef = reactExports.useRef(null);
@@ -31303,7 +31310,7 @@ function ReviewWorkspace(props) {
   ]);
   if (requests.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-      businessQueueReadFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessQueueReadNotice, {}),
+      businessQueueReadFailed2 && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessQueueReadNotice, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewEmptyState,
         {
@@ -31311,7 +31318,7 @@ function ReviewWorkspace(props) {
           resolutionMessage: props.resolutionMessage,
           codexResume: props.codexResume,
           onRetryResume: props.onRetryResume,
-          queueReadIncomplete: businessQueueReadFailed
+          queueReadIncomplete: businessQueueReadFailed2
         }
       )
     ] });
@@ -31320,7 +31327,7 @@ function ReviewWorkspace(props) {
   const progressIndex = filteredRequests.findIndex((r) => r.request_id === activeItem.request_id);
   const progress = filteredRequests.length > 0 ? `${Math.max(0, progressIndex) + 1} of ${filteredRequests.length}` : `0 of ${requests.length}`;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    businessQueueReadFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessQueueReadNotice, {}),
+    businessQueueReadFailed2 && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessQueueReadNotice, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewHeader,
       {

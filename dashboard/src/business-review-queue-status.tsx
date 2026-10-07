@@ -8,11 +8,21 @@ export function recordBusinessQueueReadFailure(failed: boolean): void {
   readFailed = failed;
   for (const listener of listeners) listener();
 }
+export function businessQueueReadFailed(): boolean {
+  return readFailed;
+}
+export function recordBusinessQueueReadResult(payload: {
+  native_business_queue_error?: unknown;
+  native_business_queue_checked?: unknown;
+}): void {
+  if (payload.native_business_queue_error !== undefined) recordBusinessQueueReadFailure(true);
+  else if (payload.native_business_queue_checked === true) recordBusinessQueueReadFailure(false);
+}
 export function useBusinessQueueReadFailure(): boolean {
   return useSyncExternalStore((listener) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
-  }, () => readFailed, () => false);
+  }, businessQueueReadFailed, () => false);
 }
 export function BusinessQueueReadNotice() {
   return <div role="alert" className="rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4">

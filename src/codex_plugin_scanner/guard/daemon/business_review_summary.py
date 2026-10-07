@@ -14,7 +14,8 @@ def handle_business_review_summary(handler, request_id: str) -> None:
     # to that review, even when an opaque selector happens to collide.
     if handler.server.store.get_approval_request(request_id) is not None:
         handler._write_json(
-            {"error": "native_local_business_summary_unavailable"}, status=404,
+            {"error": "native_local_business_summary_unavailable"},
+            status=404,
             extra_headers={"Cache-Control": "no-store"},
         )
         return

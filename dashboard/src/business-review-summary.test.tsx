@@ -8,6 +8,7 @@ import type { GuardApprovalRequest, GuardRuntimeSnapshot } from "./guard-types";
 import { ReviewEmptyState } from "./review-states";
 import { freeStateSnapshot } from "../e2e/fixture-states";
 import { QueueItemRow } from "./review-queue-item";
+import { businessQueueReadFailed, recordBusinessQueueReadResult } from "./business-review-queue-status";
 
 export const sampleSummary = {
   schema: "guard-native-local-business-review-summary.v1", version: 1, request_id: "business-test",
@@ -71,3 +72,16 @@ const retryMarkup = renderToStaticMarkup(<ReviewEmptyState
 assert.match(retryMarkup, /Retry resume/);
 assert.doesNotMatch(retryMarkup, /Nothing to review|All clear/);
 console.log("Incomplete native queue: SQL resolution and resume controls preserved PASS");
+
+recordBusinessQueueReadResult({ native_business_queue_error: "native_local_business_queue_read_failed" });
+assert.equal(businessQueueReadFailed(), true);
+for (const unrelated of [{}, { native_business_queue_checked: false }, { native_business_queue_checked: "true" }]) {
+  recordBusinessQueueReadResult(unrelated);
+  assert.equal(businessQueueReadFailed(), true, "an unchecked page cannot clear native queue failure");
+}
+recordBusinessQueueReadResult({ native_business_queue_checked: true });
+assert.equal(businessQueueReadFailed(), false);
+recordBusinessQueueReadResult({ native_business_queue_checked: true, native_business_queue_error: "failed" });
+assert.equal(businessQueueReadFailed(), true, "failure takes precedence over checked marker");
+recordBusinessQueueReadResult({ native_business_queue_checked: true });
+console.log("Native queue failure survives unrelated pages and clears only after a checked success PASS");

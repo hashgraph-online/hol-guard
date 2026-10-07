@@ -41,8 +41,11 @@ def summary():
 def test_summary_sql_collision_is_absent_without_contacting_native(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_approval_request", lambda request_id: {"request_id": request_id})
-    monkeypatch.setattr(route, "read_native_business_review_summary",
-        lambda *args: pytest.fail("SQL review must not read another native snapshot"))
+    monkeypatch.setattr(
+        route,
+        "read_native_business_review_summary",
+        lambda *args: pytest.fail("SQL review must not read another native snapshot"),
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -60,16 +63,31 @@ def test_summary_sql_collision_is_absent_without_contacting_native(tmp_path, mon
 
 
 @pytest.mark.parametrize(
-    "code", ["native_local_business_summary_unavailable", "native_workspace_review_request_missing"]
+    "code",
+    [
+        "native_local_business_summary_unavailable",
+        "native_workspace_review_request_missing",
+        "native_policy_snapshot_missing",
+        "native_policy_snapshot_unavailable",
+    ],
 )
 def test_real_native_absence_error_envelope_is_optional(tmp_path, monkeypatch, code):
-    monkeypatch.setattr(adapter, "native_runtime_status", lambda: SimpleNamespace(
-        available=True, compatible=True, identity=SimpleNamespace(path=Path("/test/native")),
-        capabilities=SimpleNamespace(features=("resident-protocol-v2", "native-local-business-review-summary-v1")),
-    ))
+    monkeypatch.setattr(
+        adapter,
+        "native_runtime_status",
+        lambda: SimpleNamespace(
+            available=True,
+            compatible=True,
+            identity=SimpleNamespace(path=Path("/test/native")),
+            capabilities=SimpleNamespace(features=("resident-protocol-v2", "native-local-business-review-summary-v1")),
+        ),
+    )
     monkeypatch.setattr(adapter, "_isolated_environment", lambda: {})
-    monkeypatch.setattr(adapter, "native_resident_client_request", lambda **kwargs:
-        json.dumps({"error": code, "retryable": False}).encode())
+    monkeypatch.setattr(
+        adapter,
+        "native_resident_client_request",
+        lambda **kwargs: json.dumps({"error": code, "retryable": False}).encode(),
+    )
     assert adapter.read_native_business_review_summary(tmp_path, "business-test") is None
 
 
