@@ -70,7 +70,10 @@ def install() -> Path:
             with contents.extractfile(members[0]) as source, executable.open("wb") as output:
                 shutil.copyfileobj(source, output)
         executable.chmod(0o755)
-        version = subprocess.check_output([str(executable), "--version"], text=True).strip()
+        try:
+            version = subprocess.check_output([str(executable), "--version"], text=True, timeout=10).strip()
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("nextest --version timed out") from error
         if not version.startswith(f"cargo-nextest {VERSION} ") and version != f"cargo-nextest {VERSION}":
             raise RuntimeError(f"unexpected nextest version: {version}")
         binary_dir = root / "bin"

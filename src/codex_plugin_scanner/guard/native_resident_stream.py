@@ -12,14 +12,15 @@ import re
 import stat
 import struct
 import subprocess
-import tempfile
 import threading
 import time
+from _thread import LockType
+from collections import deque
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import ExitStack, contextmanager, suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from queue import Empty, Full, Queue
-from typing import BinaryIO, Protocol
+from typing import Protocol
 
 from .codex_hook_launch_runtime import isolated_hook_environment
 from .native_mode import non_production_diagnostic_enabled
@@ -111,8 +112,9 @@ class _PersistentNativeClient:
         self._responses: Queue[bytes | _StreamFailure] = Queue(maxsize=1)
         self._reader: threading.Thread | None = None
         self._writer: threading.Thread | None = None
-        self._diagnostic_output: BinaryIO | None = None
-        self._diagnostic_resources: ExitStack | None = None
+        self._diagnostic_reader: threading.Thread | None = None
+        self._diagnostic_lines: deque[bytes] | None = None
+        self._diagnostic_lock: LockType | None = None
         self._diagnostic_tail = b""
         self._closing = False
         self._lock = threading.Lock()
@@ -137,12 +139,10 @@ class _PersistentNativeClient:
                                 logger.warning("%s", line.decode("ascii"))
 
     def _read_diagnostic_tail(self) -> bytes:
-        output = self._diagnostic_output
-        if output is not None:
-            with suppress(OSError, ValueError):
-                output.seek(0, os.SEEK_END)
-                output.seek(max(0, output.tell() - _MAX_DIAGNOSTIC_BYTES))
-                return output.read(_MAX_DIAGNOSTIC_BYTES)
+        lines, lock = self._diagnostic_lines, self._diagnostic_lock
+        if lines is not None and lock is not None:
+            with lock:
+                return b"\n".join(lines)
         return self._diagnostic_tail
 
     def _read_managed_diagnostics(self) -> bytes:
@@ -155,9 +155,10 @@ class _PersistentNativeClient:
 
                 if native_policy_snapshot._windows_path_has_reparse_component(path):
                     return b""
-                return native_policy_snapshot._windows_read_snapshot_bytes(
-                    path, maximum_bytes=_MAX_DIAGNOSTIC_BYTES
-                ) or b""
+                return (
+                    native_policy_snapshot._windows_read_snapshot_bytes(path, maximum_bytes=_MAX_DIAGNOSTIC_BYTES)
+                    or b""
+                )
             flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
             directory = os.open(state_dir, flags | os.O_DIRECTORY)
             try:
@@ -198,14 +199,27 @@ class _PersistentNativeClient:
         return b""
 
     def _close_diagnostic_output(self) -> None:
-        output = self._diagnostic_output
-        if output is not None:
-            self._diagnostic_tail = self._read_diagnostic_tail()
-        if self._diagnostic_resources is not None:
-            with suppress(OSError, ValueError):
-                self._diagnostic_resources.close()
-            self._diagnostic_resources = None
-        self._diagnostic_output = None
+        self._diagnostic_tail = self._read_diagnostic_tail()
+        self._diagnostic_lines = None
+        self._diagnostic_lock = None
+        self._diagnostic_reader = None
+
+    @staticmethod
+    def _read_diagnostics(process: subprocess.Popen[bytes], lines: deque[bytes], lock: LockType) -> None:
+        stderr = process.stderr
+        if stderr is None:
+            return
+        discarding = False
+        with suppress(OSError, ValueError):
+            while raw := stderr.readline(193):
+                complete = raw.endswith(b"\n")
+                if discarding or not complete:
+                    discarding = not complete
+                    continue
+                line = raw.rstrip(b"\r\n")
+                if _NATIVE_DIAGNOSTIC_LINE.fullmatch(line):
+                    with lock:
+                        lines.append(line)
 
     def _start(self, *, deadline_monotonic: float | None = None) -> bool:
         if self._closing:
@@ -223,11 +237,10 @@ class _PersistentNativeClient:
         if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
             return False
         self._diagnostic_tail = b""
-        if non_production_diagnostic_enabled():
-            # Append mode keeps child writes independent of bounded tail reads.
-            with suppress(OSError), ExitStack() as resources:
-                self._diagnostic_output = resources.enter_context(tempfile.TemporaryFile(mode="a+b", buffering=0))
-                self._diagnostic_resources = resources.pop_all()
+        diagnostics = non_production_diagnostic_enabled()
+        if diagnostics:
+            self._diagnostic_lines = deque(maxlen=64)
+            self._diagnostic_lock = threading.Lock()
         try:
             process = subprocess.Popen(
                 (
@@ -240,7 +253,7 @@ class _PersistentNativeClient:
                 env=self._environment,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=self._diagnostic_output or subprocess.DEVNULL,
+                stderr=subprocess.PIPE if diagnostics else subprocess.DEVNULL,
                 start_new_session=True,
             )
         except OSError:
@@ -248,6 +261,14 @@ class _PersistentNativeClient:
             self._close_diagnostic_output()
             return False
         self._process = process
+        if self._diagnostic_lines is not None and self._diagnostic_lock is not None:
+            self._diagnostic_reader = threading.Thread(
+                target=self._read_diagnostics,
+                args=(process, self._diagnostic_lines, self._diagnostic_lock),
+                name="hol-guard-native-diagnostics",
+                daemon=True,
+            )
+            self._diagnostic_reader.start()
         self._reader = threading.Thread(
             target=self._read_responses,
             args=(process, responses),
@@ -468,6 +489,7 @@ class _PersistentNativeClient:
         process = self._process
         reader = self._reader
         writer = self._writer
+        diagnostic_reader = self._diagnostic_reader
         responses = self._responses
         if process is None:
             return True
@@ -494,10 +516,13 @@ class _PersistentNativeClient:
             reader.join(timeout=remaining())
         if writer is not None and writer is not threading.current_thread():
             writer.join(timeout=remaining())
+        if diagnostic_reader is not None and diagnostic_reader is not threading.current_thread():
+            diagnostic_reader.join(timeout=remaining())
         if (
             process.poll() is None
             or (reader is not None and reader.is_alive())
             or (writer is not None and writer.is_alive())
+            or (diagnostic_reader is not None and diagnostic_reader.is_alive())
         ):
             # Keep ownership for a later close; do not block on a buffered
             # stream lock held by the unfinished reader or reuse its generation.
@@ -506,6 +531,9 @@ class _PersistentNativeClient:
             if stream is not None:
                 with suppress(OSError, ValueError):
                     stream.close()
+        if diagnostic_reader is not None and process.stderr is not None:
+            with suppress(OSError, ValueError):
+                process.stderr.close()
         self._close_diagnostic_output()
         self._process = None
         self._reader = None

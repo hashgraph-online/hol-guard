@@ -158,25 +158,16 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
     if binary is not None:
         from codex_plugin_scanner.guard import native_context
 
-        previous_native = os.environ.get("HOL_GUARD_NATIVE")
-        previous_binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
-        os.environ["HOL_GUARD_NATIVE"] = "force"
-        os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
-        try:
+        with pytest.MonkeyPatch.context() as environment:
+            environment.setenv("HOL_GUARD_NATIVE", "force")
+            environment.setenv("HOL_GUARD_NATIVE_BINARY", str(binary))
+            environment.setenv("HOL_GUARD_TEST_MODE", "1")
+            environment.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
             native_context.native_context_digest(
                 "launch_argv_digest",
                 {"argv": ["guard-context-warmup"]},
                 guard_home=guard_home,
             )
-        finally:
-            if previous_native is None:
-                os.environ.pop("HOL_GUARD_NATIVE", None)
-            else:
-                os.environ["HOL_GUARD_NATIVE"] = previous_native
-            if previous_binary is None:
-                os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
-            else:
-                os.environ["HOL_GUARD_NATIVE_BINARY"] = previous_binary
     yield guard_home
     close_native_residents(guard_home)
 

@@ -451,6 +451,7 @@ jobs:
       - name: Verify distributions
         run: |
           uv run --no-sync twine check dist/*
+          python scripts/ci/check_wheel_size.py --dist-dir dist
           python3 scripts/verify_guard_wheel_entrypoints.py dist
       - name: Record immutable distribution hashes
         run: |

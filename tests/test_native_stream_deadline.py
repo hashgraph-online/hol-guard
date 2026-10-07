@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from queue import Queue
 
 import pytest
@@ -378,3 +379,28 @@ def test_timeout_diagnostics_filter_raw_shared_content_after_helper_retirement(t
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     client._record_phase_failure("native_client_timed_out", "response_wait")
     assert caplog.messages == ["native_client_timed_out phase=response_wait", row]
+
+
+@pytest.mark.parametrize("count", [0, 10000])
+def test_real_diagnostic_pipe_bounds_burst_history_and_discards_fragmented_private_lines(count):
+    script = (
+        "import sys\n"
+        "sys.stderr.write('x' * 193 + 'native_resident_phase phase=resident_evaluate status=error elapsed_ms=99\\n')\n"
+        f"for index in range({count}):\n"
+        " sys.stderr.write(f'native_resident_phase phase=stream_dispatch status=ok elapsed_ms={index}\\n')\n"
+    )
+    process = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    lines = deque(maxlen=64)
+    try:
+        streams._PersistentNativeClient._read_diagnostics(process, lines, threading.Lock())
+        assert process.wait(timeout=5) == 0
+        assert list(lines) == [
+            f"native_resident_phase phase=stream_dispatch status=ok elapsed_ms={index}".encode()
+            for index in range(max(0, count - 64), count)
+        ]
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        if process.stderr is not None:
+            process.stderr.close()
