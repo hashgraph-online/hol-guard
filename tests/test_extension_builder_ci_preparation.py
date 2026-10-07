@@ -122,7 +122,7 @@ def test_trust_only_does_not_build_or_read_generated_catalogs(checkout, monkeypa
 
 
 def test_malformed_binding_is_not_silently_replaced(checkout):
-    root, bindings_dir = checkout
+    _root, bindings_dir = checkout
     bad = bindings_dir / "command.broken.v1.json"
     bad.write_text("invalid JSON", encoding="utf-8")
     with pytest.raises(ValueError):
@@ -130,18 +130,36 @@ def test_malformed_binding_is_not_silently_replaced(checkout):
     assert bad.read_text() == "invalid JSON"
 
 
-def test_hand_edited_aggregate_is_rejected_not_laundered(checkout):
+def test_stale_aggregate_is_replaced_from_authored_bindings(checkout):
     root, bindings_dir = checkout
     trust = root / "contracts/extensions/trust-class-map.v1.json"
     payload = json.loads(trust.read_bytes())
     payload["classes"]["external"].append("command.hand-edited")
     trust.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    with pytest.raises(SystemExit):
-        refresh.main(["--trust-only"])
-    # The hand-edited id gains no authored binding and the committed map is left
-    # intact to surface the drift rather than rewriting it away.
+    assert refresh.main(["--trust-only"]) == 0
+    # Disposable output cannot author a trust classification.
     assert not (bindings_dir / "command.hand-edited.v1.json").exists()
-    assert "command.hand-edited" in json.loads(trust.read_bytes())["classes"]["external"]
+    assert "command.hand-edited" not in json.loads(trust.read_bytes())["classes"]["external"]
+
+
+def test_absent_aggregate_is_generated_from_bindings(checkout):
+    root, _bindings_dir = checkout
+    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    trust.unlink()
+    assert refresh.main(["--trust-only"]) == 0
+    assert json.loads(trust.read_bytes()) == refresh._projected_aggregate()
+
+
+def test_refresh_uses_build_generator_bytes_without_rewrite_churn(checkout):
+    """A build-produced aggregate remains current across trust-only refreshes."""
+    from scripts.build_native_command_program import canonical_bytes
+
+    root, _bindings_dir = checkout
+    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    expected = canonical_bytes(refresh._projected_aggregate())
+    trust.write_bytes(expected)
+    assert refresh.sync_trust_map() is False
+    assert trust.read_bytes() == expected
 
 
 def test_stale_contributor_branch_prepares_on_merge_without_rebase(checkout):

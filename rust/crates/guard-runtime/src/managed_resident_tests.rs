@@ -252,7 +252,6 @@ fn retire_clients_for_update_terminates_exact_process() {
         std::thread::sleep(Duration::from_secs(120));
         return;
     }
-
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-lease-retire-{}-{}",
         std::process::id(),

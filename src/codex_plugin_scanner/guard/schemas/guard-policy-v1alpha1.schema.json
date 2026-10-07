@@ -114,6 +114,14 @@
           "items": {
             "$ref": "#/$defs/rule"
           }
+        },
+        "budgets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/businessBudget"
+          }
         }
       },
       "patternProperties": {
@@ -813,6 +821,93 @@
           }
         }
       ]
+    },
+    "businessBudget": {
+      "type": "object",
+      "required": [
+        "schema",
+        "version",
+        "id",
+        "scope",
+        "match",
+        "windowMs",
+        "maximumActions",
+        "maximumRecipients",
+        "maximumRecords",
+        "maximumBytes"
+      ],
+      "properties": {
+        "schema": {
+          "const": "guard.business-budget.v1"
+        },
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "scope": {
+          "enum": [
+            "workflow",
+            "account",
+            "user"
+          ]
+        },
+        "match": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/businessMatch"
+            },
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "minRecipientCount"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "minRecordCount"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "minByteCount"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "windowMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000
+        },
+        "maximumActions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maximumRecipients": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maximumRecords": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maximumBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
