@@ -126,9 +126,19 @@ def _handoff(args: argparse.Namespace) -> dict[str, object]:
     expected_fixture = repo / "tests" / "fixtures" / f"command-source-{extension_id.removeprefix('command.')}.v1.json"
     if source_path != expected_source or fixture_path != expected_fixture:
         raise BuilderError("canonical_paths", "Source and fixture must use their canonical repository paths.")
-    trust_map = object_value(
-        read_json(repo / "contracts" / "extensions" / "trust-class-map.v1.json"), code="trust_shape"
-    )
+    bindings = repo / "contracts" / "extensions" / "trust"
+    if bindings.is_dir():
+        from ..runtime.extension_trust import trust_map_from_bindings
+
+        try:
+            trust_map = trust_map_from_bindings(bindings)
+        except (OSError, ValueError) as exc:
+            raise BuilderError("trust_shape", "Repository trust bindings are invalid.") from exc
+    else:
+        # Older repository layouts still expose the aggregate as authored input.
+        trust_map = object_value(
+            read_json(repo / "contracts" / "extensions" / "trust-class-map.v1.json"), code="trust_shape"
+        )
     if trust_map.get("schemaVersion") != "guard.extension-trust-class-map.v1":
         raise BuilderError("trust_schema", "Trust map must use guard.extension-trust-class-map.v1.")
     classes = object_value(trust_map.get("classes"), code="trust_shape")

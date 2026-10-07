@@ -5,8 +5,8 @@ use guard_contracts::NativeCommandControlBindingV1;
 
 const EXAMPLE: &[u8] = include_bytes!("../tests/fixtures/command-source-example.v1.json");
 const TRUST: &[u8] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../../contracts/extensions/trust-class-map.v1.json"
+    env!("OUT_DIR"),
+    "/trust-class-map.v1.json"
 ));
 
 #[test]

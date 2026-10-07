@@ -209,11 +209,13 @@ def main() -> int:
             raise ValueError("duplicate descriptor identity")
         descriptors[descriptor["id"]] = descriptor
     sources = convert(inventory, program, schema, descriptors)
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
     request = {
         "schema": "guard.command-extension-build.v1",
         "sources": sources,
         "mcp_sources": [load(path) for path in sorted((root / "contributions/mcp-servers").glob("*.json"))],
-        "trust": load(root / "contracts/extensions/trust-class-map.v1.json"),
+        "trust": trust_map_from_bindings(root / "contracts/extensions/trust"),
     }
     result = subprocess.run(
         [str(args.compiler.resolve(strict=True)), "compile"],

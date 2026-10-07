@@ -70,9 +70,8 @@ def build_request() -> dict:
 def _trust_request_payload() -> dict:
     """Assemble the trust block from authored per-extension bindings.
 
-    The committed aggregate map is a generated projection; building the native
-    request from the bindings guarantees the compiled program and catalog carry
-    binding truth even if the committed aggregate is stale or hand-edited.
+    The aggregate is an ignored package projection. Only authored bindings
+    determine the compiled program, catalog, and packaged trust classifications.
     """
     sys.path.insert(0, str(ROOT / "src"))
     from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
@@ -171,6 +170,7 @@ def main() -> int:
         "implementation_digest": compiled["implementation_digest"],
     }
     outputs = {
+        ROOT / "contracts/extensions/trust-class-map.v1.json": canonical_bytes(build_request()["trust"]),
         ARTIFACT: canonical_bytes(program),
         ROOT / "contracts/extensions/command-catalog.v1.json": canonical_bytes(catalog),
     }

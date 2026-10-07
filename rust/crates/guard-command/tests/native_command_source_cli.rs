@@ -19,8 +19,8 @@ fn request() -> Vec<u8> {
     let source: Value =
         serde_json::from_slice(include_bytes!("fixtures/command-source-example.v1.json")).unwrap();
     let trust: Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../../contracts/extensions/trust-class-map.v1.json"
+        env!("OUT_DIR"),
+        "/trust-class-map.v1.json"
     )))
     .unwrap();
     serde_json::to_vec(&json!({

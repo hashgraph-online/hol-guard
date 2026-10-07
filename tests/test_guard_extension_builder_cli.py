@@ -424,7 +424,18 @@ def test_cli_handoff_human_output_confirms_the_safety_boundary(
 ) -> None:
     monkeypatch.setattr(sys, "argv", ["hol-guard"])
     source_path, fixture_path = write_handoff_inputs(tmp_path)
-    write_external_trust_map(tmp_path)
+    binding = tmp_path / "contracts/extensions/trust/command.demo.v1.json"
+    binding.parent.mkdir(parents=True)
+    binding.write_text(
+        canonical_json(
+            {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": "command.demo",
+                "trustClass": "external",
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.extension_builder_commands.subprocess.run",
         lambda command, **_kwargs: subprocess.CompletedProcess(

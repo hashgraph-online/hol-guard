@@ -31,7 +31,8 @@ The trust class is reviewed separately as a per-extension binding file
 `contracts/extensions/trust/<extension-id>.v1.json`; a source file cannot select
 its own class or activation state. The reviewed bindings are the authored source
 of truth; `contracts/extensions/trust-class-map.v1.json` is a generated
-projection of `contracts/extensions/trust/` and is never edited by hand.
+projection of `contracts/extensions/trust/`. It is generated for packages, ignored by Git,
+and never edited by hand. Clean Rust builds read the bindings directly.
 Turning off a first-party or trusted-library extension blocks that capability.
 Turning off an external extension returns it to inert: Guard does not apply that
 contribution, and first-party floors still apply.

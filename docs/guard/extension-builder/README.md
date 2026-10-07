@@ -22,7 +22,7 @@ For a command contribution, edit or review these files:
 | --- | --- |
 | `contributions/command-sources/command.<name>.json` | Authoritative `guard.command-extension-source.v1` metadata and matcher trees |
 | `tests/fixtures/command-source-<slug>.v1.json` | `guard.command-extension-fixtures.v1` cases evaluated by native policy |
-| `contracts/extensions/trust-class-map.v1.json` | Separately reviewed trust and activation class |
+| `contracts/extensions/trust/<extension-id>.v1.json` | Separately reviewed trust and activation class; builds derive the shared map |
 | `contributions/extensions/command.<name>.json` | Generated `guard.extension-contribution.v2` descriptor |
 | `contracts/extensions/native-command-program.v1.json` | Generated admitted matcher program |
 | `contracts/extensions/command-catalog.v1.json` | Generated catalog projection |

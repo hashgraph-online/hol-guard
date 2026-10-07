@@ -1847,7 +1847,12 @@ def convert_backlog(
     inventory = _load_json(inventory_path)
     if not isinstance(inventory, dict) or inventory.get("schema") != INVENTORY_SCHEMA:
         raise ValueError("unsupported backlog inventory schema")
-    trust = _load_json(trust_path or repository / "contracts/extensions/trust-class-map.v1.json")
+    if trust_path:
+        trust = _load_json(trust_path)
+    else:
+        from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
+        trust = trust_map_from_bindings(repository / "contracts/extensions/trust")
     if not isinstance(trust, dict):
         raise ValueError("trust map must be an object")
     pinned_heads: dict[str, str] = {}
