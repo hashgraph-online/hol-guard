@@ -177,10 +177,11 @@ def build_source_compiler() -> None:
 
 
 def regenerate_projections() -> None:
-    """One native build, then project its sources without a rebuild fixpoint."""
+    """Publish current sources without admitting historical fixture snapshots."""
     build_source_compiler()
-    _run([sys.executable, "scripts/prepare_extension_contribution.py", "--compiler", str(COMPILER)])
-    _run([sys.executable, "scripts/prepare_extension_contribution.py", "--check", "--compiler", str(COMPILER)])
+    for check in ([], ["--check"]):
+        _run([sys.executable, "scripts/build_native_command_program.py", "--compiler", str(COMPILER), *check])
+        _run([sys.executable, "scripts/export_extension_directory.py", *check])
 
 
 def refresh_directory_render() -> None:
