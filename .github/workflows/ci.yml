@@ -174,10 +174,24 @@ jobs:
           CARGO_CHECK: ${{ matrix.check }}
         run: |
           case "$CARGO_CHECK" in
-            clippy) cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings ;;
+            clippy)
+              mkdir -p clippy-report
+              cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets --message-format=json -- -D warnings > clippy-report/clippy.jsonl
+              ;;
             test) cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
+      - name: Bind successful strict Clippy report
+        if: matrix.check == 'clippy'
+        run: python3 -m scripts.ci.clippy_report bind
+      - name: Upload successful strict Clippy report
+        if: matrix.check == 'clippy'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: clippy-report-${{ github.run_attempt }}
+          path: clippy-report/
+          if-no-files-found: error
+          retention-days: 1
 
   native-command-evaluators:
     runs-on: ubuntu-latest

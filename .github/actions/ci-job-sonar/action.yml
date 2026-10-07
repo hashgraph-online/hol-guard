@@ -52,13 +52,27 @@ runs:
       shared-key: sonar
       save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     if: inputs.has-token == 'true'
-  - name: Check Rust workspace with pinned Clippy
-    shell: bash
-    run: cargo clippy --manifest-path rust/Cargo.toml --locked --workspace
-    if: inputs.has-token == 'true'
   - name: Generate current-checkout Rust coverage
     shell: bash
     run: bash scripts/ci/prepare_sonar_rust_coverage.sh
+    if: inputs.has-token == 'true'
+  - name: Wait for successful current-attempt strict Clippy report
+    id: clippy-selection
+    shell: bash
+    run: uv run --no-sync python -m scripts.ci.clippy_report select
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    if: inputs.has-token == 'true'
+  - name: Download current-run strict Clippy report
+    uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+    with:
+      artifact-ids: ${{ steps.clippy-selection.outputs.artifact-id }}
+      path: clippy-report
+      merge-multiple: true
+    if: inputs.has-token == 'true'
+  - name: Verify strict Clippy report against analyzed checkout
+    shell: bash
+    run: uv run --no-sync python -m scripts.ci.clippy_report verify
     if: inputs.has-token == 'true'
   - name: Install pinned Sonar scanner CLI
     uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f

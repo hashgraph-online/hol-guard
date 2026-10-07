@@ -10,13 +10,15 @@ rustup component add --toolchain "$toolchain" llvm-tools-preview
 if [[ "$(cargo +"$toolchain" llvm-cov --version 2>/dev/null || true)" != "cargo-llvm-cov $coverage_version" ]]; then
     cargo +"$toolchain" install cargo-llvm-cov --version "=$coverage_version" --locked --force
 fi
+nextest_bin="$(python "$repo_root/scripts/ci/install_nextest.py")"
 
 report="$repo_root/coverage-reports/rust-lcov.info"
 mkdir -p "$(dirname "$report")"
 # Neither a restored report nor profiles from another commit can qualify this run.
 rm -f "$report"
 cargo +"$toolchain" llvm-cov clean --workspace
-cargo +"$toolchain" llvm-cov --locked --workspace --all-targets --lcov --output-path "$report"
+PATH="$nextest_bin:$PATH" cargo +"$toolchain" llvm-cov nextest --locked --workspace --all-targets \
+    --test-threads 2 --retries 0 --no-fail-fast --lcov --output-path "$report"
 test -s "$report"
 grep -q '^SF:.*\.rs$' "$report"
 grep -q '^DA:' "$report"
