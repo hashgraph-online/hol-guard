@@ -34,6 +34,28 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.28.0](https://github.com/hashgraph-online/hol-guard/compare/v3.27.1...v3.28.0) (2026-10-07)
+
+
+### Features
+
+* **guard:** install and recover native business policy documents ([48e0df3](https://github.com/hashgraph-online/hol-guard/commit/48e0df3504ab6f9ad1615837f9ff0417edf50a16))
+
+
+### Bug Fixes
+
+* **ci:** run continuation timing in its required isolated lane ([384e8dd](https://github.com/hashgraph-online/hol-guard/commit/384e8dd7df1ecc79806c2f01de6f6917e475ebcd))
+* **claude:** guard Grep searches and defer permission dialogs ([48ed9a6](https://github.com/hashgraph-online/hol-guard/commit/48ed9a63d17f9ef715447e848e125ec8d8944ebb))
+* **dashboard:** rank pattern search by match strength and risk severity ([#3671](https://github.com/hashgraph-online/hol-guard/issues/3671)) ([7ac9f7c](https://github.com/hashgraph-online/hol-guard/commit/7ac9f7ced50496fea40d0265a5af6b65d41dbddc))
+* **guard:** exercise signed Desktop proxy during runtime qualification ([#3676](https://github.com/hashgraph-online/hol-guard/issues/3676)) ([0a27f80](https://github.com/hashgraph-online/hol-guard/commit/0a27f80067ce55705ba7ea17ce64026df05bfd58))
+* **hooks:** review literal shell scripts and retain terminal native denies ([#3669](https://github.com/hashgraph-online/hol-guard/issues/3669)) ([d2af463](https://github.com/hashgraph-online/hol-guard/commit/d2af463d5d5d588693ab9f0099ee2a50a014522c))
+* **updates:** detect promoted Desktop Core bundles ([#3670](https://github.com/hashgraph-online/hol-guard/issues/3670)) ([eb7d9e1](https://github.com/hashgraph-online/hol-guard/commit/eb7d9e186f4d6e2f39a170643bebaabac9f91a09))
+
+
+### Performance Improvements
+
+* **ci:** restore fast pull request critical path ([#3651](https://github.com/hashgraph-online/hol-guard/issues/3651)) ([b53ac1d](https://github.com/hashgraph-online/hol-guard/commit/b53ac1da1c360ef38d665da245f40cf990c997cf))
+
 ## [3.27.1](https://github.com/hashgraph-online/hol-guard/compare/v3.27.0...v3.27.1) (2026-10-06)
 
 
