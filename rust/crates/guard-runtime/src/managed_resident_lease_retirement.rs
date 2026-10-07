@@ -9,6 +9,16 @@ use super::{
     LEASE_SUFFIX,
 };
 
+fn retirement_failed(stage: &str) -> String {
+    // Test output identifies the failing boundary without exposing process or
+    // lease data. The production error contract remains unchanged.
+    #[cfg(test)]
+    eprintln!("resident client retirement failed at {stage}");
+    #[cfg(not(test))]
+    let _ = stage;
+    "native_resident_client_retirement_failed".to_owned()
+}
+
 pub(super) fn retire_clients_for_update(
     state_base: &Path,
     expected_digest: &str,
@@ -23,13 +33,13 @@ pub(super) fn retire_clients_for_update(
     let observed_at = SystemTime::now();
     let mut paths = Vec::with_capacity(LEASE_MAX_FILES);
     for (entry_count, entry) in fs::read_dir(&directory)
-        .map_err(|_| "native_resident_client_retirement_failed".to_owned())?
+        .map_err(|_| retirement_failed("directory_read"))?
         .enumerate()
     {
         if entry_count >= LEASE_MAX_DIRECTORY_ENTRIES {
-            return Err("native_resident_client_retirement_failed".to_owned());
+            return Err(retirement_failed("directory_capacity"));
         }
-        let entry = entry.map_err(|_| "native_resident_client_retirement_failed".to_owned())?;
+        let entry = entry.map_err(|_| retirement_failed("directory_entry"))?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if name.starts_with(LEASE_PREFIX) && name.ends_with(LEASE_SUFFIX) {
@@ -42,11 +52,11 @@ pub(super) fn retire_clients_for_update(
             Ok(record) => record,
             Err(LeaseReadError::Missing) => continue,
             Err(LeaseReadError::Unavailable) => {
-                return Err("native_resident_client_retirement_failed".to_owned());
+                return Err(retirement_failed("lease_unavailable"));
             }
             Err(LeaseReadError::Malformed(file)) => {
                 if lease_file_is_recent(file.modified, observed_at) {
-                    return Err("native_resident_client_retirement_failed".to_owned());
+                    return Err(retirement_failed("recent_lease_malformed"));
                 }
                 let _ = file.remove_if_same(&path);
                 continue;
@@ -62,9 +72,9 @@ pub(super) fn retire_clients_for_update(
                     let _ = remove_stale_lease(&path, &private_root, observed_at);
                     continue;
                 }
-                return Err("native_resident_client_retirement_failed".to_owned());
+                return Err(retirement_failed("old_process_identity_unavailable"));
             }
-            Err(_) => return Err("native_resident_client_retirement_failed".to_owned()),
+            Err(_) => return Err(retirement_failed("recent_process_identity_unavailable")),
         };
         if actual_start_marker != record.start_marker {
             let _ = record.identity.remove_if_same(&path);
@@ -78,11 +88,11 @@ pub(super) fn retire_clients_for_update(
             )
             .is_err()
         {
-            return Err("native_resident_client_retirement_failed".to_owned());
+            return Err(retirement_failed("runtime_process_identity"));
         }
         let timeout = deadline.saturating_duration_since(Instant::now());
         if timeout.is_zero() {
-            return Err("native_resident_client_retirement_failed".to_owned());
+            return Err(retirement_failed("deadline_after_identity_validation"));
         }
         crate::managed_resident::containment::terminate_client_process(
             record.process_id,

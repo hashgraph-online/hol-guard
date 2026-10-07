@@ -20,6 +20,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_workflow_matrix import _workflow_prompt, contained_vitest_cases
 
+from .agent_configuration import write_agent_configuration
 from .catalog import catalog_digest
 from .cleanup import cleanup_case_resources
 from .contained_judge import (
@@ -31,15 +32,10 @@ from .contained_judge import (
 )
 from .evidence import public_events, read_events
 from .fixtures import create_fixture, digest_file
+from .host_process import clean_environment, run_process
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
 from .provider import InferenceRelay, LoopbackCollector
-from .runner import (
-    HERE,
-    REPO,
-    _agent_configuration,
-    clean_environment,
-    run_process,
-)
+from .runner import HERE, REPO
 from .source_files import digest_runner_files
 from .source_identity import source_identity
 
@@ -211,7 +207,7 @@ def run_contained_profile(
     try:
         with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
             agent_dir = private / "agent"
-            _agent_configuration(agent_dir, relay)
+            write_agent_configuration(agent_dir, relay)
             daemon = probe._start_installed_daemon(
                 guard_home=guard_home,
                 home=fixture.home,
@@ -282,7 +278,7 @@ def run_contained_profile(
             time.sleep(0.1)
             native_routes = worker.metrics.snapshot().get("routes", {})
             approval_delta = worker.store.count_approval_requests(status=None) - before_approvals
-            inference = relay.evidence()
+            inference = relay.evidence(wait_seconds=3)
             egress_requests = list(collector.requests)
             events = public_events(raw_events, replacements)
             if guard_log.exists():
