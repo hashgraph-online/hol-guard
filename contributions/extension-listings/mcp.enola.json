@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "mcp.enola",
+  "tagline": "Allows enola's read-only architecture query tools; snapshot writes keep Guard's usual handling. Off until you turn it on.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed enola MCP tools and the surrounding Guard policy.",
+    "Only package launches of enola-cli through uvx or pipx are matched; an enola binary installed by the shell installer or RubyGems and launched directly stays on Guard's normal handling.",
+    "A publisher profile or badge is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://github.com/enola-labs/enola/blob/main/docs/CLI.md",
+  "tags": ["mcp", "architecture", "code-graph"],
+  "maintainerGithubIds": ["710642"]
+}

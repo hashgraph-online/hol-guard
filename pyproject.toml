@@ -161,7 +161,6 @@ path = "scripts/build_command_projection_hook.py"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
 "contracts/extensions/contribution.v2.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v2.schema.json"
-"contributions/extensions" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions"
 
@@ -171,6 +170,8 @@ artifacts = [
     "src/codex_plugin_scanner/guard/schemas/**",
 ]
 exclude = [
+    "contributions/extensions/**",
+    "contracts/extensions/trust-class-map.v1.json",
     "src/codex_plugin_scanner/_native/guard-command-source",
     "src/codex_plugin_scanner/_native/source-compiler-manifest.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json",
