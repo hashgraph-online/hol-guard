@@ -288,7 +288,9 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
     )
     assert unchanged is base_payload
     assert exact_cloud_review_status(store)["enabled"] is False
-    assert exact_cloud_review_operations(store) == ()
+    # OAuth credentials remain, so admin-MFA jobs stay deliverable — the
+    # operation listing reflects the queue's capability, not consent state.
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
     failed_connect = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
         args=argparse.Namespace(enable_cloud_review=True),
@@ -301,7 +303,7 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
         "enabled": False,
         "reason": "connect_not_completed",
     }
-    assert exact_cloud_review_operations(store) == ()
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
     connected = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
         args=argparse.Namespace(enable_cloud_review=True),
@@ -379,7 +381,7 @@ def test_cloud_review_enable_failure_does_not_requeue_pending_requests(
     assert exit_code == 2
     assert payload["error"] == "cloud_review_grant_binding_missing"
     assert exact_cloud_review_status(store)["enabled"] is False
-    assert exact_cloud_review_operations(store) == ()
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
     with store._connect() as connection:
         event_types = [
             row[0]

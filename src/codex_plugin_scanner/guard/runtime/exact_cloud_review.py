@@ -354,6 +354,16 @@ def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) 
         return ()
     try:
         _verified_capability(store, now=now)
+        return (EXACT_CLOUD_REVIEW_OPERATION,)
+    except (AttributeError, ExactCloudReviewError):
+        pass
+    # Workspace-admin MFA approvals do not require a local consent capability;
+    # the operation stays reachable when OAuth metadata exists so the queue can
+    # deliver those jobs even with no consent bound.
+    if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+        return ()
+    try:
+        _oauth_metadata(store)
     except (AttributeError, ExactCloudReviewError):
         return ()
     return (EXACT_CLOUD_REVIEW_OPERATION,)
