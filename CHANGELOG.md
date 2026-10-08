@@ -29,8 +29,7 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **ci:** make absent managed stores explicit before opening a connection scope, preserving existing hook decisions while allowing the optional-store type check to pass.
 * **ci:** collect pytest once for the shard plan and complete protected test inventory, retaining markers, corpus and source metrics before scheduling-only nodes are excluded; run the remaining static quality checks independently of native artifact production.
 * **ci:** remove obsolete fake-Cargo workflow command tests after the real pinned nextest cutover; retain required-aggregate failure checks and complete native test execution.
-* **ci:** execute existing pytest shards with four checksum-locked file-affine workers and no worker restarts, preserving single-process corpus fixtures and fresh coverage merging; only the controller publishes complete per-node durations.
-* **ci:** prepare the captured pull-request base once before parallel freshness checks, preserve canonical lockfile format and release-version annotations, and keep unchanged workload/status/configured-proof timing contracts in required isolated lanes.
+* **ci:** preserve canonical lockfile format and release-version annotations, and keep unchanged workload/status/configured-proof timing contracts in required isolated lanes.
 * **ci:** detect musl Python hosts from their build triplet when GNU-symbol libc detection is empty; retain the pinned archive checksums and bounded nextest version probe.
 
 ### Features

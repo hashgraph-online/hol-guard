@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
@@ -22,6 +23,10 @@ class _Report(Protocol):
     when: str
     nodeid: str
     duration: float
+
+
+class _Config(Protocol):
+    workerinput: Mapping[str, object] | None
 
 
 _DURATIONS: dict[str, float] = {}
@@ -47,12 +52,9 @@ def pytest_sessionstart() -> None:
 
 
 def pytest_sessionfinish(session: object, exitstatus: int) -> None:
-    """Only the controller may publish the complete shard report."""
+    """Write the shard artifact only when CI requested a destination."""
 
-    _ = exitstatus
-    configuration = getattr(session, "config", None)
-    if getattr(configuration, "workerinput", None) is not None:
-        return
+    _ = session, exitstatus
     output_value = os.environ.get(OUTPUT_ENV)
     if not output_value:
         return

@@ -47,6 +47,8 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]",
         "tests/test_guard_daemon_cli.py::TestDaemonStatusCommand::test_status_does_not_wait_for_guard_database_writer",
         "tests/test_codex_hook_repair_native_binding.py::test_real_configured_hook_native_protection_commits_repair",
+        "tests/test_guard_js_lockfile_resolution_phase11.py::"
+        "test_representative_large_bun_lockfile_completes_within_scaled_budget",
         "tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner",
         "tests/test_guard_cloud_review_runtime_recovery.py::"
         "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
