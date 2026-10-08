@@ -1,5 +1,4 @@
 #![cfg(windows)]
-use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 use std::path::Path;
 
@@ -31,6 +30,14 @@ fn windows_drive_cwd_targets_bind_only_the_exact_workspace_spelling() {
     std::fs::write(workspace.join("src/one.ts"), "export const one = 1;\n").unwrap();
     std::os::windows::fs::symlink_dir(home.join("other"), workspace.join("alias"))
         .expect("Windows regression runner must support directory symlinks");
+    std::os::windows::fs::symlink_dir(workspace.join("src"), workspace.join("linked")).unwrap();
+    let init = std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .current_dir(&workspace)
+        .status()
+        .unwrap();
+    assert!(init.success());
+    let controls = fixture::github_controls("enabled");
     let cwd = workspace.to_str().unwrap();
     let forward = cwd.replace('\\', "/");
     let lowered = cwd.to_lowercase();
@@ -48,16 +55,35 @@ fn windows_drive_cwd_targets_bind_only_the_exact_workspace_spelling() {
         (format!("cd '{cwd}\\..' && mkdir -p output"), false),
         (format!("cd '{cwd}\\alias' && mkdir -p output"), false),
         (format!("cd '{cwd}\\.ssh' && cat config"), false),
+        (format!("cd '{cwd}\\linked' && cat one.ts"), false),
+        // An unquoted backslash is removed by the shell, so it never proves a path.
+        (format!("cd {cwd} && mkdir -p output"), false),
+        (format!("cd \"{cwd}\\\\src\" && cat one.ts"), false),
+        (format!("git --no-pager -C '{cwd}' status --short"), true),
+        (format!("git --no-pager -C \"{cwd}\" status --short"), true),
+        (format!("git --no-pager -C {cwd} status --short"), false),
+        (
+            format!("git --no-pager -C '{lowered}' status --short"),
+            false,
+        ),
+        (
+            format!("git --no-pager -C '{cwd}\\src\\..' status --short"),
+            false,
+        ),
+        (
+            format!("git --no-pager -C '{cwd}\\linked' status --short"),
+            false,
+        ),
         (
             format!("git --no-pager -C '{cwd}\\..' status --short"),
             false,
         ),
     ] {
-        let result = evaluate_pre_tool_envelope_with_context(
+        let result = fixture::evaluate_pre_tool_envelope_with_context(
             "omp",
             "PreToolUse",
             &json!({"tool_name":"bash","tool_input":{"command":command}}),
-            None,
+            Some(&controls),
             None,
             Some(home.to_str().unwrap()),
             Some(cwd),
