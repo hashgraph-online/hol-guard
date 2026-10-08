@@ -1,4 +1,6 @@
-use super::*;
+#![cfg(unix)]
+
+use crate::pretool::*;
 
 fn environment(names: &[&str]) -> guard_contracts::GuardExecutionEnvironmentV1 {
     guard_contracts::GuardExecutionEnvironmentV1 {
@@ -67,13 +69,7 @@ fn dotted_relative_cd_skips_cdpath_and_keeps_the_target_checks() {
     let root = crate_root();
     let cdpath = environment(&["CDPATH", "HOME", "PATH"]);
     for environment in [None, Some(&cdpath)] {
-        for command in [
-            "cd ./src && ls",
-            "cd ./src/../tests && ls",
-            "cd ./src/.. && ls",
-        ] {
-            assert!(allowed_in(&root, command, environment), "{command}");
-        }
+        assert!(allowed_in(&root, "cd ./src && ls", environment));
         for command in [
             "cd ./missing && ls",
             "cd ./.ssh && ls",
@@ -85,15 +81,31 @@ fn dotted_relative_cd_skips_cdpath_and_keeps_the_target_checks() {
 }
 
 #[test]
+fn parent_directory_cd_is_never_proved() {
+    // The shell resolves `..` against its logical $PWD, which can differ
+    // from the reported cwd when the session was entered through a symlink.
+    let root = crate_root().join("src");
+    let clean = environment(&["HOME", "PATH"]);
+    for command in [
+        "cd .. && ls",
+        "cd ../tests && ls",
+        "cd ./pretool/.. && ls",
+        "cd pretool/.. && ls",
+    ] {
+        assert!(!allowed_in(&root, command, Some(&clean)), "{command}");
+    }
+}
+
+#[test]
 fn relative_cd_through_a_symlink_is_not_proved() {
     // The system temporary directory lives under a reviewed root on macOS.
-    let root = crate_root()
-        .join("../../target")
+    let parent = crate_root().join("../../target");
+    std::fs::create_dir_all(&parent).unwrap();
+    let root = parent
         .canonicalize()
         .unwrap()
         .join(format!("guard-relative-cd-{}", std::process::id()));
     std::fs::create_dir_all(root.join("real")).unwrap();
-    #[cfg(unix)]
     std::os::unix::fs::symlink(root.join("real"), root.join("link")).unwrap();
     let clean = environment(&["HOME", "PATH"]);
     let outcome = (
@@ -103,6 +115,5 @@ fn relative_cd_through_a_symlink_is_not_proved() {
     );
     std::fs::remove_dir_all(&root).unwrap();
     assert!(outcome.0);
-    #[cfg(unix)]
     assert!(!outcome.1 && !outcome.2);
 }

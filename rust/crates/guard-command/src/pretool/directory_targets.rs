@@ -58,13 +58,14 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
 /// POSIX `cd` skips the CDPATH search for operands that begin with `.` or
 /// `..`; any other relative operand needs proof that CDPATH is unset. The
 /// lexical join is what a logical `cd` reaches, so the caller's spelling
-/// check rejects symlinked components.
+/// check rejects symlinked components. `..` is never proved: the shell
+/// resolves it against its logical `$PWD`, which may name a symlinked
+/// parent the reported cwd does not show.
 fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
     if cfg!(windows) || value.starts_with('~') {
         return None;
     }
-    let dotted =
-        value == "." || value == ".." || value.starts_with("./") || value.starts_with("../");
+    let dotted = value == "." || value.starts_with("./");
     if !dotted && !context.cdpath_unset {
         return None;
     }
@@ -76,11 +77,7 @@ fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<s
     for component in base.join(value).components() {
         match component {
             std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                if !joined.pop() {
-                    return None;
-                }
-            }
+            std::path::Component::ParentDir => return None,
             other => joined.push(other),
         }
     }
@@ -188,3 +185,31 @@ mod tests {
         assert!(shell_alters_backslash(r"cd 'C:\a' && echo \x"));
     }
 }
+
+impl<'a> super::PathContext<'a> {
+    /// `cdpath_unset` is set only from a harness-stamped environment that
+    /// declares no CDPATH, so a bare relative `cd` operand cannot be
+    /// redirected by a CDPATH search.
+    pub(crate) fn for_session(
+        home_dir: Option<&'a str>,
+        cwd: Option<&'a str>,
+        execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> Self {
+        let cdpath_unset = execution_environment.is_some_and(|environment| {
+            environment.has_valid_shape()
+                && !environment
+                    .environment_names
+                    .iter()
+                    .any(|name| name == "CDPATH")
+        });
+        Self {
+            home_dir,
+            cwd,
+            cdpath_unset,
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "tests_relative_cd.rs"]
+mod tests_relative_cd;

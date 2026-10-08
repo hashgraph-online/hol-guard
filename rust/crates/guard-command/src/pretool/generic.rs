@@ -151,7 +151,8 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
-    let context = context.with_execution_environment(execution_environment);
+    let context =
+        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
     let super::PathContext { home_dir, cwd, .. } = context;
     let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
