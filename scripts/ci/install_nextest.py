@@ -5,6 +5,7 @@ import hashlib
 import platform
 import shutil
 import subprocess
+import sysconfig
 import tarfile
 import tempfile
 from pathlib import Path
@@ -28,6 +29,11 @@ def host_target() -> str:
         return "universal-apple-darwin"
     if system == "Linux":
         libc = platform.libc_ver()[0]
+        # CPython's libc_ver scans GNU symbols and can be empty on musl.
+        if libc not in {"glibc", "musl"} and any(
+            "musl" in (sysconfig.get_config_var(name) or "") for name in ("HOST_GNU_TYPE", "MULTIARCH")
+        ):
+            libc = "musl"
         if libc == "glibc":
             target = f"{machine}-unknown-linux-gnu"
         elif libc == "musl":

@@ -43,7 +43,10 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "test_resolving_one_request_with_100k_rows_stays_under_100ms",
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-240-24]",
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-480-two-client-24]",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-960-four-client-8]",
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]",
+        "tests/test_guard_daemon_cli.py::TestDaemonStatusCommand::test_status_does_not_wait_for_guard_database_writer",
+        "tests/test_codex_hook_repair_native_binding.py::test_real_configured_hook_native_protection_commits_repair",
         "tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner",
         "tests/test_guard_cloud_review_runtime_recovery.py::"
         "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
@@ -144,7 +147,11 @@ def build_affinity_node_shards(
 
     # A timing contract that is deselected during coverage execution must never
     # own an otherwise empty shard or contribute phantom time to its estimate.
-    nodes = [node_id for node_id in node_ids if node_id not in SCHEDULING_ONLY_NODE_IDS]
+    nodes = [
+        node_id
+        for node_id in node_ids
+        if node_id not in SCHEDULING_ONLY_NODE_IDS and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+    ]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")
     if shard_count > len(nodes):

@@ -362,6 +362,10 @@ jobs:
           echo "HOL_GUARD_BUILD_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
+      - name: Prepare exact-base freshness diff before worker startup
+        run: |
+          uv run --no-sync python -c \
+            'from tests.support.extension_freshness import _pr_diff_paths; _pr_diff_paths()'
       - name: Run coverage shard ${{ matrix.shard-index }}
         shell: bash
         run: |
