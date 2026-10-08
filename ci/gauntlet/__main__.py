@@ -42,6 +42,12 @@ def main() -> int:
     run.add_argument("--sdk-root", type=Path, help="Pinned SDK directory for --native-luna-route (default: from omp)")
     run.add_argument("--case", action="append", dest="cases", help="Targeted runs are never full-profile qualification")
     run.add_argument("--timeout", type=float, default=300, help="Per-scenario host deadline in seconds")
+    run.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="Concurrent isolated case workers (1-8; default 1 runs cases sequentially in-process)",
+    )
     run.add_argument("--max-inference-rounds", type=int, default=32)
     run.add_argument("--omp", help="Path to the repository-pinned Oh My Pi executable")
     run.add_argument("--work-root", type=Path, help="Parent for newly created disposable fixtures")
@@ -127,6 +133,11 @@ def main() -> int:
         # argparse does not apply choices to an environment-supplied default.
         if args.reasoning_effort is not None and args.reasoning_effort not in REASONING_EFFORTS:
             raise ValueError("unsupported reasoning effort; use " + ", ".join(REASONING_EFFORTS))
+        from .parallel import validate_jobs
+
+        validate_jobs(args.jobs)
+        if args.profile == "contained-bun-vitest" and args.jobs != 1:
+            raise ValueError("--jobs is only supported by the core profile")
         if args.profile == "core" and args.contained_test_project is not None:
             raise ValueError("--contained-test-project requires --profile contained-bun-vitest")
         if args.profile == "contained-bun-vitest" and args.contained_test_project is None:
@@ -181,6 +192,7 @@ def main() -> int:
                     omp=args.omp,
                     work_root=args.work_root,
                     candidate_sha=args.candidate_sha,
+                    jobs=args.jobs,
                 )
         print(
             json.dumps(
