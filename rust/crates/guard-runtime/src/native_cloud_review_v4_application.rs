@@ -206,7 +206,7 @@ pub(crate) fn apply_hook(
     .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
     hook_receipt.request_id = request_id.clone();
     edge["request_id"] = json!(request_id);
-    crate::native_hook_receipt::authorize_consumed_receipt(&mut hook_receipt, &native)?;
+    crate::native_hook_receipt::authorize_consumed_receipt(&mut hook_receipt, native)?;
     native_review_origin::authenticate(store, &mut hook_receipt)?;
     edge["receipt"] = serde_json::to_value(hook_receipt)
         .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;

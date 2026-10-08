@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_native_review_approval import _native_review_action_envelope
+from codex_plugin_scanner.guard.daemon.hook_native_review_origin import _native_review_action_envelope
 from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import (
     RuntimeHookEvidenceWriter,
     _NativeDecisionReceiptRecord,

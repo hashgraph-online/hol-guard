@@ -19,7 +19,6 @@ pub(crate) fn transaction(home: &Path) -> Result<std::fs::File, String> {
 }
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-
 pub(crate) struct ConsentRequest {
     pub schema: String,
     pub version: u16,

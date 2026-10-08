@@ -80,6 +80,11 @@ def test_unavailable_discovery_preserves_durable_cursor(tmp_path, monkeypatch, e
     result = recovery.recover_native_applications_once(store)
     assert result["state"] == "unavailable"
     assert store.get_sync_payload(recovery._STATE_KEY)["afterRequestId"] == "saved-cursor"
+    assert recovery.native_observation_recovery_status(GuardStore(tmp_path)) == {
+        "state": "unavailable",
+        "retrying_count": 1,
+        "quarantined_count": 0,
+    }
 
 
 def test_terminal_candidate_quarantined_and_later_pages_advance(tmp_path, monkeypatch):
@@ -288,3 +293,4 @@ def test_native_recovery_error_does_not_starve_ordinary_event_delivery(tmp_path,
     monkeypatch.setattr(worker, "user_health_report_due", lambda home: False)
     worker._cloud_sync_sync_loop(store, stop, Wake(), poll_interval=30, error_backoff=30)
     assert deliveries == ["delivered"]
+    assert store.get_sync_payload(recovery._STATE_KEY)["state"] == "unavailable"

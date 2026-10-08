@@ -110,6 +110,38 @@ def _quarantine_candidate(
     return True
 
 
+def native_observation_recovery_status(store: GuardStore) -> dict[str, object]:
+    """Project bounded health metadata, never native receipts or request IDs."""
+    saved = store.get_sync_payload(_STATE_KEY)
+    saved = saved if isinstance(saved, dict) else {}
+    quarantined = len(_quarantine_entries(store))
+    state = saved.get("state")
+    if not isinstance(state, str) or state not in {"confirmed", "recovery_required", "unavailable"}:
+        state = "not_observed"
+    if quarantined:
+        state = "recovery_required"
+    failures = saved.get("failureCount", 0)
+    retrying = min(max(failures, 0), _PAGE_LIMIT) if type(failures) is int else 0
+    return {"state": state, "retrying_count": retrying, "quarantined_count": quarantined}
+
+
+def record_native_observation_recovery_failure(
+    store: GuardStore, reason: str = "native_application_observation_recovery_unavailable"
+) -> dict[str, object]:
+    saved = store.get_sync_payload(_STATE_KEY)
+    now = datetime.now(timezone.utc).isoformat()
+    state = {
+        "state": "unavailable",
+        "reason": reason,
+        "afterRequestId": saved.get("afterRequestId") if isinstance(saved, dict) else None,
+        "confirmed": 0,
+        "failureCount": 1,
+        "observedAt": now,
+    }
+    store.set_sync_payload(_STATE_KEY, state, now)
+    return state
+
+
 def recover_native_applications_once(store: GuardStore) -> dict[str, object]:
     saved = store.get_sync_payload(_STATE_KEY)
     cursor = saved.get("afterRequestId") if isinstance(saved, dict) else None
@@ -122,7 +154,7 @@ def recover_native_applications_once(store: GuardStore) -> dict[str, object]:
             limit=_PAGE_LIMIT,
         )
     except (OSError, RuntimeError, ValueError) as error:
-        return {"state": "unavailable", "reason": _recovery_reason(error), "afterRequestId": cursor, "confirmed": 0}
+        return record_native_observation_recovery_failure(store, _recovery_reason(error))
     now = datetime.now(timezone.utc).isoformat()
     quarantine = _quarantine_entries(store)
     confirmed = 0

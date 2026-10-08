@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import TextIO
 
 from ..approval_gate import public_config
+from ..daemon.client import GuardDaemonRequestError, load_guard_surface_daemon_client
 from ..native_cloud_review_consent import NativeCloudReviewConsentError, native_cloud_review_consent
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
-from ..daemon.client import GuardDaemonRequestError, load_guard_surface_daemon_client
 from ..runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY,
     ExactCloudReviewError,
@@ -24,10 +24,10 @@ from ..runtime.exact_cloud_review import (
     exact_cloud_review_status,
 )
 from ..runtime.native_workspace_review import (
-    NativeWorkspaceReviewError,
     apply_native_workspace_review_decision,
     canonical_workspace_review_decision_bytes,
 )
+from ..runtime.native_workspace_review_error import NativeWorkspaceReviewError
 from ._commands_shared import GuardConfig, GuardStore, HarnessContext
 from .approval_gate_prompt import consume_desktop_cloud_review_factors
 from .commands_support_interaction import _emit
@@ -93,7 +93,9 @@ def apply_connect_time_cloud_review_consent(
     previously_enabled = exact_cloud_review_status(store).get("enabled") is True
     try:
         capability = enable_exact_cloud_review(
-            store, issuer="connect-consent", **_native_consent_factors(store),
+            store,
+            issuer="connect-consent",
+            **_native_consent_factors(store),
         )
         pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
     except PendingReviewRequeueError:

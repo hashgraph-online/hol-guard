@@ -13,6 +13,7 @@ from ..runtime.exact_cloud_review import (
     enable_exact_cloud_review,
     exact_cloud_review_status,
 )
+from ..runtime.native_cloud_review_observation_recovery import native_observation_recovery_status
 from ..sqlite_cloud_review_recovery import (
     read_cloud_review_recovery_health,
     read_cloud_review_recovery_repair,
@@ -63,6 +64,7 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
             else None
         ),
         "delivery_state": sync.get("state", "idle"),
+        "native_observation_recovery": native_observation_recovery_status(store),
         "cloud_review_recovery": recovery_health,
         "cloud_review_recovery_repair": {
             "status": recovery_repair.get("status"),

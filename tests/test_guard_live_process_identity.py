@@ -75,7 +75,7 @@ def test_process_identity_stops_matching_after_the_process_exits() -> None:
 
 
 def test_proven_codex_wait_keeps_only_the_live_process_identity() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_native_review_approval import _proven_codex_wait_process
+    from codex_plugin_scanner.guard.daemon.hook_native_review_wait import _proven_codex_wait_process
     from codex_plugin_scanner.guard.live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY
 
     identity = current_process_identity()

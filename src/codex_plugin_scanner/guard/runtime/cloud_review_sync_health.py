@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from ..store import GuardStore
 from .cloud_review_event_delivery import CLOUD_REVIEW_EVENT_PROTOCOL_VERSION
+from .native_cloud_review_observation_recovery import native_observation_recovery_status
 
 
 def classify_cloud_review_worker(
@@ -96,6 +97,7 @@ def cloud_review_sync_status(store: GuardStore) -> dict[str, object]:
         "synced_count": state.get("synced_count", 0),
         "rejected_count": state.get("rejected_count", 0),
         "outbox": outbox,
+        "native_observation_recovery": native_observation_recovery_status(store),
         "oauth_source": store.guard_source,
         "protocol_version": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
         "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,

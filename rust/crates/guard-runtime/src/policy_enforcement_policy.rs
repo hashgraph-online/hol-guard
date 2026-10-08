@@ -21,7 +21,6 @@ struct CompiledExactCommandAction {
 pub(crate) struct CompiledEffectivePolicy {
     pub(super) harness_actions: BTreeMap<String, String>,
     pub(super) harness_risk_actions: BTreeMap<String, BTreeMap<String, String>>,
-    cloud_workspace_id: Option<String>,
     exact_command_actions: ExactCommandActions,
 }
 
@@ -31,7 +30,6 @@ impl CompiledEffectivePolicy {
         Ok(Self {
             harness_actions: canonical_map(&policy.harness_actions)?,
             harness_risk_actions: canonical_map(&policy.harness_risk_actions)?,
-            cloud_workspace_id: policy.cloud_workspace_id.clone(),
             exact_command_actions: compile_exact_command_actions(policy)?,
         })
     }
@@ -40,14 +38,10 @@ impl CompiledEffectivePolicy {
         &self,
         payload: &Value,
         harness: &str,
-        cloud_workspace_id: Option<&str>,
     ) -> Result<Option<&'static str>, String> {
         let Some(actions) = self.exact_command_actions.get(harness) else {
             return Ok(None);
         };
-        if cloud_workspace_id != self.cloud_workspace_id.as_deref() {
-            return Err("native_policy_cloud_workspace_mismatch".into());
-        }
         let context = guard_command::pretool::generic::extract_untrusted_command_context(payload)?;
         let Some(command) = context.command else {
             return Ok(None);

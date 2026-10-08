@@ -58,6 +58,40 @@ def test_dashboard_reports_real_consent_not_cloud_connection(tmp_path: Path) -> 
     assert disabled["connected"] is True
 
 
+@pytest.mark.parametrize("stored_state", ["confirmed", {"unexpected": "secret-state"}])
+def test_native_outcome_health_keeps_quarantine_visible_without_private_evidence(
+    tmp_path: Path, stored_state: object
+) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload(
+        "guard_native_cloud_review_observation_recovery",
+        {"state": stored_state, "failureCount": 1000, "reason": "private-transport-detail"},
+        "2026-10-08T00:00:00Z",
+    )
+    store.set_sync_payload(
+        "guard_native_cloud_review_observation_recovery:quarantine",
+        {
+            "entries": {
+                "private-request-id": {
+                    "state": "quarantined",
+                    "reason": "private-reason",
+                    "observation": {"receipt": "private-receipt"},
+                }
+            }
+        },
+        "2026-10-08T00:00:00Z",
+    )
+
+    result = cloud_review_settings_status(store)
+
+    assert result["native_observation_recovery"] == {
+        "state": "recovery_required",
+        "retrying_count": 8,
+        "quarantined_count": 1,
+    }
+    assert "private-" not in json.dumps(result)
+
+
 def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
     add_review_request(store, review_request("current-workspace"))
@@ -239,13 +273,20 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
     ],
 )
 def test_reopened_dashboard_preserves_independent_recovery_without_consent(
-    tmp_path: Path, cloud_review: bool, local_cli: bool, reason: str, repair_state: str,
+    tmp_path: Path,
+    cloud_review: bool,
+    local_cli: bool,
+    reason: str,
+    repair_state: str,
 ) -> None:
     store = GuardStore(tmp_path / ".hol-guard")
     add_review_request(store, review_request("pending-after-recovery"))
     before = store.get_approval_request("pending-after-recovery")
     persist_cloud_review_recovery_health(
-        store, cloud_review=cloud_review, local_cli=local_cli, now="2026-10-07T14:00:00Z",
+        store,
+        cloud_review=cloud_review,
+        local_cli=local_cli,
+        now="2026-10-07T14:00:00Z",
     )
     reopened = GuardStore(store.guard_home)
     daemon = GuardDaemonServer(reopened, host="127.0.0.1", port=0)

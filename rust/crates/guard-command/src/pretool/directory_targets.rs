@@ -41,7 +41,11 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     // Absolute, non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
     if !absolute_path_spelling_matches(supplied, &canonical)
         || !canonical.is_dir()
-        || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
+        || !super::read_paths::screens::resolved_path_allowed(
+            &canonical,
+            context.home_dir,
+            context.cwd,
+        )
     {
         return None;
     }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_native_review_approval import _command_reuse_is_payload_bound
+from codex_plugin_scanner.guard.daemon.hook_native_review_command import _command_reuse_is_payload_bound
 
 
 @pytest.mark.parametrize(

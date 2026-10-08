@@ -170,6 +170,9 @@ export function CloudReviewSettings({ onOpenDataAndRepair }: { onOpenDataAndRepa
   if (cloudRecoveryIncomplete) connectionLabel = "Recovery incomplete";
   if (connectionRepairNeeded) connectionLabel = "Device sign-in needed";
   const localDataRecoveryIncomplete = status?.cloud_review_recovery?.localCli === false;
+  const nativeRecovery = status?.native_observation_recovery;
+  const nativeRecoveryIncomplete = nativeRecovery?.state === "recovery_required"
+    || nativeRecovery?.state === "unavailable";
   return (
     <section aria-labelledby="cloud-review-heading" className="border-t border-slate-200 pt-4">
       <div className="flex items-start justify-between gap-3">
@@ -208,6 +211,20 @@ export function CloudReviewSettings({ onOpenDataAndRepair }: { onOpenDataAndRepa
             </dd>
           </div>
         </dl>
+      ) : null}
+      {nativeRecoveryIncomplete ? (
+        <div role="status" className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-brand-dark">
+          <p className="font-semibold">Native outcome recovery needs attention</p>
+          <p className="mt-1">
+            Recovery failures: {nativeRecovery?.retrying_count ?? 0};
+            {" "}isolated observations: {nativeRecovery?.quarantined_count ?? 0}.
+            {" "}Local evidence is retained. Ordinary cloud uploads can continue; missing outcomes do not authorize an action.
+          </p>
+          <button type="button" onClick={onOpenDataAndRepair}
+            className="mt-2 min-h-10 rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-white">
+            View Data &amp; repair
+          </button>
+        </div>
       ) : null}
       {localDataRecoveryIncomplete ? (
         <div role="status" className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-brand-dark">

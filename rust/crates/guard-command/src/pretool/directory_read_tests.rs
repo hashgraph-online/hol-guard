@@ -1,4 +1,4 @@
-use super::super::safe_reads::bounded_omp_directory_read_target;
+use super::super::read_paths::selectors::bounded_omp_directory_read_target;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);

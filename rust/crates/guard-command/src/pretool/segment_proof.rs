@@ -240,7 +240,7 @@ pub(crate) fn benign_command_segments(
             let covered = benign
                 && ls_has_explicit_target
                 && (!requires_path_context
-                    || safe_reads::verified_path_context(
+                    || super::read_paths::screens::verified_path_context(
                         proof_context.home_dir,
                         proof_context.cwd,
                     ))

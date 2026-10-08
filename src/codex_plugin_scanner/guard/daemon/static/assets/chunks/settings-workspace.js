@@ -2665,6 +2665,8 @@ function CloudReviewSettings({ onOpenDataAndRepair }) {
   if (cloudRecoveryIncomplete) connectionLabel = "Recovery incomplete";
   if (connectionRepairNeeded) connectionLabel = "Device sign-in needed";
   const localDataRecoveryIncomplete = status?.cloud_review_recovery?.localCli === false;
+  const nativeRecovery = status?.native_observation_recovery;
+  const nativeRecoveryIncomplete = nativeRecovery?.state === "recovery_required" || nativeRecovery?.state === "unavailable";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cloud-review-heading", className: "border-t border-slate-200 pt-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
@@ -2710,6 +2712,29 @@ function CloudReviewSettings({ onOpenDataAndRepair }) {
           minute: "2-digit"
         }) }) : "Not recorded yet" })
       ] })
+    ] }) : null,
+    nativeRecoveryIncomplete ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold", children: "Native outcome recovery needs attention" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1", children: [
+        "Recovery failures: ",
+        nativeRecovery?.retrying_count ?? 0,
+        ";",
+        " ",
+        "isolated observations: ",
+        nativeRecovery?.quarantined_count ?? 0,
+        ".",
+        " ",
+        "Local evidence is retained. Ordinary cloud uploads can continue; missing outcomes do not authorize an action."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onOpenDataAndRepair,
+          className: "mt-2 min-h-10 rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-white",
+          children: "View Data & repair"
+        }
+      )
     ] }) : null,
     localDataRecoveryIncomplete ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-brand-dark", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold", children: "Local data recovery incomplete" }),

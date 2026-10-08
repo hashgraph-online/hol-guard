@@ -14,7 +14,7 @@ pub(in crate::policy_store::workspace_review_business) fn owned_decision(
     let request =
         crate::policy_store::workspace_review_request::load(&fixture.store, "business-test")
             .unwrap();
-    let (workspace, scope) = decision::current_native_workspace_review_bindings(
+    let (workspace, scope) = decision::verification::current_native_workspace_review_bindings(
         &fixture.root,
         &fixture.snapshot.scope_contract.scope_digest,
     )

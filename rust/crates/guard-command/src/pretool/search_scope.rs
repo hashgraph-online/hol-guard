@@ -98,7 +98,7 @@ fn verified_directory_root(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> Option<PathBuf> {
-    if !super::safe_reads::verified_path_context(home_dir, cwd) {
+    if !super::read_paths::screens::verified_path_context(home_dir, cwd) {
         return None;
     }
     if !super::safe_reads::bounded_read_target(target, home_dir, cwd, true) {

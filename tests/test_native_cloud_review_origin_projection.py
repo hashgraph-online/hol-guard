@@ -11,6 +11,7 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.daemon import hook_native_review_approval as producer
+from codex_plugin_scanner.guard.daemon import hook_native_review_origin as native_origin
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.review_contracts import (
@@ -235,7 +236,7 @@ def test_wrong_native_query_bindings_leave_cloud_visible_without_v4_execution(
     store = GuardStore(tmp_path / "guard")
     origin, receipt, result = _source()
     cast(dict[str, object], origin["challenge"])[field] = value
-    monkeypatch.setattr(producer, "get_native_approval_origin", lambda *_args: origin)
+    monkeypatch.setattr(native_origin, "get_native_approval_origin", lambda *_args: origin)
     monkeypatch.setattr(
         projection,
         "build_native_workspace_review_context",
@@ -275,7 +276,7 @@ def test_missing_private_origin_keeps_visibility_without_executable_legacy_downg
     def unavailable(*_args: object) -> dict[str, object]:
         raise NativeCloudReviewV4Error(code)
 
-    monkeypatch.setattr(producer, "get_native_approval_origin", unavailable)
+    monkeypatch.setattr(native_origin, "get_native_approval_origin", unavailable)
     monkeypatch.setattr(
         projection,
         "build_native_workspace_review_context",
@@ -319,7 +320,7 @@ def test_non_original_native_receipts_never_gain_a_private_origin(
         result["agent_visible_immutable_block"] = True
     else:
         result["reason_code"] = "different_native_reason"
-    monkeypatch.setattr(producer, "get_native_approval_origin", lambda *_args: origin)
+    monkeypatch.setattr(native_origin, "get_native_approval_origin", lambda *_args: origin)
     row = _queue(store, tmp_path, receipt, result)
     assert frozen_native_approval_challenge(row) is None
     assert row["request_id"] != receipt["request_id"]
@@ -379,7 +380,7 @@ def test_invalid_frozen_origin_cannot_fall_back_to_an_executable_root_context(
 ) -> None:
     store = GuardStore(tmp_path / "guard")
     origin, receipt, result = _source()
-    monkeypatch.setattr(producer, "get_native_approval_origin", lambda *_args: origin)
+    monkeypatch.setattr(native_origin, "get_native_approval_origin", lambda *_args: origin)
     row = _queue(store, tmp_path, receipt, result)
     if invalid == "watch":
         row["watch_only_observation"] = 1
@@ -422,7 +423,7 @@ def test_actual_older_native_core_retains_native_proven_legacy_root_context(
         raise NativeCloudReviewV4Error("native_cloud_review_v4_capability_unavailable")
 
     legacy_context = {"schema": "guard-native-workspace-review-context.v1", "request_id": "legacy-original"}
-    monkeypatch.setattr(producer, "get_native_approval_origin", older_native)
+    monkeypatch.setattr(native_origin, "get_native_approval_origin", older_native)
     monkeypatch.setattr(projection, "build_native_workspace_review_context", lambda *_args: legacy_context)
     row = _queue(store, tmp_path, receipt, result)
     event = _event(store, row)
@@ -437,7 +438,7 @@ def test_standalone_challenge_response_is_not_an_original_native_origin(
 ) -> None:
     store = GuardStore(tmp_path / "guard")
     origin, receipt, result = _source()
-    monkeypatch.setattr(producer, "get_native_approval_origin", lambda *_args: origin["challenge"])
+    monkeypatch.setattr(native_origin, "get_native_approval_origin", lambda *_args: origin["challenge"])
     row = _queue(store, tmp_path, receipt, result)
     event = _event(store, row)
     assert frozen_native_approval_challenge(row) is None
@@ -461,7 +462,7 @@ def test_original_native_reapproval_floor_is_not_downgraded_to_sdk_review(
     receipt["policy_action"] = "require-reapproval"
     receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
     result["policy_action"] = result["minimum_action"] = "require-reapproval"
-    monkeypatch.setattr(producer, "get_native_approval_origin", lambda *_args: origin)
+    monkeypatch.setattr(native_origin, "get_native_approval_origin", lambda *_args: origin)
     row = _queue(store, tmp_path, receipt, result)
     event = _event(store, row)
     assert row["policy_action"] == event["policyAction"] == "require-reapproval"

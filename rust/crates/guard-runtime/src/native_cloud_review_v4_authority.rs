@@ -15,9 +15,7 @@ pub(super) fn checked_request(request: &DeliveryRequest, schema: &str) -> Result
     }
     Ok(())
 }
-pub(super) fn exact_bindings<'a>(
-    request: &'a DeliveryRequest,
-) -> Result<(&'a str, &'a str), String> {
+pub(super) fn exact_bindings(request: &DeliveryRequest) -> Result<(&str, &str), String> {
     let decision = request
         .decision_receipt_id
         .as_deref()

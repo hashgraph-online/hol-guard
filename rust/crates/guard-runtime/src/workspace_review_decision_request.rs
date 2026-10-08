@@ -206,10 +206,11 @@ fn claim_request_with_clock_and<T>(
         // scope come from the current native policy store and state path, so
         // Python metadata cannot choose the authority's provenance.
         let snapshot = policy_store.current_snapshot()?;
-        let (workspace_binding, scope_binding) = current_native_workspace_review_bindings(
-            state_base,
-            &snapshot.scope_contract.scope_digest,
-        )?;
+        let (workspace_binding, scope_binding) =
+            verification::current_native_workspace_review_bindings(
+                state_base,
+                &snapshot.scope_contract.scope_digest,
+            )?;
         let request = policy_store::workspace_review_request::load(policy_store, request_id)?;
         // This legacy response returns bindings, not owned provider bytes.
         // Never consume a business grant through a mutable-command retry path.
@@ -222,7 +223,7 @@ fn claim_request_with_clock_and<T>(
         }
         let (authority, query_state) = if operation == RequestOperation::QueryConsumption {
             let time = clock()?;
-            let (authority, state) = read_query_authority(state_base, time)?;
+            let (authority, state) = verification::read_query_authority(state_base, time)?;
             (authority, Some((time, state)))
         } else {
             let authority =
@@ -232,7 +233,7 @@ fn claim_request_with_clock_and<T>(
                 .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
             (authority, None)
         };
-        ensure_current_native_workspace_review_provenance(
+        verification::ensure_current_native_workspace_review_provenance(
             &authority,
             &workspace_binding,
             &scope_binding,
@@ -271,7 +272,9 @@ fn claim_request_with_clock_and<T>(
             verified.observed_at_ms = release_time_ms;
             verified
         } else if let Some((time, state)) = query_state.as_ref() {
-            query_consumption_verified(state_base, &envelope, &context, *time, &authority, state)?
+            verification::query_consumption_verified(
+                state_base, &envelope, &context, *time, &authority, state,
+            )?
         } else {
             verify_and_claim_bytes_at(state_base, decision, &context, clock()?)?
         };

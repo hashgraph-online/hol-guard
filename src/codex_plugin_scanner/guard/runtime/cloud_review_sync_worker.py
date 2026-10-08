@@ -16,7 +16,10 @@ from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_event_wake import ReviewEventWake, ReviewEventWakeSignal, review_event_wake_signal
 from ..store import GuardStore
 from .cloud_review_retry_recovery import prepare_retry_identity_replay
-from .native_cloud_review_observation_recovery import recover_native_applications_once
+from .native_cloud_review_observation_recovery import (
+    record_native_observation_recovery_failure,
+    recover_native_applications_once,
+)
 from .native_workspace_review_replay import prepare_native_workspace_review_replay
 
 _LOGGER = logging.getLogger(__name__)
@@ -187,16 +190,14 @@ def _cloud_sync_sync_loop(
                     store, binding=binding, force_probe=binding_changed or authority_changed
                 )
             try:
-                native_recovery = recover_native_applications_once(store)
+                recover_native_applications_once(store)
             except Exception:
                 _LOGGER.exception("Native observation recovery failed; continuing ordinary Cloud Review delivery")
-                native_recovery = {
-                    "state": "recovery_required",
-                    "reason": "native_application_observation_recovery_unavailable",
-                    "confirmed": 0,
-                }
+                try:
+                    record_native_observation_recovery_failure(store)
+                except Exception:
+                    _LOGGER.exception("Native observation recovery status could not be persisted")
             result = sync.sync_cloud_review_events_once(store, auth_context)
-            result["nativeObservationRecovery"] = native_recovery
             error_streak = 0
             with suppress(OSError, PermissionError, RuntimeError, ValueError):
                 if user_health_report_due(store.guard_home):

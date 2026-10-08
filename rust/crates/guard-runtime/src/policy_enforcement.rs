@@ -286,11 +286,8 @@ pub(crate) fn apply_pre_tool_policy(
             PreToolActionTypeV1::Command | PreToolActionTypeV1::ProcessService
         )
     {
-        if let Some(action) = snapshot.compiled.exact_command_action(
-            payload,
-            &harness,
-            snapshot.effective_policy.cloud_workspace_id.as_deref(),
-        )? {
+        // Rule/workspace binding was validated when this snapshot was compiled.
+        if let Some(action) = snapshot.compiled.exact_command_action(payload, &harness)? {
             // Remembered allows never replace an intrinsic or governed floor,
             // and never manufacture native approval/physical capability.
             policy_floor = join_action(&policy_floor, action)?;

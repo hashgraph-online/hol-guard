@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import (
     exact_result,
     exact_transport_job,
 )
-from codex_plugin_scanner.guard.runtime.native_workspace_review import NativeWorkspaceReviewError
+from codex_plugin_scanner.guard.runtime.native_workspace_review_error import NativeWorkspaceReviewError
 from codex_plugin_scanner.guard.runtime.native_workspace_review_queue import (
     NativeWorkspaceReviewQueueError,
     is_native_workspace_review_job,
