@@ -15,18 +15,25 @@
 
 use std::collections::HashSet;
 use std::fs::{self, Metadata};
-use std::io::Read;
+use std::io::{Cursor, Read, Write};
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use guard_contracts::write_canonical_json;
 use serde_json::{json, Map, Value};
+#[cfg(test)]
 use sha2::{Digest, Sha256};
 
 use crate::command_tokens::executable_name;
 use crate::env_wrapper::parse_env_wrapper;
+use crate::launch_identity_common::{
+    canonical_material_bytes, context_opaque_digest_strict, expand_user, launch_argv_digest,
+    normalized_launch_cwd, runtime_launch_argv, sha256_hex, RuntimeLaunchArgv, UNBOUND_PREFIX,
+};
 use crate::shell_tokens;
 
 // Python constants (approval_context.py :47-51, file_identity.py :23-31,
@@ -34,7 +41,6 @@ use crate::shell_tokens;
 const MAX_EXECUTABLE_HASH_BYTES: u64 = 256 * 1024 * 1024;
 const EXECUTABLE_HASH_CHUNK_BYTES: usize = 1024 * 1024;
 const MAX_SHEBANG_BYTES: usize = 4096;
-const UNBOUND_PREFIX: &str = "guard-context-unbound:";
 
 // `content_stat_identity` (file_identity.py :23-31) — the compact stat tuple
 // used to detect content/path replacement. Order is
@@ -69,10 +75,6 @@ fn is_regular(mode: u32) -> bool {
     mode & S_IFMT == S_IFREG
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    hex::encode(Sha256::digest(bytes))
-}
-
 fn token_hex(bytes: usize) -> String {
     let mut buffer = vec![0u8; bytes];
     if getrandom::fill(&mut buffer).is_ok() {
@@ -80,34 +82,6 @@ fn token_hex(bytes: usize) -> String {
     } else {
         "0".repeat(bytes * 2)
     }
-}
-
-// `_canonical_material_bytes` (native_context.py :383-388) → canonical JSON
-// UTF-8 bytes. `ensure_ascii=True` semantics are enforced inside
-// `write_canonical_json` (the contract is byte-identical).
-fn canonical_material_bytes(material: &Value) -> Vec<u8> {
-    let mut out = Vec::with_capacity(256);
-    // JSON encode failure is unreachable for identity material (only strings,
-    // numbers, arrays, maps); fail closed to an empty-payload digest rather
-    // than panic, matching the unbound degrade semantics.
-    if write_canonical_json(material, &mut out).is_err() {
-        return Vec::new();
-    }
-    out
-}
-
-// `context_opaque_digest(material, unbound_label=<label>, strict=True)` —
-// when the native resident is absent (always true for in-process Rust) the
-// strict degrade is `guard-context-unbound:<label>:<sha256(canonical_json)>`
-// (native_context.py :441-453 + :377-388).
-fn context_opaque_digest_strict(material: &str, unbound_label: &str) -> String {
-    let material_bytes = canonical_material_bytes(&Value::String(material.to_string()));
-    format!(
-        "{}{}:{}",
-        UNBOUND_PREFIX,
-        unbound_label,
-        sha256_hex(&material_bytes)
-    )
 }
 
 // `context_sha256_digest(material, unbound_label=<label>, strict=True)` — same
@@ -126,18 +100,6 @@ fn context_sha256_digest_strict(material: &Value, unbound_label: &str) -> String
 // unbound_label="opaque-identity")` (strict).
 fn opaque_identity_digest(material: &str) -> String {
     context_opaque_digest_strict(material, "opaque-identity")
-}
-
-// `_launch_argv_digest` (:891-897) — `opaque_material_digest` over
-// `json.dumps(list(argv), ensure_ascii=True, separators=(",",":"))`.
-fn launch_argv_digest(argv: &[String]) -> String {
-    let material = Value::Array(argv.iter().map(|s| Value::String(s.clone())).collect());
-    let mut bytes = Vec::with_capacity(64);
-    if write_canonical_json(&material, &mut bytes).is_err() {
-        bytes.clear();
-    }
-    let text = String::from_utf8_lossy(&bytes);
-    context_opaque_digest_strict(&text, "launch-argv")
 }
 
 fn is_sha256_hex(value: &Value) -> bool {
@@ -180,39 +142,6 @@ fn with_launch_cwd(mut identity: Value, effective_cwd: Option<&Path>) -> Value {
         );
     }
     identity
-}
-
-// `_normalized_launch_cwd` (:872-878) — expanduser + resolve(strict=False)
-// with absolute() fallback. POSIX: `Path::expanduser` is `~` → `$HOME`.
-fn normalized_launch_cwd(cwd: Option<&Path>) -> PathBuf {
-    let candidate = cwd
-        .map(expand_user)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    candidate.canonicalize().unwrap_or_else(|_| {
-        if candidate.is_absolute() {
-            candidate
-        } else {
-            std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join(candidate)
-        }
-    })
-}
-
-fn expand_user(path: &Path) -> PathBuf {
-    let text = path.to_string_lossy();
-    if text == "~" {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home);
-        }
-        return path.to_path_buf();
-    }
-    if let Some(rest) = text.strip_prefix("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return Path::new(&home).join(rest);
-        }
-    }
-    path.to_path_buf()
 }
 
 // `_runtime_path_with_trusted_home` (:315-330).
@@ -313,10 +242,55 @@ fn executable_path_chain_snapshot(path: &Path) -> Option<Vec<Value>> {
     }
 }
 
+// Match the runtime's opt-in sanitized stderr protocol without exposing any
+// executable path, digest, launch environment, or file content.
+static EXECUTABLE_DIGEST_DIAGNOSTIC: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var("HOL_GUARD_NATIVE_DIAGNOSTIC").is_ok_and(|value| {
+        let value = value.trim();
+        value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("yes")
+    })
+});
+
+fn emit_executable_digest_phase(status: &'static str, elapsed: Duration) {
+    let mut line = [0u8; 192];
+    let mut output = Cursor::new(line.as_mut_slice());
+    if writeln!(
+        output,
+        "native_resident_phase phase=executable_digest status={status} elapsed_ms={}",
+        elapsed.as_millis()
+    )
+    .is_ok()
+    {
+        let length = output.position() as usize;
+        let _ = std::io::stderr().lock().write_all(&line[..length]);
+    }
+}
+
 // `_cached_executable_hash` (:1743-1782) — ported uncached; the Python
 // `lru_cache` is a pure optimization (output identical for same stat key).
 // Returns (digest, hash_status, shebang, shebang_status).
 fn cached_executable_hash(
+    path: &Path,
+    expected_stat: StatKey,
+) -> (Option<String>, &'static str, Option<String>, &'static str) {
+    if !*EXECUTABLE_DIGEST_DIAGNOSTIC {
+        return executable_hash_inner(path, expected_stat);
+    }
+    let started = Instant::now();
+    emit_executable_digest_phase("start", Duration::ZERO);
+    let result = executable_hash_inner(path, expected_stat);
+    emit_executable_digest_phase(
+        if result.1 == "verified" {
+            "ok"
+        } else {
+            "error"
+        },
+        started.elapsed(),
+    );
+    result
+}
+
+fn executable_hash_inner(
     path: &Path,
     expected_stat: StatKey,
 ) -> (Option<String>, &'static str, Option<String>, &'static str) {
@@ -342,7 +316,7 @@ fn cached_executable_hash(
     if opened_stat.size() > MAX_EXECUTABLE_HASH_BYTES {
         return (None, "too_large", None, "unverified");
     }
-    let mut digest = Sha256::new();
+    let mut digest = ring::digest::Context::new(&ring::digest::SHA256);
     let mut prefix: Vec<u8> = Vec::new();
     let mut total: u64 = 0;
     let mut reader = file;
@@ -375,7 +349,7 @@ fn cached_executable_hash(
     }
     let (shebang, shebang_status) = parse_executable_shebang(&prefix);
     (
-        Some(hex::encode(digest.finalize())),
+        Some(hex::encode(digest.finish().as_ref())),
         "verified",
         shebang,
         shebang_status,
@@ -979,38 +953,21 @@ pub fn build_runtime_launch_identity(
         }
     };
 
-    let command_tokens: Vec<String>;
-    if structured_command {
-        command_tokens = vec![command_str.clone()];
-    } else {
-        match shell_tokens(&command_str, false) {
-            Ok(t) => command_tokens = t,
-            Err(_) => command_tokens = Vec::new(),
+    let full_argv: Vec<String> = match runtime_launch_argv(command, args, structured_command) {
+        RuntimeLaunchArgv::Valid(argv) => argv,
+        RuntimeLaunchArgv::Invalid(executable_cmd) => {
+            return json!({
+                "argv_sha256": launch_argv_digest(&[]),
+                "entrypoint": unproven_runtime_entrypoint("unknown-launch", "unparseable_launch_vector", None),
+                "executable": build_runtime_executable_identity(
+                    &executable_cmd, search_path, Some(&effective_cwd), home_dir, true,
+                ),
+                "launch_cwd": effective_cwd.to_string_lossy(),
+            });
         }
-    }
-    let args_all_strings = args.iter().all(|a| a.is_string());
-    if command_tokens.is_empty() || !args_all_strings {
-        let executable_cmd = command_tokens
-            .first()
-            .map(|s| Value::String(s.clone()))
-            .unwrap_or_else(|| command.clone());
-        return json!({
-            "argv_sha256": launch_argv_digest(&[]),
-            "entrypoint": unproven_runtime_entrypoint("unknown-launch", "unparseable_launch_vector", None),
-            "executable": build_runtime_executable_identity(
-                &executable_cmd, search_path, Some(&effective_cwd), home_dir, true,
-            ),
-            "launch_cwd": effective_cwd.to_string_lossy(),
-        });
-    }
-
-    let executable = command_tokens[0].clone();
-    let mut launch_args: Vec<String> = command_tokens[1..].to_vec();
-    for a in args {
-        if let Some(s) = a.as_str() {
-            launch_args.push(s.to_string());
-        }
-    }
+    };
+    let executable = full_argv[0].clone();
+    let launch_args: &[String] = &full_argv[1..];
     let raw_command = command_str.trim_start();
     let raw_current_user_tilde = raw_command.starts_with("~/");
     let executable_identity: Value =
@@ -1036,12 +993,10 @@ pub fn build_runtime_launch_identity(
         executable_shebang.as_deref(),
         executable_shebang_status.as_str(),
         direct_executable,
-        &launch_args,
+        launch_args,
         &effective_cwd,
         launch_env,
     );
-    let mut full_argv = vec![executable.clone()];
-    full_argv.extend(launch_args.iter().cloned());
     json!({
         "argv_sha256": launch_argv_digest(&full_argv),
         "entrypoint": entrypoint,

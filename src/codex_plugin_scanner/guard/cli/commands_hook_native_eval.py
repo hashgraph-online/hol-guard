@@ -61,6 +61,7 @@ from ..runtime.approval_reuse import (
     APPROVAL_REUSE_REAPPROVAL_REQUIRED,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
     with_saved_artifact_hash_provenance,
 )
@@ -78,6 +79,7 @@ from .commands_hook_github_workflow import (
     github_workflow_approval_evidence,
     prepare_github_workflow_hook_state,
 )
+from .commands_hook_native_edge_floor import _native_edge_floor_action
 from .commands_hook_native_floor import (
     _runtime_package_raw_command,
     apply_local_grant_then_native_floor,
@@ -100,40 +102,6 @@ from .commands_support_runtime_policy import (
 
 def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
     return coerce_guard_action(value) or fallback
-
-
-def _native_edge_floor_action(
-    native_edge_result: Mapping[str, object] | None,
-    event_name: str,
-    *,
-    artifact_default_action: object | None = None,
-) -> GuardAction | None:
-    """Project the typed native edge result onto the composition floor."""
-
-    if not isinstance(native_edge_result, Mapping):
-        return None
-    action = coerce_guard_action(native_edge_result.get("policy_action") or native_edge_result.get("minimum_action"))
-    if event_name != "PostToolUse":
-        # PreToolUse/UserPromptSubmit composition floors come from the
-        # command-level native review (``native_pre_tool_floor``) and the
-        # artifact's own request classes; the envelope edge result is carried
-        # as provenance, not as a second policy floor.
-        return None
-    if action is None and native_edge_result.get("decision") == "deny":
-        action = "block"
-    if action not in {"block", "sandbox-required"}:
-        return action
-    if artifact_default_action == "warn":
-        # Standalone credential-looking output is warn-tier evidence the
-        # artifact classifier already priced (cleared environments, remote
-        # samples, read-only dumps). The edge deny still masks the emitted
-        # output surface; it does not turn the run into a pause.
-        return None
-    # PostToolUse can never undo the finished action; the edge deny is an
-    # output-mask directive carried by the emitted decision surface. The
-    # policy floor flags the run for re-approval so it stays reviewable
-    # instead of terminal.
-    return "require-reapproval"
 
 
 def _requested_policy_action_normalization(
@@ -553,6 +521,7 @@ def evaluate_native_artifact_hook(
         native_edge_result,
         event_name,
         artifact_default_action=runtime_artifact.metadata.get("guard_default_action"),
+        artifact_type=runtime_artifact.artifact_type,
     )
     if native_edge_action is not None:
         current_action_inputs.append(native_edge_action)
@@ -806,6 +775,10 @@ def evaluate_native_artifact_hook(
             "allow",
             saved_decision_present=True,
         )
+        if native_reuse is None:
+            # Resident unreachable: the observed approval is recorded against
+            # the recomputed current action; no saved approval is claimed.
+            native_reuse = approval_reuse_authority_unavailable(current_policy_action)
         claude_native_approval_observed, claude_native_approval_saved = (
             _persist_claude_native_permission_for_runtime_artifact(
                 store=store,
@@ -985,12 +958,13 @@ def evaluate_native_artifact_hook(
             else current_policy_action
         )
         if stored_policy_action == "block":
+            block_reuse = evaluate_approval_reuse(
+                current_policy_action,
+                "block",
+                saved_decision_present=True,
+            )
             approval_reuse = with_saved_artifact_hash_provenance(
-                evaluate_approval_reuse(
-                    current_policy_action,
-                    "block",
-                    saved_decision_present=True,
-                ),
+                block_reuse if block_reuse is not None else approval_reuse_authority_unavailable(current_policy_action),
                 stored_policy_decision.get("artifact_hash") if stored_policy_decision is not None else None,
             )
             policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action)
@@ -1055,13 +1029,18 @@ def evaluate_native_artifact_hook(
                 if validation_reason == "approval_reuse_integrity_failure"
                 else "invalidated_saved_policy"
             )
+        saved_reuse = evaluate_approval_reuse(
+            current_policy_action,
+            saved_action,
+            saved_decision_present=saved_present,
+            validation_reason=validation_reason,
+        )
         approval_reuse = with_saved_artifact_hash_provenance(
-            evaluate_approval_reuse(
-                current_policy_action,
-                saved_action,
-                saved_decision_present=saved_present,
-                validation_reason=validation_reason,
-            ),
+            saved_reuse
+            if saved_reuse is not None
+            # Resident unreachable: preserve the recomputed action; the saved
+            # policy decision is not claimed.
+            else approval_reuse_authority_unavailable(current_policy_action),
             (
                 stored_policy_decision.get("artifact_hash")
                 if stored_policy_decision is not None
@@ -1087,13 +1066,16 @@ def evaluate_native_artifact_hook(
             and _claim_saved_approval
         ):
             if not store.claim_approval_reuse_decision(stored_policy_decision, now=_now()):
+                claim_failed_reuse = evaluate_approval_reuse(
+                    current_policy_action,
+                    saved_action,
+                    saved_decision_present=True,
+                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+                )
                 approval_reuse = with_saved_artifact_hash_provenance(
-                    evaluate_approval_reuse(
-                        current_policy_action,
-                        saved_action,
-                        saved_decision_present=True,
-                        validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-                    ),
+                    claim_failed_reuse
+                    if claim_failed_reuse is not None
+                    else approval_reuse_authority_unavailable(current_policy_action),
                     stored_policy_decision.get("artifact_hash"),
                 )
             else:
@@ -1206,14 +1188,19 @@ def evaluate_native_artifact_hook(
             # only after its one-shot row has been claimed and the complete
             # runtime authority has been rebuilt.
             post_claim_current_action = "review"
+        claimed_reuse = evaluate_approval_reuse(
+            post_claim_current_action,
+            "allow",
+            saved_decision_present=True,
+            validation_reason=claimed_validation_reason,
+            fresh_local_approval=(_claimed_package_approval_consumed or _claimed_trusted_request_override),
+        )
         approval_reuse = with_saved_artifact_hash_provenance(
-            evaluate_approval_reuse(
-                post_claim_current_action,
-                "allow",
-                saved_decision_present=True,
-                validation_reason=claimed_validation_reason,
-                fresh_local_approval=(_claimed_package_approval_consumed or _claimed_trusted_request_override),
-            ),
+            claimed_reuse
+            if claimed_reuse is not None
+            # Resident unreachable after the atomic claim: keep the consumed
+            # claim's projected action rather than inventing a new grant.
+            else approval_reuse_authority_unavailable(post_claim_current_action),
             _claimed_saved_allow_hash,
         )
         policy_action = approval_reuse.action

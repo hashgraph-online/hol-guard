@@ -23,6 +23,8 @@ from tests.test_guard_supply_chain_evaluator import (
     _package,
 )
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
@@ -491,5 +493,3 @@ def test_known_package_does_not_emit_unidentified_package(
         now="2026-05-19T00:00:00Z",
     )
     assert all(reason["code"] != "unidentified_package" for package in result.packages for reason in package["reasons"])
-
-

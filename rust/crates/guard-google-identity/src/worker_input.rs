@@ -41,16 +41,18 @@ impl GoogleSendCredential {
         if !self.is_current() {
             return Err(GoogleWorkerInputError::Expired);
         }
-        if !self
-            .identity()
-            .sender
-            .as_ref()
-            .is_some_and(|sender| sender.matches(input.sender()))
-        {
+        if !self.sender_matches(input.sender()) {
             return Err(GoogleWorkerInputError::Sender);
         }
         let mut digest = Sha256::new();
         digest.update(b"hol-guard.google-worker-input.v1\0");
+        if let Some(epoch) = self.account_epoch() {
+            // Versioned binding format: domain marker, u64 big-endian byte
+            // length, then epoch bytes. Preserve this inspection commitment.
+            digest.update(b"hol-guard.google-account-epoch.v1\0");
+            digest.update((epoch.len() as u64).to_be_bytes());
+            digest.update(epoch.as_bytes());
+        }
         for field in [
             self.identity().account_binding(),
             self.identity().tenant_binding(),
@@ -69,6 +71,19 @@ impl GoogleSendCredential {
 }
 
 impl GoogleWorkerInput {
+    #[cfg(test)]
+    pub(crate) fn test_credential(self) -> GoogleSendCredential {
+        self.credential
+    }
+    pub(crate) fn send_once(
+        self,
+        bytes: &[u8],
+    ) -> Result<crate::dispatch::RawSendAttempt, crate::dispatch::GoogleDispatchError> {
+        if bytes != self.input.wire_input().body_bytes() {
+            return Err(crate::dispatch::GoogleDispatchError::InputChanged);
+        }
+        self.credential.send_json_once(bytes)
+    }
     pub fn identity(&self) -> &GoogleIdentityEvidence {
         self.credential.identity()
     }

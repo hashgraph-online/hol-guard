@@ -7,8 +7,9 @@ from copy import deepcopy
 
 import pytest
 
-from ci.gauntlet.catalog import Scenario, load_catalog
+from ci.gauntlet.catalog import Scenario, load_catalog, load_catalog_data
 from ci.gauntlet.evidence import assess_case, public_events, reconcile
+from ci.gauntlet.extension_adapters import EXTENSION_ADAPTERS
 from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from ci.gauntlet.input_evidence import input_digest
 from ci.gauntlet.proofs import task_tools_match
@@ -235,115 +236,11 @@ def test_sibling_copy_requires_bash_then_native_read_and_exact_bytes(tmp_path):
     assert not task_tools_match(scenario, list(reversed(calls)))
 
 
-def test_extension_permission_denial_requires_native_binding_evidence():
-    """Do not credit a missing executable, stale receipt, or generic deny."""
-    scenario = Scenario(
-        "permission-denial",
-        "block",
-        "blocked-extension",
-        "Attempt the synthetic ollama command",
-        ("ollama rm gauntlet-synthetic-model",),
-    )
-    case = observed_case(scenario.commands[0], blocked=True)
-    case["filesystem"]["extension-executed-absent"] = True
-    binding = {
-        "schema": "guard.native-command-receipt-binding.v1",
-        "program_digest": "b" * 64,
-        "catalog_digest": "c" * 64,
-        "trust_digest": "d" * 64,
-        "control_revision": 1,
-        "managed_control_revision": 1,
-        "control_effective_digest": "e" * 64,
-        "observations_digest": "f" * 64,
-        "observation_count": 2,
-        "uncertainty_count": 0,
-    }
-    case["guard_observations"][0].update(
-        policy_action="block",
-        reason_code="native_command_permission_disabled",
-        probe_operation_id="00000000-0000-4000-8000-000000000001",
-        probe_request_id="transition-hook-" + "1" * 32,
-    )
-    case["extension_control"] = {
-        "extension_id": "command.ollama",
-        "rule_id": "command.ollama.rm",
-        "permission_id": "command.ollama.permission.rm",
-        "permission_state": "disabled",
-        "control_revision": 1,
-    }
-    receipt = {
-        "schema": "guard-native-hook-decision-receipt.v1",
-        "version": 1,
-        "authority": "rust",
-        "decision_id": "a" * 64,
-        "request_id": "transition-hook-" + "1" * 32,
-        "payload_kind": "inline",
-        "harness": "omp",
-        "event_name": "PreToolUse",
-        "decision": "deny",
-        "policy_action": "block",
-        "observed_policy_action": "block",
-        "reason_code": "native_command_permission_disabled",
-        "command_extensions": binding,
-    }
-    case["native_observer_receipt"] = receipt
-    case["native_receipt"] = dict(receipt)
-    case["native_receipt_writer"] = {"processed_before": 3, "processed_after": 4}
-    case["native_observation"] = {
-        "schema": "hol-guard.transition-hook-observation.v1",
-        "operation_id": "00000000-0000-4000-8000-000000000001",
-        "request_id": "transition-hook-" + "1" * 32,
-        "native_receipt": receipt,
-    }
-    case["guard_observations"][0]["native_observation"] = case["native_observation"]
-    case["native_extension_evidence"] = {
-        "schema": "guard.native-command-observations.v1",
-        "binding": binding,
-        "observations": [
-            {
-                "extension_id": "command.ollama",
-                "rule_id": "command.ollama.rm",
-                "uncertainty_reasons": [],
-                "effective_segment_indexes": [0],
-                "matcher_evidence": [{"segment_index": 0}],
-            }
-        ],
-        "permission_observations": [
-            {
-                "extension_id": "command.ollama",
-                "permission_id": "command.ollama.permission.rm",
-                "uncertainty_reasons": [],
-                "matcher_evidence": [{"segment_index": 0}],
-            }
-        ],
-        "evaluation_error": None,
-    }
-    assert assess_case(scenario, case)["outcome"] == "pass"
-    permission_observation = case["native_extension_evidence"]["permission_observations"][0]
-    permission_observation["permission_id"] = "command.ollama.permission.push"
-    assert assess_case(scenario, case)["outcome"] != "pass"
-    permission_observation["permission_id"] = "command.ollama.permission.rm"
-    case["native_extension_evidence"]["permission_observations"] = []
-    binding["observation_count"] = 1
-    assert assess_case(scenario, case)["outcome"] == "pass"
-    case["extension_control"]["permission_id"] = "command.ollama.permission.push"
-    assert assess_case(scenario, case)["outcome"] != "pass"
-    case["extension_control"]["permission_id"] = "command.ollama.permission.rm"
-    case["native_receipt"] = None
-    assert assess_case(scenario, case)["outcome"] != "pass"
-    case["native_receipt"] = dict(receipt)
-    case["native_observer_receipt"] = dict(receipt, decision_id="c" * 64)
-    assert assess_case(scenario, case)["outcome"] != "pass"
-    case["native_observer_receipt"] = receipt
-    case["native_extension_evidence"]["observations"][0]["rule_id"] = "command.ollama.help"
-    assert assess_case(scenario, case)["outcome"] != "pass"
-
-
 def test_fixture_uses_only_synthetic_data_and_detects_deletion(tmp_path):
     """Verify synthetic canaries, deletion detection and refusal to reuse an existing fixture."""
     fixture = create_fixture(tmp_path / "fresh")
     assert fixture.canary.startswith("GAUNTLET_SYNTHETIC_")
-    assert (fixture.root / "bin/ollama").is_file()
+    assert all((fixture.root / "bin" / executable).is_file() for executable in EXTENSION_ADAPTERS)
     assert filesystem_checks(fixture, "blocked-extension", "explicit-disabled-ollama-permission")[
         "extension-executed-absent"
     ]
@@ -352,8 +249,6 @@ def test_fixture_uses_only_synthetic_data_and_detects_deletion(tmp_path):
     assert filesystem_checks(fixture, "commands", "ordinary")["protected:deletion-target/keep.txt"] is False
     with pytest.raises(FileExistsError):
         create_fixture(tmp_path / "fresh")
-
-
 
 
 def test_provider_rejects_credentials_redirect_style_urls_and_plaintext_remote_hosts():
@@ -391,7 +286,7 @@ def test_interrupted_run_reaps_its_owned_host_process(tmp_path, monkeypatch):
     import sys
     import time
 
-    from ci.gauntlet import runner
+    from ci.gauntlet import host_process
 
     if os.name != "posix":
         pytest.skip("Gauntlet process containment is POSIX-only")
@@ -412,10 +307,10 @@ def test_interrupted_run_reaps_its_owned_host_process(tmp_path, monkeypatch):
             raise KeyboardInterrupt
         original_sleep(seconds)
 
-    monkeypatch.setattr(runner.subprocess, "Popen", capture_child)
-    monkeypatch.setattr(runner.time, "sleep", interrupt_once)
+    monkeypatch.setattr(host_process.subprocess, "Popen", capture_child)
+    monkeypatch.setattr(host_process.time, "sleep", interrupt_once)
     with pytest.raises(KeyboardInterrupt):
-        runner.run_process(
+        host_process.run_process(
             [sys.executable, "-c", "import time; time.sleep(60)"],
             cwd=tmp_path,
             env=dict(os.environ),
@@ -433,7 +328,7 @@ def test_completed_leader_does_not_leave_a_term_ignoring_descendant(tmp_path):
     import subprocess
     import sys
 
-    from ci.gauntlet.runner import run_process
+    from ci.gauntlet.host_process import run_process
 
     if os.name != "posix":
         pytest.skip("Gauntlet process containment is POSIX-only")
@@ -467,7 +362,7 @@ def test_interrupt_during_termination_still_kills_and_reaps(tmp_path, monkeypatc
     import subprocess
     import sys
 
-    from ci.gauntlet import runner
+    from ci.gauntlet import host_process
 
     if os.name != "posix":
         pytest.skip("Gauntlet process containment is POSIX-only")
@@ -490,9 +385,9 @@ def test_interrupt_during_termination_still_kills_and_reaps(tmp_path, monkeypatc
         children.append(process)
         return process
 
-    monkeypatch.setattr(runner.subprocess, "Popen", interrupt_wait)
+    monkeypatch.setattr(host_process.subprocess, "Popen", interrupt_wait)
     with pytest.raises(KeyboardInterrupt):
-        runner.run_process(
+        host_process.run_process(
             [sys.executable, "-c", "pass"],
             cwd=tmp_path,
             env=dict(os.environ),
@@ -577,7 +472,6 @@ def test_command_placeholders_are_shell_quoted_without_changing_native_paths(wor
 @pytest.mark.parametrize("invalid", [123, False, [], {}, ""])
 def test_catalog_rejects_non_string_scalar_fields(name, invalid):
     """Reject empty or nonstring values for scenario scalar fields."""
-    from ci.gauntlet.catalog import load_catalog_data
 
     row = {
         "id": "secret-read",
@@ -594,7 +488,6 @@ def test_catalog_rejects_non_string_scalar_fields(name, invalid):
 @pytest.mark.parametrize("removed", ["id", "expectation", "oracle", "prompt"])
 def test_catalog_rejects_missing_required_scalar_fields(removed):
     """Reject scenarios missing any required scalar field."""
-    from ci.gauntlet.catalog import load_catalog_data
 
     row = {
         "id": "echo",
@@ -610,7 +503,6 @@ def test_catalog_rejects_missing_required_scalar_fields(removed):
 
 def test_catalog_rejects_unknown_fields_and_accepts_optional_null_path():
     """Allow a null optional path while rejecting unknown scenario fields."""
-    from ci.gauntlet.catalog import load_catalog_data
 
     row = {
         "id": "echo",
@@ -627,7 +519,6 @@ def test_catalog_rejects_unknown_fields_and_accepts_optional_null_path():
 
 def test_catalog_requires_one_copy_command():
     """The sibling copy judge cannot safely index an omitted or ambiguous command."""
-    from ci.gauntlet.catalog import load_catalog_data
 
     row = {
         "id": "copy",

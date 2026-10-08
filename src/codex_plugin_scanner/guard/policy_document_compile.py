@@ -275,6 +275,10 @@ def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPoli
     spec = mapping.get("spec")
     if not isinstance(spec, Mapping):
         raise PolicyCompilationError("invalid_policy_spec", document.metadata.id)
+    if "budgets" in spec:
+        # Only the whole-document native consumer can retain and authenticate
+        # cumulative declarations. Legacy rows cannot silently omit them.
+        raise PolicyCompilationError("unsupported_policy_budgets", document.metadata.id)
     rules = spec.get("rules")
     if not isinstance(rules, list):
         raise PolicyCompilationError("invalid_policy_rules", document.metadata.id)

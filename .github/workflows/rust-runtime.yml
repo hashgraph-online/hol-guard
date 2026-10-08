@@ -192,4 +192,5 @@ jobs:
           ci/native_runtime/test_native_hook_client_transport.py
           ci/native_runtime/test_native_managed_resident.py
           ci/native_runtime/test_native_managed_resident_cross_process.py
+          ci/native_runtime/test_native_managed_resident_handoff.py
           --tb=short

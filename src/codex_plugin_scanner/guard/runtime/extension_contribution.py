@@ -116,6 +116,13 @@ def reset_contribution_cache() -> None:
     _trust_classes.cache_clear()
 
 
+def _validated_payload(payload: object, filename: str) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        raise ValueError(f"{filename} must contain an object")
+    validate_contribution(payload, filename=filename)
+    return cast(dict[str, object], payload)
+
+
 def _load_from_directory(directory: Path) -> tuple[dict[str, object], ...]:
     if not directory.is_dir():
         return ()
@@ -143,11 +150,7 @@ def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
         return ()
     payloads: list[dict[str, object]] = []
     for item in sorted(names, key=lambda entry: entry.name):
-        payload = json.loads(item.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError(f"{item.name} must contain an object")
-        validate_contribution(payload, filename=item.name)
-        payloads.append(payload)
+        payloads.append(_validated_payload(json.loads(item.read_text(encoding="utf-8")), item.name))
     return tuple(payloads)
 
 
@@ -202,7 +205,9 @@ def _trust_classes() -> dict[str, str]:
         elif _frozen_runtime():
             raise FileNotFoundError("frozen Guard is missing packaged extension trust map") from None
         else:
-            raw = (Path(__file__).resolve().parents[4] / "contracts/extensions/trust-class-map.v1.json").read_bytes()
+            raise FileNotFoundError(
+                "Guard requires authored trust bindings or a packaged extension trust map"
+            ) from None
     payload = json.loads(raw.decode("utf-8"))
     classes = payload.get("classes") if isinstance(payload, dict) else None
     if not isinstance(classes, dict):

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
 from tests.native_command_test_support import _resolve_native_binary
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,7 +67,7 @@ def test_uivoid_portable_fixture_binds_canonical_sources() -> None:
     for source, extension_id in zip(sources, ids, strict=True):
         canonical = ROOT / "contributions/command-sources" / f"{extension_id}.json"
         assert source == json.loads(canonical.read_text())
-    canonical_trust = json.loads((ROOT / "contracts/extensions/trust-class-map.v1.json").read_text())
+    canonical_trust = trust_map_from_bindings(ROOT / "contracts/extensions/trust")
     assert build["trust"]["schemaVersion"] == canonical_trust["schemaVersion"]
     assert build["trust"]["publishers"] == canonical_trust["publishers"]
     # Only the fixture's sources determine its trust contract. Another
@@ -91,7 +92,7 @@ def test_uivoid_behavior_fixtures_pass_against_the_native_evaluator() -> None:
 def test_uivoid_fixture_trust_rejects_missing_ambiguous_or_promoted_identity(change: str) -> None:
     """Verify uivoid fixture trust rejects missing ambiguous or promoted identity."""
     fixture_trust = json.loads(_FIXTURE_PATH.read_text())["build"]["trust"]
-    canonical = json.loads((ROOT / "contracts/extensions/trust-class-map.v1.json").read_text())
+    canonical = trust_map_from_bindings(ROOT / "contracts/extensions/trust")
     identity = "command.uivoid"
     if change != "duplicate":
         fixture_trust["classes"]["external"].remove(identity)

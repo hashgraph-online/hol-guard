@@ -368,6 +368,9 @@ export function buildResumeInstruction(item: GuardApprovalRequest): string {
 }
 
 export function requestResolutionBlockReason(item: GuardApprovalRequest): string | null {
+  if (item.native_business_review_display_only) {
+    return "This saved business request is read-only. Review decisions and execution are not connected yet.";
+  }
   if (item.decision_contract_error !== undefined) {
     return "HOL Guard found inconsistent stored decision data. This request cannot be approved; rerun the action to create a fresh, consistent review request.";
   }
@@ -527,6 +530,7 @@ function serializeMcpInput(payload: Record<string, unknown>, maxLength: number |
 }
 
 export function harnessDisplayName(harness: string): string {
+  if (harness === "native-business") return "Native business workflow";
   if (typeof harness !== "string") {
     return "Unknown app";
   }

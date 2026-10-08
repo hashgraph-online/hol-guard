@@ -23,6 +23,19 @@ def _durations(nodes: list[str], *, seconds: float = 1.0) -> dict[str, float]:
     return {node_id_digest(node_id): seconds for node_id in nodes}
 
 
+def test_isolated_function_excludes_all_parameters_without_matching_other_tests(monkeypatch) -> None:
+    from scripts.ci import build_pytest_shard_plan as planner
+
+    parent = "tests/test_probe.py::test_latency"
+    isolated = [f"{parent}[first]", f"{parent}[second]"]
+    retained = [f"{parent}_control[value]", "tests/test_other.py::test_latency[first]"]
+    monkeypatch.setattr(planner, "SCHEDULING_ONLY_NODE_IDS", frozenset({parent}))
+
+    shards, _loads = build_affinity_node_shards(isolated + retained, 1, {})
+
+    assert shards == [sorted(retained)]
+
+
 def test_new_parameters_inherit_unsplit_duration_without_overriding_observations() -> None:
     parent = "tests/test_corpus.py::test_all_cases"
     nodes = [f"{parent}[{index}]" for index in range(4)]
@@ -84,6 +97,44 @@ def test_scheduling_only_nodes_cannot_own_or_inflate_a_coverage_shard() -> None:
     assert sorted(node for shard in shards for node in shard) == sorted(traced_nodes)
     assert loads == [1.0] * len(traced_nodes)
     assert not SCHEDULING_ONLY_NODE_IDS.intersection(node for shard in shards for node in shard)
+
+
+def test_hung_continuation_timing_runs_in_required_dedicated_lane_not_parallel_shards() -> None:
+    import yaml
+
+    module = "tests/test_guard_continuation_contract.py"
+    timing_node = f"{module}::test_bounded_adapter_cancels_a_hung_worker_and_records_timeout"
+    ordinary_node = f"{module}::test_failed_attempt_persistence_never_populates_the_in_memory_cache"
+    shards, _loads = build_affinity_node_shards([timing_node, ordinary_node], 1, {})
+    assert shards == [[ordinary_node]]
+
+    root = Path(__file__).resolve().parents[1]
+    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
+    timing_step = next(
+        step
+        for step in jobs["scheduling-sensitive"]["steps"]
+        if step.get("name") == "Run scheduling-sensitive tests untraced"
+    )
+    assert "if" not in timing_step
+    selected = shlex.split(timing_step["run"])
+    assert module in selected or timing_node in selected
+    assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
+
+
+@pytest.mark.parametrize("condition", ["false", "github.event_name == 'schedule'"])
+def test_hung_continuation_routing_rejects_conditional_execution(monkeypatch, condition: str) -> None:
+    original = expand_ci_job_actions
+
+    def with_conditional_timing_step(workflow):
+        expanded = original(workflow)
+        for step in expanded["jobs"]["scheduling-sensitive"]["steps"]:
+            if step.get("name") == "Run scheduling-sensitive tests untraced":
+                step["if"] = condition
+        return expanded
+
+    monkeypatch.setattr(f"{__name__}.expand_ci_job_actions", with_conditional_timing_step)
+    with pytest.raises(AssertionError):
+        test_hung_continuation_timing_runs_in_required_dedicated_lane_not_parallel_shards()
 
 
 def test_affinity_plan_splits_only_an_oversized_file() -> None:

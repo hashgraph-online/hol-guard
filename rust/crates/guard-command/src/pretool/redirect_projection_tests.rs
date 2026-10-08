@@ -229,3 +229,36 @@ fn contained_commands_with_an_output_redirect_keep_protected_execution() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn array_and_json_encoded_command_copies_project_consistently() {
+    for tool_input in [
+        serde_json::json!({"tool_input": {"command": ["ls > /dev/null"]}}),
+        serde_json::json!({
+            "tool_input": {"command": "ls > /dev/null"},
+            "toolInput": "{\"command\":\"ls > /dev/null\"}"
+        }),
+        serde_json::json!({
+            "tool_input": "{\"command\":[\"ls > /dev/null\"]}",
+            "toolInput": {"command": "ls > /dev/null"}
+        }),
+        serde_json::json!({"parameters": "[\"ls > /dev/null\"]"}),
+    ] {
+        let mut payload = tool_input;
+        payload["tool_name"] = "Bash".into();
+        let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+            "zcode",
+            "PreToolUse",
+            &payload,
+            Some(&controls()),
+            None,
+            Some(HOME),
+            Some(CWD),
+        );
+        assert_ne!(
+            result.reason_code, "native_pre_tool_ambiguous_payload",
+            "{payload}"
+        );
+        assert_eq!(result.minimum_action, "allow", "{payload}");
+    }
+}

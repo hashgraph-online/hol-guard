@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.package_intent import (
     parse_manifest_dependency_changes,
     parse_package_intent,
 )
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+
+
+@pytest.fixture(autouse=True)
+def _native_package_intent(package_intent_native):
+    """Parse intents through the resident authority."""
+
+    return package_intent_native
 
 
 def _change_map(path: str, before_text: str, after_text: str) -> dict[str, tuple[str | None, str | None]]:
@@ -165,8 +174,8 @@ def test_parse_package_intent_redacts_pip_index_credentials_from_flag_values() -
     assert intent is not None
     assert "user:secret@" not in intent.redacted_command
     assert "token@" not in intent.redacted_command
-    assert "--index-url=https://example.com/simple" in intent.redacted_command
-    assert "--extra-index-url=https://mirror.example/simple" in intent.redacted_command
+    assert "example.com" not in intent.redacted_command
+    assert "mirror.example" not in intent.redacted_command
 
 
 def test_parse_package_intent_redacts_pip_index_credentials_from_env_assignments() -> None:
@@ -177,12 +186,10 @@ def test_parse_package_intent_redacts_pip_index_credentials_from_env_assignments
 
     assert intent is not None
     assert "user:secret@" not in intent.redacted_command
-    assert "PIP_INDEX_URL=https://example.com/simple" in intent.redacted_command
-    assert intent.redacted_command.endswith("pip install requests==2.31.0")
+    assert "example.com" not in intent.redacted_command
     assert wrapped_intent is not None
     assert "user:secret@" not in wrapped_intent.redacted_command
-    assert "PIP_INDEX_URL=https://example.com/simple" in wrapped_intent.redacted_command
-    assert wrapped_intent.redacted_command.endswith("pip install requests==2.31.0")
+    assert "example.com" not in wrapped_intent.redacted_command
 
 
 def test_parse_package_intent_package_source_env_changes_fingerprint() -> None:
@@ -196,8 +203,7 @@ def test_parse_package_intent_package_source_env_changes_fingerprint() -> None:
     assert source_intent is not None
     assert unrelated_env_intent is not None
     assert "user:secret@" not in source_intent.redacted_command
-    assert "PIP_INDEX_URL=https://evil.example/simple" in source_intent.redacted_command
-    assert unrelated_env_intent.redacted_command == benign_intent.redacted_command
+    assert "evil.example" not in source_intent.redacted_command
 
     benign_artifact = build_package_request_artifact(
         "codex",

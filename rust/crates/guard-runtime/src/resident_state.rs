@@ -119,7 +119,8 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
 
 pub(crate) use crate::resident_process_identity::{
     parent_process_id, process_is_definitively_gone, process_start_marker,
-    validate_package_process_identity, validate_runtime_process_identity,
+    validate_package_process_identity, validate_process_start_marker,
+    validate_runtime_process_identity,
 };
 
 pub(crate) fn state_scope(base: &Path, digest: &str) -> Result<PathBuf, String> {
@@ -216,7 +217,7 @@ fn state_message(state: &ResidentState) -> Vec<u8> {
     message
 }
 
-fn state_mac(state: &ResidentState, token: &[u8]) -> String {
+pub(crate) fn state_mac(state: &ResidentState, token: &[u8]) -> String {
     hex_bytes(&crate::hmac_sha256(
         token,
         STATE_MAC_LABEL,

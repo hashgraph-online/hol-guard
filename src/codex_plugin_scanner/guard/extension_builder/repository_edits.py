@@ -23,7 +23,6 @@ if TYPE_CHECKING or sys.version_info >= (3, 11):
 else:  # pragma: no cover - exercised by the Python 3.10 CI job
     tomllib = importlib.import_module("tomli")
 
-TRUST_PATH = "contracts/extensions/trust-class-map.v1.json"
 BINDINGS_DIR = "contracts/extensions/trust"
 STAGING_PATH = "scripts/release/stage_guard_cloud_review_artifacts.py"
 PYPROJECT_PATH = "pyproject.toml"
@@ -97,7 +96,7 @@ def project_trust_map(bindings: dict[str, str]) -> str:
 
     ``bindings`` maps each ``trust/<id>.v1.json`` path to its content. Delegates
     to the runtime folder so the builder's projection is byte-identical to the
-    refresh pipeline's; the committed aggregate is regenerated, never hand-edited.
+    refresh pipeline's. The aggregate is ignored package output, never authored.
     """
     import tempfile
 

@@ -47,6 +47,59 @@ fn complete_source_is_retained_and_bound() {
     }
 }
 
+fn budget() -> Value {
+    json!({"schema":"guard.business-budget.v1","version":1,"id":"mail.daily","scope":"account",
+        "windowMs":86400000,"maximumActions":2,"maximumRecipients":10,"maximumRecords":10,"maximumBytes":10000,
+        "match":{"schema":"guard.business-policy-match.v1","version":1,"services":["google_gmail"],"operations":["mail_send"]}})
+}
+
+#[test]
+fn whole_document_budgets_are_retained_and_change_source_authority() {
+    let mut source = document();
+    let original = compile_business_document(&source).unwrap();
+    source["spec"]["budgets"] = json!([budget()]);
+    let compiled = compile_business_document(&source).unwrap();
+    assert_eq!(
+        compiled.binding().budgets.as_ref().unwrap()[0].maximum_actions,
+        2
+    );
+    assert_ne!(compiled.source_digest(), original.source_digest());
+    source["spec"]["budgets"][0]["maximumActions"] = json!(0);
+    let changed = compile_business_document(&source).unwrap();
+    assert_ne!(compiled.source_digest(), changed.source_digest());
+    assert_eq!(
+        changed.binding().budgets.as_ref().unwrap()[0].maximum_actions,
+        0
+    );
+}
+
+#[test]
+fn invalid_or_chunk_evading_document_budgets_refuse() {
+    for value in [Value::Null, json!([]), json!([budget(), budget()])] {
+        let mut source = document();
+        source["spec"]["budgets"] = value;
+        assert!(compile_business_document(&source).is_err());
+    }
+    for (field, value) in [
+        ("windowMs", json!(0)),
+        ("maximumActions", json!(-1)),
+        ("unknown", json!(1)),
+    ] {
+        let mut source = document();
+        let mut declaration = budget();
+        declaration[field] = value;
+        source["spec"]["budgets"] = json!([declaration]);
+        assert!(compile_business_document(&source).is_err());
+    }
+    for field in ["minRecipientCount", "minRecordCount", "minByteCount"] {
+        let mut source = document();
+        let mut declaration = budget();
+        declaration["match"][field] = json!(1);
+        source["spec"]["budgets"] = json!([declaration]);
+        assert!(compile_business_document(&source).is_err());
+    }
+}
+
 #[test]
 fn co_selectors_are_refused_instead_of_widened() {
     for field in [

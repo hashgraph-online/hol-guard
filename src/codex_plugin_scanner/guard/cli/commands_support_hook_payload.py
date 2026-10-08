@@ -889,6 +889,7 @@ def _hook_action_envelope(
     payload: dict[str, object],
     home_dir: Path,
     workspace: Path | None,
+    guard_home: Path | None = None,
 ) -> GuardActionEnvelope | None:
     canonical_harness = _canonical_harness_name(harness)
     if canonical_harness not in _ACTION_ENVELOPE_HARNESSES:
@@ -899,6 +900,7 @@ def _hook_action_envelope(
         payload,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
     )
 
 def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, object] | None:

@@ -1,19 +1,30 @@
 //! Offline compiler front end. Reads bounded stdin, never executes or imports sources.
 
+use guard_command::native_command_program::packaged_command_program_bytes;
 use guard_command::native_command_program::source::{
     compare_programs, compile_build_request, descriptor_schema, evaluate_batch, run_fixtures,
-    source_schema,
+    source_schema, MAX_SOURCE_INPUT_BYTES,
 };
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 
 fn run(arguments: &[String]) -> Result<Value, &'static str> {
-    if arguments == ["export-built"] {
+    if arguments == ["export-trust"] {
         return serde_json::from_slice(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/trust-class-map.v1.json"
+        )))
+        .map_err(|_| "command_source_trust_output_invalid");
+    }
+    if arguments == ["export-built"] {
+        let mut output: Value = serde_json::from_slice(include_bytes!(concat!(
             env!("OUT_DIR"),
             "/native-command-build.v1.json"
         )))
-        .map_err(|_| "command_source_build_output_invalid");
+        .map_err(|_| "command_source_build_output_invalid")?;
+        output["program"] = serde_json::from_slice(packaged_command_program_bytes())
+            .map_err(|_| "command_source_build_output_invalid")?;
+        return Ok(output);
     }
     if arguments == ["schema"] {
         return Ok(source_schema());
@@ -41,9 +52,12 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     }
     let mut bytes = Vec::new();
     std::io::stdin()
-        .take(8 * 1024 * 1024 + 1)
+        .take(MAX_SOURCE_INPUT_BYTES as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "command_source_input_read_failed")?;
+    if bytes.len() > MAX_SOURCE_INPUT_BYTES {
+        return Err("command_source_bytes_invalid");
+    }
     if operation == "test" {
         return run_fixtures(&bytes);
     }
@@ -89,4 +103,26 @@ fn main() {
         std::process::exit(2);
     }
     std::process::exit(code);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exported_build_preserves_program_and_catalog_binding() {
+        let output = run(&["export-built".to_owned()]).unwrap();
+        let program: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
+        assert_eq!(output["program"], program);
+        let ids = |rows: &Value| {
+            rows.as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row["extension_id"].as_str().unwrap().to_owned())
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+        assert_eq!(ids(&output["catalog"]), ids(&program["extensions"]));
+        assert_eq!(output["catalog_projection_kind"], "complete");
+        assert!(!output["descriptors"].as_array().unwrap().is_empty());
+    }
 }

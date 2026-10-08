@@ -21,6 +21,7 @@ from typing import Any
 
 REQUEST_LIMIT = 1_000_000
 RESPONSE_LIMIT = 4_000_000
+REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -63,10 +64,14 @@ class InferenceRelay:
         allow_loopback: bool = False,
         max_rounds: int = 32,
         timeout: float = 120,
+        reasoning_effort: str | None = None,
     ):
         """Validate the provider and bind an unstarted loopback relay with bounded inference budgets."""
+        if reasoning_effort is not None and reasoning_effort not in REASONING_EFFORTS:
+            raise ValueError("unsupported reasoning effort")
         self.endpoint = validate_endpoint(base_url, allow_loopback)
         self.model = model
+        self.reasoning_effort = reasoning_effort
         self.identity = identity
         self._api_key = api_key
         self._session_id = str(uuid.uuid4())
@@ -119,6 +124,9 @@ class InferenceRelay:
                     # The configured provider/model is fixed by the test operator.
                     payload["model"] = relay.model
                     payload["stream"] = True
+                    if relay.reasoning_effort is not None:
+                        # Pinned like the model so the agent cannot lower or raise it.
+                        payload["reasoning_effort"] = relay.reasoning_effort
                     forwarded = json.dumps(payload, ensure_ascii=False).encode()
                     request = urllib.request.Request(
                         relay.endpoint, data=forwarded, headers=relay._request_headers(), method="POST"
@@ -128,12 +136,17 @@ class InferenceRelay:
                     size = 0
                     models: set[str] = set()
                     completed = False
+                    finish_seen = False
+                    finish_delivered = False
+                    agent_open = True
+                    phase = "provider-connect"
                     with relay._opener.open(request, timeout=relay.timeout) as response:
                         if response.status != 200:
                             raise ValueError("provider response status")
                         self.send_response(200)
                         self.send_header("Content-Type", "text/event-stream")
                         self.end_headers()
+                        phase = "provider-read"
                         for line in response:
                             size += len(line)
                             if size > RESPONSE_LIMIT:
@@ -148,11 +161,34 @@ class InferenceRelay:
                                         chunk = json.loads(data)
                                         if isinstance(chunk.get("model"), str):
                                             models.add(chunk["model"])
-                                    except (ValueError, AttributeError):
+                                        finish_seen = finish_seen or any(
+                                            isinstance(choice, dict) and choice.get("finish_reason")
+                                            for choice in chunk.get("choices") or []
+                                        )
+                                    except (ValueError, AttributeError, TypeError):
                                         pass
-                            self.wfile.write(line)
-                            self.wfile.flush()
-                            row["delivered_bytes"] += len(line)
+                            if agent_open:
+                                phase = "agent-write"
+                                try:
+                                    self.wfile.write(line)
+                                    self.wfile.flush()
+                                    row["delivered_bytes"] += len(line)
+                                    # The blank line ends the SSE event that
+                                    # carried the finish reason.
+                                    finish_delivered = finish_delivered or (finish_seen and not line.strip())
+                                except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                                    # Agents may close once they receive the
+                                    # finish reason, before the trailing usage
+                                    # chunk and DONE. Windows reports that close
+                                    # on the next write. Keep reading so the
+                                    # round still needs the provider's DONE; a
+                                    # close before the whole finish event was
+                                    # delivered stays an error.
+                                    if not finish_delivered:
+                                        raise
+                                    agent_open = False
+                                    row["agent_closed_after_finish"] = True
+                                phase = "provider-read"
                             # DONE terminates an SSE event, even when the provider
                             # keeps its HTTP connection open after the delimiter.
                             if completed and not line.strip():
@@ -171,6 +207,7 @@ class InferenceRelay:
                         if "row" in locals() and row["status"] == "started":
                             row["status"] = "provider-error"
                             row["error_type"] = type(exc).__name__
+                            row["error_phase"] = locals().get("phase", "request")
                             if isinstance(exc, urllib.error.HTTPError):
                                 row["http_status"] = exc.code
                             relay._settled.notify_all()
@@ -217,12 +254,15 @@ class InferenceRelay:
                 lambda: all(row["status"] != "started" for row in self.rounds),
                 timeout=min(3.0, max(0.0, wait_seconds)),
             )
-            return {
+            evidence = {
                 "identity": self.identity,
                 "requested_model": self.model,
                 "live_rounds": [dict(row) for row in self.rounds],
                 "canary_export_violations": self.export_violations,
             }
+            if self.reasoning_effort is not None:
+                evidence["requested_reasoning_effort"] = self.reasoning_effort
+            return evidence
 
 
 class LoopbackCollector:

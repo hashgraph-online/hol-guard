@@ -443,9 +443,10 @@ pub(super) fn trusted_command(
     }
     #[cfg(windows)]
     {
-        if !["ProgramFiles", "ProgramFiles(x86)", "SystemRoot"]
-            .iter()
-            .filter_map(std::env::var_os)
+        // The system's own folder locations, not the caller-controlled and
+        // runtime-filtered ProgramFiles/SystemRoot environment variables.
+        if !guard_runtime_windows_process::trusted_install_roots()
+            .into_iter()
             .filter_map(|root| fs::canonicalize(root).ok())
             .any(|root| path.starts_with(root))
         {

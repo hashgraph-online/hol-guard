@@ -128,19 +128,18 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   await expect(page.getByRole("group", { name: "Trust" })).toBeHidden();
   await expect(page.getByRole("group", { name: "Kind" })).toBeHidden();
   await expect(page.getByRole("group", { name: "Area" })).toBeHidden();
-  const toolCountTop = await page.getByTestId("catalog-tool-count").boundingBox();
-  const scrollBeforeOpen = await page.evaluate(() => window.scrollY);
+  const toolCountTop = await page.getByTestId("catalog-tool-count").evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
   await filtersTrigger.click();
   await expect(filtersTrigger).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("group", { name: "Trust" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Kind" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Area" })).toBeVisible();
   await expect(page.getByTestId("catalog-tool-count")).toHaveText(/^[1-9]\d* tools$/);
-  const toolCountTopOpen = await page.getByTestId("catalog-tool-count").boundingBox();
-  const scrollAfterOpen = await page.evaluate(() => window.scrollY);
+  const toolCountTopOpen = await page.getByTestId("catalog-tool-count").evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
   // Clicking the trigger can scroll it into view. Compare document positions
-  // so the assertion detects layout movement rather than viewport scrolling.
-  expect(Math.abs((toolCountTopOpen?.y ?? 0) + scrollAfterOpen - (toolCountTop?.y ?? 0) - scrollBeforeOpen)).toBeLessThanOrEqual(1);
+  // Atomically sample document positions so a scroll frame between protocol
+  // calls cannot look like layout movement. Real layout shifts still fail.
+  expect(Math.abs(toolCountTopOpen - toolCountTop)).toBeLessThanOrEqual(1);
   const externalFilter = page.getByTestId("catalog-filters").getByRole("button", { name: /^External,/ });
   await expect(externalFilter).toBeVisible();
   await externalFilter.click();

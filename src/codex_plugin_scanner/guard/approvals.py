@@ -31,6 +31,7 @@ from .approval_scope_support import (
     request_scope_contract_payload,
     resolve_request_scope_selection,
     resolve_request_workspace_scope,
+    tool_call_exact_context_token,
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
@@ -795,6 +796,15 @@ def apply_approval_resolution(
         browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
         if browser_mcp_exact_key is not None:
             scoped_artifact_hash = browser_mcp_exact_key
+    native_once_artifact_hash: str | None = None
+    if persist_policy is True and scope == "artifact" and approval_context_token is None:
+        # Native review rows keep the per-call binding as their artifact hash
+        # for once flows; a saved decision keys on the stable exact-action token.
+        native_exact_token = tool_call_exact_context_token(request)
+        if native_exact_token is not None:
+            scoped_artifact_id = request_artifact_id
+            scoped_artifact_hash = native_exact_token
+            native_once_artifact_hash = request_artifact_hash
     decision = PolicyDecision(
         harness="*" if scope == "global" else _approval_policy_harness(request),
         scope=scope,
@@ -828,7 +838,11 @@ def apply_approval_resolution(
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
-                decision=decision,
+                decision=(
+                    decision
+                    if native_once_artifact_hash is None
+                    else replace(decision, artifact_hash=native_once_artifact_hash)
+                ),
                 harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
@@ -957,6 +971,7 @@ def apply_approval_resolution(
                 harness=resolution_harness,
                 scope=scope,
                 artifact_id=scoped_artifact_id,
+                artifact_hash=request_artifact_hash,
                 workspace=resolved_workspace if scope == "workspace" else None,
                 publisher=(
                     str(request["publisher"])
@@ -997,6 +1012,7 @@ def apply_approval_resolution(
             harness=resolution_harness,
             scope=scope,
             artifact_id=scoped_artifact_id,
+            artifact_hash=request_artifact_hash,
             workspace=resolved_workspace if scope == "workspace" else None,
             publisher=(
                 str(request["publisher"])

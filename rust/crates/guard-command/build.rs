@@ -49,6 +49,12 @@ fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
         .filter(|path| {
             path.extension().is_some_and(|v| v == "json")
                 && path.file_name().unwrap() != "migration-manifest.json"
+                && (directory != "contracts/extensions/trust"
+                    || path
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .ends_with(".v1.json"))
         })
         .collect();
     paths.sort();
@@ -65,6 +71,17 @@ fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
                     "source filename/identity mismatch"
                 );
             }
+            if directory == "contracts/extensions/trust" {
+                let binding: Value = serde_json::from_str(&text).expect("trust binding JSON");
+                let expected = binding["extension"]
+                    .as_str()
+                    .map(|id| format!("{id}.v1.json"));
+                assert_eq!(
+                    path.file_name().and_then(|name| name.to_str()),
+                    expected.as_deref(),
+                    "trust binding filename mismatch"
+                );
+            }
             text
         })
         .collect()
@@ -74,6 +91,41 @@ fn write_json(path: &Path, value: &Value) {
     let mut bytes = serde_json::to_vec(value).expect("generated JSON");
     bytes.push(b'\n');
     fs::write(path, bytes).expect("write generated build output");
+}
+
+fn trust_map(root: &Path) -> Value {
+    let directory = "contracts/extensions/trust";
+    let mut classes = json!({"first-party": [], "trusted-library": [], "external": []});
+    let mut seen = std::collections::BTreeSet::new();
+    for text in sources(root, directory, false) {
+        let binding: Value = serde_json::from_str(&text).expect("trust binding JSON");
+        assert_eq!(binding["schemaVersion"], "guard.extension-trust-binding.v1");
+        let extension = binding["extension"]
+            .as_str()
+            .expect("trust binding identity");
+        assert!(seen.insert(extension.to_owned()), "duplicate trust binding");
+        let class = binding["trustClass"].as_str().expect("trust binding class");
+        classes
+            .get_mut(class)
+            .and_then(Value::as_array_mut)
+            .expect("unknown trust class")
+            .push(json!(extension));
+    }
+    assert!(!seen.is_empty(), "authored trust bindings are missing");
+    for values in classes.as_object_mut().unwrap().values_mut() {
+        values
+            .as_array_mut()
+            .unwrap()
+            .sort_by(|a, b| a.as_str().cmp(&b.as_str()));
+    }
+    json!({
+        "schemaVersion": "guard.extension-trust-class-map.v1",
+        "publishers": {
+            "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+            "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"}
+        },
+        "classes": classes
+    })
 }
 
 fn main() {
@@ -87,10 +139,7 @@ fn main() {
         !commands.is_empty() && commands.len() + mcp.len() <= 512,
         "canonical source inventory invalid"
     );
-    let trust = read_input(
-        root,
-        &root.join("contracts/extensions/trust-class-map.v1.json"),
-    );
+    let trust = trust_map(root);
     // Keep raw JSON until the native duplicate-key/depth/budget validator runs.
     // Parsing then reserializing here would silently discard duplicate keys.
     let request = format!(
@@ -103,7 +152,7 @@ fn main() {
         request.len() as u64 <= MAX_ENVELOPE_BYTES,
         "canonical source envelope exceeds budget"
     );
-    let compiled = guard_command_build::native_command_program::source::compile_build_request(
+    let mut compiled = guard_command_build::native_command_program::source::compile_build_request(
         request.as_bytes(),
     )
     .unwrap_or_else(|error| panic!("canonical source compilation failed: {error}"));
@@ -113,6 +162,7 @@ fn main() {
         "host/target compiler identity mismatch"
     );
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo output directory"));
+    write_json(&out.join("trust-class-map.v1.json"), &trust);
     write_json(
         &out.join("native-command-program.v1.json"),
         &compiled.program,
@@ -125,6 +175,9 @@ fn main() {
             "source_digest":compiled.source_digest, "implementation_digest":compiled.implementation_digest,
         }),
     );
+    // The export front end reuses the admitted program rather than embedding a
+    // second complete copy inside the build envelope.
+    compiled.program = Value::Null;
     write_json(
         &out.join("native-command-build.v1.json"),
         &serde_json::to_value(compiled).expect("compiled output"),

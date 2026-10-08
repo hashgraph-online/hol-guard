@@ -30,7 +30,7 @@ fi
 python scripts/ci/verify_native_command_program.py "${verification_arguments[@]}"
 uv build --wheel --out-dir pure-dist
 RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
-jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
+jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
 "$source_compiler" compile < source-build.json > source-compiled.json
 python scripts/build_native_hol_guard_wheel.py \
@@ -45,3 +45,4 @@ python scripts/build_native_hol_guard_wheel.py \
   --source-compiler "$source_compiler" \
   --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
   --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
+python scripts/ci/check_wheel_size.py --dist-dir native-dist

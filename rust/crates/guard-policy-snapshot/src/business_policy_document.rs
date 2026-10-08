@@ -236,7 +236,11 @@ pub fn compile_business_document(
         default_action: default_action.to_owned(),
         rules,
         source_document_digest: Some(source_digest.clone()),
-        budgets: None,
+        budgets: spec
+            .get("budgets")
+            .map(|value| serde_json::from_value(value.clone()))
+            .transpose()
+            .map_err(|_| BusinessDocumentError::InvalidDocument)?,
     };
     binding
         .validate()

@@ -12,6 +12,8 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests import test_guard_js_supply_chain_phase11 as support
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 @pytest.mark.parametrize(
     ("resolved_version", "policy_selector", "expected_decision", "expected_rule_id"),

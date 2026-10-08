@@ -30,8 +30,9 @@ Azure, Git, Kubernetes, Docker, and other mapped tools) stay on.
 The trust class is reviewed separately as a per-extension binding file
 `contracts/extensions/trust/<extension-id>.v1.json`; a source file cannot select
 its own class or activation state. The reviewed bindings are the authored source
-of truth; `contracts/extensions/trust-class-map.v1.json` is a generated
-projection of `contracts/extensions/trust/` and is never edited by hand.
+of truth; `contracts/extensions/build-trust-class-map.v1.json` is a generated
+projection of `contracts/extensions/trust/`. It is generated for packages, ignored by Git,
+and never edited by hand. Clean Rust builds read the bindings directly.
 Turning off a first-party or trusted-library extension blocks that capability.
 Turning off an external extension returns it to inert: Guard does not apply that
 contribution, and first-party floors still apply.
@@ -52,8 +53,9 @@ For a command extension, contributors submit these files together in the same ch
 
 Extension builder CI adds a per-extension `contracts/extensions/trust/`
 binding for any missing ID as external/opt-in before installing dependencies
-and compiling Rust, then regenerates the shared `trust-class-map.v1.json`
-projection. Because each extension's trust binding is its own file, parallel
+and compiling Rust, then regenerates the ignored
+`contracts/extensions/build-trust-class-map.v1.json` projection.
+Because each extension's trust binding is its own file, parallel
 contributions do not collide on a shared map. Contributors do not need to edit
 trust state or pull unrelated main changes to refresh generated catalogs.
 Existing reviewed trust classifications are never promoted or changed by this
@@ -105,6 +107,7 @@ preparation command:
 ```sh
 COMPILER=$(uv run --no-sync python -c \
   'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler as f; print(f())')
+uv run --no-sync python scripts/refresh_extension_artifacts.py --trust-only
 
 uv run --no-sync python scripts/prepare_extension_contribution.py \
   --compiler "$COMPILER" \
@@ -123,7 +126,7 @@ COMPILER=$(uv run --no-sync python -c \
 
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
-  --slurpfile trust contracts/extensions/trust-class-map.v1.json \
+  --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
   > source-build.json
 
