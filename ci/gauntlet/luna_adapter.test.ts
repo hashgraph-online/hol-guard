@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { authorized, convertMessages, finishReason, eventDelta, setModel, WireArguments } from './luna_adapter';
+import { authorized, convertMessages, finishReason, requirePromptable, eventDelta, setModel, WireArguments } from './luna_adapter';
 
 test('native streaming tool argument bytes are preserved across arbitrary splits', () => {
   const indices = new Map<number, number>();
@@ -83,4 +83,12 @@ test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned SDK exposes the Luna m
   expect(typeof agent.prompt).toBe('function');
   expect(typeof agent.abort).toBe('function');
   expect(typeof registry.resolver).toBe('function');
+});
+
+test('a conversation must end with a user or tool message', () => {
+  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-5.6-luna' });
+  expect(() => requirePromptable(convertMessages([{ role: 'system', content: 's' }]))).toThrow();
+  expect(() => requirePromptable(convertMessages([{ role: 'user', content: 'u' },
+    { role: 'assistant', content: 'a' }]))).toThrow();
+  expect(requirePromptable(convertMessages([{ role: 'user', content: 'u' }])).length).toBe(1);
 });

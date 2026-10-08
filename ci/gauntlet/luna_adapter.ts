@@ -44,6 +44,14 @@ export function convertMessages(messages: any[]) {
   return converted;
 }
 
+// The final message is the prompt; it must be a user or tool message.
+export function requirePromptable(converted: any[]) {
+  const last = converted[converted.length - 1];
+  if (!last || (last.role !== 'user' && last.role !== 'toolResult'))
+    throw new Error('Conversation must end with a user or tool message');
+  return converted;
+}
+
 export function finishReason(stopReason: string) {
   if (stopReason === 'toolUse') return 'tool_calls';
   if (stopReason === 'length') return 'length';
@@ -141,7 +149,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       body = JSON.parse(text);
       if (body.model !== REQUEST_MODEL || body.stream !== true || body.reasoning_effort !== 'high')
         throw new Error('Unexpected transport selection');
-      convertMessages(body.messages);
+      requirePromptable(convertMessages(body.messages));
     } catch { return new Response('Invalid transport request', { status: 400 }); }
     const controller = new AbortController();
     const wire = new WireArguments();
