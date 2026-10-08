@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import runner
+from codex_plugin_scanner.guard.runtime.extension_catalog_handshake import runtime_session_success_summary
 from codex_plugin_scanner.guard.runtime.extension_catalog_sync import build_managed_controls_runtime_posture
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -29,6 +30,11 @@ def test_cloud_sync_preserves_independent_protected_revisions(
     )
     assert payload["extensionAuthorityRevision"] == local_revision
     assert payload["managedExtensionAuthorityRevision"] == managed_revision
+    summary = runtime_session_success_summary(
+        session_payload=payload, response_payload={}, synced_at="2026-08-25T00:00:00Z", catalog_sync={}
+    )
+    assert summary["extensionAuthorityRevision"] == local_revision
+    assert summary["managedExtensionAuthorityRevision"] == managed_revision
 
 
 def test_unavailable_authority_does_not_fabricate_managed_revision(
@@ -43,6 +49,20 @@ def test_unavailable_authority_does_not_fabricate_managed_revision(
     )
     assert "managedExtensionAuthorityRevision" not in posture
     assert posture["extensionAuthorityRevision"] is None
+    summary = runtime_session_success_summary(
+        session_payload={
+            **posture,
+            "sessionId": "runtime-session-1",
+            "deviceId": "device-1",
+            "harness": "codex",
+            "surface": "cli",
+            "workspace": "local-machine",
+        },
+        response_payload={},
+        synced_at="2026-08-25T00:00:00Z",
+        catalog_sync={},
+    )
+    assert "managedExtensionAuthorityRevision" not in summary
 
 
 @pytest.mark.parametrize("revision", [True, -1, 1.5, "1", 2**53])
