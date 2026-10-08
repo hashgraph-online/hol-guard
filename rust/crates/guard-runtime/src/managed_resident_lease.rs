@@ -508,11 +508,11 @@ fn batch_has_live_lease(
     found_live
 }
 
-#[cfg(test)]
 pub(super) fn any_live(state_base: &Path, expected_digest: &str) -> bool {
     any_live_with_digest(state_base, Some(expected_digest))
 }
 
+#[cfg(test)]
 pub(super) fn any_live_for_home(state_base: &Path) -> bool {
     any_live_with_digest(state_base, None)
 }

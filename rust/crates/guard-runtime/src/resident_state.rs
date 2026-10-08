@@ -118,7 +118,7 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
 }
 
 pub(crate) use crate::resident_process_identity::{
-    parent_process_id, process_is_definitively_gone, process_start_marker,
+    parent_process_id, process_is_definitively_gone, process_parent_id, process_start_marker,
     validate_package_process_identity, validate_runtime_process_identity,
 };
 
