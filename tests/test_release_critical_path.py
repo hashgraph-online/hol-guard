@@ -22,15 +22,35 @@ from tests.release_workflow_helpers import load_workflow
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize(
+    "workflow,publisher",
+    [
+        ("desktop-core-alpha-feed.yml", "publish-macos-arm64"),
+        ("desktop-core-linux-feed.yml", "publish-linux-x64"),
+    ],
+)
+def test_feed_registry_checks_keep_the_authorized_distribution_filename(workflow, publisher):
+    steps = load_workflow(ROOT / ".github/workflows" / workflow)["jobs"][publisher]["steps"]
+    authorization = next(step for step in steps if step.get("id") == "source")["run"]
+    if "authorize_macos_core_source.sh" in authorization:
+        authorization = (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text()
+    assert 'ATTESTED_WHEEL_FILENAME=$(basename "$WHEEL")' in authorization
+    checks = [step["run"] for step in steps if "wait_for_core_publication.py" in step.get("run", "")]
+    assert len(checks) == 2
+    assert all('--filename "$ATTESTED_WHEEL_FILENAME"' in check for check in checks)
+
+
+@pytest.mark.parametrize("renamed", [False, True])
 @pytest.mark.parametrize("state", ["missing-platform", "wrong-digest", "wrong-version", "ready"])
-def test_registry_readiness_distinguishes_pending_uploads_from_corruption(tmp_path, monkeypatch, state):
-    wheel = tmp_path / "hol_guard-3.34.1-py3-none-macosx_11_0_arm64.whl"
+def test_registry_readiness_distinguishes_pending_uploads_from_corruption(tmp_path, monkeypatch, state, renamed):
+    filename = "hol_guard-3.34.1-py3-none-macosx_11_0_arm64.whl"
+    wheel = tmp_path / ("attested-macos-arm64.whl" if renamed else filename)
     wheel.write_bytes(b"attested wheel")
     metadata = {
         "info": {"version": "3.34.0" if state == "wrong-version" else "3.34.1"},
         "urls": [
             {
-                "filename": "other-platform.whl" if state == "missing-platform" else wheel.name,
+                "filename": "other-platform.whl" if state == "missing-platform" else filename,
                 "digests": {
                     "sha256": "0" * 64 if state == "wrong-digest" else hashlib.sha256(wheel.read_bytes()).hexdigest()
                 },
@@ -40,9 +60,9 @@ def test_registry_readiness_distinguishes_pending_uploads_from_corruption(tmp_pa
     monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: io.BytesIO(json.dumps(metadata).encode()))
     if state in {"wrong-digest", "wrong-version"}:
         with pytest.raises(ValueError, match="mismatch"):
-            registry_ready("3.34.1", wheel)
+            registry_ready("3.34.1", wheel, filename if renamed else None)
     else:
-        assert registry_ready("3.34.1", wheel) is (state == "ready")
+        assert registry_ready("3.34.1", wheel, filename if renamed else None) is (state == "ready")
 
 
 def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_path):
