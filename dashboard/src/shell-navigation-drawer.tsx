@@ -55,6 +55,9 @@ function useNavigationDrawerFocus(
     const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (Number(document.documentElement.dataset.guardModalOpen ?? 0) > 0) {
+          return;
+        }
         event.preventDefault();
         onClose();
         return;
@@ -211,6 +214,7 @@ export function NavigationDrawer(
               updateError={props.updateError}
               onUpdateGuard={props.onUpdateGuard}
               onReinstallGuard={props.onReinstallGuard}
+              onSetUpdateChannel={props.onSetUpdateChannel}
               approvalGate={props.approvalGate}
             />
           </section>

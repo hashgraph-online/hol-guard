@@ -230,7 +230,7 @@ class TestRedactionLevelPartial:
         assert isinstance(event["redactedCommand"], str)
         # The original secret value must not appear
         assert "supersecretkey123" not in event["redactedCommand"]
-        assert event["redactedCommand"] == "[redacted]"
+        assert event["redactedCommand"] == "API_KEY=*****"
 
     def test_redaction_partial_display_command_is_redacted(self, tmp_path: Path) -> None:
         """display_command mirrors redacted_command (not raw secret)."""
@@ -303,7 +303,7 @@ class TestRedactionLevelPartial:
         )
         assert event is not None
         assert sensitive_identity not in event["displayCommand"]
-        assert event["displayCommand"] == "my-harness: [redacted]"
+        assert event["displayCommand"] == "my-harness: api_key=*****"
         assert event["redactedCommand"] is None
         assert event["displayProvenance"] == "withheld"
 

@@ -11,15 +11,21 @@ path = "src/lib.rs"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { workspace = true, features = [
+    "combaseapi",
+    "dpapi",
     "errhandlingapi",
     "fileapi",
     "handleapi",
     "jobapi2",
+    "knownfolders",
     "namedpipeapi",
     "processthreadsapi",
+    "shlobj",
     "synchapi",
     "winbase",
     "winerror",
+    "wincred",
+    "wincrypt",
     "winnt",
 ] }
 windows-permissions.workspace = true

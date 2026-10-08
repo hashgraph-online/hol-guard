@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from typing import Final, cast
+
+from .store_command_activity_schema import _validate_schema_object_sql
 
 COMMAND_ACTIVITY_API_SCHEMA_MIGRATION_VERSION: Final = 13
 COMMAND_ACTIVITY_INVALIDATION_LIMIT: Final = 10_000
@@ -149,35 +150,9 @@ def _validate_command_activity_api_schema(
         if primary_key != expected_primary_key:
             raise RuntimeError(f"incompatible {table} primary key")
 
-    _validate_schema_object_sql(connection, statements)
+    _validate_schema_object_sql(connection, statements, family_label="API ")
     if len(statements) != 13:
         raise RuntimeError("incomplete command activity API schema")
-
-
-def _validate_schema_object_sql(connection: sqlite3.Connection, statements: tuple[str, ...]) -> None:
-    expected: dict[str, str] = {}
-    for statement in statements:
-        canonical = _canonical_sql(statement)
-        match = re.match(r"create (?:table|trigger|index) if not exists ([a-z0-9_]+)", canonical)
-        if match is None:
-            raise RuntimeError("unrecognized command activity API schema statement")
-        expected[match.group(1)] = canonical.replace(" if not exists", "", 1)
-    placeholders = ", ".join("?" for _ in expected)
-    rows = cast(
-        list[tuple[str, str]],
-        connection.execute(
-            f"select name, sql from sqlite_schema where name in ({placeholders})",
-            tuple(expected),
-        ).fetchall(),
-    )
-    actual = {name: _canonical_sql(sql) for name, sql in rows}
-    for name, expected_sql in expected.items():
-        if actual.get(name) != expected_sql:
-            raise RuntimeError(f"incompatible command activity API schema object: {name}")
-
-
-def _canonical_sql(value: str) -> str:
-    return " ".join(value.strip().lower().split())
 
 
 __all__ = (

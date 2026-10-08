@@ -1,0 +1,1698 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "cs pin state command",
+            "cs session archive command",
+            "cs session resume command",
+            "cs session summary command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews cs (Claude Sessions) commands that launch Claude Code in another folder, write pin or archive files, or send session text to a model for a recap. Read-only commands (ls, show) are not matched.",
+          "ecosystem_ids": [],
+          "executables": [],
+          "extension_id": "command.cs",
+          "homepage": "https://github.com/AryaKesharwani/claude-sessions",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "cs (Claude Sessions) command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "cs session resume command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `cs resume` (alias `cs r`) and `cs pick`, which change into the folder a past Claude Code session was started in and replace the process with `claude --resume <session-id>`. That starts an interactive agent with its normal tool access inside a directory other than the current one, where that folder's project settings, hooks and MCP servers apply. If the session exists only in cs's archive, the transcript is first copied back into ~/.claude/projects. `cs pick` ends in the same resume once a session is chosen. `cs resume --claude-args '<flags>'` forwards the string, split with shlex, to `claude` unchanged, so it can include flags such as `--dangerously-skip-permissions`; any form of the option is reviewed because the whole resume is. Only `--help`/`-h` is treated as safe; the bare `cs` picker is not matched by this rule.",
+              "example_command": "cs resume 1a2b3c4d",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Claude Sessions resume",
+              "permission_id": "command.cs.permission.resume",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "If you pass --claude-args, read the exact flags first; options such as --dangerously-skip-permissions turn off Claude Code's own prompts.",
+                "Run `cs ls` or `cs show <id>` first to confirm which session and which folder you are about to enter.",
+                "Check the target folder's .claude/settings.json, hooks and .mcp.json before resuming a session there.",
+                "Resume from the session's own folder with `claude --resume <id>` if you want to see exactly what runs."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "cs pin state command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `cs pin`, which toggles a session id in ~/.claude-sessions/pins.json (pin if absent, unpin if present). It writes only that small state file and does not touch session transcripts, but the same command both adds and removes, so repeating it reverses the change.",
+              "example_command": "cs pin 1a2b3c4d",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Claude Sessions pin toggle",
+              "permission_id": "command.cs.permission.pin",
+              "replacement_permission_id": null,
+              "risk_tier": "low",
+              "safer_guidance": [
+                "Run `cs ls` first to see which sessions are already pinned (shown with a star) before toggling one.",
+                "The state is one JSON file, ~/.claude-sessions/pins.json; back it up if the current pins matter."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "cs session archive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `cs backup`, which copies every session transcript under ~/.claude/projects into ~/.claude-sessions/archive, replacing an archived copy whenever the live file is newer or a different size. Originals are not modified, but the archive keeps full transcripts, which can contain pasted secrets, beyond the point where Claude Code's own cleanup would delete them. It can also be run quietly with `-q`/`--quiet` (for example from cron).",
+              "example_command": "cs backup",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Claude Sessions backup",
+              "permission_id": "command.cs.permission.backup",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Check the size and contents of ~/.claude-sessions/archive after the first run, and exclude it from cloud sync if transcripts may hold secrets.",
+                "Run `cs ls` to confirm which sessions exist before archiving them."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "cs session summary command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `cs summary`, which builds a prompt from the session's typed messages (up to about 40 messages, each clipped to 400 characters, spread across the session) and sends it to the model through `claude -p --model haiku`. The text therefore leaves the machine to the model provider, and the recap is cached in ~/.claude-sessions/summaries.json. It runs with no tools and without saving a session, but the messages can include anything typed into the session, such as paths, names or credentials.",
+              "example_command": "cs summary 1a2b3c4d",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Claude Sessions summary",
+              "permission_id": "command.cs.permission.summary",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run `cs show <id>` first to read the messages that would be summarized; do not summarize a session that contains secrets or confidential material.",
+                "Check which account the `claude` CLI is logged in to before sending session text for a recap."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.claude-sessions",
+            "url": "https://github.com/AryaKesharwani/claude-sessions"
+          },
+          "reference_urls": [
+            "https://github.com/AryaKesharwani/claude-sessions#the-cs-cli",
+            "https://github.com/AryaKesharwani/claude-sessions/blob/main/cs.py"
+          ],
+          "required": false,
+          "risk_classes": [
+            "execution",
+            "destructive_shell",
+            "network_egress",
+            "data_flow_exfiltration"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "cs session resume command"
+              ],
+              "default_mode": "review",
+              "description": "Reviews `cs resume`, `cs r` and `cs pick`, which exec `claude --resume` (with any forwarded --claude-args) in the session's original folder.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cs",
+                        "cs.cmd",
+                        "cs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--claude-args"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "resume"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cs",
+                        "cs.cmd",
+                        "cs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--claude-args"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "r"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cs",
+                        "cs.cmd",
+                        "cs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-n",
+                        "--claude-args"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "pick"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.cs.permission.resume",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.cs.resume",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-n",
+                            "--claude-args"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "resume"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-n",
+                            "--claude-args"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "resume"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-n",
+                            "--claude-args"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "r"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-n",
+                            "--claude-args"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "r"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-n",
+                            "--claude-args"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "pick"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-n",
+                            "--claude-args"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "pick"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cs resume or pick help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "If you pass --claude-args, read the exact flags first; options such as --dangerously-skip-permissions turn off Claude Code's own prompts.",
+                "Run `cs ls` or `cs show <id>` first to confirm which session and which folder you are about to enter.",
+                "Check the target folder's .claude/settings.json, hooks and .mcp.json before resuming a session there.",
+                "Resume from the session's own folder with `claude --resume <id>` if you want to see exactly what runs."
+              ],
+              "severity": "high",
+              "title": "cs session resume"
+            },
+            {
+              "action_classes": [
+                "cs pin state command"
+              ],
+              "default_mode": "review",
+              "description": "Reviews `cs pin`, which writes the cs pin list.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cs",
+                        "cs.cmd",
+                        "cs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "pin"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.cs.permission.pin",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.cs.pin",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "pin"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "pin"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cs pin help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `cs ls` first to see which sessions are already pinned (shown with a star) before toggling one.",
+                "The state is one JSON file, ~/.claude-sessions/pins.json; back it up if the current pins matter."
+              ],
+              "severity": "low",
+              "title": "cs pin toggle"
+            },
+            {
+              "action_classes": [
+                "cs session archive command"
+              ],
+              "default_mode": "review",
+              "description": "Reviews `cs backup`, which writes copies of all session transcripts into ~/.claude-sessions/archive.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cs",
+                        "cs.cmd",
+                        "cs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h",
+                        "--quiet",
+                        "-q"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "backup"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.cs.permission.backup",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.cs.backup",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--quiet",
+                            "-q"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "backup"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h",
+                            "--quiet",
+                            "-q"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "backup"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cs backup help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Check the size and contents of ~/.claude-sessions/archive after the first run, and exclude it from cloud sync if transcripts may hold secrets.",
+                "Run `cs ls` to confirm which sessions exist before archiving them."
+              ],
+              "severity": "medium",
+              "title": "cs session backup"
+            },
+            {
+              "action_classes": [
+                "cs session summary command"
+              ],
+              "default_mode": "review",
+              "description": "Reviews `cs summary`, which sends session prompts to `claude -p` for a recap.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cs",
+                        "cs.cmd",
+                        "cs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "summary"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.cs.permission.summary",
+              "risk_classes": [
+                "network_egress",
+                "data_flow_exfiltration"
+              ],
+              "rule_id": "command.cs.summary",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "summary"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "cs",
+                            "cs.cmd",
+                            "cs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "summary"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cs summary help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `cs show <id>` first to read the messages that would be summarized; do not summarize a session that contains secrets or confidential material.",
+                "Check which account the `claude` CLI is logged in to before sending session text for a recap."
+              ],
+              "severity": "high",
+              "title": "cs session summary"
+            }
+          ],
+          "safer_alternatives": [
+            "Use `cs ls` and `cs show <id>` (read-only) to inspect sessions before resuming, summarizing or archiving them."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-contribos",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.syngraphe",
+          "command.tui-runner",
+          "command.uivoid"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "cs resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-0",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs r 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-1",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 3 fix login",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-2",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs pick",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-3",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs pick -n 5 login",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-4",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs pick 'login bug'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-5",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs.exe resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-6",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs.cmd r 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-7",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume --here-is-unknown 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-active-8",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-inactive",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 1a2b3c4d",
+      "disabled_permissions": [
+        "command.cs.permission.resume"
+      ],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-disabled-permission",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-help-long",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs r -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-help-short",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs pick --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-pick-help",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 1a2b3c4d --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-help-after-ref",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "echo start && cs resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "resume-compound-second",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cd /tmp; cs resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "resume-compound-semicolon",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "yes | cs resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "resume-pipeline",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume --help && cs resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "resume-help-then-live",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 1a2b3c4d \"fix login bug\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-path-spaces",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs ls",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-ls-not-covered",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs ls --json login",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-ls-json-not-covered",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs show 1a2b3c4d -n 3",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-show-not-covered",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-bare-not-covered",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "othertool resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-unknown-cli",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs frobnicate",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-unknown-subcommand",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 1a2b3c4d --claude-args '--model opus'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-claude-args-space",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 1a2b3c4d --claude-args=--dangerously-skip-permissions",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-claude-args-equals",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs r 1a2b3c4d --claude '--model opus'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-claude-args-prefix",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume --claude-args '--model opus' 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-claude-args-before-ref",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 1a2b3c4d --claude-args '--model opus' --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "resume-claude-args-help",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs resume 1a2b3c4d --claude-args '--model opus'",
+      "disabled_permissions": [
+        "command.cs.permission.resume"
+      ],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "resume-claude-args-disabled-permission",
+      "rule_id": "command.cs.resume"
+    },
+    {
+      "command": "cs pin 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pin-active",
+      "rule_id": "command.cs.pin"
+    },
+    {
+      "command": "cs.exe pin 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pin-exe",
+      "rule_id": "command.cs.pin"
+    },
+    {
+      "command": "cs pin 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "pin-inactive",
+      "rule_id": "command.cs.pin"
+    },
+    {
+      "command": "cs pin 1a2b3c4d",
+      "disabled_permissions": [
+        "command.cs.permission.pin"
+      ],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pin-disabled-permission",
+      "rule_id": "command.cs.pin"
+    },
+    {
+      "command": "cs pin --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "pin-help",
+      "rule_id": "command.cs.pin"
+    },
+    {
+      "command": "cs pin -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "pin-help-short",
+      "rule_id": "command.cs.pin"
+    },
+    {
+      "command": "cs ls && cs pin 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "pin-compound",
+      "rule_id": "command.cs.pin"
+    },
+    {
+      "command": "cs ls --here",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "pin-other-subcommand-not-covered",
+      "rule_id": "command.cs.pin"
+    },
+    {
+      "command": "cs backup",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "backup-active",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs backup -q",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "backup-quiet-short",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs backup --quiet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "backup-quiet-long",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs.cmd backup",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "backup-cmd",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cd ~ && cs backup -q",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "backup-cron-style",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs backup",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "backup-inactive",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs backup",
+      "disabled_permissions": [
+        "command.cs.permission.backup"
+      ],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "backup-disabled-permission",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs backup --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "backup-help",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs backup -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "backup-help-short",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs backup -q --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "backup-quiet-help",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs show 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "backup-show-not-covered",
+      "rule_id": "command.cs.backup"
+    },
+    {
+      "command": "cs summary 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "summary-active",
+      "rule_id": "command.cs.summary"
+    },
+    {
+      "command": "cs.exe summary 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "summary-exe",
+      "rule_id": "command.cs.summary"
+    },
+    {
+      "command": "cs summary 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "summary-inactive",
+      "rule_id": "command.cs.summary"
+    },
+    {
+      "command": "cs summary 1a2b3c4d",
+      "disabled_permissions": [
+        "command.cs.permission.summary"
+      ],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "summary-disabled-permission",
+      "rule_id": "command.cs.summary"
+    },
+    {
+      "command": "cs summary --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "summary-help",
+      "rule_id": "command.cs.summary"
+    },
+    {
+      "command": "cs summary -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "summary-help-short",
+      "rule_id": "command.cs.summary"
+    },
+    {
+      "command": "cs ls login | head -1 && cs summary 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        2
+      ],
+      "id": "summary-compound",
+      "rule_id": "command.cs.summary"
+    },
+    {
+      "command": "cs resume 1a2b3c4d",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "summary-resume-not-covered",
+      "rule_id": "command.cs.summary"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

@@ -250,7 +250,7 @@ Each numbered line is one operation task. Completion requires the exact path in 
 - [x] 231. `az network private-link-service delete`
 - [x] 232. `az network traffic-manager profile delete`
 - [x] 233. `az network front-door delete`
-- [x] 234. `az network private-dns zone delete`
+- [x] 234. `az hdinsight delete`
 - [x] 235. `az network watcher connection-monitor delete`
 - [x] 236. `az network watcher flow-log delete`
 - [x] 237. `az network watcher packet-capture delete`
@@ -259,7 +259,7 @@ Each numbered line is one operation task. Completion requires the exact path in 
 - [x] 240. `az network local-gateway delete`
 - [x] 241. `az network express-route delete`
 - [x] 242. `az network express-route port delete`
-- [x] 243. `az dns-resolver delete`
+- [x] 243. `az signalr delete`
 - [x] 244. `az aks delete`
 - [x] 245. `az container delete`
 - [x] 246. `az containerapp delete`

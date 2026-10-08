@@ -99,16 +99,25 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
     CommandExtensionSpec(
         extension_id="command.container-runtime",
         name="Container runtime protection",
-        description="Reviews container operations that can expose credentials, publish data, or mutate host state.",
+        description=(
+            "Reviews container lifecycle, cleanup, execution, network, and persistent-data operations "
+            "that can expose credentials or mutate host state."
+        ),
         action_classes=("docker-sensitive command", "Docker client config access"),
-        risk_classes=("network_egress", "destructive_shell", "local_secret_read"),
+        risk_classes=("network_egress", "destructive_shell", "local_secret_read", "execution"),
         safer_alternatives=(
             "Use a pinned image and a read-only container filesystem where possible.",
             "Pass only the specific secret or file required by the container.",
+            "List exact containers, images, volumes, networks, and builders before deleting or pruning them.",
         ),
         reference_urls=(
             "https://docs.docker.com/reference/cli/docker/system/prune/",
             "https://docs.docker.com/reference/cli/docker/container/rm/",
+            "https://docs.docker.com/reference/cli/docker/container/exec/",
+            "https://docs.docker.com/reference/cli/docker/image/rm/",
+            "https://docs.docker.com/reference/cli/docker/volume/rm/",
+            "https://docs.docker.com/reference/cli/docker/network/rm/",
+            "https://docs.docker.com/reference/cli/docker/compose/down/",
             "https://docs.docker.com/reference/cli/docker/container/run/",
         ),
     ),

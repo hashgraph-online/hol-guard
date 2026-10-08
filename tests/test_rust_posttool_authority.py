@@ -179,7 +179,6 @@ def test_hook_worker_records_activity_when_auto_native_is_unavailable(
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_post_tool_unavailable"
-    assert worker.test_oracle is None
     assert len(writer.calls) == 1
     assert writer.calls[0]["event"] == "PostToolUse"
     assert writer.calls[0]["harness"] == "pi"
@@ -232,8 +231,8 @@ def test_cli_native_authority_drains_receipt_writer_before_exit(
             return True
 
     class _Worker:
-        def __init__(self, *, store: GuardStore, activity_writer: object) -> None:
-            del store, activity_writer
+        def __init__(self, *, store: GuardStore, activity_writer: object, **_kwargs: object) -> None:
+            del store, activity_writer, _kwargs
 
         def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
             return {"decision": "deny", "reason_code": "test_native_decision"}

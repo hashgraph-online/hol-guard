@@ -43,6 +43,8 @@ type LoadState =
 
 type RouteState = { route: ProtectionRoute; detail: ExtensionDetailUrlState };
 
+const DEFAULT_AUTHORITY_RECOVERY_COMMAND = "hol-guard command controls recover-authority";
+
 export function currentExtensionRouteState(): RouteState {
   return {
     route: parseProtectionRoute(window.location.pathname),
@@ -59,13 +61,19 @@ export function requiresExtensionRecoveryApproval(error: unknown): boolean {
  * Never surface a raw protocol code for authority actions. Every failure gets
  * a plain-language cause and a next step so the operator is never stuck.
  */
-export function authorityActionErrorMessage(error: unknown): string {
+export function authorityActionErrorMessage(
+  error: unknown,
+  recoveryCommand?: string,
+  recoveryShell?: "powershell",
+): string {
+  const command = recoveryCommand ?? DEFAULT_AUTHORITY_RECOVERY_COMMAND;
+  const terminalName = recoveryShell === "powershell" ? "PowerShell" : "your terminal";
   if (error instanceof ExtensionControlApiError) {
     if (error.code === "authority_not_recoverable") {
-      return "Guard could not start this repair because the protection state changed underneath it. Guard reloaded the latest status. If protection still needs attention, run `hol-guard command controls recover-authority` in your terminal.";
+      return `Guard could not start this repair because the protection state changed underneath it. Guard reloaded the latest status. If protection still needs attention, run \`${command}\` in ${terminalName}.`;
     }
     if (error.code === "authority_recovery_failed" || error.code === "authority_recovery_incomplete") {
-      return "Guard started the repair but could not verify a fully protected state. Protection stays fail-safe. Try again, or run `hol-guard command controls recover-authority` in your terminal.";
+      return `Guard started the repair but could not verify a fully protected state. Protection stays fail-safe. Try again, or run \`${command}\` in ${terminalName}.`;
     }
     if (error.code === "authority_not_degraded") {
       return "The limited state already changed. Guard reloaded the latest status.";
@@ -76,7 +84,7 @@ export function authorityActionErrorMessage(error: unknown): string {
   }
   return error instanceof Error && error.message && !/^authority_|^approval_/.test(error.message)
     ? error.message
-    : "Guard could not complete this action. Local protection continues. Try again, or run `hol-guard command controls recover-authority` in your terminal.";
+    : `Guard could not complete this action. Local protection continues. Try again, or run \`${command}\` in ${terminalName}.`;
 }
 
 function randomToken(): string {
@@ -126,6 +134,7 @@ export function buildExtensionMutation(
 
 export function ProtectionCenterWorkspace(props: {
   runtime?: GuardRuntimeSnapshot | null;
+  onRefreshRuntime: () => Promise<GuardRuntimeSnapshot | null>;
   onNavigate: (path: string) => void;
 }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
@@ -136,34 +145,56 @@ export function ProtectionCenterWorkspace(props: {
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
+  const recoveryCommand = state.kind === "ready" ? state.effective.terminal_commands?.recover_authority : undefined;
+  const recoveryShell = state.kind === "ready" ? state.effective.terminal_commands?.shell : undefined;
+  const recoveryTerminal = recoveryShell === "powershell" ? "PowerShell" : "your terminal";
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = useRef<string | null>(null);
   const overviewKeepAlive = useRef(false);
+  const loadInFlightRef = useRef<Promise<EffectiveExtensionControls | null> | null>(null);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const localClis = useLocalCliCatalog();
-  const load = useCallback(async (): Promise<EffectiveExtensionControls | null> => {
-    // Keep the already-rendered protection data mounted while a refresh is in
-    // flight so an applied change's confirmation toast survives the reload.
-    setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
-    try {
-      const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
-      setState({ kind: "ready", catalog, effective });
-      return effective;
-    } catch (error) {
-      // A failed refresh after an authority action must not unmount the page
-      // (and with it the mapped action error); only an initial load may fall
-      // back to the full-page error state.
-      setState((current) => (current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" }));
-      return null;
-    }
+  const load = useCallback((): Promise<EffectiveExtensionControls | null> => {
+    if (loadInFlightRef.current !== null) return loadInFlightRef.current;
+    const request = (async (): Promise<EffectiveExtensionControls | null> => {
+      // Keep the already-rendered protection data mounted while a refresh is in
+      // flight so an applied change's confirmation toast survives the reload.
+      setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
+      try {
+        const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
+        if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        setState({ kind: "ready", catalog, effective });
+        return effective;
+      } catch (error) {
+        // A failed refresh after an authority action must not unmount the page
+        // (and with it the mapped action error); only an initial load may fall
+        // back to the full-page error state.
+        setState((current) => (current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" }));
+        return null;
+      }
+    })();
+    loadInFlightRef.current = request;
+    void request.then(
+      () => { if (loadInFlightRef.current === request) loadInFlightRef.current = null; },
+      () => { if (loadInFlightRef.current === request) loadInFlightRef.current = null; },
+    );
+    return request;
   }, []);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const onPopState = () => setRouteState(currentExtensionRouteState());
+    const onPopState = () => {
+      const next = currentExtensionRouteState();
+      if (next.route.kind === "add-custom") void localClis.discover();
+      setRouteState(next);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [localClis.discover]);
+  useEffect(() => {
+    if (routeState.route.kind !== "add-custom") return;
+    void localClis.discover();
+  }, [localClis.discover, routeState.route.kind]);
 
   const catalogExtensions = useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((a, b) => a.name.localeCompare(b.name)) : [], [state]);
   const requestedExtensionId = routeState.route.kind === "detail" ? routeState.route.extensionId : null;
@@ -203,10 +234,11 @@ export function ProtectionCenterWorkspace(props: {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
   const openAddCustom = useCallback(() => {
+    void localClis.discover();
     pushExtensionHistory(addCustomExtensionHref());
     setRouteState({ route: { kind: "add-custom" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
-  }, []);
+  }, [localClis.discover]);
   const handleCustomExtensionAdded = useCallback((cliId: string) => {
     void localClis.load();
     openLocalCliDetail(cliId);
@@ -214,9 +246,21 @@ export function ProtectionCenterWorkspace(props: {
 
   const retryLocalClis = useCallback(() => { void localClis.load(); }, [localClis.load]);
   const retryLoad = useCallback(() => { void load(); }, [load]);
-  const refreshProtection = useCallback(async () => {
-    await load();
-  }, [load]);
+  const refreshProtection = useCallback((): Promise<void> => {
+    if (refreshInFlightRef.current !== null) return refreshInFlightRef.current;
+    const request = (async () => {
+      const [refreshed] = await Promise.all([load(), props.onRefreshRuntime()]);
+      if (refreshed === null) {
+        throw new Error("Protection status could not be refreshed.");
+      }
+    })();
+    refreshInFlightRef.current = request;
+    void request.then(
+      () => { if (refreshInFlightRef.current === request) refreshInFlightRef.current = null; },
+      () => { if (refreshInFlightRef.current === request) refreshInFlightRef.current = null; },
+    );
+    return request;
+  }, [load, props.onRefreshRuntime]);
   const handleCancelPending = useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -284,7 +328,11 @@ export function ProtectionCenterWorkspace(props: {
         setRecoveryStatus("The protection state changed during the attempt. This page now shows the latest status.");
       } else {
         setRecoveryStatus(null);
-        setRecoveryError(authorityActionErrorMessage(error));
+        setRecoveryError(authorityActionErrorMessage(
+          error,
+          recoveryCommand,
+          recoveryShell,
+        ));
       }
     } finally {
       setRecoveryBusy(false);
@@ -298,13 +346,17 @@ export function ProtectionCenterWorkspace(props: {
     void runAuthorityAction(kind, credentials);
   }, [runAuthorityAction]);
 
-  const handleCheckAgain = useCallback(() => {
-    void load();
+  const handleCheckAgain = useCallback(async (): Promise<void> => {
     setRecoveryError(null);
-    void refreshApprovalGate({ failClosed: true }).catch(() => {
-      setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
-    });
-  }, [load, refreshApprovalGate]);
+    const [protectionResult, approvalResult] = await Promise.allSettled([
+      refreshProtection(),
+      refreshApprovalGate({ failClosed: true }),
+    ]);
+    if (approvalResult.status === "rejected") {
+      setRecoveryError(`Guard could not load the local approval settings yet. Check the connection and try again, or run \`${recoveryCommand ?? DEFAULT_AUTHORITY_RECOVERY_COMMAND}\` in ${recoveryTerminal}.`);
+    }
+    if (protectionResult.status === "rejected") throw protectionResult.reason;
+  }, [refreshApprovalGate, refreshProtection, recoveryCommand, recoveryTerminal]);
 
   const handleOpenApprovalSettings = useCallback(() => {
     props.onNavigate("/settings?section=approval");
@@ -314,9 +366,9 @@ export function ProtectionCenterWorkspace(props: {
   useEffect(() => {
     if (!authorityNeedsAttention) return;
     void resolveApprovalGate({ failClosed: true }).catch(() => {
-      setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
+      setRecoveryError(`Guard could not load the local approval settings yet. Check the connection and try again, or run \`${recoveryCommand ?? DEFAULT_AUTHORITY_RECOVERY_COMMAND}\` in ${recoveryTerminal}.`);
     });
-  }, [authorityNeedsAttention, resolveApprovalGate]);
+  }, [authorityNeedsAttention, recoveryCommand, recoveryTerminal, resolveApprovalGate]);
 
   const showOverview = state.kind === "ready" && routeState.route.kind === "overview";
   if (showOverview) overviewKeepAlive.current = true;
@@ -365,7 +417,9 @@ export function ProtectionCenterWorkspace(props: {
           catalogExtensions={catalogExtensions}
           effective={state.effective}
           localCliItems={localClis.data?.items ?? []}
+          hostInventory={localClis.data?.host_inventory}
           localCliError={localClis.error}
+          localCliNotice={localClis.discoveryNotice}
           mutationError={mutationError && !pending ? mutationError : null}
           recoveryStatus={recoveryStatus}
           healthBroken={healthBroken}
@@ -373,6 +427,7 @@ export function ProtectionCenterWorkspace(props: {
           active={showOverview}
           onPrimaryStatusAction={handlePrimaryStatusAction}
           onRefresh={refreshProtection}
+          onReloadConnections={localClis.load}
           onOpenExtension={openExtension}
           onOpenLocalCli={openLocalCliDetail}
           onAddCustom={openAddCustom}
@@ -388,6 +443,11 @@ export function ProtectionCenterWorkspace(props: {
       {showLocalCli && localClis.error && localClis.data ? (
         <p role="alert" className="mb-3 text-sm font-medium text-rose-800">{localClis.error}</p>
       ) : null}
+      {(showLocalCli || routeState.route.kind === "add-custom") && localClis.discoveryNotice && localClis.data ? (
+        <p role="status" className="mb-3 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark">
+          {localClis.discoveryNotice}
+        </p>
+      ) : null}
       {showLocalCli && !localClis.data && !localClis.error ? (
         <ExtensionsLoadingState label="Loading custom extension" />
       ) : null}
@@ -395,8 +455,10 @@ export function ProtectionCenterWorkspace(props: {
         <AddCustomExtensionWorkspace
           items={localClis.data?.items ?? []}
           revision={localClis.data?.revision ?? 0}
+          discovering={localClis.discovering || !localClis.catalogReady}
           onBack={closeExtension}
           onAdded={handleCustomExtensionAdded}
+          onConfigured={localClis.discover}
         />
       ) : null}
       {showLocalCli && selectedLocalCli && localClis.data ? (
@@ -404,6 +466,7 @@ export function ProtectionCenterWorkspace(props: {
           item={selectedLocalCli}
           revision={localClis.data.revision}
           continuity={localClis.data.cloud}
+          nativePublication={localClis.data.native_publication}
           onBack={closeExtension}
           onRefresh={localClis.load}
         />

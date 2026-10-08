@@ -55,6 +55,34 @@ def test_windows_cache_reader_verifies_and_reads_one_handle(
     assert closed == [opened[0]]
 
 
+def test_windows_cache_reader_accepts_explicit_authority_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = b"a" * (snapshot_module.POLICY_SNAPSHOT_MAX_BYTES + 1)
+    kernel32, information, closed = _fake_windows_snapshot_kernel(data)
+    handle = object()
+    monkeypatch.setattr(
+        snapshot_module,
+        "_windows_open_handle",
+        lambda *_args, **_kwargs: (kernel32, handle, information),
+    )
+    monkeypatch.setattr(snapshot_module, "_windows_owner_sid", lambda: "S-1-5-21-1")
+    monkeypatch.setattr(snapshot_module, "_windows_verify_private_dacl", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        snapshot_module,
+        "_windows_close_handle",
+        lambda _kernel, closed_handle: closed.append(closed_handle),
+    )
+
+    payload = snapshot_module._windows_read_snapshot_bytes(
+        Path("C:/Guard/policy-snapshot-v3.json"),
+        maximum_bytes=storage_module.POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
+    )
+
+    assert payload == data
+    assert closed == [handle]
+
+
 @pytest.mark.parametrize(
     ("failure", "reported_size", "read_result"),
     (
@@ -240,6 +268,7 @@ def test_windows_existing_directory_reapplies_private_dacl_on_same_handle(
             ("apply", (applied_handle, applied_descriptor, applied_dacl, directory))
         ),
     )
+
     def verify_dacl(verified_handle: object, *, owner_sid: str, directory: bool) -> None:
         events.append(("verify", (verified_handle, owner_sid, directory)))
         if sum(1 for event in events if event[0] == "verify") == 1:

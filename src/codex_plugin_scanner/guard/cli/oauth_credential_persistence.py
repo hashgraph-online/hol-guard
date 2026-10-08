@@ -4,8 +4,31 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from typing_extensions import NotRequired, TypedDict
+
 from ..store import GuardStore
 from .oauth_client import GuardDpopKeyMaterial
+
+
+class OAuthCredentialUpdateParams(TypedDict):
+    """Keyword parameters accepted by persist_oauth_local_credentials."""
+
+    store: GuardStore
+    issuer: str
+    client_id: str
+    refresh_token: str
+    dpop_key_material: GuardDpopKeyMaterial
+    now: str
+    grant_id: NotRequired[str | None]
+    machine_id: NotRequired[str | None]
+    device_id: NotRequired[str | None]
+    supply_chain_entitlement: NotRequired[dict[str, object] | None]
+    workspace_id: NotRequired[str | None]
+    cloud_user_profile: NotRequired[dict[str, str] | None]
+    runtime_id: NotRequired[str | None]
+    runtime_label: NotRequired[str | None]
+    access_token: NotRequired[str | None]
+    access_token_expires_at: NotRequired[str | None]
 
 
 def persist_oauth_local_credentials(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.metadata
+import logging
 import threading
 import time
 import uuid
@@ -20,6 +21,7 @@ from .action_lattice import normalize_guard_action_result
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
+from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     IneligibleApprovalScopeError,
@@ -32,6 +34,8 @@ from .approval_scope_support import (
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
+    connect_retry_refresh_race_from_state,
+    connect_retry_required_from_state,
     resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
@@ -44,7 +48,12 @@ from .desktop_notifications import (
     notify_pending_approval_once,
 )
 from .incident import build_incident_context
-from .local_dashboard_session import build_local_dashboard_session_token
+from .local_dashboard_session import (
+    build_approval_browser_url as build_approval_browser_url,
+)
+from .local_dashboard_session import (
+    build_local_dashboard_session_token,
+)
 from .local_supply_chain import build_local_supply_chain_posture
 from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
@@ -64,9 +73,9 @@ from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
 from .runtime.github_workflow_runtime import (
-    github_workflow_requires_local_once,
     issue_github_workflow_capability_for_resolution,
 )
+from .runtime.package_protect_projection import LOCAL_SUPPLY_CHAIN_HARNESS
 from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
@@ -90,6 +99,8 @@ from .trusted_local_tools import (
     parse_local_tool_grant_selection,
 )
 from .value_coercion import coerce_non_negative_int
+
+_LOGGER = logging.getLogger(__name__)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -145,27 +156,6 @@ def build_approval_request_url(approval_center_url: str, request_id: str) -> str
     return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
 
 
-def build_approval_browser_url(approval_url: str | None, *, auth_token: str | None) -> str | None:
-    """Build a browser-openable approval URL with a scoped Guard session token."""
-
-    if not approval_url or auth_token is None:
-        return approval_url
-    parsed = urlparse(approval_url)
-    fragment_pairs = [
-        (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
-    ]
-    fragment_pairs.append(
-        (
-            "guard-token",
-            build_local_dashboard_session_token(
-                auth_token=auth_token,
-                surface="approval-center",
-            ),
-        )
-    )
-    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
-
-
 def _normalize_harness_slug(harness: str | None) -> str | None:
     if not isinstance(harness, str):
         return None
@@ -173,6 +163,20 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     if normalized in {"claude", "claude-code"}:
         return "claude-code"
     return normalized or None
+
+
+def _approval_policy_harness(request: Mapping[str, object]) -> str:
+    """Keep local package policy identity separate from display attribution."""
+
+    artifact_type = request.get("artifact_type")
+    artifact_id = request.get("artifact_id")
+    if (
+        artifact_type == "package_request"
+        and isinstance(artifact_id, str)
+        and artifact_id.startswith(f"{LOCAL_SUPPLY_CHAIN_HARNESS}:project:package-request:")
+    ):
+        return LOCAL_SUPPLY_CHAIN_HARNESS
+    return str(request["harness"])
 
 
 def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
@@ -453,6 +457,7 @@ def queue_blocked_approvals(
     approval_center_url: str,
     now: str | None = None,
     notify: bool = True,
+    prompt_shown: bool = True,
     redaction_level: str = "full",
     continuation_operation: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
@@ -594,7 +599,7 @@ def queue_blocked_approvals(
                 approval_url=build_approval_request_url(approval_center_url, persisted_request_id),
             )
         if created_new_request:
-            _record_created_event(store, request, timestamp)
+            _record_created_event(store, request, timestamp, prompt_shown=prompt_shown)
         if notify:
             _notify_pending_approval(store=store, request=request)
         request_payload = store.get_approval_request(persisted_request_id)
@@ -602,6 +607,46 @@ def queue_blocked_approvals(
             raise RuntimeError(f"Persisted approval request not found: {persisted_request_id}")
         queued.append(request_payload)
     return queued
+
+
+def silent_review_center_url(guard_home: Path) -> str:
+    """Loopback origin stored on a silent review. Does not start the daemon."""
+
+    from .daemon.manager import guard_daemon_url_for_home
+
+    return guard_daemon_url_for_home(guard_home)
+
+
+def record_unprompted_review(
+    *,
+    detection: HarnessDetection,
+    evaluation: Mapping[str, object],
+    store: GuardStore,
+    approval_center_url: str | None = None,
+    now: str | None = None,
+    redaction_level: str = "full",
+    continuation_operation: Mapping[str, object] | None = None,
+) -> list[dict[str, object]]:
+    """Persist a blocked review for the inbox and cloud outbox without prompting."""
+
+    import sqlite3
+
+    try:
+        return queue_blocked_approvals(
+            detection=detection,
+            evaluation=dict(evaluation),
+            store=store,
+            approval_center_url=approval_center_url or silent_review_center_url(store.guard_home),
+            now=now,
+            notify=False,
+            prompt_shown=False,
+            redaction_level=redaction_level,
+            continuation_operation=continuation_operation,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        # Exception text can include tool input. Keep the class only.
+        _LOGGER.warning("Silent review stayed blocked without an inbox row (%s)", type(error).__name__)
+        return []
 
 
 def _item_browser_intent(item: Mapping[str, object]) -> dict[str, object] | None:
@@ -751,7 +796,7 @@ def apply_approval_resolution(
         if browser_mcp_exact_key is not None:
             scoped_artifact_hash = browser_mcp_exact_key
     decision = PolicyDecision(
-        harness="*" if scope == "global" else str(request["harness"]),
+        harness="*" if scope == "global" else _approval_policy_harness(request),
         scope=scope,
         action="allow" if action == "allow" else "block",
         artifact_id=scoped_artifact_id,
@@ -779,12 +824,12 @@ def apply_approval_resolution(
             now=resolved_at,
         )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
-        if action == "allow" and _should_record_local_once_replay(request):
+        if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
                 decision=decision,
-                harness=str(request["harness"]),
+                harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
     elif persist_policy is None and scope == "artifact" and temporary_mcp_selection is None:
@@ -802,14 +847,35 @@ def apply_approval_resolution(
             resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
-        if action == "allow" and _should_record_local_once_replay(request):
+        if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
                 decision=once_decision,
-                harness=str(request["harness"]),
+                harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
+
+    elif (
+        persist_policy is False
+        and scope == "artifact"
+        and exact_context_allow
+        and temporary_mcp_selection is None
+        and local_tool_selection is None
+    ):
+        # "Do not remember" still authorizes the exact approved retry once.
+        store.ensure_policy_integrity_ready_for_write(
+            harness=decision.harness,
+            approval_gate_grant=resolved_gate_grant,
+            now=resolved_at,
+        )
+        local_once_fallback = _record_local_once_approval(
+            store,
+            request_id=request_id,
+            decision=decision,
+            harness=_approval_policy_harness(request),
+            created_at=resolved_at,
+        )
 
     temporary_mcp_result: dict[str, object] | None = None
     temporary_mcp_resolved_ids: list[str] = []
@@ -1270,7 +1336,13 @@ def _enqueue_memory_decision_for_resolution(
     )
 
 
-def _record_created_event(store: GuardStore, request: GuardApprovalRequest, created_at: str) -> None:
+def _record_created_event(
+    store: GuardStore,
+    request: GuardApprovalRequest,
+    created_at: str,
+    *,
+    prompt_shown: bool = True,
+) -> None:
     store.add_event(
         "approval.created",
         {
@@ -1287,7 +1359,7 @@ def _record_created_event(store: GuardStore, request: GuardApprovalRequest, crea
         },
         created_at,
     )
-    if request.policy_action in {"review", "require-reapproval"}:
+    if prompt_shown and request.policy_action in {"review", "require-reapproval"}:
         store.add_event(
             "guard.protection.ask_once_shown",
             {
@@ -1560,6 +1632,35 @@ def build_runtime_snapshot(
     active_request_id: str | None = None,
     include_items: bool = True,
     containment_health: object = None,
+    serving_runtime: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    # Each store call otherwise opens its own connection. That made this
+    # control-plane read take several seconds on an ordinary local store.
+    with store.connection_scope():
+        return _build_runtime_snapshot(
+            store=store,
+            approval_center_url=approval_center_url,
+            now=now,
+            request_limit=request_limit,
+            receipt_limit=receipt_limit,
+            active_request_id=active_request_id,
+            include_items=include_items,
+            containment_health=containment_health,
+            serving_runtime=serving_runtime,
+        )
+
+
+def _build_runtime_snapshot(
+    *,
+    store: GuardStore,
+    approval_center_url: str | None,
+    now: str | None = None,
+    request_limit: int = 200,
+    receipt_limit: int = 25,
+    active_request_id: str | None = None,
+    include_items: bool = True,
+    containment_health: object = None,
+    serving_runtime: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     queue_page = store.list_pending_approval_summaries(limit=1, exclude_watch_only=True)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
@@ -1585,6 +1686,14 @@ def build_runtime_snapshot(
     hook_verification = _live_hook_verification(health_managed_installs, store)
     runtime_state = store.get_runtime_state()
     health_runtime_state = dict(runtime_state) if runtime_state is not None else None
+    if health_runtime_state is None and serving_runtime is not None:
+        # The store row is gone but this process is serving requests. Report a
+        # truthful "missing registration" state instead of claiming the runtime
+        # is offline; the heartbeat writer re-registers the row.
+        health_runtime_state = dict(serving_runtime)
+        health_runtime_state["registration_status"] = "missing"
+        if approval_center_url is not None:
+            health_runtime_state["approval_center_url"] = approval_center_url
     if health_runtime_state is not None and containment_health is not None:
         health_runtime_state["containment_health"] = containment_health
     protection_health = build_runtime_protection_health(
@@ -1597,7 +1706,7 @@ def build_runtime_snapshot(
     )
     headline_state = _resolve_runtime_headline_state(
         pending_count=pending_count,
-        runtime_state=runtime_state,
+        runtime_state=health_runtime_state,
         protection_state=str(protection_health["state"]),
     )
     return {
@@ -1820,21 +1929,6 @@ def _approval_once_policy_expires_at(resolved_at: str) -> str:
     return (parsed + _APPROVAL_ONCE_POLICY_TTL).isoformat()
 
 
-def _should_record_local_once_replay(request: Mapping[str, object]) -> bool:
-    artifact_type = request.get("artifact_type")
-    if artifact_type == "package_request":
-        return False
-    artifact_id = request.get("artifact_id")
-    if isinstance(artifact_id, str) and ":package-request:" in artifact_id:
-        return False
-    if github_workflow_requires_local_once(request):
-        return True
-    launch_target = request.get("launch_target")
-    if not isinstance(launch_target, str):
-        return False
-    return launch_target.startswith(("npm ", "npx ", "pnpm ", "yarn ", "bun "))
-
-
 def _record_local_once_approval(
     store: GuardStore,
     *,
@@ -1869,8 +1963,8 @@ def _build_runtime_cloud_context(
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
-    connect_retry_required = _connect_retry_required(latest_connect_state)
-    connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
+    connect_retry_required = connect_retry_required_from_state(latest_connect_state)
+    connect_retry_refresh_race = connect_retry_refresh_race_from_state(latest_connect_state)
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
     alert_preferences = store.get_sync_payload("alert_preferences") or {}
@@ -2120,20 +2214,6 @@ def _runtime_proof_status_detail(state: str) -> str:
         "not_connected": "Connect Guard Cloud to sync this device proof.",
     }
     return details.get(state, "Connect Guard Cloud to sync this device proof.")
-
-
-def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None:
-        return False
-    status = _optional_string(latest_state.get("status"))
-    milestone = _optional_string(latest_state.get("milestone"))
-    return status == "retry_required" or milestone == "first_sync_failed"
-
-
-def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None or not _connect_retry_required(latest_state):
-        return False
-    return connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _build_cloud_sync_health(

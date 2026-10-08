@@ -120,7 +120,7 @@ _ACTION_MESSAGES: dict[GuardAction, tuple[GuardDecisionAction, str, str, str]] =
     "require-reapproval": (
         "ask",
         "Fresh approval required",
-        "HOL Guard needs a fresh approval because this action changed.",
+        "HOL Guard needs a fresh approval before this action can run.",
         "Choose the smallest approval scope that matches your intent, then retry.",
     ),
     "block": (
@@ -384,6 +384,22 @@ def authoritative_decision_from_artifact(
     return decision
 
 
+def _is_disabled_codex_skill_inventory(raw_item: Mapping[str, object], decision: AuthoritativeGuardDecision) -> bool:
+    """Only a disabled Codex skill inventory row may omit launch authority."""
+
+    artifact_id = raw_item.get("artifact_id")
+    return (
+        raw_item.get("inventory_only") is True
+        and raw_item.get("artifact_type") == "skill"
+        and isinstance(artifact_id, str)
+        and artifact_id.startswith("codex:")
+        and decision.action == "allow"
+        and decision.reason == "inventory_only"
+        and decision.composition_trace.get("inventory_only") is True
+        and decision.enforcement.authority_finalized is False
+    )
+
+
 def evaluation_authority_error(
     evaluation: Mapping[str, object],
     *,
@@ -451,8 +467,15 @@ def evaluation_authority_error(
         return AUTHORITATIVE_DECISION_INCONSISTENT
     if blocked != any(decision.enforcement.blocking for decision in decisions):
         return AUTHORITATIVE_DECISION_INCONSISTENT
-    if require_launch_permitted and any(not decision.enforcement.launch_permitted for decision in decisions):
-        return AUTHORITATIVE_DECISION_INCONSISTENT
+    if require_launch_permitted:
+        for raw_item, decision in zip(raw_artifacts, artifact_decisions, strict=True):
+            if decision.enforcement.launch_permitted:
+                continue
+            if isinstance(raw_item, Mapping) and _is_disabled_codex_skill_inventory(raw_item, decision):
+                continue
+            return AUTHORITATIVE_DECISION_INCONSISTENT
+        if any(not decision.enforcement.launch_permitted for decision in decisions[len(artifact_decisions) :]):
+            return AUTHORITATIVE_DECISION_INCONSISTENT
     return None
 
 

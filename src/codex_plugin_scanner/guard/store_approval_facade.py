@@ -6,9 +6,33 @@ from __future__ import annotations
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_native_review_approvals import consume_native_review_approval as consume_native_retry
 
 
 class StoreApprovalsMixin:
+    def consume_native_review_approval(
+        self,
+        *,
+        harness: str,
+        artifact_id: str,
+        artifact_name: str,
+        artifact_hash: str,
+        launch_target: str,
+        workspace: str | None,
+        now: str,
+    ) -> bool:
+        with self._connect() as connection:
+            return consume_native_retry(
+                connection,
+                harness=harness,
+                artifact_id=artifact_id,
+                artifact_name=artifact_name,
+                artifact_hash=artifact_hash,
+                launch_target=launch_target,
+                workspace=workspace,
+                now=now,
+            )
+
     def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
         with self._connect() as connection:
             request_id = persist_approval_request(

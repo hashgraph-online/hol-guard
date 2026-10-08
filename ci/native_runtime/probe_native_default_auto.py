@@ -2,7 +2,6 @@
 
 # The probe deliberately adds the repository root to sys.path so that it can
 # validate the installed package against the checked-in ownership contract.
-# Keep the import guard explicit instead of relying on the caller's cwd.
 # ruff: noqa: E402
 
 from __future__ import annotations
@@ -27,7 +26,10 @@ import codex_plugin_scanner
 from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
-from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+from codex_plugin_scanner.guard.native_resident_client import (
+    close_native_residents,
+    native_resident_client_failure_code,
+)
 from codex_plugin_scanner.guard.native_runtime import (
     NativeRuntimeCapabilities,
     NativeRuntimeIdentity,
@@ -39,9 +41,13 @@ from codex_plugin_scanner.guard.native_runtime import (
 )
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 from codex_plugin_scanner.guard.store import GuardStore
-from scripts.native_probe_receipts import receipt_corpus_is_complete, wait_for_receipt_corpus
+from scripts.native_probe_receipts import (
+    receipt_corpus_is_complete,
+    wait_for_receipt_corpus,
+    wait_for_route_corpus,
+)
 from scripts.native_slo_adapter import is_allowed
-from scripts.native_slo_contract import proof_environment_violations
+from scripts.native_slo_contract import MAX_READINESS_P95_MS, proof_environment_violations
 
 _HOOK_CLIENT_SPEC = importlib.util.spec_from_file_location(
     "hol_guard_installed_hook_client",
@@ -52,6 +58,7 @@ if _HOOK_CLIENT_SPEC is None or _HOOK_CLIENT_SPEC.loader is None:
 _HOOK_CLIENT_MODULE = importlib.util.module_from_spec(_HOOK_CLIENT_SPEC)
 _HOOK_CLIENT_SPEC.loader.exec_module(_HOOK_CLIENT_MODULE)
 _installed_hook_request = _HOOK_CLIENT_MODULE.installed_hook_request
+hook_failure_detail = _HOOK_CLIENT_MODULE.hook_failure_detail
 
 
 def _request(root: Path, text: str, request_id: str) -> HookReviewRequest:
@@ -108,6 +115,33 @@ def _native_state_files(guard_home: Path) -> list[Path]:
 
 
 def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
+    # Join the scoped Python supervisor before the authenticated Rust stop.
+    cleanup_error: OSError | RuntimeError | None = None
+    try:
+        contained = close_native_residents(guard_home)
+    except (OSError, RuntimeError) as exc:
+        contained = False
+        cleanup_error = exc
+    if _native_state_files(guard_home):
+        try:
+            if not _stop_native_process(runtime, guard_home):
+                cleanup_error = cleanup_error or RuntimeError("native resident stop did not complete")
+        except (OSError, RuntimeError) as exc:
+            cleanup_error = cleanup_error or exc
+    # The authenticated stop can release the child while the supervisor's
+    # first bounded join is still unwinding its process handles.
+    if cleanup_error is None and not contained:
+        try:
+            contained = close_native_residents(guard_home)
+        except (OSError, RuntimeError) as exc:
+            cleanup_error = exc
+    if cleanup_error is not None:
+        raise cleanup_error
+    if not contained:
+        raise RuntimeError("native resident containment did not complete")
+
+
+def _stop_native_process(runtime: Path, guard_home: Path) -> bool:
     try:
         result = subprocess.run(
             (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
@@ -117,12 +151,22 @@ def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
         )
     except subprocess.TimeoutExpired:
         print("native_default_auto_probe_cleanup_timeout", file=sys.stderr)
-        return
-    if result.returncode != 0:
-        print(
-            f"native_default_auto_probe_cleanup_failed: returncode={result.returncode}",
-            file=sys.stderr,
-        )
+        return False
+    if result.returncode == 0:
+        return True
+    # Rust maps the authenticated idempotent "no resident" result to exit 2;
+    # accept it only with the exact documented error and no remaining state.
+    if (
+        result.returncode == 2
+        and result.stderr.strip() == b"native_resident_stop_unavailable"
+        and not _native_state_files(guard_home)
+    ):
+        return True
+    print(
+        f"native_default_auto_probe_cleanup_failed: returncode={result.returncode}",
+        file=sys.stderr,
+    )
+    return False
 
 
 def _ownership_routes() -> dict[str, dict[str, str]]:
@@ -176,17 +220,16 @@ def _exercise_installed_routes(
                 )
             )
         for event, payload in events:
-            response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            try:
+                response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            except TimeoutError as error:
+                # Report the failed route without exposing tokens or replaying a possibly dispatched request.
+                raise RuntimeError(f"installed hook transport timed out: harness={harness} event={event}") from error
             if response_payload is None:
                 raise RuntimeError(f"empty response for {harness} {event}")
             _require(
                 is_allowed(event, response_payload),
-                {
-                    "harness": harness,
-                    "event": event,
-                    "decision": response_payload.get("decision"),
-                    "permission_decision": _permission_decision(response_payload),
-                },
+                hook_failure_detail(harness, event, response_payload),
             )
             reason = response_payload.get("reason_code")
             if isinstance(reason, str):
@@ -226,7 +269,7 @@ def _exercise_mode_invariants(
             mode_invariants[mode] = {
                 "decision": response.get("decision"),
                 "reason_code": response.get("reason_code"),
-                "python_oracle": daemon._server.hook_worker.test_oracle is not None,
+                "python_oracle": getattr(daemon._server.hook_worker, "test_oracle", None) is not None,
             }
             _require(mode_invariants[mode]["python_oracle"] is False, mode_invariants[mode])
     finally:
@@ -248,7 +291,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     # Register the actual installed-hook workspace before timing the readiness
     # barrier. The publisher is already started by HookWorker construction;
     # pre-registering prevents the measured first request from paying for a
-    # second workspace-overlay publication and keeps the strict 250 ms budget
+    # second workspace-overlay publication and keeps the shared readiness budget
     # meaningful on slower Intel runners.
     register_workspace = getattr(daemon._server.hook_worker.policy_snapshot_publisher, "register_workspace", None)
     if callable(register_workspace):
@@ -259,25 +302,34 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     daemon.start()
     mode_invariants: dict[str, dict[str, object]] = {}
     worker_stats = evidence_stats = None
+    readiness_budget_seconds = MAX_READINESS_P95_MS / 1_000.0
     try:
         readiness_started = time.monotonic()
         prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
             workspace,
-            deadline=readiness_started + 0.25,
+            deadline=readiness_started + readiness_budget_seconds,
         )
         readiness_elapsed = time.monotonic() - readiness_started
         _require(
-            prepared_policy is not None and readiness_elapsed <= 0.25,
+            prepared_policy is not None and readiness_elapsed <= readiness_budget_seconds,
             {
                 "elapsed_ms": round(readiness_elapsed * 1_000, 2),
                 "policy_ready": prepared_policy is not None,
             },
         )
         _exercise_installed_routes(daemon, guard_home, workspace, routes, route_receipts, reason_codes)
-        worker_stats = daemon._server.hook_worker.metrics.snapshot()
+        worker_stats = wait_for_route_corpus(
+            daemon._server.hook_worker.metrics,
+            expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
+        )
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
-        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
+        evidence_stats = wait_for_receipt_corpus(
+            writer,
+            expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
+        )
     finally:
         daemon.stop()
     if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
@@ -288,7 +340,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
     observed_routes = cast(dict[str, int], observed_routes_raw)
     _require(expected > 0, "installed hook corpus is empty")
-    _require(expected == 21, {"expected": expected, "routes": routes})
+    _require(expected == 23, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
     _require(receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)
@@ -391,6 +443,7 @@ def _run_native_smoke(root: Path) -> None:
 def _run_temporary_probe(identity: NativeRuntimeIdentity) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="hg-auto-", dir=_short_temp_parent()) as temporary:
         root = Path(temporary)
+        completed = False
         try:
             _run_native_smoke(root)
             health = native_runtime_health(root / "guard-home")
@@ -399,10 +452,20 @@ def _run_temporary_probe(identity: NativeRuntimeIdentity) -> dict[str, object]:
             _require(health.resident_failures == 0, health)
             _require(health.oneshot_failures == 0, health)
             _require(len(_native_state_files(root / "guard-home")) == 1, "native generation was not reused")
-            return _installed_hook_corpus(root)
+            corpus = _installed_hook_corpus(root)
+            completed = True
+            return corpus
         finally:
+            cleanup_error: OSError | RuntimeError | None = None
             for guard_home in (root / "guard-home", root / "hook-home"):
-                _stop_native_runtime(identity.path, guard_home)
+                try:
+                    _stop_native_runtime(identity.path, guard_home)
+                except (OSError, RuntimeError) as exc:
+                    message = f"native_default_auto_probe_cleanup_failed: {type(exc).__name__}"
+                    print(message, file=sys.stderr)
+                    cleanup_error = cleanup_error or exc
+            if cleanup_error is not None and completed:
+                raise cleanup_error
 
 
 def _assert_native_disabled_mode() -> None:

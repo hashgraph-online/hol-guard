@@ -9,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner import version as product_version_module
 from codex_plugin_scanner.guard import mcp_tool_calls as mcp_tool_calls_module
-from codex_plugin_scanner.guard.cli import commands_hook_generic as generic_hook_module
 from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as runtime_policy_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
@@ -89,7 +88,7 @@ def _runtime_hook_token(
     )
 
 
-def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path) -> None:
+def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path, native_context_digest: Path) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(
         artifact_id="codex:project:runtime-permission-mode",
@@ -131,6 +130,7 @@ def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path) -
 def test_runtime_hook_evaluator_policy_version_is_the_only_changed_component(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(
@@ -164,63 +164,6 @@ def test_runtime_hook_evaluator_policy_version_is_the_only_changed_component(
     )
 
 
-def _generic_hook_token(*, config: GuardConfig, payload: dict[str, object]) -> str:
-    return generic_hook_module._generic_hook_approval_context_token(
-        action_envelope=None,
-        artifact_id="generic:project:policy-version",
-        artifact_name="generic policy version fixture",
-        config=config,
-        current_action="review",
-        current_config_action="review",
-        daemon_hint_disposition=None,
-        daemon_hint_reason_code=None,
-        daemon_status=None,
-        fail_mode=None,
-        harness="generic-test",
-        home_dir=_workspace(config).parent,
-        payload=payload,
-        publisher=None,
-        runtime_workspace=config.workspace,
-        trusted_cli_action=None,
-        untrusted_payload_action=None,
-        untrusted_payload_action_disposition=None,
-        untrusted_payload_action_reason=None,
-    )
-
-
-def test_generic_hook_evaluator_policy_version_is_the_only_changed_component(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config = _config(tmp_path)
-    payload: dict[str, object] = {
-        "hook_event_name": "OpaqueHookEvent",
-        "tool_name": "opaque_tool",
-        "tool_input": {"target": "unchanged"},
-        "approval_delivery": {"ui_contract_version": "v1"},
-    }
-    saved_token = _generic_hook_token(config=config, payload=payload)
-
-    monkeypatch.setattr(product_version_module, "__version__", "999.0.0-ux-only")
-    assert (
-        _generic_hook_token(
-            config=_ux_only_config_change(config),
-            payload={**payload, "approval_delivery": {"ui_contract_version": "v2"}},
-        )
-        == saved_token
-    )
-
-    monkeypatch.setattr(
-        generic_hook_module,
-        "_GENERIC_HOOK_EVALUATOR_POLICY_VERSION",
-        "generic-hook-evaluation-v2-test",
-    )
-    _assert_only_policy_component_changed(
-        saved_token,
-        _generic_hook_token(config=config, payload=payload),
-    )
-
-
 def _tool_call_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
     assert config.workspace is not None
     return mcp_tool_calls_module.build_tool_call_hash(
@@ -231,9 +174,10 @@ def _tool_call_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
     )
 
 
-def test_mcp_tool_call_evaluator_policy_version_is_the_only_changed_component(
+def test_mcp_tool_call_approval_ignores_presentation_only_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = mcp_tool_calls_module.build_tool_call_artifact(
@@ -256,15 +200,6 @@ def test_mcp_tool_call_evaluator_policy_version_is_the_only_changed_component(
         == saved_token
     )
 
-    monkeypatch.setattr(
-        mcp_tool_calls_module,
-        "_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION",
-        "mcp-tool-call-evaluation-v3-test",
-    )
-    _assert_only_policy_component_changed(
-        saved_token,
-        _tool_call_token(artifact=artifact, config=config),
-    )
 
 
 def _sensitive_read_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
@@ -279,6 +214,7 @@ def _sensitive_read_token(*, artifact: GuardArtifact, config: GuardConfig) -> st
 def test_stdio_sensitive_read_evaluator_policy_version_is_the_only_changed_component(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(

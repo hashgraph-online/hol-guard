@@ -150,8 +150,9 @@ def test_request_device_authorization_sets_hol_guard_user_agent(monkeypatch) -> 
                 }
             ).encode("utf-8")
 
-    def fake_urlopen(request: urllib.request.Request, timeout: int):
+    def fake_urlopen(request: urllib.request.Request, timeout: int, *, context):
         del timeout
+        assert context.check_hostname is True
         captured["user_agent"] = request.get_header("User-agent") or ""
         return _Response()
 

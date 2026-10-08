@@ -1,0 +1,216 @@
+{
+  "extension": {
+    "action_classes": [
+      "CircleCI pipeline execution command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews remote pipeline execution through CircleCI CLI.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.cicd.circleci",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "CircleCI command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "CircleCI pipeline execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies remote CircleCI pipeline execution.",
+        "example_command": "circleci pipeline run",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "CircleCI pipeline execution",
+        "permission_id": "command.cicd.circleci.permission.pipeline-run",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Validate the configuration and inspect the pipeline definition before starting remote work."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://circleci.com/docs/guides/toolkit/how-to-use-the-circleci-local-cli/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "CircleCI pipeline execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies remote CircleCI pipeline execution.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "circleci",
+                  "circleci.cmd",
+                  "circleci.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--skip-update-check",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [
+                  "--host",
+                  "--token"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "pipeline",
+                  "run"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.cicd.circleci.permission.pipeline-run",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.cicd.circleci.pipeline-run",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "circleci",
+                      "circleci.cmd",
+                      "circleci.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--skip-update-check",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--host",
+                      "--token"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "pipeline",
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "circleci",
+                      "circleci.cmd",
+                      "circleci.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--skip-update-check",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--host",
+                      "--token"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "pipeline",
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Validate the configuration and inspect the pipeline definition before starting remote work."
+        ],
+        "severity": "high",
+        "title": "CircleCI pipeline execution"
+      }
+    ],
+    "safer_alternatives": [
+      "Validate configuration and inspect the pipeline definition before execution."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

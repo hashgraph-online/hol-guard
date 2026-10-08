@@ -25,6 +25,7 @@ from .commands_parser_local import _configure_guard_local_parsers
 from .commands_parser_mdm import _configure_guard_mdm_parsers
 from .commands_parser_policy import _configure_guard_policy_parsers
 from .commands_parser_risk_report import configure_guard_risk_report_parser
+from .extension_builder_commands import configure_extension_builder_parser
 
 
 def add_guard_parser(
@@ -55,13 +56,14 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         parser_class=FriendlyArgumentParser,
         metavar=(
             "{start,status,risk-report,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
-            "test-eval,command,verified-read,contained-write,mdm,"
+            "test-eval,command,extensions,verified-read,contained-write,mdm,"
             "receipts,inventory,abom,aibom,approvals,explain,allow,deny,policies,trust,exceptions,advisories,events,doctor,connect,"
             "remote-pair,disconnect,"
             "login,sync,device,commands,cloud-review,bridge,mcp}"
         ),
     )
     _configure_guard_local_parsers(guard_subparsers)
+    configure_extension_builder_parser(guard_subparsers)
     configure_guard_risk_report_parser(guard_subparsers)
     _configure_guard_desktop_parser(guard_subparsers)
     _configure_guard_mdm_parsers(guard_subparsers)

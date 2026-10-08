@@ -8,6 +8,12 @@ function enrollableCount(item: LocalCliItem): number {
 
 export type EnrollStep = "pick" | "review" | "confirm";
 
+export function isObservedMcpItem(item: LocalCliItem | null): boolean {
+  return item?.surface === "mcp"
+    && item.example_label.startsWith("mcp__")
+    && item.source_label?.endsWith(" · observed tools") === true;
+}
+
 export function addDialogSubmitLabel(input: {
   recognized: LocalCliItem | null;
   busy: boolean;
@@ -16,6 +22,9 @@ export function addDialogSubmitLabel(input: {
 }): string {
   if (input.recognized === null) {
     return input.busy ? "Looking…" : "Find this tool";
+  }
+  if (input.busy && input.recognized.surface === "mcp" && input.step !== "confirm") {
+    return "Listing tools…";
   }
   if (input.step !== "confirm") {
     return "Continue";
@@ -26,14 +35,18 @@ export function addDialogSubmitLabel(input: {
   if (input.pending === "blocked") {
     return blockActionLabel(input.recognized.surface);
   }
-  return allowActionLabel(input.recognized.surface);
+  return isObservedMcpItem(input.recognized) ? "Save tool permissions" : allowActionLabel(input.recognized.surface);
 }
 
 export function enrollConfirmCopy(
   surface: LocalCliItem["surface"],
   recentlySatisfied: boolean,
   totpEnabled: boolean,
+  gateReady: boolean | null,
 ): string {
+  if (gateReady === false) {
+    return "Local approval isn't ready on this device. Set it up below, then come back to save these settings.";
+  }
   if (recentlySatisfied) {
     return "Recently confirmed with your authenticator. Save these settings.";
   }
@@ -89,17 +102,74 @@ export function blockActionLabel(surface: LocalCliItem["surface"]): string {
 export function dialogIntro(
   hasProjects: boolean,
   surface: LocalCliItem["surface"] | null,
+  discovering = false,
+  mcpHasTools = true,
+  observedMcp = false,
 ): string {
   if (surface === "package-scripts") {
     return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (surface === "mcp") {
+    if (observedMcp) return "Review each detected tool before saving. Allow listed applies only to the tools shown here.";
+    if (!mcpHasTools) {
+      return "You can still add this server. List tools again to set Recommended, Allow, or Block on each tool.";
+    }
     return "Choose Recommended, Allow all, or Block all, then confirm this server.";
+  }
+  if (discovering) {
+    return "Looking for project scripts and app servers on this device.";
   }
   if (hasProjects) {
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
   }
   return "Paste a script, binary, MCP launch, or package scripts such as npm run. Everyday commands such as rg, grep, and whoami are not custom extensions.";
+}
+
+export function listToolsAgainLabel(): string {
+  return "List tools again";
+}
+
+export function mcpListingBusyCopy(name: string): string {
+  return `Listing tools from ${name}. This can take a few seconds.`;
+}
+
+export function mcpListingRetryFailedCopy(): string {
+  return "Guard still could not list tools. You can add the server anyway.";
+}
+
+export function mcpCatalogHasTools(commands: LocalCliItem["commands"]): boolean {
+  return commands.some((entry) => entry.command_id !== "other");
+}
+
+export function mcpListingRetryError(
+  helpStatus: LocalCliItem["help_status"],
+  commands: LocalCliItem["commands"],
+): string | null {
+  if (mcpCatalogHasTools(commands) || helpStatus === "empty") return null;
+  return mcpListingRetryFailedCopy();
+}
+
+export function McpListingStatus(props: {
+  name: string;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  if (props.busy) {
+    return (
+      <p className="mt-4 max-w-xl text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+        {mcpListingBusyCopy(props.name)}
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={props.onRetry}
+      className="mt-4 min-h-11 text-sm font-semibold text-brand-blue"
+    >
+      {listToolsAgainLabel()}
+    </button>
+  );
 }
 
 export function filterCountCopy(visible: number, total: number): string {
@@ -109,6 +179,10 @@ export function filterCountCopy(visible: number, total: number): string {
 }
 
 export function suggestionSummary(item: LocalCliItem): string {
+  if (isObservedMcpItem(item)) {
+    const count = item.commands.filter((entry) => entry.command_id !== "other").length;
+    return `${count} detected ${count === 1 ? "tool" : "tools"}. Set permissions for each one. New tools keep the usual review, and safety policy still applies.`;
+  }
   if (item.surface === "package-scripts" && item.commands.length > 0) {
     const count = enrollableCount(item);
     const unit = count === 1 ? "script" : "scripts";
@@ -131,6 +205,7 @@ export function suggestionSummary(item: LocalCliItem): string {
 
 export function SuggestionPanel(props: {
   query: string;
+  discovering?: boolean;
   hasSuggestions: boolean;
   packageScriptSuggestions: LocalCliItem[];
   harnessSuggestions: LocalCliItem[];
@@ -139,13 +214,18 @@ export function SuggestionPanel(props: {
 }) {
   if (!props.hasSuggestions) {
     return (
-      <p className="mt-5 text-sm leading-6 text-brand-dark/70">
-        {suggestionEmptyCopy(props.query)}
+      <p className="mt-5 text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+        {suggestionEmptyCopy(props.query, props.discovering === true)}
       </p>
     );
   }
   return (
     <>
+      {props.discovering === true ? (
+        <p className="mt-5 text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+          Looking for more project scripts and app servers on this device.
+        </p>
+      ) : null}
       <SuggestionGroup
         heading="From this device"
         helper="Projects Guard has already seen, including nested names such as guard:audit."
@@ -153,8 +233,8 @@ export function SuggestionPanel(props: {
         onSelect={props.onSelect}
       />
       <SuggestionGroup
-        heading="From your apps"
-        helper="MCP servers already configured in apps on this device."
+        heading="MCP servers and connectors"
+        helper="Configured in your apps or detected from tool activity. Pick one to review its tools."
         items={props.harnessSuggestions}
         onSelect={props.onSelect}
       />
@@ -188,9 +268,12 @@ export function ProjectSwitcher(props: {
   );
 }
 
-function suggestionEmptyCopy(query: string): string {
+function suggestionEmptyCopy(query: string, discovering: boolean): string {
   if (query.trim() !== "") {
     return "No matching tools. Try npm run, a project folder, or a nested script name. Everyday commands such as rg stay hidden.";
+  }
+  if (discovering) {
+    return "Scanning this device for package scripts and app servers.";
   }
   return "No extra tools yet. Paste npm run, a project folder, a script, or an MCP launch.";
 }
@@ -245,15 +328,25 @@ function SuggestionButton(props: { item: LocalCliItem; onSelect: (item: LocalCli
   const handleSelect = useCallback(() => {
     props.onSelect(props.item);
   }, [props]);
+  let connectorLabel = "Load tools";
+  if (mcpCatalogHasTools(props.item.commands)) {
+    connectorLabel = `${props.item.commands.filter((entry) => entry.command_id !== "other").length} tools`;
+  }
   return (
-    <button type="button" onClick={handleSelect} className="flex min-h-11 w-full items-baseline justify-between gap-3 py-2 text-left">
+    <button type="button" onClick={handleSelect} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-2 py-3 text-left hover:bg-brand-blue/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-brand-dark">{props.item.name}</span>
         <span className="block truncate text-xs text-brand-dark/60">
           {props.item.source_label ?? seenSuggestionMeta(props.item)}
         </span>
       </span>
-      <span className="truncate font-mono text-xs text-brand-dark/60">{props.item.example_label}</span>
+      {props.item.surface === "mcp" ? (
+        <span className="shrink-0 text-xs font-semibold text-brand-blue">
+          {connectorLabel}
+        </span>
+      ) : (
+        <span className="max-w-[55%] truncate font-mono text-xs text-brand-dark/60">{props.item.example_label}</span>
+      )}
     </button>
   );
 }

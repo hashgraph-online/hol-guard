@@ -278,7 +278,8 @@ CLOUD_COMMAND_EXTENSION_SPECS = (
         extension_id="command.cloud.aws",
         name="AWS command protection",
         description=(
-            "Reviews a validated AWS CLI operation matrix for permanent resource deletion and service termination."
+            "Reviews a validated AWS CLI operation matrix for permanent resource deletion "
+            "and service termination across identity, compute, data, delivery, and control-plane services."
         ),
         action_classes=("AWS destructive command",),
         risk_classes=("destructive_shell", "network_egress"),

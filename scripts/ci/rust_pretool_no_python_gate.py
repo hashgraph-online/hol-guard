@@ -122,36 +122,6 @@ def _keyword_value(call: ast.Call, name: str) -> ast.AST | None:
     return next((keyword.value for keyword in call.keywords if keyword.arg == name), None)
 
 
-def _contains_name(node: ast.AST, name: str) -> bool:
-    return any(isinstance(child, ast.Name) and child.id == name for child in ast.walk(node))
-
-
-def _calls_guarded_by(node: ast.FunctionDef, call_name: str, guard_name: str) -> tuple[ast.Call, ...]:
-    """Return calls whose enclosing branch mentions the required guard."""
-    parents: dict[ast.AST, ast.AST] = {}
-    for parent in ast.walk(node):
-        for child in ast.iter_child_nodes(parent):
-            parents[child] = parent
-    guarded: list[ast.Call] = []
-    for child in ast.walk(node):
-        if not isinstance(child, ast.Call):
-            continue
-        called_name = (
-            child.func.id
-            if isinstance(child.func, ast.Name)
-            else (child.func.attr if isinstance(child.func, ast.Attribute) else None)
-        )
-        if called_name != call_name:
-            continue
-        ancestor = parents.get(child)
-        while ancestor is not None and ancestor is not node:
-            if isinstance(ancestor, ast.If) and _contains_name(ancestor.test, guard_name):
-                guarded.append(child)
-                break
-            ancestor = parents.get(ancestor)
-    return tuple(guarded)
-
-
 def _server_graph_failures(root: Path) -> list[str]:
     failures: list[str] = []
     server = root / "src/codex_plugin_scanner/guard/daemon/server.py"
@@ -172,11 +142,9 @@ def _server_graph_failures(root: Path) -> list[str]:
         failures.append("server execute path can reach compatibility CLI without a native-mode return guard")
     if "_native_mode_requires_rust" not in function_calls(server_execute):
         failures.append("server execute path does not branch on native mode before compatibility dispatch")
-    unsupported = _exception_handler(server_fast, "HookWorkerUnsupported")
-    if unsupported is None or "_native_mode_requires_rust" not in function_calls(unsupported):
-        failures.append("server fast path can spill HookWorkerUnsupported into compatibility CLI in auto/force")
-    elif "_runtime_hook_fail_safe_response" not in function_calls(unsupported):
-        failures.append("server HookWorkerUnsupported native branch has no fail-safe response")
+    generic = _exception_handler(server_fast, "Exception")
+    if generic is None or "_runtime_hook_fail_safe_response" not in function_calls(generic):
+        failures.append("server fast path worker exception has no fail-safe response")
     return failures
 
 
@@ -187,48 +155,40 @@ def _resident_graph_failures(root: Path) -> list[str]:
     if resident is None:
         failures.append("resident hook entrypoint is missing")
         return failures
-    fallback = _called_node(resident, "_run_guard_hook_command")
-    unsupported = _exception_handler(resident, "HookWorkerUnsupported")
-    if fallback is None or unsupported is None:
-        failures.append("resident entrypoint native/compatibility graph is incomplete")
-        return failures
-    has_unknown_event_native_route = any(
-        isinstance(child, ast.If)
-        and "_native_mode_requires_rust" in function_calls(child.test)
-        and _contains_name(child.test, "event_name")
-        and "review_http_payload" in function_calls(child)
-        for child in ast.walk(resident)
-    )
-    if not has_unknown_event_native_route:
-        failures.append("resident entrypoint does not send unknown events to native authority")
-    elif not any(
-        isinstance(child, ast.If)
-        and child.lineno < fallback.lineno
-        and "_native_mode_requires_rust" in function_calls(child.test)
-        and any(isinstance(item, ast.Return) for item in ast.walk(child))
-        for child in resident.body
-    ):
-        failures.append("resident entrypoint can reach Python CLI without a native-mode return guard")
-    elif not _has_typed_fail_safe(unsupported):
-        failures.append("resident HookWorkerUnsupported native branch has no fail-safe response")
+    if _called_node(resident, "_run_guard_hook_command") is not None:
+        failures.append("resident entrypoint can still reach the Python CLI")
+    if _called_node(resident, "review_http_payload") is None:
+        failures.append("resident entrypoint does not route hooks through the native worker")
+    generic = _exception_handler(resident, "Exception")
+    if generic is None or "_native_worker_fail_safe_result" not in function_calls(generic):
+        failures.append("resident worker exception has no fail-safe response")
     return failures
 
 
 def _native_cli_graph_failures(root: Path) -> list[str]:
     failures: list[str] = []
     native_cli = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py"
-    native_route = _function_node_or_none(native_cli, "try_native_or_source_ref_hook")
+    native_route = _function_node_or_none(native_cli, "route_native_hook")
     if native_route is None:
-        failures.append("CLI native/source-ref route is missing")
+        failures.append("CLI native route is missing")
         return failures
-    native_call = _called_node(native_route, "try_native_hook_authority")
-    source_call = _called_node(native_route, "_try_source_ref_fast_path")
-    if native_call is None or source_call is None or native_call.lineno >= source_call.lineno:
-        failures.append("CLI source-ref path is reachable before native authority")
+    pipeline_call = _called_node(native_route, "run_native_hook_pipeline")
+    if pipeline_call is None and _called_node(native_route, "try_native_hook_authority") is None:
+        failures.append("CLI native route does not call native authority")
+    if pipeline_call is not None:
+        pipeline_module = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py"
+        pipeline = _function_node_or_none(pipeline_module, "run_native_hook_pipeline")
+        if pipeline is None:
+            failures.append("CLI native pipeline dispatcher is missing")
+        elif _called_node(pipeline, "review_native_edge_decision") is None:
+            failures.append("CLI native pipeline does not reach the native edge authority")
+    for retired in ("_try_source_ref_fast_path", "record_python_semantic_hook_route", "evaluate_source_file_ref"):
+        if _called_node(native_route, retired) is not None:
+            failures.append(f"CLI native route still calls retired Python route {retired}")
     if "_native_mode_requires_rust" not in function_calls(native_route):
-        failures.append("CLI native/source-ref route has no native-mode guard")
+        failures.append("CLI native route has no native-mode guard")
     if not _has_typed_fail_safe(native_route):
-        failures.append("CLI native/source-ref route has no fail-safe native terminal")
+        failures.append("CLI native route has no fail-safe native terminal")
     return failures
 
 
@@ -240,26 +200,17 @@ def _hook_cli_graph_failures(root: Path) -> list[str]:
         failures.append("CLI hook command entrypoint is missing")
         return failures
     load_call = _called_node(hook_command, "_load_hook_payload")
-    native_call = _called_node(hook_command, "try_native_or_source_ref_hook")
-    hydrate_call = _called_node(hook_command, "hydrate_hook_payload_reference")
-    normalize_call = _called_node(hook_command, "_normalize_hook_payload")
+    native_call = _called_node(hook_command, "route_native_hook")
     normalize_value = _keyword_value(load_call, "normalize") if load_call is not None else None
     if load_call is None or normalize_value is None:
         failures.append("CLI hook command does not load an explicit raw payload")
     elif not isinstance(normalize_value, ast.Constant) or normalize_value.value is not False:
         failures.append("CLI hook command normalizes payload before native authority")
-    if native_call is None or normalize_call is None or native_call.lineno >= normalize_call.lineno:
-        failures.append("CLI hook command reaches adapter normalization before native authority")
-        return failures
-    compatibility_value = _keyword_value(native_call, "allow_compatibility")
-    if not isinstance(compatibility_value, ast.Constant) or compatibility_value.value is not False:
-        failures.append("CLI raw native route does not disable compatibility fallback")
-    if (
-        hydrate_call is None
-        or native_call.lineno >= hydrate_call.lineno
-        or hydrate_call.lineno >= normalize_call.lineno
-    ):
-        failures.append("CLI hook command hydrates references before native routing or after normalization")
+    if native_call is None:
+        failures.append("CLI hook command does not route through native authority")
+    for retired in ("hydrate_hook_payload_reference", "_normalize_hook_payload"):
+        if _called_node(hook_command, retired) is not None:
+            failures.append(f"CLI hook command still calls retired Python helper {retired}")
     return failures
 
 
@@ -269,8 +220,8 @@ def _payload_graph_failures(root: Path) -> list[str]:
     payload_loader = _function_node_or_none(payload_support, "_load_hook_payload")
     if payload_loader is None:
         failures.append("CLI hook payload loader is missing")
-    elif not _calls_guarded_by(payload_loader, "hydrate_hook_payload_reference", "normalize"):
-        failures.append("CLI hook payload loader hydrates references outside explicit normalization")
+    elif _called_node(payload_loader, "hydrate_hook_payload_reference") is not None:
+        failures.append("CLI hook payload loader still hydrates payload references in Python")
     return failures
 
 
@@ -384,9 +335,23 @@ def _worker_failures(root: Path) -> list[str]:
         )
     )
     failures.extend(required_tokens(native_hook, ("native_pre_tool_unavailable",)))
-    native_edge_review = function_node(native_hook, "_review_native_edge", class_name="HookWorkerNativeMixin")
-    if "_review_raw_hook_native" not in function_calls(native_edge_review):
-        failures.append("HookWorkerNativeMixin._review_native_edge does not invoke the native hook edge")
+    native_review = root / "src/codex_plugin_scanner/guard/daemon/hook_worker_native_review.py"
+    review_chain = (
+        (native_hook, "_review_native_edge", "HookWorkerNativeMixin", "review_native_edge"),
+        (native_review, "review_native_edge", None, "_review_native_edge_once"),
+        (native_review, "_review_native_edge_once", None, "_review_native_edge_with_snapshot"),
+    )
+    # Follow the extracted bounded-review helper instead of requiring the old
+    # direct call. Every link must still reach the snapshot-bound native edge.
+    for path, name, class_name, callee in review_chain:
+        node = function_node(path, name, class_name=class_name)
+        if callee not in function_calls(node):
+            failures.append(f"{class_name or 'module'}.{name} does not invoke {callee}")
+    native_edge_snapshot = function_node(
+        native_hook, "_review_native_edge_with_snapshot", class_name="HookWorkerNativeMixin"
+    )
+    if "_review_raw_hook_native" not in function_calls(native_edge_snapshot):
+        failures.append("HookWorkerNativeMixin._review_native_edge_with_snapshot does not invoke the native hook edge")
     raw_edge_review = function_node(hook_worker, "_review_raw_hook_native", class_name="HookWorker")
     if "review_raw_hook_native" not in function_calls(raw_edge_review):
         failures.append("HookWorker._review_raw_hook_native does not invoke review_raw_hook_native")

@@ -1,6 +1,8 @@
 import type {
   GuardActionEnvelope,
+  GuardAction,
   GuardApprovalRequest,
+  GuardWatchOnlyScannerEvidence,
   GuardArtifactDiff,
   GuardCodexResumeResult,
   GuardReceipt,
@@ -9,7 +11,7 @@ import type {
 import { guardAwareHref } from "./guard-api";
 import { resolveQueueCategory } from "./queue-state";
 import { whyPaused } from "./evidence/plain-english";
-import { guardActionPresentation } from "./guard-action";
+import { guardActionPresentation, isGuardAction } from "./guard-action";
 import {
   isApplyPatchEnvelope,
   resolveDecisionV2Detail,
@@ -22,8 +24,6 @@ export { resolveDecisionV2Detail, resolveEnvelopeDisplayText, resolveSecondaryRi
 
 export const EMPTY_QUEUE_TITLE = "Review queue is clear";
 export const STALE_REQUEST_COPY = "This request was already decided.";
-export const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
-export const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
 
 export type DataFlowEvidenceSummary = {
   signalTitle: string;
@@ -34,6 +34,9 @@ export type DataFlowEvidenceSummary = {
 };
 
 export function isWatchOnlyObservation(item: GuardApprovalRequest): boolean {
+  if (typeof item.watch_only_observation === "boolean") {
+    return item.watch_only_observation;
+  }
   return (item.scanner_evidence as unknown[] | undefined ?? []).some(
     (evidence) =>
       typeof evidence === "object" &&
@@ -41,6 +44,37 @@ export function isWatchOnlyObservation(item: GuardApprovalRequest): boolean {
       "source" in evidence &&
       evidence.source === "observe_mode_inbox",
   );
+}
+
+export function watchObservedPolicyAction(item: GuardApprovalRequest): GuardAction | null {
+  if (!isWatchOnlyObservation(item)) return null;
+  const evidence = item.scanner_evidence?.find(
+    (entry): entry is GuardWatchOnlyScannerEvidence =>
+      typeof entry === "object" &&
+      entry !== null &&
+      "source" in entry &&
+      entry.source === "observe_mode_inbox",
+  );
+  const observedAction = evidence?.observed_policy_action;
+  return isGuardAction(observedAction) ? observedAction : null;
+}
+
+export function watchProtectedOutcome(item: GuardApprovalRequest): string {
+  switch (watchObservedPolicyAction(item)) {
+    case "allow":
+    case "warn":
+      return "In Protected mode, Guard would have allowed it to continue.";
+    case "review":
+      return "In Protected mode, Guard would have sent it for review.";
+    case "require-reapproval":
+      return "In Protected mode, Guard would have required fresh approval before allowing it to continue.";
+    case "sandbox-required":
+      return "In Protected mode, Guard would have required a sandbox before allowing it to continue.";
+    case "block":
+      return "In Protected mode, Guard would have blocked it.";
+    default:
+      return "In Protected mode, Guard would have applied its policy before allowing it to continue.";
+  }
 }
 
 export function deriveDataFlowEvidence(item: GuardApprovalRequest): DataFlowEvidenceSummary | null {
@@ -117,11 +151,11 @@ export function resolveActionEnvelopeDetailText(
   envelope: GuardActionEnvelope,
   options: { mcpInputMaxLength?: number | null } = {}
 ): string | null {
-  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.length > 0) {
+  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.trim().length > 0) {
     return envelope.command;
   }
-  if (envelope.action_type === "shell_command") {
-    return envelope.command !== null && envelope.command.length > 0 ? envelope.command : null;
+  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.trim().length > 0) {
+    return envelope.command;
   }
   const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
   if (envelope.action_type === "prompt") {
@@ -136,12 +170,6 @@ export function resolveActionEnvelopeDetailText(
   if (envelope.action_type === "network_request" && envelope.network_hosts.length > 0) {
     return envelope.network_hosts.join("\n");
   }
-  if (envelope.action_type === "mcp_tool") {
-    const baseText =
-      resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
-    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
-    return inputSummary === null ? baseText : `${baseText}\n\nInput:\n${inputSummary}`;
-  }
   if (envelope.action_type === "package_script") {
     if (envelope.package_manager && envelope.package_name) {
       return `${envelope.package_manager} install ${envelope.package_name}`;
@@ -150,7 +178,15 @@ export function resolveActionEnvelopeDetailText(
       return envelope.package_name;
     }
   }
-  return resolveEnvelopeDisplayText(envelope);
+  // All canonical details above take precedence. This JSON input fallback never changes Rust's action kind.
+  if (envelope.action_type === "mcp_tool" || envelope.event_name === "PreToolUse") {
+    const baseText = friendlyMcpToolName(envelope.tool_name) ?? friendlyMcpToolName(envelope.mcp_tool)
+      ?? resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
+    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
+    if (inputSummary !== null) return `${baseText}\n\nInput:\n${inputSummary}`;
+    return envelope.action_type === "shell_command" ? null : baseText;
+  }
+  return envelope.action_type === "shell_command" ? null : resolveEnvelopeDisplayText(envelope);
 }
 
 export function humanizeList(values: string[]): string {
@@ -194,7 +230,7 @@ export function buildPauseLine(item: GuardApprovalRequest): string {
     return resolutionBlockReason;
   }
   if (isWatchOnlyObservation(item)) {
-    return "Would have stopped. Guard recorded this because Protected would have blocked it.";
+    return `Would have stopped. ${watchProtectedOutcome(item)}`;
   }
   if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
     return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;
@@ -332,6 +368,9 @@ export function buildResumeInstruction(item: GuardApprovalRequest): string {
 }
 
 export function requestResolutionBlockReason(item: GuardApprovalRequest): string | null {
+  if (item.native_business_review_display_only) {
+    return "This saved business request is read-only. Review decisions and execution are not connected yet.";
+  }
   if (item.decision_contract_error !== undefined) {
     return "HOL Guard found inconsistent stored decision data. This request cannot be approved; rerun the action to create a fresh, consistent review request.";
   }
@@ -340,6 +379,11 @@ export function requestResolutionBlockReason(item: GuardApprovalRequest): string
   }
   if (item.policy_action === "block") {
     return "Policy terminally blocked this action. This queue record is diagnostic and cannot be overridden by an approval.";
+  }
+  if (item.status === "expired") {
+    return item.superseded_by_request_id
+      ? "This request expired and was superseded by a fresh review."
+      : "This request expired. Rerun the action to create a fresh review.";
   }
   return null;
 }
@@ -466,7 +510,7 @@ function resolvePrimaryReviewText(item: GuardApprovalRequest): string {
 }
 
 function serializeMcpInput(payload: Record<string, unknown>, maxLength: number | null = null): string | null {
-  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
+  const input = payload.tool_input ?? payload.toolInput ?? payload.arguments ?? payload.input ?? payload.params ?? null;
   if (input === null || input === undefined) {
     return null;
   }
@@ -486,6 +530,7 @@ function serializeMcpInput(payload: Record<string, unknown>, maxLength: number |
 }
 
 export function harnessDisplayName(harness: string): string {
+  if (harness === "native-business") return "Native business workflow";
   if (typeof harness !== "string") {
     return "Unknown app";
   }
@@ -527,13 +572,36 @@ export function harnessDisplayName(harness: string): string {
       return "Oh My Pi";
     case "zcode":
       return "ZCode";
+    case "devin":
+      return "Devin";
+    case "guard-cli":
+    case "hol-guard":
+      return "Guard CLI";
     default:
       return capitalizeHarness(normalized);
   }
 }
 
 export function displayArtifactName(item: GuardApprovalRequest): string {
+  if (item.artifact_type === "tool_call") {
+    const friendly = friendlyMcpToolName(item.artifact_name);
+    if (friendly) return friendly;
+  }
   return item.artifact_name || item.artifact_id || "this action";
+}
+
+export function friendlyMcpToolName(raw: string | null | undefined): string | null {
+  if (!raw || raw.length > 256) return null;
+  const parts = raw.startsWith("mcp__") ? raw.slice(5).split("__") : [];
+  if (parts.length < 2 || parts.some((part) => !/^[a-zA-Z0-9_-]{1,80}$/.test(part))) return null;
+  const codexApp = parts[0] === "codex_apps" && parts.length > 2;
+  const connector = codexApp ? parts[1] : parts[0];
+  const tool = parts.slice(codexApp ? 2 : 1).join("__");
+  const humanize = (part: string) => part.replaceAll("_", " ").replaceAll("-", " ")
+    .toLowerCase().replace(/\s+/g, " ").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+  const shortTool = tool.toLowerCase().startsWith(`${connector.toLowerCase()}_`)
+    ? tool.slice(connector.length + 1) : tool;
+  return `${humanize(connector)} · ${humanize(shortTool)}`;
 }
 
 export function formatNumber(n: number): string {
@@ -623,14 +691,26 @@ export function resolveApprovalShareUrl(item: GuardApprovalRequest): string | nu
   return guardAwareHref(absolute);
 }
 
+export function isBrowserToolReview(item: GuardApprovalRequest): boolean {
+  const name = item.artifact_name ?? "";
+  if (name.startsWith("chrome-devtools:")) {
+    return true;
+  }
+  return item.changed_fields.some((field) => field.toLowerCase().includes("browser"));
+}
+
 export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
   if (envelope && isApplyPatchEnvelope(envelope)) return "Patch";
+  if (item.artifact_type === "tool_call" && item.changed_fields.includes("runtime_tool_call")) {
+    return isBrowserToolReview(item) ? "Browser tool" : "MCP tool";
+  }
   const actionType = envelope?.action_type;
   if (actionType === "shell_command") return "Command";
   if (actionType === "prompt") return "Prompt excerpt";
   if (actionType === "file_read" || actionType === "file_write") return "File path";
   if (actionType === "mcp_tool") return "MCP server / tool";
+  if (actionType === "browser_action") return "Browser tool";
   if (actionType === "package_script") return "Package";
   if (actionType === "network_request") return "Network destination";
 
@@ -721,7 +801,7 @@ export function buildCodexResumeUx(resume: GuardCodexResumeResult): CodexResumeU
   }
   return {
     headline: "Guard could not locate the Codex chat.",
-    body: resume.message ?? "Return to Codex and retry the same request.",
+    body: resume.message ?? "Return to Codex and retry. A new tool call may need fresh approval.",
     showRetry: false
   };
 }

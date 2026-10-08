@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import shlex
@@ -12,20 +11,21 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_state import RuntimeArtifactHookState
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.local_supply_chain import (
     _bound_external_archive_launch_command,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
 
 def _hook_inputs(
@@ -59,31 +59,6 @@ def _hook_inputs(
         "source_scope": "project",
     }
     return artifact, config, context, store, workspace, payload
-
-
-def _evaluate_hook(
-    *,
-    artifact: GuardArtifact,
-    config: GuardConfig,
-    context: HarnessContext,
-    store: GuardStore,
-    workspace: Path,
-    payload: dict[str, object],
-    trusted_request_override_hash: str | None = None,
-) -> int | RuntimeArtifactHookState:
-    return _evaluate_runtime_artifact_hook(
-        argparse.Namespace(harness="codex", policy_action=None, json=True),
-        action_envelope=None,
-        config=config,
-        context=context,
-        data_flow_signals=(),
-        guard_home=store.guard_home,
-        payload=payload,
-        runtime_artifact=artifact,
-        runtime_workspace=workspace,
-        store=store,
-        trusted_request_override_hash=trusted_request_override_hash,
-    )
 
 
 def _save_exact_allow(store: GuardStore, *, artifact: GuardArtifact, artifact_hash: str) -> None:
@@ -140,8 +115,9 @@ def test_external_archive_private_source_is_preserved_for_authorized_scan(
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
+        del request_deadline, retain_download, guard_home
         scanned_sources.append(scanned_url)
         return (
             {
@@ -153,7 +129,7 @@ def test_external_archive_private_source_is_preserved_for_authorized_scan(
             None,
         )
 
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", clean_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
     evaluator.evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
@@ -178,7 +154,7 @@ def test_external_archive_private_source_mutation_fails_closed_before_scan(
     assert isinstance(private_target, dict)
     private_target["source_url"] = "https://changed.example.com/demo.tgz"
     monkeypatch.setattr(
-        evaluator,
+        package_services,
         "_scan_external_tarball",
         lambda *_args, **_kwargs: pytest.fail("mutated private source reached archive scan"),
     )
@@ -223,8 +199,9 @@ def test_direct_pip_signed_url_preserves_exact_private_download_and_binding_sour
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
+        del request_deadline, retain_download, guard_home
         scanned_sources.append(scanned_url)
         return (
             {
@@ -236,7 +213,7 @@ def test_direct_pip_signed_url_preserves_exact_private_download_and_binding_sour
             None,
         )
 
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", clean_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
     evaluator.evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),

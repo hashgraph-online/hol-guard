@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ CONTAINMENT_POLICY_CONTRACT_DIGEST: Final = hashlib.sha256(
     b"guard.containment-policy.v1\x00deny-network\x00deny-external-writes\x00deny-live-workspace-reads"
 ).hexdigest()
 _SHA256: Final = re.compile(r"[0-9a-f]{64}")
+_UNSUPPORTED_BACKEND_DIGEST: Final = hashlib.sha256(b"unavailable:unsupported").hexdigest()
 _PROBE_MAX_AGE: Final = timedelta(minutes=5)
 _FUTURE_TOLERANCE: Final = timedelta(seconds=5)
 
@@ -187,6 +189,16 @@ def probe_containment_health(*, daemon_fingerprint: str) -> ContainmentHealthEvi
 
     if _SHA256.fullmatch(daemon_fingerprint) is None:
         raise ValueError("daemon fingerprint must be a lowercase SHA-256 digest")
+    if sys.platform != "darwin" and not sys.platform.startswith("linux"):
+        return ContainmentHealthEvidence(
+            backend=ContainmentBackend.UNSUPPORTED,
+            backend_digest=_UNSUPPORTED_BACKEND_DIGEST,
+            policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
+            daemon_fingerprint=daemon_fingerprint,
+            runtime_fingerprint=daemon_fingerprint,
+            probe_at=datetime.now(timezone.utc).isoformat(),
+            probe_enforced=False,
+        )
     executable = next((path for path in ("/usr/bin/true", "/bin/true") if os.path.isfile(path)), None)
     if executable is None:
         raise RuntimeError("containment probe executable is unavailable")
@@ -225,6 +237,8 @@ def containment_health_signals(
         evidence = ContainmentHealthEvidence.from_mapping(value)
     except (TypeError, ValueError):
         return _failed_signals("containment_health_invalid")
+    if evidence.backend is ContainmentBackend.UNSUPPORTED:
+        return _failed_signals("unsupported_platform")
     errors = evidence.compatibility_errors(now=now)
     if not errors:
         return {

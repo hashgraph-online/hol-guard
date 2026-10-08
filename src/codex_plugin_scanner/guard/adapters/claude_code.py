@@ -11,14 +11,16 @@ from pathlib import Path
 from ...path_support import iter_safe_matching_files, resolves_within_root
 from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
+from ..shims import prepare_guard_shim, remove_guard_shim
 from . import claude_hook_argv as _hook_argv
 from . import claude_hook_config as _hook_config
 from .base import (
     HarnessAdapter,
     HarnessContext,
+    PreparedHarnessInstall,
     _ensure_path_within_root,
     _json_payload,
+    _owned_adapter_mutation,
     _run_command_probe,
     _shell_command,
 )
@@ -426,6 +428,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
         )
 
+    @_owned_adapter_mutation
     def refresh_runtime_hook_urls(self, context: HarnessContext) -> None:
         settings_path = _claude_managed_settings_path(context)
         _ensure_path_within_root(context.home_dir, settings_path, label="Claude Code")
@@ -444,16 +447,23 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             return None
         return _run_command_probe([resolved_executable, "--help"], timeout_seconds=5)
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = install_guard_shim(
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        prepared_shim = prepare_guard_shim(
             self.harness,
             context,
             launcher_name="claude",
             display_name="claude",
         )
+        shim_manifest = prepared_shim.manifest
         settings_path = _claude_managed_settings_path(context)
         _ensure_path_within_root(context.home_dir, settings_path, label="Claude Code")
-        payload = _json_payload(settings_path)
+        before = _snapshot(settings_path)
+        payload = json.loads(before.decode("utf-8")) if before is not None else {}
+        if not isinstance(payload, dict):
+            raise ValueError("Claude Code settings must be a JSON object before installation.")
         session_start_argv = self._session_start_command_parts(context)
         hook_argv = self._daemon_hook_command_parts(context)
         hooks_payload = payload.get("hooks")
@@ -475,9 +485,16 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         hooks["SessionStart"] = session_start_entries
         _sync_runtime_hook_groups(hooks, hook_argv)
         _remove_unsupported_guard_hook_groups(hooks)
-        settings_path.parent.mkdir(parents=True, exist_ok=True)
-        settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        return {
+        mode = settings_path.stat().st_mode & 0o777 if before is not None else 0o644
+        settings = TransitionFile(
+            settings_path.resolve(strict=False),
+            before,
+            json.dumps(payload, indent=2).encode("utf-8"),
+            before_mode=mode,
+            after_mode=mode,
+        )
+        settings.payload()
+        manifest: dict[str, object] = {
             "harness": self.harness,
             "active": True,
             "config_path": str(settings_path),
@@ -487,6 +504,10 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                 *_manifest_notes(shim_manifest),
             ],
         }
+        return PreparedHarnessInstall((*prepared_shim.files, settings), manifest)
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from hashlib import sha256
@@ -17,6 +18,27 @@ _GENERIC_POLICY_REASONS = (
     "local auto-resume proof",
     "local e2e approval proof",
 )
+
+
+def _receipt_match_clauses(
+    fallback_artifact_ids: Sequence[str],
+    runtime_exact_families: Sequence[str],
+    hash_variants: set[str],
+) -> tuple[list[str], list[object]]:
+    match_clauses: list[str] = []
+    params: list[object] = []
+    if fallback_artifact_ids:
+        artifact_placeholders = ", ".join("?" for _ in fallback_artifact_ids)
+        match_clauses.append(f"artifact_id in ({artifact_placeholders})")
+        params.extend(fallback_artifact_ids)
+    if runtime_exact_families:
+        match_clauses.extend("artifact_id like ?" for _ in runtime_exact_families)
+        params.extend(f"%:{family}:%" for family in runtime_exact_families)
+    if hash_variants:
+        hash_placeholders = ", ".join("?" for _ in hash_variants)
+        match_clauses.append(f"artifact_hash in ({hash_placeholders})")
+        params.extend(sorted(hash_variants))
+    return match_clauses, params
 
 
 def _is_generic_policy_reason(reason: str | None) -> bool:
@@ -777,19 +799,7 @@ def build_policy_source_context_index(
     harness_filter_sql, harness_filter_params = _harness_filter_sql(include_all_harnesses, harnesses)
 
     if fallback_artifact_ids or hash_variants:
-        match_clauses: list[str] = []
-        params: list[object] = []
-        if fallback_artifact_ids:
-            artifact_placeholders = ", ".join("?" for _ in fallback_artifact_ids)
-            match_clauses.append(f"artifact_id in ({artifact_placeholders})")
-            params.extend(fallback_artifact_ids)
-        if runtime_exact_families:
-            match_clauses.extend("artifact_id like ?" for _ in runtime_exact_families)
-            params.extend(f"%:{family}:%" for family in runtime_exact_families)
-        if hash_variants:
-            hash_placeholders = ", ".join("?" for _ in hash_variants)
-            match_clauses.append(f"artifact_hash in ({hash_placeholders})")
-            params.extend(sorted(hash_variants))
+        match_clauses, params = _receipt_match_clauses(fallback_artifact_ids, runtime_exact_families, hash_variants)
         receipt_rows = connection.execute(
             f"""
             select {_POLICY_RECEIPT_COLUMNS}
@@ -830,19 +840,7 @@ def build_policy_source_context_index(
             index.inventory_by_harness_artifact[(str(row["harness"]), str(row["artifact_id"]))] = row
 
     if fallback_artifact_ids or hash_variants:
-        match_clauses = []
-        params: list[object] = []
-        if fallback_artifact_ids:
-            artifact_placeholders = ", ".join("?" for _ in fallback_artifact_ids)
-            match_clauses.append(f"artifact_id in ({artifact_placeholders})")
-            params.extend(fallback_artifact_ids)
-        if runtime_exact_families:
-            match_clauses.extend("artifact_id like ?" for _ in runtime_exact_families)
-            params.extend(f"%:{family}:%" for family in runtime_exact_families)
-        if hash_variants:
-            hash_placeholders = ", ".join("?" for _ in hash_variants)
-            match_clauses.append(f"artifact_hash in ({hash_placeholders})")
-            params.extend(sorted(hash_variants))
+        match_clauses, params = _receipt_match_clauses(fallback_artifact_ids, runtime_exact_families, hash_variants)
         approval_rows = connection.execute(
             f"""
             select {_POLICY_APPROVAL_COLUMNS}

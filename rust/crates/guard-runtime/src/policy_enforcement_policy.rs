@@ -2,6 +2,41 @@ use super::{normalized_harness, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_R
 use guard_policy_snapshot::EffectiveNativePolicyV3;
 use std::collections::BTreeMap;
 
+/// Generation-owned indexes. The signed policy is retained unchanged; only
+/// derived selector keys are canonicalized here, before snapshot publication.
+#[derive(Debug)]
+pub(crate) struct CompiledEffectivePolicy {
+    pub(super) harness_actions: BTreeMap<String, String>,
+    pub(super) harness_risk_actions: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+impl CompiledEffectivePolicy {
+    pub(crate) fn new(policy: &EffectiveNativePolicyV3) -> Result<Self, String> {
+        validate_effective_policy(policy)?;
+        Ok(Self {
+            harness_actions: canonical_map(&policy.harness_actions)?,
+            harness_risk_actions: canonical_map(&policy.harness_risk_actions)?,
+        })
+    }
+}
+
+fn canonical_map<T: Clone + PartialEq>(
+    map: &BTreeMap<String, T>,
+) -> Result<BTreeMap<String, T>, String> {
+    let mut canonical = BTreeMap::new();
+    for (configured, action) in map {
+        let normalized = normalized_harness(configured);
+        if let Some(previous) = canonical.get(&normalized) {
+            if previous != action {
+                return Err("native_policy_harness_selector_conflict".to_owned());
+            }
+        } else {
+            canonical.insert(normalized, action.clone());
+        }
+    }
+    Ok(canonical)
+}
+
 pub(super) fn policy_map_action(
     map: &std::collections::BTreeMap<String, String>,
     key: &str,
@@ -82,48 +117,4 @@ pub(super) fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Res
         validate_action_map(actions, true, false)?;
     }
     Ok(())
-}
-
-pub(super) fn canonical_harness_action(
-    map: &std::collections::BTreeMap<String, String>,
-    harness: &str,
-) -> Result<Option<String>, String> {
-    let mut selected: Option<(&str, &str)> = None;
-    for (configured, action) in map {
-        if !VALID_ACTIONS.contains(&action.as_str()) {
-            return Err("native_policy_action_invalid".to_owned());
-        }
-        let normalized = normalized_harness(configured);
-        if normalized != harness {
-            continue;
-        }
-        if let Some((_, previous_action)) = selected {
-            if previous_action != action {
-                return Err("native_policy_harness_selector_conflict".to_owned());
-            }
-        } else {
-            selected = Some((configured.as_str(), action.as_str()));
-        }
-    }
-    Ok(selected.map(|(_, action)| action.to_owned()))
-}
-
-pub(super) fn canonical_harness_risk_actions<'a>(
-    map: &'a BTreeMap<String, BTreeMap<String, String>>,
-    harness: &str,
-) -> Result<Option<&'a BTreeMap<String, String>>, String> {
-    let mut selected: Option<&'a BTreeMap<String, String>> = None;
-    for (configured, actions) in map {
-        if normalized_harness(configured) != harness {
-            continue;
-        }
-        if let Some(previous) = selected {
-            if previous != actions {
-                return Err("native_policy_harness_selector_conflict".to_owned());
-            }
-        } else {
-            selected = Some(actions);
-        }
-    }
-    Ok(selected)
 }

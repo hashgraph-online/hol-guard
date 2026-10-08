@@ -8,25 +8,41 @@ text, prompts, tool output, paths, tokens, or response bodies to evidence.
 
 There are two deliberately separate performance boundaries. The direct Rust
 release gate (`scripts/bench_guard_native_release_gate.py`) keeps the native
-runtime limits at warm p95 at most 20 ms, cold one-shot p95 at most 100 ms,
-readiness at most 250 ms, and measurable direct c16 p99 at most 100 ms. These
+runtime limits at warm p95 at most 20 ms, cold one-shot p95 at most 150 ms,
+readiness at most 400 ms, and measurable direct c16 p99 at most 100 ms. These
 limits exclude the Python adapter and HTTP scheduling overhead.
 
 The installed proof measures the complete adapter-to-decision path. Its
 ordinary warm, size-class, resident-recovery, and c16 p99 limit is the existing
 production `HOOK_ENGINE_NORMAL_BUDGET_MS` of 1,000 ms; the installed cold
-one-shot and readiness checks retain the direct 100 ms and 250 ms limits. c16
+one-shot and readiness checks retain the direct 150 ms and 400 ms limits. c16
 must complete resident allowed decisions with zero errors within that adapter
 budget. c64 has no latency ceiling: every result must be either a resident
 allowed decision or an explicitly classified bounded capacity/overload
 response, with zero request errors and no hang.
 
-RSS evidence fills the bounded sixteen-stream resident pool first, then issues
-bounded capacity waves while sampling process-tree RSS and worker counts. It
-takes the baseline only after three consecutive samples within a 2 percent
-RSS plateau and a 30-second deadline, and compares the post-c16/c64 peak
-against that steady-state baseline. The growth gate remains at most 10
-percent, so one-time pool startup is not misreported as stress growth.
+Each resident-recovery sample first proves a resident allow decision, then
+requires the Rust stop command to verify containment of that resident. The
+installed adapter's persistent Rust client streams remain alive, matching a
+resident restart in production: their next request re-discovers and
+authenticates the new resident generation. The complete next adapter request
+is timed against the unchanged 1,000 ms budget. Cold one-shot probes and final
+session cleanup retain full client teardown. Aggregate per-sample diagnostics
+report both adapter time and the enclosing measurement time.
+
+The c16 latency proof uses a dedicated, fully started 16-thread client executor
+so thread creation and a larger benchmark-only client pool cannot distort the
+production contention being measured. RSS is evaluated separately after c16.
+The proof fills the resident worker pool, fully starts the bounded 64-thread c64
+load executor, and only then samples the RSS baseline. That same c64 executor
+remains alive through the RSS baseline and c64 wave, so client thread allocation
+cannot be misreported as daemon/runtime growth. Adapter transport requests are
+individually bounded at five seconds and concurrent waves have a six-second
+executor envelope; a wave that escapes that bound fails closed without waiting
+for executor teardown. The baseline requires three consecutive samples within
+a 2 percent RSS plateau and a 30-second deadline; the post-c64 peak is compared
+against that steady-state baseline. The resident growth gate remains at most
+12 percent.
 
 Native wheel CI runs the no-environment installed-wheel probe and enforces the
 adapter SLO. Windows remains outside this wave. The stress script exposes

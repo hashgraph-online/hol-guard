@@ -22,9 +22,9 @@ SPEC.loader.exec_module(mutation_gate)
 
 def _counts(**overrides: int) -> dict[str, int]:
     counts = {
-        "killed": 393,
-        "survived": 217,
-        "total": 610,
+        "killed": 377,
+        "survived": 211,
+        "total": 588,
         "no_tests": 0,
         "skipped": 0,
         "suspicious": 0,
@@ -37,7 +37,7 @@ def _counts(**overrides: int) -> dict[str, int]:
 
 
 def test_mutation_score_uses_all_evaluated_mutants() -> None:
-    assert mutation_gate.mutation_score(_counts()) == pytest.approx(64.4262)
+    assert mutation_gate.mutation_score(_counts()) == pytest.approx(64.1156)
 
 
 def test_mutation_gate_supports_direct_script_execution(tmp_path: Path) -> None:
@@ -69,7 +69,6 @@ def test_mutation_gate_accepts_measured_parser_baseline_and_target_contracts(tmp
     assert set(TARGETS) == {
         "command-model",
         "secret-flow",
-        "hook-output",
         "approval-reuse",
         "package-intent",
         "package-policy",
@@ -98,6 +97,7 @@ def test_mutation_gate_accepts_measured_parser_baseline_and_target_contracts(tmp
     config_path = prepare_workspace(ROOT, TARGETS["secret-flow"], workspace)
     assert (workspace / "src").is_symlink()
     assert (workspace / "tests").is_symlink()
+    assert (workspace / "docs/guard/contracts/guard-cloud-review.md").is_file()
     assert config_path.read_text(encoding="utf-8") == render_mutmut_config(TARGETS["secret-flow"])
     runner_result = subprocess.run(
         [sys.executable, "scripts/ci/run_mutation_target.py", "--target", "secret-flow", "--dry-run"],
@@ -118,7 +118,7 @@ def test_mutation_gate_reports_every_failed_constraint() -> None:
     )
 
     assert errors == (
-        "expected 610 mutants, found 600",
+        "expected 588 mutants, found 600",
         "mutation score 50.00% is below 64.00%",
         "suspicious must be zero, found 1",
         "timeout must be zero, found 1",
@@ -127,7 +127,7 @@ def test_mutation_gate_reports_every_failed_constraint() -> None:
 
 def test_load_counts_rejects_invalid_or_inconsistent_summaries(tmp_path: Path) -> None:
     path = tmp_path / "summary.json"
-    path.write_text(json.dumps(_counts(total=611)), encoding="utf-8")
+    path.write_text(json.dumps(_counts(total=589)), encoding="utf-8")
 
     with pytest.raises(ValueError, match="total"):
         mutation_gate.load_counts(path)

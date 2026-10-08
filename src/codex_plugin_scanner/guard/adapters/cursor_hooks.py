@@ -7,11 +7,12 @@ import os
 import stat
 from hashlib import sha256
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..frozen_runtime_commands import frozen_daemon_recovery_command
 from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
 from .adapter_safe_output import write_text_at_authorized_path
-from .base import HarnessContext, _ensure_path_within_root
+from .base import HarnessContext, PreparedHarnessInstall, _ensure_path_within_root
 from .cursor_hook_config import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
@@ -39,13 +40,20 @@ from .cursor_hook_payload import (
     prepare_cursor_hook_payload,
 )
 from .cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
+from .cursor_hook_script_template_reason import HOOK_SCRIPT_TEMPLATE_REASON
 from .cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
-from .cursor_native_approval import ensure_cursor_hook_attestation_secret
+from .cursor_native_approval import cursor_hook_attestation_secret_path, ensure_cursor_hook_attestation_secret
 from .cursor_path_cleanup import prune_empty_project_cursor_dir
 from .guard_cli_attestation import resolve_attested_guard_cli
 from .hook_python import HookPythonAttestation
+from .state_files import parse_backup_payload
 
-_HOOK_SCRIPT_TEMPLATE = HOOK_SCRIPT_TEMPLATE_HEAD + HOOK_SCRIPT_TEMPLATE_RESOLVER + HOOK_SCRIPT_TEMPLATE_TAIL
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionFile
+
+_HOOK_SCRIPT_TEMPLATE = (
+    HOOK_SCRIPT_TEMPLATE_HEAD + HOOK_SCRIPT_TEMPLATE_REASON + HOOK_SCRIPT_TEMPLATE_RESOLVER + HOOK_SCRIPT_TEMPLATE_TAIL
+)
 _INHERIT_ENV_KEYS = (
     "PATH",
     "HOME",
@@ -65,7 +73,6 @@ _INHERIT_ENV_KEYS = (
     "HOL_GUARD_NATIVE_BINARY",
     "HOL_GUARD_SRC",
     "HOL_GUARD_TEST_MODE",
-    "HOL_GUARD_PYTHON_ORACLE",
     "HOL_GUARD_NATIVE_DIAGNOSTIC",
 )
 
@@ -90,6 +97,156 @@ def _legacy_project_cursor_hook_script_path(workspace_dir: Path) -> Path:
 
 def managed_hook_script_path(context: HarnessContext) -> Path:
     return context.guard_home / "managed" / "cursor" / HOOK_SCRIPT_NAME
+
+
+def prepare_cursor_hooks(context: HarnessContext) -> PreparedHarnessInstall:
+    """Render the complete native rebind with existing authority and captured inverses."""
+    from .hook_python import disposable_guard_hook_probe
+
+    with disposable_guard_hook_probe():
+        return _prepare_cursor_hooks(context)
+
+
+def _prepare_cursor_hooks(context: HarnessContext) -> PreparedHarnessInstall:
+    from ..codex_hook_recovery import _snapshot
+    from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
+
+    secret_path = cursor_hook_attestation_secret_path(context.guard_home)
+    secret = _snapshot(secret_path)
+    if secret is None:
+        raise TransitionError("adapter_preparation_authority_missing")
+    if len(secret) != 32 or (os.name != "nt" and secret_path.stat().st_mode & 0o077):
+        raise TransitionError("adapter_preparation_authority_invalid")
+    files = [TransitionFile.identity_dependency(secret_path)]
+    guard_cli = resolve_attested_guard_cli(context)
+    hooks_path = cursor_hooks_path(context)
+    script_path = cursor_hook_script_path(context)
+    managed_path = managed_hook_script_path(context)
+    backup_path, state_path = _hooks_backup_path(hooks_path, context), _hooks_state_path(hooks_path, context)
+    for path in (hooks_path, script_path):
+        _ensure_path_within_root(context.home_dir, path, label="Cursor hook")
+    for path in (managed_path, backup_path, state_path):
+        _ensure_path_within_root(context.guard_home, path, label="Cursor hook state")
+    before = {path: _snapshot(path) for path in (hooks_path, script_path, managed_path, backup_path, state_path)}
+    original = before[hooks_path]
+    payload = json.loads(original) if original is not None else {}
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Guard refused to overwrite non-object Cursor hooks config at {hooks_path}")
+    payload = _managed_hooks_payload(payload)
+    hooks = _inline_hooks(payload)
+    python_executable = guard_cli.python.executable if guard_cli.python is not None else None
+    for event in _MANAGED_HOOK_EVENTS:
+        entry = _managed_hook_entry(
+            context, script_path=script_path, event_name=event, python_executable=python_executable
+        )
+        hooks[event] = _merge_hook_entries(hooks.get(event), entry, event_name=event)
+    if hooks.get("preToolUse") is not None:
+        stripped = _strip_managed_hook_entries(hooks["preToolUse"], script_path=script_path)
+        if stripped:
+            hooks["preToolUse"] = stripped
+        else:
+            hooks.pop("preToolUse", None)
+    payload["hooks"] = hooks
+    source = cursor_hook_script_source(
+        context, guard_cli=list(guard_cli.command), recovery_command=_cursor_recovery_command(context, guard_cli.python)
+    )
+    manifest: dict[str, object] = {
+        "managed_hooks_path": str(hooks_path),
+        "managed_hook_script_path": str(script_path),
+        "managed_hook_events": list(_MANAGED_HOOK_EVENTS),
+        "guard_cli_identity": guard_cli.manifest_payload(),
+        "hook_script_sha256": sha256(source.encode("utf-8")).hexdigest(),
+        "backup_path": str(backup_path),
+        "state_path": str(state_path),
+    }
+    state = {key: value for key, value in manifest.items() if key not in {"managed_hook_events", "state_path"}}
+    state["workspace_dir"] = str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
+    after = {
+        hooks_path: (json.dumps(payload, indent=2) + "\n").encode("utf-8"),
+        script_path: source.encode("utf-8"),
+        managed_path: source.encode("utf-8"),
+        state_path: (json.dumps(state, indent=2) + "\n").encode("utf-8"),
+        backup_path: before[backup_path]
+        if before[backup_path] is not None
+        else (
+            json.dumps(
+                {
+                    "existed": original is not None,
+                    "content": original.decode("utf-8") if original is not None else None,
+                },
+                indent=2,
+            )
+            + "\n"
+        ).encode("utf-8"),
+    }
+    for path, data in after.items():
+        mode = path.stat().st_mode & 0o777 if before[path] is not None else 0o600
+        after_mode = mode if path == backup_path and before[path] is not None else 0o600
+        if path in {script_path, managed_path} and os.name != "nt":
+            after_mode |= stat.S_IXUSR
+        files.append(
+            TransitionFile(
+                path.resolve(strict=False), before[path], data, before_mode=mode, after_mode=after_mode, no_follow=True
+            )
+        )
+    files.extend(_prepare_legacy_project_cursor_cleanup(context))
+    prepared = PreparedHarnessInstall(tuple(files), manifest)
+    RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
+    return prepared
+
+
+def _prepare_legacy_project_cursor_cleanup(context: HarnessContext) -> tuple[TransitionFile, ...]:
+    from ..codex_hook_recovery import _snapshot
+    from ..runtime_transition import TransitionFile
+
+    if context.workspace_dir is None:
+        return ()
+    hooks_path = _legacy_project_cursor_hooks_path(context.workspace_dir)
+    script_path = _legacy_project_cursor_hook_script_path(context.workspace_dir)
+    if hooks_path.resolve() == cursor_hooks_path(context).resolve():
+        return ()
+    _ensure_path_within_root(context.workspace_dir, hooks_path, label="Cursor legacy hooks")
+    _ensure_path_within_root(context.workspace_dir, script_path, label="Cursor legacy script")
+    backup_path, state_path = _hooks_backup_path(hooks_path, context), _hooks_state_path(hooks_path, context)
+    for path in (backup_path, state_path):
+        _ensure_path_within_root(context.guard_home, path, label="Cursor legacy state")
+    before = {path: _snapshot(path) for path in (hooks_path, script_path, backup_path, state_path)}
+    script = before[script_path]
+    managed_script = script is not None and _is_managed_hook_script(script.decode("utf-8"))
+    hook_before, backup_before = before[hooks_path], before[backup_path]
+    try:
+        payload = json.loads(hook_before) if hook_before is not None else {}
+    except json.JSONDecodeError:
+        payload = {}
+    cleaned, removed = _render_without_managed_hook_entries(payload, script_path=script_path)
+    after = dict(before)
+    if managed_script or removed:
+        backup = parse_backup_payload(backup_before.decode("utf-8")) if backup_before is not None else {}
+        restored = False
+        if backup.get("readable") is True:
+            content = backup.get("content")
+            if backup.get("existed") is True and isinstance(content, str):
+                after[hooks_path] = content.encode("utf-8")
+                restored = True
+            elif backup.get("existed") is not True:
+                after[hooks_path] = None
+                restored = True
+        if restored:
+            after[backup_path] = after[state_path] = None
+        elif removed:
+            after[hooks_path] = (json.dumps(cleaned, indent=2) + "\n").encode("utf-8") if cleaned is not None else None
+            after[state_path] = None
+        if managed_script:
+            after[script_path] = None
+    files = []
+    for path, data in after.items():
+        mode = path.stat().st_mode & 0o777 if before[path] is not None else 0o600
+        files.append(
+            TransitionFile(
+                path.resolve(strict=False), before[path], data, before_mode=mode, after_mode=mode, no_follow=True
+            )
+        )
+    return tuple(files)
 
 
 def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
@@ -303,13 +460,28 @@ def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool
         payload = json.loads(hooks_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    if not isinstance(payload, dict):
+    cleaned, removed = _render_without_managed_hook_entries(payload, script_path=script_path)
+    if not removed:
         return False
+    if cleaned is None:
+        hooks_path.unlink()
+    else:
+        write_text_at_authorized_path(hooks_path, json.dumps(cleaned, indent=2) + "\n")
+    return True
+
+
+def _render_without_managed_hook_entries(
+    payload: object,
+    *,
+    script_path: Path,
+) -> tuple[dict[str, object] | None, bool]:
+    if not isinstance(payload, dict):
+        return None, False
     hooks = payload.get("hooks")
     has_managed_hooks = False
     has_other_hooks = False
     if not isinstance(hooks, dict):
-        return False
+        return payload, False
     cleaned_hooks: dict[str, object] = {}
     managed_command = str(script_path.resolve())
     for event, entries in hooks.items():
@@ -327,13 +499,11 @@ def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool
             cleaned_hooks[str(event)] = entries
             has_other_hooks = True
     if not has_managed_hooks:
-        return False
+        return payload, False
     if has_other_hooks:
         payload["hooks"] = cleaned_hooks
-        write_text_at_authorized_path(hooks_path, json.dumps(payload, indent=2) + "\n")
-    else:
-        hooks_path.unlink()
-    return True
+        return payload, True
+    return None, True
 
 
 def _resolve_guard_cli_command(context: HarnessContext) -> list[str]:

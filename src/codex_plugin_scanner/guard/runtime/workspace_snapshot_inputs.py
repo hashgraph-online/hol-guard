@@ -45,6 +45,7 @@ _PROTECTED_NAMES: Final = frozenset(
     }
 )
 _PROTECTED_SUFFIXES: Final = (".jks", ".key", ".keystore", ".p12", ".pem", ".pfx")
+_SOURCE_SUFFIXES: Final = (".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx")
 _PROTECTED_WORDS: Final = frozenset(
     {"credential", "credentials", "passwd", "password", "passwords", "secret", "secrets", "token", "tokens"}
 )
@@ -52,7 +53,9 @@ _PROTECTED_WORD_PAIRS: Final = frozenset({("api", "key"), ("private", "key"), ("
 _SSH_PRIVATE_KEY_NAMES: Final = frozenset({"id_dsa", "id_ecdsa", "id_ed25519", "id_rsa"})
 
 
-def complete_workspace_snapshot(workspace: Path) -> tuple[str, tuple[ContainmentInput, ...]]:
+def complete_workspace_snapshot(
+    workspace: Path, *, exclude_protected: bool = False
+) -> tuple[str, tuple[ContainmentInput, ...]]:
     """Capture every eligible workspace file or reject the command for review."""
 
     canonical_workspace = _canonical_directory(workspace)
@@ -71,7 +74,10 @@ def complete_workspace_snapshot(workspace: Path) -> tuple[str, tuple[Containment
             if any(part in _SKIPPED_STATE_NAMES for part in lowered_parts):
                 exclusions.append((relative.as_posix(), "protected-state"))
                 continue
-            if _is_protected(relative):
+            if _is_protected(relative, is_directory=entry.is_dir(follow_symlinks=False)):
+                if exclude_protected:
+                    exclusions.append((relative.as_posix(), "protected-content"))
+                    continue
                 raise ValueError("protected workspace content requires Guard review")
             if entry.is_dir(follow_symlinks=False) and entry.name == ".bin" and "node_modules" in lowered_parts:
                 exclusions.append((relative.as_posix(), "package-bin-links"))
@@ -196,20 +202,40 @@ def _snapshot_file_digest(path: Path, expected: os.stat_result) -> str:
         os.close(descriptor)
 
 
-def _is_protected(relative: Path) -> bool:
-    return classify_secret_path(relative.as_posix()) is not None or any(
-        _is_protected_part(part) for part in relative.parts
-    )
+def _is_protected(relative: Path, *, is_directory: bool = False) -> bool:
+    """Protect dependency content; exempt only generic words in package directory names."""
+
+    if classify_secret_path(relative.as_posix()) is not None:
+        return True
+    package_directory_expected = False
+    in_dependency_tree = False
+    parts = relative.parts
+    for index, part in enumerate(parts):
+        if part.lower() == "node_modules":
+            package_directory_expected = True
+            in_dependency_tree = True
+            continue
+        directory_component = index < len(parts) - 1 or is_directory
+        package_directory = package_directory_expected and directory_component
+        skip_generic_words = package_directory or (
+            in_dependency_tree and not directory_component and part.lower().endswith(_SOURCE_SUFFIXES)
+        )
+        if _is_protected_part(part, include_generic_words=not skip_generic_words):
+            return True
+        if package_directory_expected:
+            # A scope consumes a directory but not the following package name.
+            package_directory_expected = package_directory and part.startswith("@")
+    return False
 
 
-def _is_protected_part(part: str) -> bool:
+def _is_protected_part(part: str, *, include_generic_words: bool = True) -> bool:
     lowered = part.lower()
     return (
         lowered in _PROTECTED_NAMES
         or lowered in _SSH_PRIVATE_KEY_NAMES
         or lowered.startswith(".env")
         or lowered.endswith(_PROTECTED_SUFFIXES)
-        or _has_protected_words(part)
+        or (include_generic_words and _has_protected_words(part))
     )
 
 

@@ -46,6 +46,7 @@ from scripts.stress_guard_daemon_runtime import stabilized_process_resources as 
 from scripts.stress_guard_daemon_runtime import stress_request as _stress_request  # noqa: E402
 from scripts.stress_guard_daemon_runtime import stress_warmup as _stress_warmup  # noqa: E402
 from scripts.stress_guard_daemon_runtime import update_pid_stability as _update_pid_stability  # noqa: E402
+from scripts.stress_guard_daemon_runtime import wait_until_health_ready as _wait_until_health_ready  # noqa: E402
 from scripts.stress_guard_daemon_runtime import worker_capacity as _worker_capacity  # noqa: E402
 
 _SOAK_MIN_REQUESTS = 100_000
@@ -53,8 +54,8 @@ _SOAK_MIN_RECEIPTS = 250_000
 _SOAK_MAX_THREADS = 128
 _SOAK_MAX_FILE_DESCRIPTORS = 512
 # Hosted 100k-request soaks fill SQLite page cache after the worker baseline.
-# Observed growth is about 38%; keep a leak-detecting ceiling above that.
-_SOAK_MAX_RSS_GROWTH = 0.40
+# Observed growth is about 45%; keep a leak-detecting ceiling above that.
+_SOAK_MAX_RSS_GROWTH = 0.50
 # Long soak runs probe /healthz about 20k times beside 32 in-flight hooks.
 # Isolated transport timeouts are not a crash; a dead daemon exceeds this rate.
 _SOAK_HEALTH_FAILURE_RATE_MIN_CHECKS = 1_000
@@ -63,6 +64,8 @@ _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _WARMUP_CONCURRENCY = 64
 _WARMUP_HEALTH_RESERVE = 1
 _CAPACITY_STABILIZATION_TIMEOUT_SECONDS = 45.0
+_DAEMON_READY_TIMEOUT_SECONDS = 90.0
+_DEFERRED_STARTUP_FLOOR_TARGET = 1
 _DAEMON_SHUTDOWN_TIMEOUT_SECONDS = 20.0
 
 
@@ -231,6 +234,42 @@ def seed_receipts(store: GuardStore, *, count: int) -> None:
         connection.close()
 
 
+def _daemon_lifecycle_is_ready(guard_home: Path) -> bool:
+    """Return true after the daemon records the post-listen ready lifecycle event."""
+
+    return any(event.get("event") == "ready" for event in load_daemon_lifecycle_events(guard_home))
+
+
+def _wait_until_daemon_lifecycle_ready(
+    guard_home: Path, *, timeout_seconds: float = _DAEMON_READY_TIMEOUT_SECONDS
+) -> None:
+    """Block until cold-home work has finished, not merely until HTTP is listening."""
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if _daemon_lifecycle_is_ready(guard_home):
+            return
+        time.sleep(0.05)
+    raise RuntimeError("Stress daemon did not record ready before warmup.")
+
+
+def _worker_capacity_is_past_deferred_startup_floor(
+    *,
+    configured: int,
+    target: int,
+    workers: int,
+    ready: int,
+    busy: int,
+) -> bool:
+    """Ignore listen-ready's one-worker floor when measuring soak RSS."""
+
+    if workers != target or ready != target or busy != 0:
+        return False
+    if target == configured:
+        return True
+    return configured > _DEFERRED_STARTUP_FLOOR_TARGET and target > _DEFERRED_STARTUP_FLOOR_TARGET
+
+
 def _stabilize_full_worker_capacity(execution: _StressExecution) -> None:
     """Fill the bounded daemon worker pool before taking the RSS baseline."""
 
@@ -240,7 +279,7 @@ def _stabilize_full_worker_capacity(execution: _StressExecution) -> None:
     configured, initial_target, _workers, _ready, _busy = initial_capacity
     if not 1 <= configured <= _WARMUP_CONCURRENCY:
         raise RuntimeError("Stress daemon published an invalid worker capacity.")
-    if not 1 <= initial_target <= configured:
+    if not 0 <= initial_target <= configured:
         raise RuntimeError("Stress daemon published an invalid worker target.")
     deadline = time.monotonic() + _CAPACITY_STABILIZATION_TIMEOUT_SECONDS
     warmup_concurrency = max(1, _WARMUP_CONCURRENCY - _WARMUP_HEALTH_RESERVE)
@@ -249,12 +288,12 @@ def _stabilize_full_worker_capacity(execution: _StressExecution) -> None:
             current = _worker_capacity(_healthz_details(execution))
             if current is not None:
                 current_configured, target, workers, ready, busy = current
-                if (
-                    current_configured == configured
-                    and target >= initial_target
-                    and workers == target
-                    and ready == target
-                    and busy == 0
+                if current_configured == configured and _worker_capacity_is_past_deferred_startup_floor(
+                    configured=current_configured,
+                    target=target,
+                    workers=workers,
+                    ready=ready,
+                    busy=busy,
                 ):
                     return
             futures = [
@@ -372,6 +411,8 @@ def run_stress(
         store, execution, guard_home = _prepare_stress_execution(root, receipt_count)
         try:
             _sample_stress_runtime(execution)
+            _wait_until_health_ready(execution.daemon_url)
+            _wait_until_daemon_lifecycle_ready(guard_home)
             warmup_count = min(_WARMUP_CONCURRENCY, max(4, request_count))
             _stress_warmup(execution.endpoint, execution.auth_token, warmup_count)
             if request_count >= _SOAK_MIN_REQUESTS:

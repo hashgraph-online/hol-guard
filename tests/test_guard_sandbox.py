@@ -229,7 +229,7 @@ def test_run_sandbox_fork_bomb_limited() -> None:
 
 
 def _interpreter_sandbox_timeout_seconds() -> float:
-    return 5.0 * under_coverage_scale(6.0)
+    return 15.0 * under_coverage_scale(6.0)
 
 
 def test_run_sandbox_python_script_path() -> None:

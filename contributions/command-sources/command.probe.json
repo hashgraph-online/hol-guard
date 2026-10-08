@@ -1,0 +1,1822 @@
+{
+  "extension": {
+    "action_classes": [
+      "Probe request execution command",
+      "Probe workspace mutation command",
+      "Probe destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.probe",
+    "homepage": "https://github.com/crizant/probe/blob/main/docs/CLI.md",
+    "icon": {
+      "background": "#B45309",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "MIT",
+    "name": "Probe command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Probe destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of an environment from an OpenCollection workspace.",
+        "example_command": "probe environment delete api.yml --environment production",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Probe environment deletion",
+        "permission_id": "command.probe.permission.environment-delete",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Confirm the exact environment and dependent environments before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Probe workspace mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Probe commands that create or modify persisted OpenCollection environments.",
+        "example_command": "probe environment create api.yml --name production",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Probe environment workspace mutation",
+        "permission_id": "command.probe.permission.environment-write",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the selected environment and variable names before persisting changes."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Probe destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of a folder from an OpenCollection workspace.",
+        "example_command": "probe folder delete api.yml items/0",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Probe folder deletion",
+        "permission_id": "command.probe.permission.folder-delete",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Confirm the exact folder selector and its contents before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Probe workspace mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Probe commands that create or modify folders in an OpenCollection workspace.",
+        "example_command": "probe folder rename api.yml items/0 --name Accounts",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Probe folder workspace mutation",
+        "permission_id": "command.probe.permission.folder-write",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the selected folder and workspace status before persisting changes."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Probe destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of a request from an OpenCollection workspace.",
+        "example_command": "probe request delete api.yml items/0",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Probe request deletion",
+        "permission_id": "command.probe.permission.request-delete",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Confirm the exact request selector and retain a recoverable workspace copy before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Probe workspace mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Probe request execution that writes the response body to a local file.",
+        "example_command": "probe request run api.yml items/0 --output response.json",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Probe response file write",
+        "permission_id": "command.probe.permission.request-output",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Review the output path and existing destination before writing the response body."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Probe request execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies HTTP request execution through the Probe CLI.",
+        "example_command": "probe request run api.yml items/0 --environment production",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Probe request execution",
+        "permission_id": "command.probe.permission.request-run",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the request, selected environment, and runtime variable names before execution."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Probe workspace mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Probe commands that create or modify requests in an OpenCollection workspace.",
+        "example_command": "probe request set api.yml items/0 --method POST",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Probe request workspace mutation",
+        "permission_id": "command.probe.permission.request-write",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the selected request and workspace status before persisting changes."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.crizant",
+      "url": "https://github.com/crizant/probe"
+    },
+    "reference_urls": [
+      "https://github.com/crizant/probe/blob/main/docs/CLI.md"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress",
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Probe request execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies HTTP request execution through the Probe CLI.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "probe",
+                  "probe.cmd",
+                  "probe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--json",
+                  "--quiet",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--environment",
+                  "--extends",
+                  "--index",
+                  "--method",
+                  "--name",
+                  "--output",
+                  "--parent",
+                  "--url",
+                  "--value",
+                  "--var"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "request",
+                    "run"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.probe.permission.request-run",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.probe.request-run",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "run"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "run"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the request, selected environment, and runtime variable names before execution."
+        ],
+        "severity": "high",
+        "title": "Probe request execution"
+      },
+      {
+        "action_classes": [
+          "Probe workspace mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Probe request execution that writes the response body to a local file.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "run"
+                      ]
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "probe",
+                  "probe.cmd",
+                  "probe.exe"
+                ],
+                "required_arguments": [
+                  "--output"
+                ]
+              },
+              "op": "arguments.v1"
+            }
+          ],
+          "op": "all.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.probe.permission.request-output",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.probe.request-output",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "run"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "run"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Review the output path and existing destination before writing the response body."
+        ],
+        "severity": "medium",
+        "title": "Probe response file write"
+      },
+      {
+        "action_classes": [
+          "Probe workspace mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Probe commands that create or modify requests in an OpenCollection workspace.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "probe",
+                  "probe.cmd",
+                  "probe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--json",
+                  "--quiet",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--environment",
+                  "--extends",
+                  "--index",
+                  "--method",
+                  "--name",
+                  "--output",
+                  "--parent",
+                  "--url",
+                  "--value",
+                  "--var"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "request",
+                    "create"
+                  ],
+                  [
+                    "request",
+                    "move"
+                  ],
+                  [
+                    "request",
+                    "rename"
+                  ],
+                  [
+                    "request",
+                    "reorder"
+                  ],
+                  [
+                    "request",
+                    "set"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.probe.permission.request-write",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.probe.request-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "create"
+                      ],
+                      [
+                        "request",
+                        "move"
+                      ],
+                      [
+                        "request",
+                        "rename"
+                      ],
+                      [
+                        "request",
+                        "reorder"
+                      ],
+                      [
+                        "request",
+                        "set"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "create"
+                      ],
+                      [
+                        "request",
+                        "move"
+                      ],
+                      [
+                        "request",
+                        "rename"
+                      ],
+                      [
+                        "request",
+                        "reorder"
+                      ],
+                      [
+                        "request",
+                        "set"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the selected request and workspace status before persisting changes."
+        ],
+        "severity": "high",
+        "title": "Probe request workspace mutation"
+      },
+      {
+        "action_classes": [
+          "Probe destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of a request from an OpenCollection workspace.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "probe",
+                  "probe.cmd",
+                  "probe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--json",
+                  "--quiet",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--environment",
+                  "--extends",
+                  "--index",
+                  "--method",
+                  "--name",
+                  "--output",
+                  "--parent",
+                  "--url",
+                  "--value",
+                  "--var"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "request",
+                    "delete"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.probe.permission.request-delete",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.probe.request-delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "request",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the exact request selector and retain a recoverable workspace copy before deletion."
+        ],
+        "severity": "high",
+        "title": "Probe request deletion"
+      },
+      {
+        "action_classes": [
+          "Probe workspace mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Probe commands that create or modify folders in an OpenCollection workspace.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "probe",
+                  "probe.cmd",
+                  "probe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--json",
+                  "--quiet",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--environment",
+                  "--extends",
+                  "--index",
+                  "--method",
+                  "--name",
+                  "--output",
+                  "--parent",
+                  "--url",
+                  "--value",
+                  "--var"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "folder",
+                    "create"
+                  ],
+                  [
+                    "folder",
+                    "move"
+                  ],
+                  [
+                    "folder",
+                    "rename"
+                  ],
+                  [
+                    "folder",
+                    "reorder"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.probe.permission.folder-write",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.probe.folder-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "folder",
+                        "create"
+                      ],
+                      [
+                        "folder",
+                        "move"
+                      ],
+                      [
+                        "folder",
+                        "rename"
+                      ],
+                      [
+                        "folder",
+                        "reorder"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "folder",
+                        "create"
+                      ],
+                      [
+                        "folder",
+                        "move"
+                      ],
+                      [
+                        "folder",
+                        "rename"
+                      ],
+                      [
+                        "folder",
+                        "reorder"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the selected folder and workspace status before persisting changes."
+        ],
+        "severity": "high",
+        "title": "Probe folder workspace mutation"
+      },
+      {
+        "action_classes": [
+          "Probe destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of a folder from an OpenCollection workspace.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "probe",
+                  "probe.cmd",
+                  "probe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--json",
+                  "--quiet",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--environment",
+                  "--extends",
+                  "--index",
+                  "--method",
+                  "--name",
+                  "--output",
+                  "--parent",
+                  "--url",
+                  "--value",
+                  "--var"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "folder",
+                    "delete"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.probe.permission.folder-delete",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.probe.folder-delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "folder",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "folder",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the exact folder selector and its contents before deletion."
+        ],
+        "severity": "high",
+        "title": "Probe folder deletion"
+      },
+      {
+        "action_classes": [
+          "Probe workspace mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Probe commands that create or modify persisted OpenCollection environments.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "probe",
+                  "probe.cmd",
+                  "probe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--json",
+                  "--quiet",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--environment",
+                  "--extends",
+                  "--index",
+                  "--method",
+                  "--name",
+                  "--output",
+                  "--parent",
+                  "--url",
+                  "--value",
+                  "--var"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "environment",
+                    "create"
+                  ],
+                  [
+                    "environment",
+                    "rename"
+                  ],
+                  [
+                    "environment",
+                    "set"
+                  ],
+                  [
+                    "environment",
+                    "unset"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.probe.permission.environment-write",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.probe.environment-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "environment",
+                        "create"
+                      ],
+                      [
+                        "environment",
+                        "rename"
+                      ],
+                      [
+                        "environment",
+                        "set"
+                      ],
+                      [
+                        "environment",
+                        "unset"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "environment",
+                        "create"
+                      ],
+                      [
+                        "environment",
+                        "rename"
+                      ],
+                      [
+                        "environment",
+                        "set"
+                      ],
+                      [
+                        "environment",
+                        "unset"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the selected environment and variable names before persisting changes."
+        ],
+        "severity": "high",
+        "title": "Probe environment workspace mutation"
+      },
+      {
+        "action_classes": [
+          "Probe destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of an environment from an OpenCollection workspace.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "probe",
+                  "probe.cmd",
+                  "probe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--json",
+                  "--quiet",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--environment",
+                  "--extends",
+                  "--index",
+                  "--method",
+                  "--name",
+                  "--output",
+                  "--parent",
+                  "--url",
+                  "--value",
+                  "--var"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "environment",
+                    "delete"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.probe.permission.environment-delete",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.probe.environment-delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "environment",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "probe",
+                      "probe.cmd",
+                      "probe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--json",
+                      "--quiet",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--environment",
+                      "--extends",
+                      "--index",
+                      "--method",
+                      "--name",
+                      "--output",
+                      "--parent",
+                      "--url",
+                      "--value",
+                      "--var"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "environment",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the exact environment and dependent environments before deletion."
+        ],
+        "severity": "high",
+        "title": "Probe environment deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect selected requests, environments, selectors, and output paths before execution or mutation."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

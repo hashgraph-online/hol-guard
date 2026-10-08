@@ -52,6 +52,11 @@ def verify_native_install(
     macos_team_id: str | None = None,
     windows_signer_thumbprints: tuple[str, ...] = (),
 ) -> NativeInstallVerification:
+    """Verify a HOL Guard Machine MDM install identity.
+
+    Windows thumbprints belong to the managed machine package, not Desktop
+    Artifact Signing. Do not pin a rotating Azure Public Trust leaf here.
+    """
     if platform.system() == "Darwin":
         return _verify_macos(runtime_root, expected_team_id=macos_team_id)
     if platform.system() == "Windows":
@@ -107,6 +112,11 @@ def _verify_macos(runtime_root: Path, *, expected_team_id: str | None) -> Native
 
 
 def _verify_windows(runtime_root: Path, *, expected_thumbprints: tuple[str, ...]) -> NativeInstallVerification:
+    """Authenticode-check the MDM machine executable against configured SHA-1 pins.
+
+    Artifact Signing certificates are short-lived; a Desktop MSI signer thumbprint
+    is not a valid pin for this HOLGuardMachine identity.
+    """
     identity = "HOLGuardMachine"
     if not expected_thumbprints:
         return NativeInstallVerification("unknown", "native_publisher_pin_absent", identity, "unverified")

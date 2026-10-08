@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TextIO, cast
 
@@ -16,8 +16,11 @@ from ..windows_paths import trusted_windows_user_profile
 from .approval_gate_prompt import consume_desktop_lifecycle_env, prompt_for_approval_gate
 
 _ENROLLMENT_NOTICE = (
-    "Security recommendation: protect Guard administration with an approval password or Authenticator. "
-    "Run `hol-guard dashboard`, then enable these controls in Settings."
+    "Local Guard approval protection is not enabled. Guard Cloud sign-in and account MFA are separate from this "
+    "local gate. Run `hol-guard dashboard`, then open Settings > Approval gate, enable `Ask for proof on allow "
+    "decisions`, and set an `Approval password`. Optionally connect an `Authenticator app`; once enabled, its "
+    "code replaces the `Approval password` for every protected action and disables cooldown. This notice is "
+    "advisory and does not block the current command."
 )
 _CANONICAL_AUTHORITY_ACTION_PREFIXES = (
     "apps.",
@@ -26,6 +29,7 @@ _CANONICAL_AUTHORITY_ACTION_PREFIXES = (
     "doctor.",
     "init.",
     "install",
+    "runtime.",
     "uninstall",
     "update",
 )
@@ -40,11 +44,30 @@ class LifecycleGateRequirement:
 def lifecycle_gate_requirement(args: argparse.Namespace) -> LifecycleGateRequirement | None:
     # Every protection-mutating command must be listed here; unmatched commands are intentionally exempt.
     command = _string_attribute(args, "guard_command")
+    if command == "desktop" and _string_attribute(args, "desktop_command") == "transition-activate":
+        # The command consumes Desktop proof once, prepares the complete exact
+        # subject, then requires/validates runtime.transition before begin().
+        # A generic parsing-time gate would consume that proof too early.
+        return None
     if _bool_attribute(args, "dry_run"):
         return None
     if command in {"install", "uninstall", "update", "disconnect"}:
         return LifecycleGateRequirement(command, _command_subject(args))
     apps_command = _string_attribute(args, "apps_command")
+    if (
+        command == "apps"
+        and apps_command == "repair"
+        and (
+            _bool_attribute(args, "restore_authority")
+            or _string_attribute(args, "authority_request")
+            or _string_attribute(args, "authority_request_sha256")
+            or getattr(args, "authority_deadline_epoch", None) is not None
+            or getattr(args, "authority_verification_workspace", None) is not None
+        )
+    ):
+        # This explicit path prepares the exact file/native plan under its
+        # owner before consuming factors and requiring its repair-only grant.
+        return None
     if command == "apps" and apps_command in {"connect", "repair", "disconnect"}:
         return LifecycleGateRequirement(f"apps.{apps_command}", _string_attribute(args, "harness") or "all")
     if command == "bootstrap" and not _bool_attribute(args, "skip_install"):
@@ -103,8 +126,10 @@ def enforce_lifecycle_gate(
             use_cooldown=False,
             require_fresh_totp=require_fresh_totp,
         )
-    if require_fresh_totp and not ((gate_input.totp_code if gate_input is not None else None) or "").strip():
-        raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
+    if require_fresh_totp:
+        if gate_input is None or not (gate_input.totp_code or "").strip():
+            raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
+        gate_input = replace(gate_input, require_fresh_totp=True)
     _ = require_high_risk(
         authority_home,
         purpose="protection_lifecycle",
@@ -163,7 +188,9 @@ def _apps_disconnect_confirmation_matches(args: argparse.Namespace) -> bool:
 def _command_subject(args: argparse.Namespace) -> str:
     command = _string_attribute(args, "guard_command")
     if command == "install":
-        return "all" if _bool_attribute(args, "all") else _string_attribute(args, "harness") or "detected"
+        if _bool_attribute(args, "all"):
+            return "all"
+        return _harness_subject(_attribute(args, "harness"))
     if command == "uninstall":
         if _bool_attribute(args, "self_uninstall"):
             return "hol-guard"
@@ -180,6 +207,18 @@ def _attribute(args: argparse.Namespace, name: str) -> object | None:
 def _string_attribute(args: argparse.Namespace, name: str) -> str:
     value = _attribute(args, name)
     return value if isinstance(value, str) else ""
+
+
+def _harness_subject(value: object) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        names = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+        if len(names) == 1:
+            return names[0]
+        if len(names) > 1:
+            return ",".join(names)
+    return "detected"
 
 
 def _bool_attribute(args: argparse.Namespace, name: str) -> bool:

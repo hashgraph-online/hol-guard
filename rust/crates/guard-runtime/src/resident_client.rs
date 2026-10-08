@@ -107,6 +107,16 @@ fn validate_runtime_owner(identity: &ExpectedProcessIdentity<'_>) -> Result<(), 
     }
 }
 
+/// Confirm the peer validated before connecting is still the same process.
+///
+/// A matching start marker rules out PID reuse, and a running process cannot
+/// change its image, so hashing the runtime again would only add latency.
+/// On Windows that second hash can outlast the resident's 250 ms
+/// authentication window and make every request fail.
+fn revalidate_runtime_owner(identity: &ExpectedProcessIdentity<'_>) -> Result<(), String> {
+    crate::resident_state::validate_process_start_marker(identity.process_id, identity.start_marker)
+}
+
 fn connect_loopback_with_digest(
     endpoint: &str,
     timeout: Duration,
@@ -121,7 +131,7 @@ fn connect_loopback_with_digest(
     validate_runtime_owner(identity)?;
     let stream = TcpStream::connect_timeout(&address, timeout.min(AUTH_TIMEOUT))
         .map_err(|_| "native_client_connect_failed".to_owned())?;
-    validate_runtime_owner(identity)?;
+    revalidate_runtime_owner(identity)?;
     Ok(Box::new(stream))
 }
 
@@ -141,6 +151,9 @@ fn connect_unix_with_digest(
     use std::os::unix::net::UnixStream;
     let address = UnixAddr::new(Path::new(endpoint))
         .map_err(|_| "native_client_endpoint_invalid".to_owned())?;
+    // Hash the runtime before connecting; after connect only the cheap
+    // peer-PID and start-marker checks run inside the auth window.
+    validate_runtime_owner(identity)?;
     let descriptor = socket(
         AddressFamily::Unix,
         SockType::Stream,
@@ -181,10 +194,9 @@ fn connect_unix_with_digest(
         nix::sys::socket::getsockopt(&stream, nix::sys::socket::sockopt::LocalPeerPid)
             .map_err(|_| "native_client_peer_identity_failed".to_owned())? as u32;
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let peer_process_id =
-        nix::sys::socket::getsockopt(&stream, nix::sys::socket::sockopt::PeerCredentials)
-            .map_err(|_| "native_client_peer_identity_failed".to_owned())?
-            .pid() as u32;
+    let peer_process_id = crate::resident_peer_identity::read_linux_credentials(&stream)
+        .map_err(|_| "native_client_peer_identity_failed".to_owned())?
+        .pid() as u32;
     #[cfg(not(any(
         target_os = "macos",
         target_os = "ios",
@@ -195,7 +207,7 @@ fn connect_unix_with_digest(
     if peer_process_id != identity.process_id {
         return Err("native_client_peer_identity_mismatch".to_owned());
     }
-    validate_runtime_owner(identity)?;
+    revalidate_runtime_owner(identity)?;
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|_| "native_client_timeout_failed".to_owned())?;

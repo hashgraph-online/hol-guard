@@ -20,6 +20,12 @@ pub(crate) fn resident_parent_liveness() -> Result<Arc<AtomicBool>, String> {
     let mut pipe = std::fs::File::open(dev_path)
         .or_else(|_| std::fs::File::open(proc_path))
         .map_err(|_| "native_parent_liveness_fd_unavailable".to_owned())?;
+    // Observe an already-dead supervisor before a fast request can outrun
+    // the watcher thread. The liveness protocol treats any read as death.
+    if !parent_liveness_pipe_open(&pipe)? {
+        alive.store(false, Ordering::Release);
+        return Ok(alive);
+    }
     let watcher_state = Arc::clone(&alive);
     thread::spawn(move || {
         let mut byte = [0u8; 1];
@@ -28,6 +34,23 @@ pub(crate) fn resident_parent_liveness() -> Result<Arc<AtomicBool>, String> {
     });
     Ok(alive)
 }
+
+#[cfg(unix)]
+fn parent_liveness_pipe_open(pipe: &std::fs::File) -> Result<bool, String> {
+    use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+    use std::os::fd::AsFd;
+
+    let mut descriptors = [PollFd::new(pipe.as_fd(), PollFlags::POLLIN)];
+    poll(&mut descriptors, PollTimeout::ZERO)
+        .map_err(|_| "native_parent_liveness_fd_unavailable".to_owned())?;
+    Ok(descriptors[0]
+        .revents()
+        .is_some_and(|events| events.is_empty()))
+}
+
+#[cfg(all(test, unix))]
+#[path = "resident_parent_liveness_tests.rs"]
+mod parent_liveness_tests;
 
 #[cfg(unix)]
 pub(crate) fn serve(socket_path: &str) -> Result<(), String> {
@@ -66,7 +89,7 @@ pub(crate) fn serve(socket_path: &str) -> Result<(), String> {
         .map_err(|_| "native_socket_nonblocking_failed".to_owned())?;
 
     let token = Arc::new(read_resident_auth_token()?);
-    let sender = start_resident_workers(token, None);
+    let admission = start_resident_workers(token, None);
     let parent_alive = resident_parent_liveness()?;
     let mut consecutive_accept_failures = 0;
     while parent_alive.load(Ordering::Acquire) {
@@ -76,7 +99,7 @@ pub(crate) fn serve(socket_path: &str) -> Result<(), String> {
                 if stream.set_nonblocking(false).is_err() {
                     continue;
                 }
-                admit_connection(&sender, Box::new(stream))?;
+                admit_connection(&admission, Box::new(stream))?;
             }
             Err(error)
                 if crate::hardening::classify_io_error(&error)
@@ -116,13 +139,13 @@ pub(crate) fn serve_loopback(address: &str) -> Result<(), String> {
     }
 
     let token = Arc::new(read_resident_auth_token()?);
-    let sender = start_resident_workers(token, None);
+    let admission = start_resident_workers(token, None);
     let mut consecutive_accept_failures = 0;
     loop {
         match listener.accept() {
             Ok((stream, _address)) => {
                 consecutive_accept_failures = 0;
-                admit_connection(&sender, Box::new(stream))?;
+                admit_connection(&admission, Box::new(stream))?;
             }
             Err(error)
                 if crate::hardening::classify_io_error(&error)

@@ -251,7 +251,12 @@ def _check_authority_fence(root: Path) -> None:
         raise RuntimeError("authority fence is not SHA-256 based")
     if "DefaultHasher" in source or "hash_map::DefaultHasher" in source:
         raise RuntimeError("authority fence uses a non-cryptographic hash")
-    if "authority_unchanged_fenced" not in _read(root / Path("rust/crates/guard-runtime/src/policy_store.rs")):
+    approval_store = _read(root / Path("rust/crates/guard-runtime/src/policy_store_approval.rs"))
+    if (
+        "authority_unchanged_fenced" not in approval_store
+        or "claim_approval_nonce_fenced" not in approval_store
+        or "consume_approval_nonce_fenced" not in approval_store
+    ):
         raise RuntimeError("approval path has no fenced authority recheck")
 
 

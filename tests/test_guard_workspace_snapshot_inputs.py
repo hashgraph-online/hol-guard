@@ -33,6 +33,33 @@ def test_complete_snapshot_is_deterministic_and_omits_guard_state(tmp_path: Path
     assert paths == ("node_modules/runner/index.js", "package.json", "src/example.ts")
 
 
+def test_dependency_package_names_do_not_break_runtime_snapshot_closure(tmp_path: Path) -> None:
+    workspace = (tmp_path / "workspace").resolve()
+    _write(workspace / "node_modules" / "js-tokens" / "index.js")
+    _write(workspace / "node_modules" / "token-parser" / "tokens.js")
+
+    _digest, inputs = complete_workspace_snapshot(workspace, exclude_protected=True)
+
+    assert [item.snapshot_path for item in inputs] == [
+        "node_modules/js-tokens/index.js",
+        "node_modules/token-parser/tokens.js",
+    ]
+
+
+def test_dependency_tree_still_excludes_explicit_secret_paths(tmp_path: Path) -> None:
+    workspace = (tmp_path / "workspace").resolve()
+    _write(workspace / "node_modules" / "runner" / "index.js")
+    _write(workspace / "node_modules" / "runner" / ".env", "MUST_NOT_CROSS=synthetic\n")
+    _write(workspace / "node_modules" / "runner" / "client-secret.json", "{}\n")
+    _write(workspace / "node_modules" / "runner" / "api-key.txt", "MUST_NOT_CROSS=synthetic\n")
+
+    _digest, inputs = complete_workspace_snapshot(workspace, exclude_protected=True)
+
+    assert [item.snapshot_path for item in inputs] == ["node_modules/runner/index.js"]
+    with pytest.raises(ValueError, match="protected workspace content"):
+        complete_workspace_snapshot(workspace)
+
+
 @pytest.mark.parametrize(
     "protected_path",
     (
@@ -180,3 +207,30 @@ def test_external_node_modules_requires_review(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="external Node dependencies"):
         reject_external_node_modules(workspace)
+
+
+def test_secret_exclusion_is_explicit_and_committed_without_reading_contents(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = (tmp_path / "workspace").resolve()
+    _write(workspace / "src/unit.test.ts", "test('unit', () => {});\n")
+    before = complete_workspace_snapshot(workspace, exclude_protected=True)[0]
+    protected = workspace / ".env"
+    _write(protected, "FAKE_TEST_SECRET=one\n")
+    from codex_plugin_scanner.guard.runtime import workspace_snapshot_inputs as snapshot_module
+
+    original = snapshot_module._snapshot_file_digest
+
+    def no_secret_read(path: Path, expected: os.stat_result) -> str:
+        assert path != protected
+        return original(path, expected)
+
+    monkeypatch.setattr(snapshot_module, "_snapshot_file_digest", no_secret_read)
+    first_digest, inputs = complete_workspace_snapshot(workspace, exclude_protected=True)
+    assert first_digest != before
+    assert [item.snapshot_path for item in inputs] == ["src/unit.test.ts"]
+    protected.write_text("FAKE_TEST_SECRET=two\n")
+    assert complete_workspace_snapshot(workspace, exclude_protected=True)[0] == first_digest
+    with pytest.raises(ValueError, match="protected workspace content"):
+        complete_workspace_snapshot(workspace)

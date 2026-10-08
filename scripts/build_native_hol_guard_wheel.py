@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build one platform-specific HOL Guard wheel from the verified pure wheel.
 
-The native runtime is injected into ``codex_plugin_scanner/_native``. The
-source wheel is never modified in place, and this builder refuses any project
-other than ``hol-guard``. It rewrites only wheel metadata required by the
-platform artifact plus RECORD hashes.
+The native runtime and optional declarative source compiler are injected into
+``codex_plugin_scanner/_native``. The source wheel is never modified in place,
+and this builder refuses any project other than ``hol-guard``. It rewrites only
+wheel metadata required by the platform artifact plus RECORD hashes.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
 _MAX_RUNTIME_BYTES = 128 * 1024 * 1024
+_MAX_SOURCE_COMPILER_BYTES = 128 * 1024 * 1024
 _MAX_SOURCE_WHEEL_BYTES = 256 * 1024 * 1024
 _MAX_SOURCE_ENTRY_BYTES = 64 * 1024 * 1024
 _MAX_SOURCE_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
@@ -37,6 +38,8 @@ _SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA64_RE = re.compile(r"^[0-9a-f]{64}$")
 _NATIVE_DIR = "codex_plugin_scanner/_native"
 _RUNTIME_MANIFEST_PATH = f"{_NATIVE_DIR}/runtime-manifest.json"
+_SOURCE_COMPILER_MANIFEST_PATH = f"{_NATIVE_DIR}/source-compiler-manifest.json"
+_NATIVE_PROGRAM_PATH = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
 _DETERMINISTIC_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 
@@ -68,12 +71,7 @@ def _wheel_version_for_filename(version: str) -> str:
 
 
 def _safe_archive_path(name: str) -> bool:
-    if (
-        not name
-        or "\\" in name
-        or "\x00" in name
-        or any(ord(character) < 0x20 for character in name)
-    ):
+    if not name or "\\" in name or "\x00" in name or any(ord(character) < 0x20 for character in name):
         return False
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts or any(part in {"", "."} for part in path.parts):
@@ -120,10 +118,7 @@ def _open_regular_file(path: Path, *, max_bytes: int, label: str) -> BinaryIO:
             raise NativeWheelError(f"{label} changed while being opened")
         before_identity = (getattr(before, "st_dev", None), getattr(before, "st_ino", None))
         opened_identity = (getattr(opened, "st_dev", None), getattr(opened, "st_ino", None))
-        identities_available = all(
-            value not in {None, 0}
-            for value in (*before_identity, *opened_identity)
-        )
+        identities_available = all(value not in {None, 0} for value in (*before_identity, *opened_identity))
         if identities_available and before_identity != opened_identity:
             raise NativeWheelError(f"{label} changed while being opened")
         return os.fdopen(fd, "rb")
@@ -212,17 +207,17 @@ def _load_source_wheel(path: Path, *, version: str) -> SourceWheel:
         raise NativeWheelError("source wheel project identity or version does not match")
 
     wheel_text = entries[wheel_path].decode("utf-8")
-    tags = [
-        line.removeprefix("Tag:").strip()
-        for line in wheel_text.splitlines()
-        if line.startswith("Tag:")
-    ]
+    tags = [line.removeprefix("Tag:").strip() for line in wheel_text.splitlines() if line.startswith("Tag:")]
     if tags != ["py3-none-any"]:
         raise NativeWheelError("source wheel must be the canonical py3-none-any artifact")
     if f"{_NATIVE_DIR}/hol-guard-runtime" in entries or f"{_NATIVE_DIR}/hol-guard-runtime.exe" in entries:
         raise NativeWheelError("source wheel already contains a native runtime")
     if _RUNTIME_MANIFEST_PATH in entries:
         raise NativeWheelError("source wheel already contains a native runtime manifest")
+    if f"{_NATIVE_DIR}/guard-command-source" in entries or f"{_NATIVE_DIR}/guard-command-source.exe" in entries:
+        raise NativeWheelError("source wheel already contains a native source compiler")
+    if _SOURCE_COMPILER_MANIFEST_PATH in entries:
+        raise NativeWheelError("source wheel already contains a native source compiler manifest")
 
     return SourceWheel(
         path=path,
@@ -253,6 +248,44 @@ def _load_runtime(path: Path) -> bytes:
         if len(runtime) != metadata.st_size:
             raise NativeWheelError("runtime could not be read completely")
         return runtime
+
+
+def _load_source_compiler(path: Path) -> bytes:
+    """Read a release-built source compiler with runtime-equivalent file checks."""
+    with _open_regular_file(path, max_bytes=_MAX_SOURCE_COMPILER_BYTES, label="source compiler") as handle:
+        metadata = os.fstat(handle.fileno())
+        if os.name != "nt":
+            mode = stat.S_IMODE(metadata.st_mode)
+            if mode & 0o022:
+                raise NativeWheelError("source compiler is group/world writable")
+            if not mode & stat.S_IXUSR:
+                raise NativeWheelError("source compiler is not owner-executable")
+        compiler = handle.read(_MAX_SOURCE_COMPILER_BYTES + 1)
+        after = os.fstat(handle.fileno())
+        if len(compiler) > _MAX_SOURCE_COMPILER_BYTES:
+            raise NativeWheelError("source compiler size is outside the accepted release bounds")
+        if (metadata.st_size, metadata.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+            raise NativeWheelError("source compiler changed while being read")
+        if len(compiler) != metadata.st_size:
+            raise NativeWheelError("source compiler could not be read completely")
+        return compiler
+
+
+def _packaged_program_digest(source: SourceWheel) -> str:
+    """Read the program identity carried by the pure wheel's package data."""
+    program_bytes = source.entries.get(_NATIVE_PROGRAM_PATH)
+    if program_bytes is None:
+        raise NativeWheelError("source wheel is missing the packaged native command program")
+    try:
+        program = json.loads(program_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise NativeWheelError("packaged native command program is invalid") from exc
+    if not isinstance(program, dict):
+        raise NativeWheelError("packaged native command program is invalid")
+    digest = program.get("program_digest")
+    if not isinstance(digest, str) or not _SHA64_RE.fullmatch(digest):
+        raise NativeWheelError("packaged native command program identity is invalid")
+    return digest
 
 
 def _runtime_capabilities(path: Path) -> RuntimeCapabilities:
@@ -337,11 +370,7 @@ def _verify_runtime_provenance(
 
 def _rewrite_wheel_metadata(raw: bytes, *, platform_tag: str) -> bytes:
     lines = raw.decode("utf-8").splitlines()
-    rewritten = [
-        line
-        for line in lines
-        if not line.startswith("Root-Is-Purelib:") and not line.startswith("Tag:")
-    ]
+    rewritten = [line for line in lines if not line.startswith("Root-Is-Purelib:") and not line.startswith("Tag:")]
     rewritten.extend(["Root-Is-Purelib: false", f"Tag: py3-none-{platform_tag}"])
     return ("\n".join(rewritten).rstrip("\n") + "\n").encode("utf-8")
 
@@ -400,7 +429,8 @@ def _write_output_wheel_exclusive(
             for name in sorted(entries):
                 if not _safe_archive_path(name):
                     raise NativeWheelError(f"refusing unsafe output path: {name}")
-                archive.writestr(_zip_info(name, mode=modes.get(name, 0o644)), entries[name])
+                # Explicit ZipInfo entries do not inherit the archive's compression level.
+                archive.writestr(_zip_info(name, mode=modes.get(name, 0o644)), entries[name], compresslevel=9)
         output_file.flush()
         os.fsync(output_file.fileno())
 
@@ -415,6 +445,9 @@ def build_native_wheel(
     target: str,
     source_sha: str,
     rule_digest: str,
+    source_compiler: Path | None = None,
+    implementation_digest: str | None = None,
+    base_program_digest: str | None = None,
 ) -> Path:
     """Return a new native HOL Guard wheel without changing the source wheel."""
     if not version.strip():
@@ -427,8 +460,20 @@ def build_native_wheel(
         raise NativeWheelError("source SHA must be a lowercase 40-character Git SHA")
     if not _SHA64_RE.fullmatch(rule_digest):
         raise NativeWheelError("rule digest must be a lowercase SHA-256 hex digest")
+    if (source_compiler is None) != (implementation_digest is None) or (source_compiler is None) != (
+        base_program_digest is None
+    ):
+        raise NativeWheelError(
+            "source compiler, implementation digest, and base program digest must be supplied together"
+        )
+    if implementation_digest is not None and not _SHA64_RE.fullmatch(implementation_digest):
+        raise NativeWheelError("implementation digest must be a lowercase SHA-256 hex digest")
+    if source_compiler is not None and not _SHA64_RE.fullmatch(base_program_digest or ""):
+        raise NativeWheelError("base program digest must be supplied with the source compiler")
 
     source = _load_source_wheel(source_wheel, version=version)
+    if source_compiler is not None and base_program_digest != _packaged_program_digest(source):
+        raise NativeWheelError("base program digest must match the packaged native command program")
     runtime_bytes = _verify_runtime_provenance(
         runtime,
         version=version,
@@ -437,6 +482,9 @@ def build_native_wheel(
     )
     runtime_name = "hol-guard-runtime.exe" if platform_tag.startswith("win") else "hol-guard-runtime"
     runtime_path = f"{_NATIVE_DIR}/{runtime_name}"
+    source_compiler_bytes = _load_source_compiler(source_compiler) if source_compiler is not None else None
+    source_compiler_name = "guard-command-source.exe" if platform_tag.startswith("win") else "guard-command-source"
+    source_compiler_path = f"{_NATIVE_DIR}/{source_compiler_name}"
 
     entries = dict(source.entries)
     modes = dict(source.modes)
@@ -457,19 +505,34 @@ def build_native_wheel(
         "runtime_size": len(runtime_bytes),
     }
     entries[runtime_path] = runtime_bytes
-    entries[_RUNTIME_MANIFEST_PATH] = (
-        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
-    ).encode()
+    entries[_RUNTIME_MANIFEST_PATH] = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
     modes[runtime_path] = 0o755
     modes[_RUNTIME_MANIFEST_PATH] = 0o644
+    if source_compiler_bytes is not None and implementation_digest is not None:
+        source_compiler_manifest = {
+            "schema": "hol-guard-native-source-compiler.v1",
+            "protocol_version": 1,
+            "package_version": version,
+            "target": target,
+            "platform_tag": platform_tag,
+            "source_sha": source_sha,
+            "implementation_digest": implementation_digest,
+            "base_program_digest": base_program_digest,
+            "compiler_sha256": hashlib.sha256(source_compiler_bytes).hexdigest(),
+            "compiler_size": len(source_compiler_bytes),
+        }
+        entries[source_compiler_path] = source_compiler_bytes
+        entries[_SOURCE_COMPILER_MANIFEST_PATH] = (
+            json.dumps(source_compiler_manifest, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode()
+        modes[source_compiler_path] = 0o755
+        modes[_SOURCE_COMPILER_MANIFEST_PATH] = 0o644
     modes[source.wheel_path] = 0o644
     entries[source.record_path] = _record_content(entries, record_path=source.record_path)
     modes[source.record_path] = 0o644
 
     safe_output_dir = _prepare_output_dir(output_dir)
-    output_path = safe_output_dir / (
-        f"hol_guard-{_wheel_version_for_filename(version)}-py3-none-{platform_tag}.whl"
-    )
+    output_path = safe_output_dir / (f"hol_guard-{_wheel_version_for_filename(version)}-py3-none-{platform_tag}.whl")
     _write_output_wheel_exclusive(output_path, entries, modes)
     return output_path
 
@@ -484,6 +547,9 @@ def main() -> int:
     parser.add_argument("--target", required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--rule-digest", required=True)
+    parser.add_argument("--source-compiler", type=Path)
+    parser.add_argument("--implementation-digest")
+    parser.add_argument("--base-program-digest")
     args = parser.parse_args()
     output = build_native_wheel(
         source_wheel=args.wheel,
@@ -494,6 +560,9 @@ def main() -> int:
         target=args.target,
         source_sha=args.source_sha,
         rule_digest=args.rule_digest,
+        source_compiler=args.source_compiler,
+        implementation_digest=args.implementation_digest,
+        base_program_digest=args.base_program_digest,
     )
     print(output)
     return 0

@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.action_lattice import (
     normalize_guard_action,
     normalize_guard_action_result,
 )
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _requested_policy_action_normalization
 from codex_plugin_scanner.guard.config import (
     GuardConfig,
     _coerce_action_map,
@@ -115,20 +114,6 @@ def test_policy_engine_present_unknown_actions_do_not_fall_through_to_allow(tmp_
 
     assert decide_action("future-action", "allow", config, changed=False) == "require-reapproval"
     assert decide_action(None, "future-action", config, changed=False) == "require-reapproval"
-
-
-@pytest.mark.parametrize("payload_action", ("future-action", "", None, 7))
-def test_runtime_hook_present_unknown_action_normalizes_with_diagnostics(payload_action: object) -> None:
-    result = _requested_policy_action_normalization(None, None, {"policy_action": payload_action})
-
-    assert result is not None
-    assert result.action == "require-reapproval"
-    assert result.reason_code == UNKNOWN_GUARD_ACTION_REASON
-    assert result.original_action == (payload_action if isinstance(payload_action, str) else None)
-
-
-def test_runtime_hook_absent_action_preserves_computed_policy_fallback() -> None:
-    assert _requested_policy_action_normalization(None, None, {}) is None
 
 
 def test_runtime_policy_and_receipt_boundaries_share_canonical_normalization() -> None:
