@@ -20,14 +20,15 @@ pub(super) fn elf_interpreter(data: &[u8]) -> io::Result<Option<String>> {
         let at = offset
             .checked_add(index.checked_mul(size).ok_or_else(invalid)?)
             .ok_or_else(invalid)?;
-        if u32le(data, at)? != 3 {
+        let header = bytes(data, at, 56)?;
+        if u32le(header, 0)? != 3 {
             continue;
         }
         if interpreter.is_some() {
             return Err(invalid());
         }
-        let start = usize::try_from(u64le(data, at + 8)?).map_err(|_| invalid())?;
-        let length = usize::try_from(u64le(data, at + 32)?).map_err(|_| invalid())?;
+        let start = usize::try_from(u64le(header, 8)?).map_err(|_| invalid())?;
+        let length = usize::try_from(u64le(header, 32)?).map_err(|_| invalid())?;
         let end = start.checked_add(length).ok_or_else(invalid)?;
         bytes(data, start, length)?;
         let name = string(data, start, end)?;
@@ -47,7 +48,23 @@ pub(super) fn elf_interpreter(data: &[u8]) -> io::Result<Option<String>> {
     Ok(interpreter)
 }
 
+const MAX_IMPORTS: usize = 1024;
+const MAX_DYNAMIC_ENTRIES: usize = 16_384;
+const MAX_SEARCH_PATHS: usize = 64;
+const MAX_SEARCH_BYTES: usize = 65_536;
+
+#[cfg(test)]
 pub(super) fn elf(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
+    elf_with_context(data, library, &[], &|| Ok(()))
+}
+
+pub(super) fn elf_with_context(
+    data: &[u8],
+    library: &Path,
+    inherited: &[PathBuf],
+    check: &dyn Fn() -> io::Result<()>,
+) -> io::Result<Vec<Import>> {
+    check()?;
     if bytes(data, 4, 2)? != [2, 1] {
         return Err(invalid());
     }
@@ -60,15 +77,19 @@ pub(super) fn elf(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
     let mut segments = Vec::new();
     let mut dynamic = None;
     for index in 0..count {
-        let at = phoff + index * size;
-        let kind = u32le(data, at)?;
-        let offset = u64le(data, at + 8)?;
-        let address = u64le(data, at + 16)?;
-        let length = u64le(data, at + 32)?;
+        check()?;
+        let at = phoff
+            .checked_add(index.checked_mul(size).ok_or_else(invalid)?)
+            .ok_or_else(invalid)?;
+        let header = bytes(data, at, 56)?;
+        let kind = u32le(header, 0)?;
+        let offset = u64le(header, 8)?;
+        let address = u64le(header, 16)?;
+        let length = u64le(header, 32)?;
         if kind == 1 {
             segments.push((address, offset, length));
-        } else if kind == 2 {
-            dynamic = Some((offset, length));
+        } else if kind == 2 && dynamic.replace((offset, length)).is_some() {
+            return Err(invalid());
         }
     }
     let Some((offset, length)) = dynamic else {
@@ -76,22 +97,48 @@ pub(super) fn elf(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
     };
     let offset = usize::try_from(offset).map_err(|_| invalid())?;
     let length = usize::try_from(length).map_err(|_| invalid())?;
-    bytes(data, offset, length)?;
+    if length % 16 != 0 || length / 16 > MAX_DYNAMIC_ENTRIES {
+        return Err(invalid());
+    }
+    let table = bytes(data, offset, length)?;
     let mut strtab = None;
     let mut strsize = None;
     let mut needed = Vec::new();
-    let mut path_offsets = Vec::new();
-    for at in (offset..offset + length).step_by(16) {
-        let tag = u64le(data, at)?;
-        let value = u64le(data, at + 8)?;
+    let mut rpath = None;
+    let mut runpath = None;
+    let mut terminated = false;
+    for entry in table.chunks_exact(16) {
+        check()?;
+        let tag = u64le(entry, 0)?;
+        let value = u64le(entry, 8)?;
         match tag {
-            0 => break,
-            1 => needed.push(value),
+            0 => {
+                terminated = true;
+                break;
+            }
+            1 => {
+                if needed.len() >= MAX_IMPORTS {
+                    return Err(invalid());
+                }
+                needed.push(value);
+            }
             5 => strtab = Some(value),
             10 => strsize = Some(value),
-            15 | 29 => path_offsets.push(value),
+            15 => {
+                if rpath.replace(value).is_some() {
+                    return Err(invalid());
+                }
+            }
+            29 => {
+                if runpath.replace(value).is_some() {
+                    return Err(invalid());
+                }
+            }
             _ => {}
         }
+    }
+    if !terminated {
+        return Err(invalid());
     }
     if needed.is_empty() {
         return Ok(Vec::new());
@@ -109,7 +156,7 @@ pub(super) fn elf(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
     let table = usize::try_from(table).map_err(|_| invalid())?;
     let table_size = usize::try_from(strsize.ok_or_else(invalid)?).map_err(|_| invalid())?;
     let table_end = table.checked_add(table_size).ok_or_else(invalid)?;
-    data.get(table..table_end).ok_or_else(invalid)?;
+    bytes(data, table, table_size)?;
     let dynamic_string = |offset: u64| {
         let offset = usize::try_from(offset).map_err(|_| invalid())?;
         if offset >= table_size {
@@ -122,22 +169,23 @@ pub(super) fn elf(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
         )
     };
     let parent = library.parent().ok_or_else(invalid)?;
+    // DT_RUNPATH suppresses this object's DT_RPATH. Only DT_RPATH is
+    // inherited by its descendants, nearest loading object first.
+    let local = match runpath.or(rpath) {
+        Some(offset) => search_paths(&dynamic_string(offset)?, parent, check)?,
+        None => Vec::new(),
+    };
+    let mut inherited_rpath = Vec::new();
+    if runpath.is_none() {
+        append_paths(&mut inherited_rpath, &local)?;
+    }
+    append_paths(&mut inherited_rpath, inherited)?;
     let mut search = Vec::new();
-    for offset in path_offsets {
-        let value = dynamic_string(offset)?;
-        for path in value.split(':') {
-            if path.is_empty() {
-                return Err(invalid());
-            }
-            let path = path
-                .replace("${ORIGIN}", &parent.to_string_lossy())
-                .replace("$ORIGIN", &parent.to_string_lossy());
-            let path = PathBuf::from(path);
-            if !path.is_absolute() {
-                return Err(invalid());
-            }
-            search.push(path);
-        }
+    if runpath.is_some() {
+        // glibc ignores the loader chain's RPATH for an object with RUNPATH.
+        append_paths(&mut search, &local)?;
+    } else {
+        append_paths(&mut search, &inherited_rpath)?;
     }
     for path in [
         "/lib",
@@ -149,11 +197,14 @@ pub(super) fn elf(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
         "/lib/aarch64-linux-gnu",
         "/usr/lib/aarch64-linux-gnu",
     ] {
-        search.push(PathBuf::from(path));
+        append_paths(&mut search, &[PathBuf::from(path)])?;
     }
+    let search: std::sync::Arc<[PathBuf]> = search.into();
+    let inherited_rpath: std::sync::Arc<[PathBuf]> = inherited_rpath.into();
     needed
         .into_iter()
         .map(|offset| {
+            check()?;
             let name = dynamic_string(offset)?;
             if name.contains('/') && !Path::new(&name).is_absolute() {
                 return Err(invalid());
@@ -161,8 +212,67 @@ pub(super) fn elf(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
             Ok(Import {
                 name,
                 search: search.clone(),
+                inherited_rpath: inherited_rpath.clone(),
                 optional: false,
             })
         })
         .collect()
 }
+
+fn search_paths(
+    value: &str,
+    parent: &Path,
+    check: &dyn Fn() -> io::Result<()>,
+) -> io::Result<Vec<PathBuf>> {
+    let mut paths = Vec::new();
+    for path in value.split(':') {
+        check()?;
+        if path.is_empty() || paths.len() >= MAX_SEARCH_PATHS {
+            return Err(invalid());
+        }
+        let origin = parent.to_string_lossy();
+        // Check the expanded length before replace() can amplify repeated ORIGIN.
+        let expanded = path
+            .len()
+            .checked_add(
+                path.matches("$ORIGIN")
+                    .count()
+                    .saturating_add(path.matches("${ORIGIN}").count())
+                    .checked_mul(origin.len())
+                    .ok_or_else(invalid)?,
+            )
+            .ok_or_else(invalid)?;
+        if expanded > 4096 {
+            return Err(invalid());
+        }
+        let path = PathBuf::from(
+            path.replace("${ORIGIN}", &origin)
+                .replace("$ORIGIN", &origin),
+        );
+        if !path.is_absolute() {
+            return Err(invalid());
+        }
+        append_paths(&mut paths, &[path])?;
+    }
+    Ok(paths)
+}
+
+fn append_paths(paths: &mut Vec<PathBuf>, incoming: &[PathBuf]) -> io::Result<()> {
+    for path in incoming {
+        if paths.contains(path) {
+            continue;
+        }
+        if paths.len() >= MAX_SEARCH_PATHS {
+            return Err(invalid());
+        }
+        let used: usize = paths.iter().map(|path| path.as_os_str().len()).sum();
+        if used.saturating_add(path.as_os_str().len()) > MAX_SEARCH_BYTES {
+            return Err(invalid());
+        }
+        paths.push(path.clone());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod regressions;

@@ -160,3 +160,14 @@ pub(super) fn drain(
     }
     Ok(())
 }
+
+pub(super) fn check_protocol_budget(exceeded: bool) -> std::io::Result<()> {
+    if exceeded {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "native process protocol byte budget exceeded",
+        ))
+    } else {
+        Ok(())
+    }
+}

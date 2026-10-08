@@ -79,14 +79,15 @@ impl Config {
         guard_home: &Path,
         bindings: &mut Vec<SourceBinding>,
     ) -> io::Result<PathBuf> {
-        let mut names = vec![requested
+        // The canonical image is authoritative. An unversioned alias in
+        // `home` may belong to a different Python installation.
+        let mut names = vec![canonical
             .file_name()
             .ok_or_else(bound_fs::changed)?
             .to_os_string()];
-        if let Some(name) = canonical.file_name() {
-            if !names.iter().any(|value| value == name) {
-                names.push(name.to_os_string());
-            }
+        let requested_name = requested.file_name().ok_or_else(bound_fs::changed)?;
+        if !names.iter().any(|value| value == requested_name) {
+            names.push(requested_name.to_os_string());
         }
         if let Some(version) = &self.version {
             let major_minor = version.split('.').take(2).collect::<Vec<_>>().join(".");
@@ -108,7 +109,7 @@ impl Config {
             if image != canonical {
                 let mut selected = bound_fs::open_executable(canonical)?;
                 if bound_fs::digest_executable(&mut selected, MAX_BYTES)? != read.digest {
-                    return Err(bound_fs::changed());
+                    continue;
                 }
             }
             bindings.extend(links);
@@ -116,5 +117,50 @@ impl Config {
             return Ok(image);
         }
         Err(bound_fs::changed())
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base_image_prefers_canonical_and_skips_other_version_aliases() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let home = root.join("base/bin");
+        let venv = root.join("venv/bin");
+        let guard = root.join("guard");
+        for directory in [&home, &venv, &guard] {
+            std::fs::create_dir_all(directory).unwrap();
+        }
+        let requested = venv.join("python");
+        let selected = home.join("python3.11");
+        std::fs::write(&selected, b"selected interpreter").unwrap();
+        std::fs::write(home.join("python"), b"another interpreter").unwrap();
+        std::fs::write(&requested, b"selected interpreter").unwrap();
+        let config = Config {
+            home: home.clone(),
+            version: Some("3.11.9".into()),
+            include_system: false,
+        };
+        // Symlink venvs supply the canonical installation path; copied venvs
+        // must skip the mismatched alias and reach the versioned candidate.
+        for canonical in [&selected, &requested] {
+            let mut bindings = Vec::new();
+            assert_eq!(
+                config
+                    .base_image(&requested, canonical, &guard, &mut bindings)
+                    .unwrap(),
+                selected
+            );
+            for binding in bindings {
+                binding.verify().unwrap();
+            }
+        }
+        std::fs::write(&selected, b"also a different interpreter").unwrap();
+        assert!(config
+            .base_image(&requested, &requested, &guard, &mut Vec::new())
+            .is_err());
     }
 }

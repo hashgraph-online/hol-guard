@@ -88,6 +88,7 @@ pub(super) fn pe(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
         search.push(crate::windows::system_directory()?);
         search
     };
+    let search: std::sync::Arc<[std::path::PathBuf]> = search.into();
     Ok(names
         .into_iter()
         .filter(|name| {
@@ -97,6 +98,7 @@ pub(super) fn pe(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
         .map(|name| Import {
             name,
             search: search.clone(),
+            inherited_rpath: std::sync::Arc::from([]),
             optional: false,
         })
         .collect())

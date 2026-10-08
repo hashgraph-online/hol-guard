@@ -189,7 +189,8 @@ fn missing_early_loader_candidate_does_not_hide_a_later_library() {
     let first = PathBuf::from("/usr/lib");
     let import = Import {
         name: name.into(),
-        search: vec![first, root.clone()],
+        search: vec![first, root.clone()].into(),
+        inherited_rpath: Arc::from([]),
         optional: false,
     };
     let (selected, bindings) = resolve(&import, None).unwrap().unwrap();
@@ -210,7 +211,8 @@ fn nonexistent_system_library_is_not_a_cache_entry() {
     assert!(!system_shared_cache(&path));
     let import = Import {
         name: path.to_string_lossy().into_owned(),
-        search: vec![],
+        search: Arc::from([]),
+        inherited_rpath: Arc::from([]),
         optional: false,
     };
     assert!(resolve(&import, None).unwrap().is_none());

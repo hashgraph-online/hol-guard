@@ -41,6 +41,7 @@ pub(super) fn mach(data: &[u8], library: &Path, executable: &Path) -> io::Result
         .map(|path| PathBuf::from(expand(path)))
         .chain([loader.to_path_buf(), exe.to_path_buf(), exe.join("../lib")])
         .collect();
+    let search: std::sync::Arc<[PathBuf]> = search.into();
     names
         .into_iter()
         .map(|(name, optional)| {
@@ -55,6 +56,7 @@ pub(super) fn mach(data: &[u8], library: &Path, executable: &Path) -> io::Result
             Ok(Import {
                 name,
                 search: search.clone(),
+                inherited_rpath: std::sync::Arc::from([]),
                 optional,
             })
         })

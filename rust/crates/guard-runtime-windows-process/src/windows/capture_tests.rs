@@ -211,3 +211,25 @@ fn explicit_cancellation_has_no_success_exit_status() {
     assert!(output.cancelled);
     assert_eq!(output.exit_code, None);
 }
+
+#[test]
+fn system_executable_can_run_from_a_volume_root_without_directory_write_access() {
+    let system = std::env::var_os("SystemRoot").expect("Windows system root");
+    let executable = Path::new(&system).join("System32/cmd.exe");
+    let root = executable.ancestors().last().unwrap();
+    let output = capture(
+        CaptureCommand {
+            executable: &executable,
+            args: &[OsStr::new("/d"), OsStr::new("/c"), OsStr::new("exit /b 7")],
+            cwd: root,
+            environment: &environment("system-image"),
+        },
+        &[],
+        4096,
+        Instant::now() + Duration::from_secs(5),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(output.exit_code, Some(7));
+    assert!(!output.timed_out && !output.cancelled && !output.output_limited);
+}

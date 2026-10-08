@@ -2,10 +2,11 @@
 //! package code is used to discover the bytes that a contained tool loads.
 use crate::bound_fs::{self, Directory, ReadFile};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 mod elf;
@@ -14,7 +15,11 @@ mod pe;
 mod system;
 use system::{system_library, system_shared_cache};
 
-use elf::{elf, elf_interpreter};
+#[cfg(test)]
+use elf::elf;
+use elf::{elf_interpreter, elf_with_context};
+mod budget;
+use budget::{check_window, extend_pending};
 use mach::mach;
 use pe::pe;
 
@@ -34,7 +39,8 @@ pub struct RuntimeBundle {
 }
 struct Import {
     name: String,
-    search: Vec<PathBuf>,
+    search: Arc<[PathBuf]>,
+    inherited_rpath: Arc<[PathBuf]>,
     optional: bool,
 }
 fn invalid() -> io::Error {
@@ -71,6 +77,7 @@ fn string(data: &[u8], at: usize, end: usize) -> io::Result<String> {
     let slice = data.get(at..end.min(data.len())).ok_or_else(invalid)?;
     let length = slice
         .iter()
+        .take(4097)
         .position(|byte| *byte == 0)
         .ok_or_else(invalid)?;
     if length == 0 || length > 4096 {
@@ -85,9 +92,15 @@ fn file(path: &Path, max: usize) -> io::Result<ReadFile> {
     directory.read_installed(Path::new(path.file_name().ok_or_else(invalid)?), max)
 }
 
-pub(crate) fn python_version(path: &Path) -> io::Result<Option<String>> {
+pub(crate) fn python_version(
+    path: &Path,
+    deadline: Instant,
+    cancel: &AtomicBool,
+) -> io::Result<Option<String>> {
+    let check = || check_window(deadline, cancel);
+    check()?;
     let image = file(path, 256 * 1024 * 1024)?;
-    for import in imports(&image.bytes, path, path)? {
+    for import in imports(&image.bytes, path, path, &[], &check)? {
         let name = Path::new(&import.name)
             .file_name()
             .and_then(|name| name.to_str())
@@ -187,22 +200,43 @@ fn capture_impl(
         executable,
         &executable_file.identity,
     )?);
+    let check = || check_window(deadline, cancel);
+    check()?;
     let interpreter = elf_interpreter(&executable_file.bytes)?;
-    let mut pending = imports(&executable_file.bytes, executable, executable)?;
+    let mut pending = VecDeque::new();
+    let mut edges = 0;
+    extend_pending(
+        &mut pending,
+        &mut edges,
+        imports(&executable_file.bytes, executable, executable, &[], &check)?,
+    )?;
+    if libraries.len() > 1024 {
+        return Err(invalid());
+    }
     for (path, bytes) in libraries {
-        pending.extend(imports(bytes, path, executable)?);
+        check()?;
+        extend_pending(
+            &mut pending,
+            &mut edges,
+            imports(bytes, path, executable, &[], &check)?,
+        )?;
     }
     if let Some(name) = &interpreter {
-        pending.push(Import {
-            name: name.clone(),
-            search: Vec::new(),
-            optional: false,
-        });
+        extend_pending(
+            &mut pending,
+            &mut edges,
+            vec![Import {
+                name: name.clone(),
+                search: Arc::from([]),
+                inherited_rpath: Arc::from([]),
+                optional: false,
+            }],
+        )?;
     }
     let mut files: BTreeMap<PathBuf, RuntimeFile> = BTreeMap::new();
     let mut aliases: BTreeMap<String, PathBuf> = BTreeMap::new();
     let mut total = executable_file.bytes.len();
-    while let Some(import) = pending.pop() {
+    while let Some(import) = pending.pop_front() {
         if Instant::now() >= deadline || cancel.load(Ordering::Acquire) {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
@@ -259,7 +293,17 @@ fn capture_impl(
         if total > 256 * 1024 * 1024 {
             return Err(invalid());
         }
-        pending.extend(imports(&read.bytes, &path, executable)?);
+        extend_pending(
+            &mut pending,
+            &mut edges,
+            imports(
+                &read.bytes,
+                &path,
+                executable,
+                &import.inherited_rpath,
+                &check,
+            )?,
+        )?;
         files.insert(
             path,
             RuntimeFile {
@@ -359,9 +403,16 @@ fn resolve(
     }
     Ok(None)
 }
-fn imports(data: &[u8], library: &Path, executable: &Path) -> io::Result<Vec<Import>> {
+fn imports(
+    data: &[u8],
+    library: &Path,
+    executable: &Path,
+    inherited: &[PathBuf],
+    check: &dyn Fn() -> io::Result<()>,
+) -> io::Result<Vec<Import>> {
+    check()?;
     if data.starts_with(b"\x7fELF") {
-        elf(data, library)
+        elf_with_context(data, library, inherited, check)
     } else if data.starts_with(b"MZ") {
         pe(data, library)
     } else if data.starts_with(&[0xcf, 0xfa, 0xed, 0xfe]) {

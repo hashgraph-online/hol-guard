@@ -12,16 +12,7 @@ impl Drop for AttributeList {
 }
 
 fn bind_launch_directory(path: &Path) -> io::Result<PrivateDirectoryBinding> {
-    bind_directory(path, path, path, |handle, _, _, _| {
-        if handle.metadata()?.is_dir() {
-            Ok(())
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "launch directory changed type",
-            ))
-        }
-    })
+    bind_readonly_directory(path)
 }
 
 /// Borrowed launch inputs; capture owns the process and pipe lifetime.

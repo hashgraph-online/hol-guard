@@ -28,7 +28,7 @@ use launch::{cstring, ChildSetup, LaunchDeadline, RequestWindow};
 use owner::{require_wait_custody, ChildOwner};
 #[cfg(target_os = "macos")]
 use process_io::drain_report;
-use process_io::{drain, nonblocking, pipe, write_without_sigpipe};
+use process_io::{check_protocol_budget, drain, nonblocking, pipe, write_without_sigpipe};
 #[cfg(test)]
 #[path = "unix/process_regressions.rs"]
 mod process_regressions;
@@ -201,8 +201,10 @@ pub(crate) fn capture(
     let mut timed_out = false;
     let mut cancelled = false;
     let mut output_limited = false;
+    let mut protocol_limited = false;
     let mut status = None;
     loop {
+        check_protocol_budget(protocol_limited)?;
         cancelled |= cancel.load(Ordering::Acquire);
         timed_out |= Instant::now() >= deadline;
         if cancelled || timed_out || output_limited {
@@ -277,14 +279,14 @@ pub(crate) fn capture(
                 &mut error_fd,
                 &mut error_bytes,
                 16,
-                &mut output_limited,
+                &mut protocol_limited,
                 None,
             )?;
             drain(
                 &mut completion_fd,
                 &mut completion,
                 8192,
-                &mut output_limited,
+                &mut protocol_limited,
                 None,
             )?;
             break;
@@ -378,14 +380,14 @@ pub(crate) fn capture(
             &mut error_fd,
             &mut error_bytes,
             16,
-            &mut output_limited,
+            &mut protocol_limited,
             Some(&window),
         )?;
         drain(
             &mut completion_fd,
             &mut completion,
             8192,
-            &mut output_limited,
+            &mut protocol_limited,
             Some(&window),
         )?;
         #[cfg(target_os = "macos")]
@@ -444,6 +446,7 @@ pub(crate) fn capture(
     if owner.has_custody() {
         owner.reap()?;
     }
+    check_protocol_budget(protocol_limited)?;
     if error_bytes != [0, 0, 0, 0] && !cancelled && !timed_out {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
@@ -469,6 +472,7 @@ pub(crate) fn capture(
             None
         }
     });
+    let code = code.filter(|_| !cancelled && !timed_out && !output_limited);
     Ok(CapturedOutput {
         exit_code: code,
         stdout,
@@ -479,3 +483,6 @@ pub(crate) fn capture(
         completion,
     })
 }
+
+#[cfg(test)]
+mod result_tests;

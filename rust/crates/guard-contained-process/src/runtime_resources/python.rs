@@ -70,7 +70,7 @@ fn capture(
     let version = if version.is_some() {
         version
     } else {
-        crate::runtime_files::python_version(&base_image)?
+        crate::runtime_files::python_version(&base_image, deadline, cancel)?
     };
     let version = if let Some(version) = version {
         version
