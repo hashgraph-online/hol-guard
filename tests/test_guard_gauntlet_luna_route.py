@@ -142,6 +142,7 @@ def test_job_owned_stop_closes_stdin_terminates_the_job_and_reaps(tmp_path, monk
 
 def test_job_stop_kills_a_process_that_never_joined_the_job(tmp_path, monkeypatch):
     _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exec sleep 300\n")) + os.pathsep + os.environ["PATH"])
     monkeypatch.setattr(luna_route, "STOP_SECONDS", 0.2)
     route = NativeLunaRoute(omp=str(omp))
     route.process = subprocess.Popen(
