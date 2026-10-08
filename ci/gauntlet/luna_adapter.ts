@@ -6,7 +6,8 @@ import { isAbsolute } from 'node:path';
 // The pinned SDK is imported lazily from the SDK root named on the command line,
 // so the pure helpers below can be unit tested without installing it.
 export const ADAPTER_ID = 'pinned-omp-native-luna-stream-v2';
-export const REQUEST_MODEL = 'native-luna-high';
+export const REQUEST_MODEL = 'native-luna';
+export const THINKING_LEVELS = ['medium', 'high'];
 export const BACKEND_PROVIDER = 'openai-codex';
 export const BACKEND_MODEL = 'gpt-5.6-luna';
 let model: any;
@@ -50,6 +51,16 @@ export function requirePromptable(converted: any[]) {
   if (!last || (last.role !== 'user' && last.role !== 'toolResult'))
     throw new Error('Conversation must end with a user or tool message');
   return converted;
+}
+
+export function thinkingLevel(value: string | undefined) {
+  if (!THINKING_LEVELS.includes(value ?? '')) throw new Error('Unsupported Luna thinking level');
+  return value as string;
+}
+
+export function requireTransportSelection(body: any, thinking: string) {
+  if (body?.model !== REQUEST_MODEL || body?.stream !== true || body?.reasoning_effort !== thinking)
+    throw new Error('Unexpected transport selection');
 }
 
 export function finishReason(stopReason: string) {
@@ -125,6 +136,8 @@ async function main() {
 const token = process.env.GUARD_GAUNTLET_ROUTE_TOKEN ?? '';
 delete process.env.GUARD_GAUNTLET_ROUTE_TOKEN;
 if (token.length < 32) throw new Error('Missing per-run route token');
+const thinking = thinkingLevel(process.env.GUARD_GAUNTLET_LUNA_THINKING);
+delete process.env.GUARD_GAUNTLET_LUNA_THINKING;
 const sdkRoot = process.argv[2];
 if (!sdkRoot || !isAbsolute(sdkRoot)) throw new Error('Usage: luna_adapter.ts ABSOLUTE_SDK_ROOT');
 const load = (name: string) => import(Bun.resolveSync(name, sdkRoot));
@@ -147,14 +160,13 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
     let body: any;
     try {
       body = JSON.parse(text);
-      if (body.model !== REQUEST_MODEL || body.stream !== true || body.reasoning_effort !== 'high')
-        throw new Error('Unexpected transport selection');
+      requireTransportSelection(body, thinking);
       requirePromptable(convertMessages(body.messages));
     } catch { return new Response('Invalid transport request', { status: 400 }); }
     const controller = new AbortController();
     const wire = new WireArguments();
     const agent = new Agent({
-      initialState: { model, thinkingLevel: 'high', systemPrompt:
+      initialState: { model, thinkingLevel: thinking, systemPrompt:
         body.messages.filter((m: any) => m.role === 'system' || m.role === 'developer')
           .map((m: any) => m.content).join('\n\n'),
         tools: (body.tools ?? []).map((t: any) => ({ name: t.function.name,
@@ -223,7 +235,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
   },
 });
 console.log(JSON.stringify({ pid: process.pid, port: server.port, adapter: ADAPTER_ID,
-  provider: model.provider, model: model.id, thinking: 'high' }));
+  provider: model.provider, model: model.id, thinking }));
 const shutdown = () => {
   for (const agent of active) agent.abort();
   server.stop(true);

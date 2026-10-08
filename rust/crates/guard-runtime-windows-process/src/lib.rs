@@ -32,9 +32,10 @@ pub use windows::{
 pub use windows::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
     create_private_file, delete_private_file_handle, handle_file_id, is_single_link_file,
-    open_bound_executable_file, open_bound_regular_file, open_private_directory, open_private_file,
-    path_is_within, process_start_marker, regular_file_id, remove_file_if_same, terminate_process,
-    terminate_process_verified, wait_for_process_exit, FileId, PrivateDirectoryBinding,
+    is_single_link_handle, open_bound_executable_file, open_bound_regular_file,
+    open_private_directory, open_private_file, path_is_within, process_start_marker,
+    regular_file_id, remove_file_if_same, terminate_process, terminate_process_verified,
+    wait_for_process_exit, FileId, PrivateDirectoryBinding,
 };
 
 #[cfg(windows)]

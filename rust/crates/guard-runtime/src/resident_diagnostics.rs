@@ -88,7 +88,7 @@ impl ManagedPhaseFile {
         }
         #[cfg(windows)]
         if crate::resident_state::verify_windows_private_file(&self.file).is_err()
-            || guard_runtime_windows_process::is_single_link_file(&self.file).ok() != Some(true)
+            || guard_runtime_windows_process::is_single_link_handle(&self.file).ok() != Some(true)
         {
             return false;
         }

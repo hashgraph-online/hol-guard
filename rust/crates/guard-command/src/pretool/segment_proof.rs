@@ -80,6 +80,8 @@ pub(super) fn exact_safe_cwd_compound(
                     | "uname"
                     | "date"
                     | "sleep"
+                    | "uptime"
+                    | "pgrep"
                     | "ls"
                     | "cat"
                     | "stat"
@@ -119,6 +121,8 @@ pub(crate) fn benign_command_segments(
     if model.confidence != "exact"
         || model.path_overridden
         || !model.wrapper_chain.is_empty()
+        // Per-segment sleep proofs must not add up past the whole-command bound.
+        || !super::safe_scalar::bounded_total_sleep(model)
         // A cwd transition changes the meaning of subsequent relative operands.
         || (cwd.is_none()
             && model
@@ -175,6 +179,8 @@ pub(crate) fn benign_command_segments(
                     | "uname"
                     | "date"
                     | "sleep"
+                    | "uptime"
+                    | "pgrep"
             ) || segment.arguments.is_empty()
                 || stdin_filter;
             // Context-free public wrappers cannot prove that a file operand or
@@ -283,6 +289,8 @@ pub(super) fn exact_safe_segment_with_context(
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => true,
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
         "sleep" => safe_reads::safe_sleep_arguments(&segment.arguments),
+        "uptime" => segment.arguments.is_empty(),
+        "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
         "ls" => safe_reads::safe_listing_arguments(&segment.arguments, context),
         "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
         "find" => safe_reads::safe_find_listing_arguments(&segment.arguments, context),
@@ -333,7 +341,8 @@ pub(super) fn exact_safe_segment_with_context(
             safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0, context)
         }
         "python" | "python3" | "node" | "nodejs" => {
-            pure_expression::safe_inline_expression(basename, &segment.arguments)
+            super::safe_scalar::version_probe_arguments(basename, &segment.arguments)
+                || pure_expression::safe_inline_expression(basename, &segment.arguments)
         }
         _ => false,
     }

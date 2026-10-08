@@ -25,9 +25,11 @@ from typing import Any
 ADAPTER = Path(__file__).with_name("luna_adapter.ts")
 PINNED_PACKAGE = Path(__file__).resolve().parents[1] / "pi-exact-continuation" / "package.json"
 ADAPTER_ID = "pinned-omp-native-luna-stream-v2"
-REQUEST_MODEL = "native-luna-high"
+REQUEST_MODEL = "native-luna"
 BACKEND = ("openai-codex", "gpt-5.6-luna")
-IDENTITY = f"{BACKEND[0]}/{BACKEND[1]}/high via {ADAPTER_ID} (loopback Chat Completions to Responses)"
+# Medium is the default: it qualifies the same catalog faster and at lower cost than high.
+EFFORTS = ("medium", "high")
+DEFAULT_EFFORT = "medium"
 STARTUP_SECONDS = 60.0
 STOP_SECONDS = 5.0
 # Only what Bun and Oh My Pi's auth discovery need. Provider keys are not forwarded.
@@ -50,6 +52,11 @@ _WINDOWS_ENVIRONMENT_KEYS = (
 )
 
 
+def identity(effort: str) -> str:
+    """Provider identity recorded in evidence, naming the backend, its effort and the adapter."""
+    return f"{BACKEND[0]}/{BACKEND[1]}/{effort} via {ADAPTER_ID} (loopback Chat Completions to Responses)"
+
+
 def sdk_root_for(omp: str | None, override: Path | None = None) -> Path:
     """Locate the dependency tree that holds the exact pinned Oh My Pi packages."""
     if override is not None:
@@ -69,8 +76,8 @@ def sdk_root_for(omp: str | None, override: Path | None = None) -> Path:
     return root
 
 
-def validate_ready(line: str) -> dict[str, Any]:
-    """Accept only the adapter's own loopback readiness record for the expected backend."""
+def validate_ready(line: str, effort: str = DEFAULT_EFFORT) -> dict[str, Any]:
+    """Accept only the adapter's own loopback readiness record for the expected backend and effort."""
     try:
         ready = json.loads(line)
     except ValueError as exc:
@@ -83,7 +90,7 @@ def validate_ready(line: str) -> dict[str, Any]:
     if (
         ready.get("adapter") != ADAPTER_ID
         or (ready.get("provider"), ready.get("model")) != BACKEND
-        or ready.get("thinking") != "high"
+        or ready.get("thinking") != effort
         or type(port) is not int
         or not 1024 <= port <= 65535
     ):
@@ -94,8 +101,11 @@ def validate_ready(line: str) -> dict[str, Any]:
 class NativeLunaRoute:
     """Own one adapter process in its own process group and always reap it."""
 
-    def __init__(self, *, omp: str | None = None, sdk_root: Path | None = None):
+    def __init__(self, *, omp: str | None = None, sdk_root: Path | None = None, effort: str = DEFAULT_EFFORT):
         """Resolve the SDK root and the Bun executable without starting anything."""
+        if effort not in EFFORTS:
+            raise ValueError("--native-luna-route supports Luna " + " or ".join(EFFORTS))
+        self.effort = effort
         self.sdk_root = sdk_root_for(omp, sdk_root)
         found = shutil.which("bun")
         if not found:
@@ -112,11 +122,11 @@ class NativeLunaRoute:
             "base_url": f"http://127.0.0.1:{self.port}/v1",
             "model": REQUEST_MODEL,
             "api_key": self._token,
-            "identity": IDENTITY,
+            "identity": identity(self.effort),
             "allow_loopback": True,
             "max_rounds": max_rounds,
             "timeout": timeout,
-            "reasoning_effort": "high",
+            "reasoning_effort": self.effort,
         }
 
     def __enter__(self) -> NativeLunaRoute:
@@ -124,6 +134,7 @@ class NativeLunaRoute:
         keys = _ENVIRONMENT_KEYS + (_WINDOWS_ENVIRONMENT_KEYS if os.name == "nt" else ())
         environment = {key: os.environ[key] for key in keys if key in os.environ}
         environment["GUARD_GAUNTLET_ROUTE_TOKEN"] = self._token
+        environment["GUARD_GAUNTLET_LUNA_THINKING"] = self.effort
         command = [str(self.bun), "run", str(ADAPTER), str(self.sdk_root)]
         streams = {
             "stdin": subprocess.PIPE,
@@ -162,7 +173,7 @@ class NativeLunaRoute:
                 raise RuntimeError("Luna adapter did not start in time") from exc
             if not line:
                 raise RuntimeError("Luna adapter exited before it was ready; check the Oh My Pi ChatGPT login")
-            self.port = validate_ready(line)["port"]
+            self.port = validate_ready(line, self.effort)["port"]
         except BaseException:
             self.stop()
             raise

@@ -37,7 +37,8 @@ def main() -> int:
     run.add_argument(
         "--native-luna-route",
         action="store_true",
-        help="Run OpenAI Luna high (openai-codex/gpt-5.6-luna) through the existing Oh My Pi ChatGPT login",
+        help="Run OpenAI Luna (openai-codex/gpt-5.6-luna) through the existing Oh My Pi ChatGPT login; "
+        "medium effort unless --reasoning-effort high",
     )
     run.add_argument("--sdk-root", type=Path, help="Pinned SDK directory for --native-luna-route (default: from omp)")
     run.add_argument("--case", action="append", dest="cases", help="Targeted runs are never full-profile qualification")
@@ -124,8 +125,11 @@ def main() -> int:
         if args.native_luna_route:
             if args.provider_url or args.model or args.provider_identity or args.allow_loopback_provider:
                 raise ValueError("--native-luna-route selects the provider, model, identity and loopback itself")
-            if args.reasoning_effort not in (None, "high"):
-                raise ValueError("--native-luna-route is Luna high only")
+            from .luna_route import DEFAULT_EFFORT, EFFORTS
+
+            args.reasoning_effort = args.reasoning_effort or DEFAULT_EFFORT
+            if args.reasoning_effort not in EFFORTS:
+                raise ValueError("--native-luna-route supports Luna " + " or ".join(EFFORTS))
         elif not args.provider_url or not args.model or not args.provider_identity:
             raise ValueError("live provider URL, model and provider identity are required; there is no mock fallback")
         if not 30 <= args.timeout <= 1800 or not 1 <= args.max_inference_rounds <= 128:
@@ -160,7 +164,9 @@ def main() -> int:
                         continue
                     signal.signal(name, lambda number, _frame: sys.exit(128 + number))
 
-                route = stack.enter_context(NativeLunaRoute(omp=args.omp, sdk_root=args.sdk_root))
+                route = stack.enter_context(
+                    NativeLunaRoute(omp=args.omp, sdk_root=args.sdk_root, effort=args.reasoning_effort)
+                )
                 provider = route.provider(max_rounds=args.max_inference_rounds, timeout=min(args.timeout, 120))
             else:
                 provider = {

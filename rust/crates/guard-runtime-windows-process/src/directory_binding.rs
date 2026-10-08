@@ -9,10 +9,11 @@ use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
 use winapi::um::winnt::{FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE};
 use windows_permissions::SecurityDescriptor;
 
+use super::file_identity::file_information;
 use super::private_files::{
-    create_private_file as create_path_private_file, file_information, mark_handle_for_delete,
-    open_directory_bound, open_inspect_private_file, open_raw, open_raw_directory_bound,
-    open_rename_directory, rename_into_directory, validate_handle, verify_private_file,
+    create_private_file as create_path_private_file, mark_handle_for_delete, open_directory_bound,
+    open_inspect_private_file, open_raw, open_raw_directory_bound, open_rename_directory,
+    rename_into_directory, validate_handle, verify_private_file,
 };
 use super::MAX_PATH;
 
