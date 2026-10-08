@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,12 @@ import pytest
 from scripts.release import publish_core_inputs
 from scripts.release.prepared_native import transfer
 from scripts.release.ready_core_releases import ready_tags
-from scripts.release.wait_for_core_publication import attested_publication_identity, publication_ready, registry_ready
+from scripts.release.wait_for_core_publication import (
+    attested_publication_identity,
+    publication_ready,
+    registry_ready,
+    wait,
+)
 from tests.release_workflow_helpers import load_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,17 +48,19 @@ def test_feed_registry_checks_keep_the_authorized_distribution_filename(workflow
     assert all('--bundle "$RUNNER_TEMP/core-trust-assets/' in check for check in checks)
 
 
-def test_scheduled_publication_identity_comes_from_verified_wheel_provenance(tmp_path, monkeypatch):
+@pytest.mark.parametrize("repaired", [False, True])
+def test_scheduled_publication_identity_comes_from_verified_wheel_provenance(tmp_path, monkeypatch, repaired):
     wheel = tmp_path / "attested.whl"
     wheel.write_bytes(b"wheel")
     statement = {
         "subject": [{"digest": {"sha256": hashlib.sha256(wheel.read_bytes()).hexdigest()}}],
         "predicate": {
+            "buildDefinition": {"resolvedDependencies": [{"digest": {"gitCommit": "c" * 40}}]},
             "runDetails": {
                 "metadata": {
                     "invocationId": "https://github.com/hashgraph-online/hol-guard/actions/runs/123/attempts/1"
                 }
-            }
+            },
         },
     }
     bundle = tmp_path / "proof.jsonl"
@@ -66,8 +74,18 @@ def test_scheduled_publication_identity_comes_from_verified_wheel_provenance(tmp
         assert kwargs["check"] is True
 
     monkeypatch.setattr(subprocess, "run", verify)
-    monkeypatch.setattr(subprocess, "check_output", lambda *args, **kwargs: json.dumps({"head_sha": "a" * 40}))
-    assert attested_publication_identity(wheel, bundle, "hashgraph-online/hol-guard") == ("123", "a" * 40)
+
+    def api(command, **kwargs):
+        if any("/statuses?" in item for item in command):
+            assert "commits/" + "c" * 40 in command[3]
+            return "https://github.com/hashgraph-online/hol-guard/actions/runs/456\n" if repaired else ""
+        return json.dumps({"head_sha": "a" * 40})
+
+    monkeypatch.setattr(subprocess, "check_output", api)
+    assert attested_publication_identity(wheel, bundle, "hashgraph-online/hol-guard", version="3.34.1") == (
+        "456" if repaired else "123",
+        "a" * 40,
+    )
     assert "--signer-workflow" in calls[0]
     wheel.write_bytes(b"wrong wheel")
     with pytest.raises(ValueError, match="bind the attested wheel"):
@@ -104,6 +122,59 @@ def test_registry_readiness_distinguishes_pending_uploads_from_corruption(tmp_pa
             registry_ready("3.34.1", wheel, filename if renamed else None)
     else:
         assert registry_ready("3.34.1", wheel, filename if renamed else None) is (state == "ready")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [urllib.error.URLError("temporary"), subprocess.CalledProcessError(1, ["gh"]), ValueError("failed publication")],
+)
+def test_publication_wait_retries_network_errors_but_rejects_failed_publication(tmp_path, monkeypatch, error):
+    for key, value in {
+        "PUBLICATION_RUN_ID": "123",
+        "PUBLICATION_SOURCE_SHA": "a" * 40,
+        "GITHUB_REPOSITORY": "hashgraph-online/hol-guard",
+    }.items():
+        monkeypatch.setenv(key, value)
+    calls = []
+
+    def ready(*args):
+        calls.append(args)
+        if len(calls) == 1:
+            raise error
+        return True
+
+    monkeypatch.setattr("scripts.release.wait_for_core_publication.publication_ready", ready)
+    monkeypatch.setattr("scripts.release.wait_for_core_publication.registry_ready", lambda *args: True)
+    monkeypatch.setattr("scripts.release.wait_for_core_publication.time.sleep", lambda *args: None)
+    if isinstance(error, ValueError):
+        with pytest.raises(ValueError, match="failed publication"):
+            wait("3.34.1", tmp_path / "wheel", timeout=1)
+        assert len(calls) == 1
+    else:
+        wait("3.34.1", tmp_path / "wheel", timeout=1)
+        assert len(calls) == 2
+
+
+@pytest.mark.parametrize("conclusion,expected", [("success", True), (None, False), ("failure", None)])
+def test_legacy_publication_requires_the_entire_attested_run_to_succeed(monkeypatch, conclusion, expected):
+    def api(command, **kwargs):
+        if "--paginate" in command:
+            return ""
+        return json.dumps(
+            {
+                "path": ".github/workflows/publish.yml",
+                "event": "workflow_dispatch",
+                "head_sha": "a" * 40,
+                "conclusion": conclusion,
+            }
+        )
+
+    monkeypatch.setattr(subprocess, "check_output", api)
+    if expected is None:
+        with pytest.raises(ValueError, match="failed"):
+            publication_ready("hashgraph-online/hol-guard", "123", "a" * 40)
+    else:
+        assert publication_ready("hashgraph-online/hol-guard", "123", "a" * 40) is expected
 
 
 def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_path):
@@ -227,6 +298,12 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
     assert jobs["wake-main-core-feeds"]["needs"] == ["build", "publish-main-assets"]
     assert "publish-main-pypi" in jobs["release-main"]["needs"]
     assert "publish-main-assets" in jobs["release-main"]["needs"]
+    assert jobs["release-main"]["permissions"]["statuses"] == "write"
+    assert "!cancelled()" in jobs["build-native-guard-wheels"]["if"]
+    receipt = next(
+        step for step in jobs["release-main"]["steps"] if step.get("name", "").startswith("Record completed stable")
+    )
+    assert 'context="hol-guard / published $VERSION"' in receipt["run"]
     warm = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")
     assert "pull_request" not in warm[True]
     cache = next(step for step in warm["jobs"]["compile"]["steps"] if "rust-cache@" in step.get("uses", ""))

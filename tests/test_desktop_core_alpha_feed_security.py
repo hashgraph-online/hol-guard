@@ -102,7 +102,13 @@ def test_privileged_feed_is_main_bound_and_pins_candidate_provenance() -> None:
     text = workflow_text()
     provenance = (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(encoding="utf-8")
     job = publish_job()
-    assert job["permissions"] == {"actions": "read", "contents": "write", "id-token": "write", "attestations": "write"}
+    assert job["permissions"] == {
+        "actions": "read",
+        "statuses": "read",
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
     assert 'test "$GITHUB_REF" = "refs/heads/main"' in text
     assert "ref: ${{ github.sha }}" in text
     assert "persist-credentials: false" in text
@@ -298,7 +304,13 @@ def test_linux_feed_publishes_digest_verified_gnu_sidecar() -> None:
     assert job["runs-on"] == "ubuntu-22.04"
     assert job["env"]["RELEASE_TARGET"] == "x86_64-unknown-linux-gnu"
     assert job["env"]["NATIVE_RUNTIME_TARGET"] == "x86_64-unknown-linux-musl"
-    assert job["permissions"] == {"actions": "read", "contents": "write", "id-token": "write", "attestations": "write"}
+    assert job["permissions"] == {
+        "actions": "read",
+        "statuses": "read",
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
     assert 'test "$(uname -m)" = "x86_64"' in text
     assert '--pattern "hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in text
     assert '-name "hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in text

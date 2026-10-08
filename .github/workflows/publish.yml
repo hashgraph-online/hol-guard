@@ -517,7 +517,7 @@ jobs:
   build-native-guard-wheels:
     name: Build native Guard wheel (${{ matrix.target }})
     if: >-
-      always() && needs.build.result == 'success' &&
+      always() && !cancelled() && needs.build.result == 'success' &&
       (needs.precompile-native.result == 'success' || needs.precompile-native.result == 'skipped') &&
       (
         (
@@ -1860,6 +1860,7 @@ jobs:
     needs: [build, assemble-native-guard-distributions, publish-main-pypi, publish-main-assets]
     runs-on: ubuntu-latest
     permissions:
+      statuses: write
       attestations: write
       contents: write
       id-token: write
@@ -2009,6 +2010,18 @@ jobs:
             --notes-file "$body_file" \
             --verify-tag \
             "${ASSET_FILES[@]}"
+
+      - name: Record completed stable publication for future repairs and backfills
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SOURCE_SHA" \
+            -f state=success -f context="hol-guard / published $VERSION" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            -f description="Stable registry publication verified"
 
   wake-main-core-feeds:
     name: Dispatch published Desktop Core feeds

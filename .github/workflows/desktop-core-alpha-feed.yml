@@ -84,6 +84,7 @@ jobs:
     environment: core-alpha-desktop
     permissions:
       actions: read
+      statuses: read
       contents: write
       id-token: write
       attestations: write
@@ -693,8 +694,8 @@ jobs:
         if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
           GH_TOKEN: ${{ github.token }}
-          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
-          PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || steps.registry.outputs.publication_run_id || '' }}
+          PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || steps.registry.outputs.publication_source_sha || '' }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
         run: python3 -I scripts/release/wait_for_core_publication.py --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" --filename "$ATTESTED_WHEEL_FILENAME" --bundle "$RUNNER_TEMP/core-trust-assets/hol-guard-v${CORE_VERSION}.intoto.jsonl"
       - name: Publish immutable Core assets

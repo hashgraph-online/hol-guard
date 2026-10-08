@@ -33,8 +33,9 @@ def test_handoff_requires_verified_stable_publication() -> None:
     release = yaml.safe_load(WORKFLOW.read_text())["jobs"]["release-main"]
     assert "publish-main-pypi" in release["needs"]
     assert "needs.publish-main-pypi.result == 'success'" in release["if"]
-    assert release["steps"][-1]["name"] == "Create discoverable main release"
-    assert "gh attestation verify" in release["steps"][-1]["run"]
+    assert release["steps"][-2]["name"] == "Create discoverable main release"
+    assert "gh attestation verify" in release["steps"][-2]["run"]
+    assert release["steps"][-1]["name"] == "Record completed stable publication for future repairs and backfills"
 
 
 @pytest.mark.parametrize(
