@@ -34,7 +34,7 @@ def _installed():
     }
 
 
-PREPARED = {"generation": "generation-1", "policy_digest": "c" * 64}
+PREPARED = {"generation": 1, "policy_digest": "c" * 64}
 
 
 def _snapshot():
@@ -52,6 +52,8 @@ def _case():
     scenario = _scenario()
     case = observed_case(scenario.commands[0], blocked=True)
     case["business_policy"] = bind_business_snapshot(_installed(), _snapshot(), PREPARED)
+    receipt = {"policy_generation": PREPARED["generation"], "policy_digest": PREPARED["policy_digest"]}
+    case["guard_observations"][0]["native_observation"] = {"native_receipt": receipt}
     return scenario, case
 
 
@@ -84,6 +86,27 @@ def test_unbound_business_policy_is_not_a_pass(field, value):
     assert result["outcome"] == "harness-error"
 
 
+@pytest.mark.parametrize("reason", ["native_policy_block", "native_policy_review_required"])
+def test_policy_sourced_deny_does_not_prove_the_floor(reason):
+    scenario, case = _case()
+    case["guard_observations"][0]["reason_code"] = reason
+    result = assess_case(scenario, case)
+    assert result["outcome"] == "harness-error"
+    assert result["reason"] == "the deny did not come from the intrinsic deletion floor"
+
+
+@pytest.mark.parametrize(
+    "receipt",
+    [None, {"policy_generation": 2, "policy_digest": "c" * 64}, {"policy_generation": 1, "policy_digest": "d" * 64}],
+)
+def test_deny_under_another_snapshot_is_not_a_pass(receipt):
+    scenario, case = _case()
+    case["guard_observations"][0]["native_observation"] = {"native_receipt": receipt}
+    result = assess_case(scenario, case)
+    assert result["outcome"] == "harness-error"
+    assert result["reason"] == "the deny was not decided under the bound business snapshot"
+
+
 def test_missing_business_policy_is_not_a_pass():
     scenario, case = _case()
     del case["business_policy"]
@@ -104,7 +127,7 @@ def test_snapshot_without_business_binding_fails_the_run():
 
 def test_snapshot_from_another_generation_fails_the_run():
     with pytest.raises(RuntimeError, match="changed after workspace readiness"):
-        bind_business_snapshot(_installed(), _snapshot(), {**PREPARED, "generation": "generation-2"})
+        bind_business_snapshot(_installed(), _snapshot(), {**PREPARED, "generation": 2})
 
 
 def test_unacknowledged_snapshot_fails_the_run():

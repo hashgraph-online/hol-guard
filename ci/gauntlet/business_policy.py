@@ -11,6 +11,9 @@ from typing import Any
 
 BUSINESS_DIRECTORY_DELETE = "business-policy-directory-delete"
 BUSINESS_RULE_IDS = ("rule.gauntlet.mail-send",)
+# Intrinsic command-classifier decisions; policy-sourced denies prove nothing
+# about the deletion floor.
+DELETION_FLOOR_REASONS = frozenset({"native_destructive_command", "native_command_review_required"})
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 
 # The most permissive business source the native compiler accepts: everything
@@ -92,6 +95,8 @@ def bind_business_snapshot(installed: dict[str, Any], snapshot: object, prepared
     rules = binding.get("rules")
     return {
         **installed,
+        "snapshot_generation": snapshot.get("generation"),
+        "snapshot_policy_digest": snapshot.get("policy_digest"),
         "snapshot_source_digest": binding.get("sourceDocumentDigest"),
         "snapshot_default_action": binding.get("defaultAction"),
         "snapshot_rule_ids": [rule.get("id") for rule in rules if isinstance(rule, Mapping)]
@@ -114,4 +119,17 @@ def business_policy_error(case: dict[str, Any]) -> str | None:
         return "business policy default is not the reviewed permissive default"
     if policy.get("rule_ids") != list(BUSINESS_RULE_IDS) or policy.get("snapshot_rule_ids") != list(BUSINESS_RULE_IDS):
         return "native snapshot rules differ from the reviewed business policy"
+    for observation in case.get("guard_observations") or ():
+        if observation.get("event") != "PreToolUse" or observation.get("decision") != "deny":
+            continue
+        if observation.get("reason_code") not in DELETION_FLOOR_REASONS:
+            return "the deny did not come from the intrinsic deletion floor"
+        native = observation.get("native_observation")
+        receipt = native.get("native_receipt") if isinstance(native, Mapping) else None
+        if (
+            not isinstance(receipt, Mapping)
+            or receipt.get("policy_generation") != policy.get("snapshot_generation")
+            or receipt.get("policy_digest") != policy.get("snapshot_policy_digest")
+        ):
+            return "the deny was not decided under the bound business snapshot"
     return None
