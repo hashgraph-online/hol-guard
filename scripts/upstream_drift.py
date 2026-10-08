@@ -33,8 +33,13 @@ SCHEMA = "hol.guard.upstream-drift.v1"
 _GITHUB_PIN = re.compile(r"^https://github\.com/([\w.-]+)/([\w.-]+)/(?:tree|blob)/([0-9a-f]{40})(?:/|$)")
 _NPM_PIN = re.compile(r"^https://www\.npmjs\.com/package/((?:@[\w.-]+/)?[\w.-]+)/v/([\w.+-]+)$")
 _TIMEOUT_SECONDS = 20
+_DETAIL_LIMIT = 300
 
 Fetch = Callable[[str], Any]
+
+
+class NotFoundError(Exception):
+    """An upstream endpoint answered 404."""
 
 
 @dataclass(frozen=True)
@@ -97,7 +102,7 @@ def gauntlet_scenarios(repository: Path) -> dict[str, list[str]]:
     finally:
         sys.path.remove(str(repository))
     bound: dict[str, list[str]] = {}
-    for scenario in load_catalog():
+    for scenario in load_catalog(repository / "ci/gauntlet/scenarios.json"):
         if scenario.oracle == "blocked-extension":
             bound.setdefault(extension_adapter(scenario.commands[0]).extension_id, []).append(scenario.id)
     return bound
@@ -114,15 +119,17 @@ def http_json(url: str) -> Any:
             return json.load(response)
     except urllib.error.HTTPError as error:
         if error.code == 404:
-            raise LookupError(url) from error
-        raise
+            raise NotFoundError(url) from error
+        raise RuntimeError(f"GET {url} returned HTTP {error.code} {error.reason}") from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"GET {url} failed: {error.reason}") from error
 
 
 def _github(pin: Pin, fetch: Fetch) -> tuple[str, str | None, str]:
     api = f"https://api.github.com/repos/{pin.project}"
     try:
         target = fetch(f"{api}/releases/latest")["tag_name"]
-    except LookupError:
+    except NotFoundError:
         target = fetch(api)["default_branch"]
     head = urllib.parse.quote(target, safe="")
     comparison = fetch(f"{api}/compare/{pin.pinned}...{head}")
@@ -148,7 +155,8 @@ def check(
         try:
             status, current, detail = (_github if pin.kind == "github" else _npm)(pin, fetch)
         except Exception as error:
-            status, current, detail = "unknown", None, f"upstream check failed: {type(error).__name__}"
+            reason = " ".join(str(error).split())[:_DETAIL_LIMIT]
+            status, current, detail = "unknown", None, f"upstream check failed: {type(error).__name__}: {reason}"
         finding = Finding(pin, status, current, detail)
         if status != "current":
             finding.affected_packs = packs.get(pin.extension_id, [])

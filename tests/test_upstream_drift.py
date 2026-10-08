@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from scripts import upstream_drift
-from scripts.upstream_drift import Pin, check, gauntlet_scenarios, pack_members, pins, summary
+from scripts.upstream_drift import NotFoundError, Pin, check, gauntlet_scenarios, pack_members, pins, summary
 
 ROOT = Path(__file__).resolve().parents[1]
 GWS_SHA = "705fb0ecac6f4249679958f6325b809b63fdde17"
@@ -19,7 +19,7 @@ def fake_fetch(responses: dict[str, object]):
     def fetch(url: str) -> object:
         value = responses.get(url)
         if value is None:
-            raise LookupError(url)
+            raise NotFoundError(url)
         if isinstance(value, Exception):
             raise value
         return value
@@ -64,6 +64,32 @@ def test_github_pin_compares_against_latest_release_then_default_branch():
     assert (finding.status, finding.current, finding.affected_packs) == ("current", "main", [])
 
 
+def test_malformed_release_is_unknown_not_default_branch():
+    pin = Pin("command.demo", "github", "acme/cli", "a" * 40, "source.json")
+    api = "https://api.github.com/repos/acme/cli"
+    fetch = fake_fetch(
+        {
+            f"{api}/releases/latest": {"name": "no tag"},
+            api: {"default_branch": "main"},
+            f"{api}/compare/{'a' * 40}...main": {"status": "identical"},
+        }
+    )
+    [finding] = check([pin], fetch, {}, {})
+    assert finding.status == "unknown"
+    assert "tag_name" in finding.detail
+
+
+def test_http_failures_name_endpoint_and_status(monkeypatch):
+    url = "https://api.github.com/repos/acme/cli"
+
+    def denied(request, timeout):
+        raise upstream_drift.urllib.error.HTTPError(url, 403, "rate limit exceeded", {}, None)
+
+    monkeypatch.setattr(upstream_drift.urllib.request, "urlopen", denied)
+    with pytest.raises(RuntimeError, match=r"GET https://api\.github\.com/repos/acme/cli returned HTTP 403"):
+        upstream_drift.http_json(url)
+
+
 def test_npm_pin_compares_against_latest_dist_tag():
     pin = Pin("command.demo", "npm", "@acme/plugin", "1.0.0", "source.json")
     url = "https://registry.npmjs.org/@acme%2Fplugin"
@@ -78,6 +104,7 @@ def test_upstream_failures_are_unknown_and_still_name_stale_proofs(failure: Exce
     pin = Pin("command.demo", "npm", "demo", "1.0.0", "source.json")
     [finding] = check([pin], fake_fetch({"https://registry.npmjs.org/demo": failure}), {"command.demo": ["p"]}, {})
     assert finding.status == "unknown"
+    assert type(failure).__name__ in finding.detail
     assert finding.affected_packs == ["p"]
     assert "drift" in summary([finding]).lower()
 
