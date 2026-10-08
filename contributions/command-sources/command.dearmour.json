@@ -9,7 +9,9 @@
     "dependencies": [],
     "description": "Reviews dearmour commands that can overwrite or merge into an existing destination directory.",
     "ecosystem_ids": [],
-    "executables": [],
+    "executables": [
+    "dearmour"
+  ],
     "extension_id": "command.dearmour",
     "homepage": null,
     "icon": {
@@ -334,6 +336,7 @@
                 "interspersed_options_with_values": [],
                 "inverse_flag_pairs": [],
                 "leading_options_with_values": [
+                  "-a",
                   "-i",
                   "-l",
                   "-n",
@@ -371,6 +374,7 @@
                 "interspersed_options_with_values": [],
                 "inverse_flag_pairs": [],
                 "leading_options_with_values": [
+                  "-a",
                   "-i",
                   "-l",
                   "-n",
