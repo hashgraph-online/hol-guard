@@ -477,6 +477,7 @@
                 "allow_leading_options": true,
                 "executables": [
                   "bunx",
+                  "bunx.cmd",
                   "bunx.exe"
                 ],
                 "fail_secure_unknown_options": true,
@@ -541,6 +542,7 @@
                 "allow_leading_options": true,
                 "executables": [
                   "bunx",
+                  "bunx.cmd",
                   "bunx.exe"
                 ],
                 "fail_secure_unknown_options": true,
@@ -1238,6 +1240,7 @@
                 "allow_leading_options": true,
                 "executables": [
                   "bunx",
+                  "bunx.cmd",
                   "bunx.exe"
                 ],
                 "fail_secure_unknown_options": true,
@@ -1282,6 +1285,7 @@
                 "allow_leading_options": true,
                 "executables": [
                   "bunx",
+                  "bunx.cmd",
                   "bunx.exe"
                 ],
                 "fail_secure_unknown_options": true,
@@ -1838,6 +1842,7 @@
                 "allow_leading_options": true,
                 "executables": [
                   "bunx",
+                  "bunx.cmd",
                   "bunx.exe"
                 ],
                 "fail_secure_unknown_options": true,
@@ -1882,6 +1887,7 @@
                 "allow_leading_options": true,
                 "executables": [
                   "bunx",
+                  "bunx.cmd",
                   "bunx.exe"
                 ],
                 "fail_secure_unknown_options": true,
@@ -2438,6 +2444,7 @@
                 "allow_leading_options": true,
                 "executables": [
                   "bunx",
+                  "bunx.cmd",
                   "bunx.exe"
                 ],
                 "fail_secure_unknown_options": true,
@@ -2482,6 +2489,7 @@
                 "allow_leading_options": true,
                 "executables": [
                   "bunx",
+                  "bunx.cmd",
                   "bunx.exe"
                 ],
                 "fail_secure_unknown_options": true,
