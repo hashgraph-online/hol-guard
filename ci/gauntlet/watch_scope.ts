@@ -1,6 +1,15 @@
 // Watch is recording-only. This fixture scope prevents model substitutions from executing.
 import { realpathSync } from "node:fs";
+import { win32 } from "node:path";
 export const WATCH_COMMAND = `python -I -S -c 'print("ordinary-watch-fixture")'`;
+
+/** Spell a cwd the way its platform does, so equal directories compare equal:
+ * macOS reports /tmp and /var under /private, and Windows accepts either slash
+ * and either drive-letter case. Symlinks are never resolved here. */
+export function cwdSpelling(value: string, platform: string = process.platform): string {
+  if (platform === "win32") return win32.normalize(value).replace(/^[a-z]:/, drive => drive.toUpperCase());
+  return value.replace(/^\/private(?=\/(?:tmp|var)(?:\/|$))/, "");
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -16,9 +25,8 @@ export function permittedWatchInput(toolName: string, input: unknown, cwd = proc
   if (args.async !== undefined && args.async !== false) return false;
   if (args.cwd !== undefined && args.cwd !== cwd) {
     if (typeof args.cwd !== "string" || typeof cwd !== "string") return false;
-    // Only macOS's system root spelling may differ; never accept a task-owned symlink.
-    const rootSpelling = (value: string) => value.replace(/^\/private(?=\/(?:tmp|var)(?:\/|$))/, "");
-    if (rootSpelling(args.cwd) !== rootSpelling(cwd)) return false;
+    // Only the platform's own spelling may differ; never accept a task-owned symlink.
+    if (cwdSpelling(args.cwd) !== cwdSpelling(cwd)) return false;
     try {
       if (realpathSync(args.cwd) !== realpathSync(cwd)) return false;
     } catch {
