@@ -697,6 +697,7 @@
           "command.remote.essh",
           "command.repo2nb",
           "command.repopy",
+          "command.repro-surgeon",
           "command.routed",
           "command.salesforce.sf",
           "command.shellroute",
