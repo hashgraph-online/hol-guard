@@ -45,10 +45,13 @@ def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) 
     """Copy canonical artifacts into package data and return staged paths."""
 
     source_root = source_root.resolve()
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from extension_trust_projection import repository_trust_map
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
 
-    trust_map = repository_trust_map(source_root)
+    bindings = source_root / "contracts/extensions/trust"
+    if not bindings.is_dir() or not any(bindings.glob("*.v1.json")):
+        raise ValueError("release staging requires authored trust bindings")
+    trust_map = trust_map_from_bindings(bindings)
     data_root = (
         destination_root.resolve()
         if destination_root is not None
