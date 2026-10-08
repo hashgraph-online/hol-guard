@@ -30,6 +30,7 @@ pub const NATIVE_APPROVAL_ERROR_CODES: &[&str] = &[
     "native_cloud_review_v4_decision_binding_invalid",
     "native_cloud_review_v4_discovery_request_invalid",
     "native_cloud_review_v4_immutable_binding_conflict",
+    "native_cloud_review_v4_nonactionable_origin",
     "native_cloud_review_v4_not_installed",
     "native_cloud_review_v4_origin_invalid",
     "native_cloud_review_v4_origin_missing",

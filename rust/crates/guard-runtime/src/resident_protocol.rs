@@ -300,6 +300,16 @@ mod tests {
             serde_json::from_slice(&safe_error_response("native_approval_replay", false))
                 .expect("known approval error is JSON");
         assert_eq!(known["error"], "native_approval_replay");
+        let nonactionable: Value = serde_json::from_slice(&safe_error_response(
+            "native_cloud_review_v4_nonactionable_origin",
+            false,
+        ))
+        .expect("nonactionable origin error is JSON");
+        assert_eq!(
+            nonactionable["error"],
+            "native_cloud_review_v4_nonactionable_origin"
+        );
+        assert_eq!(nonactionable["retryable"], false);
 
         let unknown: Value = serde_json::from_slice(&safe_error_response(
             "native_approval_future_unregistered_code",

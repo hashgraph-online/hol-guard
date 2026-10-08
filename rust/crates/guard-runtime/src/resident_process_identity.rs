@@ -142,7 +142,7 @@ pub(crate) fn validate_runtime_process_identity(
     validate_process_start_marker(process_id, expected_start_marker)
 }
 
-fn validate_process_start_marker(
+pub(crate) fn validate_process_start_marker(
     process_id: u32,
     expected_start_marker: &str,
 ) -> Result<(), String> {

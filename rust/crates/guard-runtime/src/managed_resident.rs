@@ -167,9 +167,13 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
         &identity,
     )
     .is_ok();
-    if !request_landed && containment::retire_dead_generations(&scope, &digest)? {
-        let _ = restart_budget::clear(&scope);
-        return Ok(());
+    if !request_landed {
+        // Retire only affirmatively exited residents; preserve unverifiable state.
+        containment::retire_exited_states(&scope, &digest)?;
+        if crate::resident_state::discover_states(&scope, &digest)?.is_empty() {
+            let _ = restart_budget::clear(&scope);
+            return Ok(());
+        }
     }
     containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
     let _ = restart_budget::clear(&scope);
