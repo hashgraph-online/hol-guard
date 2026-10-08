@@ -160,6 +160,7 @@
           "command.cs",
           "command.ctty",
           "command.digline",
+          "command.dispat",
           "command.errand",
           "command.faf-cli",
           "command.genclave",
