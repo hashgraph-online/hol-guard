@@ -1,0 +1,989 @@
+{
+  "build": {
+    "base": "packaged",
+    "mcp_sources": [],
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "netdoctor network diagnosis",
+            "netdoctor continuous monitor"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Classifies netdoctor, a read-only network health-check CLI. One-shot checks (DNS lookup, one ICMP ping, a TCP connect, an HTTP GET, and a traceroute) are low-risk outbound probes and stay inert. Live --watch and --mtr monitors re-probe on an interval until interrupted and are reviewed.",
+          "ecosystem_ids": [
+            "netdoctor"
+          ],
+          "executables": [
+            "netdoctor"
+          ],
+          "extension_id": "command.netdoctor",
+          "homepage": "https://github.com/Sahilll15/netdoctor",
+          "icon": {
+            "background": "#0F766E",
+            "kind": "react-icon",
+            "name": "HiMiniGlobeAlt"
+          },
+          "license": "MIT",
+          "name": "netdoctor network diagnostics",
+          "permissions": [
+            {
+              "action_classes": [
+                "netdoctor network diagnosis"
+              ],
+              "baseline_floor": "allow",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "One-shot netdoctor runs against the named targets: DNS resolution, a single ICMP ping, a TCP connect, HTTP GET probes (5 by default), and a traceroute. Output goes to the terminal or stdout as JSON; nothing is written to disk.",
+              "example_command": "netdoctor github.com --json",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "netdoctor one-shot network check",
+              "permission_id": "command.netdoctor.permission.diagnose",
+              "replacement_permission_id": null,
+              "risk_tier": "low",
+              "safer_guidance": [
+                "One-shot netdoctor checks only resolve, ping, connect to, and request the named targets; confirm the target hosts are ones you intend to contact."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "netdoctor continuous monitor"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "netdoctor --watch and --mtr re-run DNS, TCP, HTTP, or traceroute probes against the targets on an interval and keep running until interrupted unless --max-runs is set.",
+              "example_command": "netdoctor github.com --watch",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "netdoctor live monitor",
+              "permission_id": "command.netdoctor.permission.continuous-monitor",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run a one-shot check (netdoctor <host>) or pass --json, which runs the ladder once even with --watch or --mtr.",
+                "If a live monitor is needed, add --max-runs N so it stops on its own instead of probing until interrupted."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Sahil Chalke",
+            "id": "community.sahilll15",
+            "url": "https://github.com/Sahilll15"
+          },
+          "reference_urls": [
+            "https://github.com/Sahilll15/netdoctor",
+            "https://pypi.org/project/netdoctor/"
+          ],
+          "required": false,
+          "risk_classes": [
+            "network_egress"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "netdoctor network diagnosis"
+              ],
+              "default_mode": "disabled",
+              "description": "Matches one-shot netdoctor runs, including --json, --quick, --no-trace, help, and version. These make outbound DNS, ICMP, TCP, HTTP, and traceroute probes to the named targets and write nothing locally.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "netdoctor",
+                        "netdoctor.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "-w",
+                        "--watch",
+                        "--mtr"
+                      ],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-p",
+                        "--port",
+                        "--scheme",
+                        "--path",
+                        "-t",
+                        "--timeout",
+                        "-n",
+                        "--interval",
+                        "--max-runs",
+                        "-s",
+                        "--samples"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "netdoctor",
+                        "netdoctor.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-p",
+                        "--port",
+                        "--scheme",
+                        "--path",
+                        "-t",
+                        "--timeout",
+                        "-n",
+                        "--interval",
+                        "--max-runs",
+                        "-s",
+                        "--samples"
+                      ],
+                      "required_flags": [
+                        "--json"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.netdoctor.permission.diagnose",
+              "risk_classes": [
+                "network_egress"
+              ],
+              "rule_id": "command.netdoctor.diagnose",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "One-shot netdoctor checks only resolve, ping, connect to, and request the named targets; confirm the target hosts are ones you intend to contact."
+              ],
+              "severity": "low",
+              "title": "netdoctor one-shot network check"
+            },
+            {
+              "action_classes": [
+                "netdoctor continuous monitor"
+              ],
+              "default_mode": "review",
+              "description": "Identifies netdoctor --watch (-w) and --mtr, which repeat network probes on an interval until interrupted or until --max-runs is reached. With --json the monitor flags are ignored and the run is one-shot.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "netdoctor",
+                        "netdoctor.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-p",
+                        "--port",
+                        "--scheme",
+                        "--path",
+                        "-t",
+                        "--timeout",
+                        "-n",
+                        "--interval",
+                        "--max-runs",
+                        "-s",
+                        "--samples"
+                      ],
+                      "required_flags": [
+                        "--watch"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "netdoctor",
+                        "netdoctor.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-p",
+                        "--port",
+                        "--scheme",
+                        "--path",
+                        "-t",
+                        "--timeout",
+                        "-n",
+                        "--interval",
+                        "--max-runs",
+                        "-s",
+                        "--samples"
+                      ],
+                      "required_flags": [
+                        "-w"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "netdoctor",
+                        "netdoctor.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-p",
+                        "--port",
+                        "--scheme",
+                        "--path",
+                        "-t",
+                        "--timeout",
+                        "-n",
+                        "--interval",
+                        "--max-runs",
+                        "-s",
+                        "--samples"
+                      ],
+                      "required_flags": [
+                        "--mtr"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.netdoctor.permission.continuous-monitor",
+              "risk_classes": [
+                "network_egress"
+              ],
+              "rule_id": "command.netdoctor.continuous-monitor",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "netdoctor",
+                        "netdoctor.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-p",
+                        "--port",
+                        "--scheme",
+                        "--path",
+                        "-t",
+                        "--timeout",
+                        "-n",
+                        "--interval",
+                        "--max-runs",
+                        "-s",
+                        "--samples"
+                      ],
+                      "required_flags": [
+                        "--json"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "netdoctor JSON output runs once",
+                  "variant_id": "json-one-shot"
+                }
+              ],
+              "safer_alternatives": [
+                "Run a one-shot check (netdoctor <host>) or pass --json, which runs the ladder once even with --watch or --mtr.",
+                "If a live monitor is needed, add --max-runs N so it stops on its own instead of probing until interrupted."
+              ],
+              "severity": "medium",
+              "title": "netdoctor live monitor"
+            }
+          ],
+          "safer_alternatives": [
+            "One-shot netdoctor checks only resolve, ping, connect to, and request the named targets; confirm the target hosts are ones you intend to contact.",
+            "Run a one-shot check (netdoctor <host>) or pass --json, which runs the ladder once even with --watch or --mtr.",
+            "If a live monitor is needed, add --max-runs N so it stops on its own instead of probing until interrupted."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.codesage",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-setup-doctor",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.netdoctor",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "netdoctor github.com --watch",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inactive-watch",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inactive-one-shot",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-bare-host",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com --quick",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-quick",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-json",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor db.internal:5432",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-host-port",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com 1.1.1.1 db:5432",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-fleet",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor https://api.example.com/health --samples 30",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-url-samples",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com --no-trace -t 2 -p 8443 --scheme https --path /status -s 3 --no-color",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-all-value-options",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-help",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor -V",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-version",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com --watch --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-watch-with-json",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor.exe github.com",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "diagnose-exe-suffix",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com --watch",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "diagnose-not-monitor",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com --watch",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-long",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com -w",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-short",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com api.internal:8080 --watch --interval 10",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-fleet-interval",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor --watch github.com",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-leading-flag",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com --watch --max-runs 3",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-bounded-still-reviewed",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com -wn5",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-bundled-short-flags",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com -wn5",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "diagnose-not-bundled-watch",
+      "rule_id": "command.netdoctor.diagnose"
+    },
+    {
+      "command": "netdoctor github.com --mtr",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mtr",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor -n 2 --mtr github.com",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mtr-leading-interval",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor 'github.com' --watch",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-quoted-target",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "/usr/local/bin/netdoctor github.com --mtr",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-absolute-path",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor.exe github.com --watch",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-exe-suffix",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "cd /tmp && netdoctor github.com --watch",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "watch-after-separator",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com --mtr | head -n 40",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-in-pipeline",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com --watch",
+      "disabled_permissions": [
+        "command.netdoctor.permission.continuous-monitor"
+      ],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "watch-disabled-permission",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-one-shot",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com --watch --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-watch-json",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com --mtr --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-mtr-json",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor --watch --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-watch-help",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "netdoctor github.com --quick --no-trace",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-quick",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    },
+    {
+      "command": "echo netdoctor github.com --watch",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.netdoctor"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "safe-unrelated-echo",
+      "rule_id": "command.netdoctor.continuous-monitor"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}
