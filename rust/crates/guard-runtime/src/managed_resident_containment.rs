@@ -4,6 +4,10 @@
 #[path = "managed_resident_containment_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "managed_resident_exit_tests.rs"]
+mod exit_tests;
+
 #[cfg(windows)]
 use guard_runtime_windows_process::ManagedChild;
 #[cfg(not(windows))]
