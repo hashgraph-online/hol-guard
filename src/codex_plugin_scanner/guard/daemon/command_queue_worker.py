@@ -5,7 +5,12 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 
-from ..runtime.command_queue import command_queue_enabled, command_queue_loop, default_command_context
+from ..runtime.command_queue import (
+    command_queue_enabled,
+    command_queue_loop,
+    command_queue_should_poll,
+    default_command_context,
+)
 from ..store import GuardStore
 
 _COMMAND_QUEUE_THREAD_JOIN_TIMEOUT_SECONDS = 1.0
@@ -21,7 +26,7 @@ def start_command_queue_worker(
     store: GuardStore,
     existing: CommandQueueWorker | None = None,
 ) -> CommandQueueWorker | None:
-    if not command_queue_enabled(store):
+    if not command_queue_should_poll(store) and not command_queue_enabled(store):
         return stop_command_queue_worker(existing)
     if existing is not None:
         if existing.thread.is_alive() and not existing.stop_event.is_set():

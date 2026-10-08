@@ -11,7 +11,7 @@ from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..consumer import detect_all
 from ..consumer.service import diff_artifact
-from ..daemon import load_guard_daemon_url
+from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..models import GuardArtifact, HarnessDetection
 from ..redaction import redact_local_path
 from ..store import GuardStore
@@ -22,7 +22,8 @@ from .connect_flow import (
     CONNECT_STATUS_COMMAND,
     _int_payload_value,
     connect_recovery_command,
-    connect_retry_refresh_race_from_reason,
+    connect_retry_refresh_race_from_state,
+    connect_retry_required_from_state,
     connect_state_requires_oauth,
     normalize_connect_state_for_missing_oauth,
     resolve_guard_cloud_repair_detail,
@@ -51,10 +52,18 @@ def build_guard_status_payload(
     context: HarnessContext,
     store: GuardStore,
     config: GuardConfig,
+    *,
+    scan_installed_apps: bool = True,
 ) -> dict[str, object]:
     """Build an ongoing Guard status payload."""
 
-    return _build_guard_product_payload(context, store, config, include_steps=False)
+    return _build_guard_product_payload(
+        context,
+        store,
+        config,
+        include_steps=False,
+        scan_installed_apps=scan_installed_apps,
+    )
 
 
 def build_guard_connect_payload(
@@ -88,14 +97,18 @@ def _build_guard_product_payload(
     config: GuardConfig,
     *,
     include_steps: bool,
+    scan_installed_apps: bool = True,
 ) -> dict[str, object]:
-    detections = detect_all(context)
-    harnesses = [_summarize_harness(detection, store, config, context.home_dir) for detection in detections]
+    if scan_installed_apps:
+        detections = detect_all(context)
+        harnesses = [_summarize_harness(detection, store, config, context.home_dir) for detection in detections]
+    else:
+        harnesses = _harnesses_from_managed_installs(store, context.home_dir)
     recommended = _recommended_harness(harnesses)
     receipt_count = store.count_receipts()
     managed_harnesses = sum(1 for item in harnesses if item["managed"] is True)
     runtime_state = store.get_runtime_state()
-    approval_center_url = load_guard_daemon_url(context.guard_home)
+    approval_center_url = load_guard_daemon_endpoint_url(context.guard_home)
     from ..protection_posture import protection_status_fields
 
     payload: dict[str, object] = {
@@ -153,6 +166,72 @@ def _summarize_harness(
         "receipts_command": f"{GUARD_COMMAND} receipts",
         "approval_flow": approval_flow,
     }
+
+
+def _harnesses_from_managed_installs(store: GuardStore, home_dir: Path) -> list[dict[str, object]]:
+    summaries: list[dict[str, object]] = []
+    for install in store.list_managed_installs():
+        summary = _summarize_managed_install(install, home_dir)
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
+def _summarize_managed_install(install: dict[str, object], home_dir: Path) -> dict[str, object] | None:
+    harness = str(install.get("harness") or "").strip()
+    if not harness:
+        return None
+    try:
+        adapter = get_adapter(harness)
+    except ValueError:
+        return None
+    managed = bool(install.get("active"))
+    manifest = install.get("manifest")
+    shim_path = manifest.get("shim_path") if isinstance(manifest, dict) else None
+    approval_flow = adapter.approval_flow(managed_install=install)
+    warning_count = _managed_install_warning_count(
+        managed=managed,
+        manifest=manifest if isinstance(manifest, dict) else None,
+    )
+    return {
+        "harness": harness,
+        "installed": managed,
+        "command_available": managed,
+        "artifact_count": 0,
+        "review_count": 0,
+        "warning_count": warning_count,
+        "managed": managed,
+        "shim_path": _redacted_path(shim_path, home_dir) if isinstance(shim_path, str) else None,
+        "config_paths": [],
+        "next_action": "run" if managed and warning_count == 0 else "install" if not managed else "review",
+        "install_command": f"{GUARD_COMMAND} install {harness}",
+        "run_command": f"{GUARD_COMMAND} run {harness} --dry-run",
+        "review_command": f"{GUARD_COMMAND} diff {harness}",
+        "receipts_command": f"{GUARD_COMMAND} receipts",
+        "approval_flow": approval_flow,
+    }
+
+
+def _managed_install_warning_count(*, managed: bool, manifest: dict[str, object] | None) -> int:
+    if not managed or manifest is None:
+        return 0
+    missing = 0
+    for key in (
+        "shim_path",
+        "windows_shim_path",
+        "shim_dir",
+        "config_path",
+        "managed_config_path",
+        "runtime_config_path",
+        "root_path",
+        "settings_path",
+    ):
+        candidate = manifest.get(key)
+        if not isinstance(candidate, str) or not candidate.strip():
+            continue
+        if not Path(candidate).expanduser().exists():
+            missing += 1
+    return missing
 
 
 def _count_review_artifacts(store: GuardStore, artifacts: tuple[GuardArtifact, ...], harness: str) -> int:
@@ -279,8 +358,8 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
             cloud_profile=cloud_profile,
         ),
     )
-    connect_retry_required = _connect_retry_required(latest_connect_state)
-    connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
+    connect_retry_required = connect_retry_required_from_state(latest_connect_state)
+    connect_retry_refresh_race = connect_retry_refresh_race_from_state(latest_connect_state)
     remote_payload_active = bool(advisories or alert_preferences or remote_policy)
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -555,20 +634,6 @@ def _cloud_state_detail(
 
 def _coerce_payload_dict(payload: dict[str, object] | list[object] | None) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
-
-
-def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None:
-        return False
-    status = _optional_string(latest_state.get("status"))
-    milestone = _optional_string(latest_state.get("milestone"))
-    return status == "retry_required" or milestone == "first_sync_failed"
-
-
-def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None or not _connect_retry_required(latest_state):
-        return False
-    return connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _advisory_headline(advisories: list[dict[str, object]]) -> str | None:

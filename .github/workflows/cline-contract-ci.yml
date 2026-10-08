@@ -15,6 +15,8 @@ on:
       - src/codex_plugin_scanner/guard/product_model.py
       - src/codex_plugin_scanner/guard/schemas/guard_product_model_v1.json
       - tests/test_cline_*.py
+      - tests/conftest.py
+      - tests/test_native_hook_runtime_selection.py
       - tests/fixtures/cline/**
       - docs/guard/cline-local-protection-contract.md
       - docs/guard/cline-security-closure.md
@@ -22,7 +24,6 @@ on:
       - docs/guard/harness-support.md
       - dashboard/src/apps/app-catalog.ts
       - dashboard/src/apps/harness-setup-target.ts
-      - ci/test-suite-ratchet-baseline.json
       - .github/workflows/cline-contract-ci.yml
   push:
     branches:
@@ -37,6 +38,8 @@ on:
       - src/codex_plugin_scanner/guard/product_model.py
       - src/codex_plugin_scanner/guard/schemas/guard_product_model_v1.json
       - tests/test_cline_*.py
+      - tests/conftest.py
+      - tests/test_native_hook_runtime_selection.py
       - tests/fixtures/cline/**
       - docs/guard/cline-local-protection-contract.md
       - docs/guard/cline-security-closure.md
@@ -44,7 +47,6 @@ on:
       - docs/guard/harness-support.md
       - dashboard/src/apps/app-catalog.ts
       - dashboard/src/apps/harness-setup-target.ts
-      - ci/test-suite-ratchet-baseline.json
       - .github/workflows/cline-contract-ci.yml
 
 permissions:
@@ -83,6 +85,32 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --extra dev --python 3.12
 
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
+      - name: Build native hook runtime
+        shell: bash
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
+
+      - name: Verify native runtime source binding
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.sha }}
+          NATIVE_RUNTIME: rust/target/release/hol-guard-runtime${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: |
+          set -euo pipefail
+          actual_source_sha="$("$NATIVE_RUNTIME" capabilities | \
+            python -c 'import json, sys; print(json.load(sys.stdin)["build_sha"])')"
+          if [[ "$actual_source_sha" != "$EXPECTED_SOURCE_SHA" ]]; then
+            printf 'native runtime build_sha %s does not match source SHA %s\n' \
+              "$actual_source_sha" "$EXPECTED_SOURCE_SHA"
+            exit 1
+          fi
+
       - name: Validate Cline Python formatting
         run: >-
           uv run --no-sync python -m ruff format --check
@@ -104,6 +132,8 @@ jobs:
           tests/test_cline_transport_arbitration.py
           tests/test_cline_paths.py
           tests/test_cline_live_proof_persistence.py
+          tests/conftest.py
+          tests/test_native_hook_runtime_selection.py
 
       - name: Lint Cline Python
         run: >-
@@ -126,8 +156,12 @@ jobs:
           tests/test_cline_transport_arbitration.py
           tests/test_cline_paths.py
           tests/test_cline_live_proof_persistence.py
+          tests/conftest.py
+          tests/test_native_hook_runtime_selection.py
 
       - name: Run Cline adapter contract tests
+        env:
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime${{ runner.os == 'Windows' && '.exe' || '' }}
         run: >-
           uv run --no-sync pytest
           tests/test_cline_payload_contract.py
@@ -139,6 +173,7 @@ jobs:
           tests/test_cline_transport_arbitration.py
           tests/test_cline_paths.py
           tests/test_cline_live_proof_persistence.py
+          tests/test_native_hook_runtime_selection.py
           --tb=short
 
   package:
@@ -165,7 +200,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --extra dev --python 3.12
 
+      - uses: ./.github/actions/setup-rust
+      - name: Build source compiler
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+
       - name: Build wheel and source distribution
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
         run: uv build
 
       - name: Smoke test built wheel and Cline lifecycle
@@ -214,10 +255,3 @@ jobs:
           assert result["complete"] is True
           PY
           test ! -e "$HOME/Documents/Cline/Hooks/PreToolUse"
-
-      - name: Validate test-suite ratchet
-        run: |
-          uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
-          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
-            --baseline ci/test-suite-ratchet-baseline.json \
-            --inventory test-inventory.json

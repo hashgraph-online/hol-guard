@@ -35,6 +35,7 @@ from .approval_gate import ApprovalGateGrant, require_policy_clear, require_poli
 from .approval_resolution import require_resolvable_approval_request
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
+from .fork_safety import forget_in_child
 from .local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
     POLICY_INTEGRITY_MODE_DEGRADED,
@@ -349,6 +350,7 @@ _SYSTEM_KEYRING_AVAILABILITY_CACHE_TTL_SECONDS = 86_400.0
 _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES = frozenset({"missing_integrity", "unknown_key"})
 _ENCRYPTED_SECRET_INIT_LOCKS_GUARD = threading.Lock()
 _ENCRYPTED_SECRET_INIT_LOCKS: dict[str, threading.Lock] = {}
+forget_in_child(_ENCRYPTED_SECRET_INIT_LOCKS)
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -453,11 +455,13 @@ class SystemKeyringSecretStore:
     """Cross-platform OS credential store backed by the Python keyring library."""
 
     _MACOS_KEYCHAIN_HEALTH_CACHE_TTL_SECONDS = 5.0
+    _WINDOWS_NO_SUCH_LOGON_SESSION = 1312
     _macos_keychain_health_cache: tuple[float, bool] | None = None
     _native_macos_security_reads_cache: tuple[tuple[int, int], bool] | None = None
 
     def __init__(self, service_name: str) -> None:
         self.service_name = service_name
+        self._windows_keyring_unavailable = False
 
     @staticmethod
     def _load_keyring_module():
@@ -673,6 +677,29 @@ class SystemKeyringSecretStore:
             return False
         return True
 
+    @classmethod
+    def _is_windows_keyring_session_unavailable(cls, error: BaseException) -> bool:
+        if sys.platform != "win32":
+            return False
+        return cls._WINDOWS_NO_SUCH_LOGON_SESSION in {
+            getattr(error, "winerror", None),
+            getattr(error, "errno", None),
+        }
+
+    def _mark_windows_keyring_unavailable(self) -> None:
+        if self._windows_keyring_unavailable:
+            return
+        self._windows_keyring_unavailable = True
+        _store_logger.warning(
+            "Guard system keyring writes are unavailable in this Windows session; policy integrity is degraded."
+        )
+
+    def _clear_windows_keyring_unavailable(self) -> None:
+        self._windows_keyring_unavailable = False
+
+    def _is_unavailable(self) -> bool:
+        return self._windows_keyring_unavailable
+
     def set_secret(self, secret_id: str, value: str) -> None:
         keyring_module = self._load_keyring_module_or_none()
         if keyring_module is None:
@@ -680,13 +707,25 @@ class SystemKeyringSecretStore:
                 "Guard system keyring backend is unavailable; the Python 'keyring' "
                 "package could not be imported. Reinstall hol-guard to restore it."
             )
-        keyring_module.set_password(self.service_name, secret_id, value)
+        try:
+            keyring_module.set_password(self.service_name, secret_id, value)
+        except Exception as error:
+            if not self._is_windows_keyring_session_unavailable(error):
+                raise
+            self._mark_windows_keyring_unavailable()
+            raise
+        self._clear_windows_keyring_unavailable()
 
     def get_secret(self, secret_id: str) -> str | None:
         keyring_module = self._load_keyring_module_or_none()
         if keyring_module is None:
             return None
-        value = keyring_module.get_password(self.service_name, secret_id)
+        try:
+            value = keyring_module.get_password(self.service_name, secret_id)
+        except Exception as error:
+            if not self._is_windows_keyring_session_unavailable(error):
+                raise
+            return None
         return value if isinstance(value, str) and value else None
 
     @classmethod
@@ -931,7 +970,8 @@ class EncryptedFileSecretStore:
         return self.base_dir / f"{normalized}.enc"
 
     def _load_fernet_key(self) -> bytes:
-        existing = self.key_path.read_bytes().strip()
+        with self.key_path.open("rb") as handle:
+            existing = handle.read(4096).strip()
         if not existing:
             raise RuntimeError("encrypted Guard secret key is empty")
         try:
@@ -1141,11 +1181,24 @@ def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
 
 def _set_private_mode(path: Path, mode: int) -> None:
     if os.name == "nt":
+        if path.is_dir():
+            _set_windows_private_directory(path)
         return
     try:
         os.chmod(path, mode)
     except OSError as exc:
         _store_logger.debug("Could not set private mode %o on %s: %s", mode, path, exc)
+        return
+
+
+def _set_windows_private_directory(path: Path) -> None:
+    from .native_policy_snapshot import NativePolicySnapshotError
+    from .native_policy_snapshot_windows_state import _windows_ensure_private_directory
+
+    try:
+        _windows_ensure_private_directory(path)
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _store_logger.debug("Could not set Windows private directory on %s: %s", path, exc)
         return
 
 

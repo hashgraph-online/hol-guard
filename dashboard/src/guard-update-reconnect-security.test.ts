@@ -6,6 +6,7 @@ import {
   prepareGuardDaemonReconnect,
   readGuardDaemonReconnectDiagnostic,
   reconnectGuardDaemonAfterUpdate,
+  redirectToGuardDaemonOrigin,
 } from "./guard-api";
 import type { GuardDaemonReconnectAuthorization } from "./guard-types";
 
@@ -51,13 +52,16 @@ const sessionStorage = new MemoryStorage();
 const localStorage = new MemoryStorage();
 sessionStorage.setItem("guard-token", "prior-dashboard-session");
 sessionStorage.setItem("guardDaemon", "http://127.0.0.1:4781");
+const replacedUrls: string[] = [];
 const location = {
   origin: "https://hol.org",
   port: "",
   pathname: "/",
   search: "",
   hash: "#guardDaemon=http%3A%2F%2F127.0.0.1%3A60000",
-  replace: (_url: string) => undefined,
+  replace: (url: string) => {
+    replacedUrls.push(url);
+  },
 };
 
 Object.assign(globalThis, {
@@ -125,7 +129,7 @@ assert(
     "1c5d2ef201d59244f432353caefdff67849c4a0fae0fd9201f185f4e4e04240e",
   "browser and daemon must share one canonical client-proof encoding",
 );
-for (const rejectedOrigin of [
+const rejectedOrigins = [
   "http://localhost:4781",
   "http://127.1:4781",
   "http://2130706433:4781",
@@ -134,13 +138,34 @@ for (const rejectedOrigin of [
   "http://user@127.0.0.1:4781",
   "http://127.0.0.1:4781/path",
   "http://127.0.0.1:4781/#fragment",
-]) {
+] as const;
+for (const rejectedOrigin of rejectedOrigins) {
   assert(canonicalizeGuardDaemonOrigin(rejectedOrigin) === null, `${rejectedOrigin} must not be a candidate origin`);
 }
 assert(
   canonicalizeGuardDaemonOrigin("http://127.0.0.1:4781") === "http://127.0.0.1:4781",
   "canonical IPv4 loopback origins should remain available",
 );
+for (const rejectedOrigin of rejectedOrigins) {
+  redirectToGuardDaemonOrigin(rejectedOrigin, "dashboard-session");
+}
+assert(replacedUrls.length === 0, "noncanonical origins must never reach the browser redirect sink");
+
+location.pathname = "/requests/request-one";
+location.search = "?tab=updates&return=dashboard";
+redirectToGuardDaemonOrigin("http://127.0.0.1:4782", "session token&scope=update");
+assert(replacedUrls.length === 1, "a canonical loopback daemon should remain redirectable after an update");
+const redirectUrl = new URL(replacedUrls[0]);
+assert(redirectUrl.origin === "http://127.0.0.1:4782", "the redirect target must remain on exact loopback");
+assert(redirectUrl.pathname === location.pathname, "the redirect must preserve the current dashboard route");
+assert(redirectUrl.search === location.search, "the redirect must preserve the current dashboard query");
+assert(
+  redirectUrl.hash ===
+    "#guard-token=session%20token%26scope%3Dupdate&guardDaemon=http%3A%2F%2F127.0.0.1%3A4782",
+  "the redirect must encode session and daemon fragment values",
+);
+location.pathname = "/";
+location.search = "";
 
 type FetchMode = "prepare" | "shape-only" | "authenticated";
 let mode: FetchMode = "prepare";

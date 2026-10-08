@@ -1,6 +1,7 @@
 use std::fs::File;
 #[cfg(unix)]
 use std::fs::{self, Metadata};
+#[cfg(any(unix, windows))]
 use std::io;
 use std::path::Path;
 #[cfg(unix)]
@@ -15,6 +16,7 @@ use std::os::unix::fs::MetadataExt;
 
 #[derive(Debug)]
 pub(crate) enum SecureOpenError {
+    #[cfg(any(unix, windows))]
     Io(io::Error),
     PathChanged,
 }
@@ -51,7 +53,7 @@ pub(crate) fn secure_open(_path: &Path, canonical_path: &Path) -> Result<File, S
         }
         let final_component = index + 1 == expected_components.len();
         let flags = if final_component {
-            OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC
+            OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC | OFlag::O_NONBLOCK
         } else {
             OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC
         };
@@ -90,10 +92,26 @@ fn same_unix_directory_identity(expected: &Metadata, actual: &Metadata) -> bool 
         && expected.mode() == actual.mode()
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub(crate) fn secure_open(_path: &Path, canonical_path: &Path) -> Result<File, SecureOpenError> {
+    // Hold each canonical ancestor open without delete sharing while the leaf
+    // is opened, the handle-bound equivalent of the Unix openat walk. Callers
+    // compare the handle's file ID with the file they inspected.
+    guard_runtime_windows_process::open_bound_regular_file(canonical_path).map_err(|error| {
+        // A component that is now a reparse point, directory, or alias
+        // no longer names the canonical file the caller checked.
+        if error.kind() == io::ErrorKind::InvalidData {
+            SecureOpenError::PathChanged
+        } else {
+            SecureOpenError::Io(error)
+        }
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn secure_open(_path: &Path, _canonical_path: &Path) -> Result<File, SecureOpenError> {
     // Opening the caller-provided path directly would reintroduce a TOCTOU
-    // window. Keep non-Unix platforms fail-closed until they have an
-    // equivalent descriptor/handle-bound path walk.
+    // window. Keep other platforms fail-closed until they have an equivalent
+    // descriptor/handle-bound path walk.
     Err(SecureOpenError::PathChanged)
 }

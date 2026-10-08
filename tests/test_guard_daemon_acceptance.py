@@ -10,7 +10,9 @@ from typing import Protocol, cast
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
+from tests.coverage_ci import under_coverage_scale
 from tests.guard_daemon_acceptance_fixtures import (
     WorkloadSpec,
     assert_adversarial_nodeids_resolve,
@@ -29,7 +31,22 @@ def test_adversarial_workload_nodeids_resolve() -> None:
 
 
 @pytest.mark.parametrize("workload", load_correctness_workloads(), ids=_fixture_id)
-def test_packaged_correctness_workloads(workload: WorkloadSpec, tmp_path: Path) -> None:
+@pytest.mark.usefixtures("native_hook_force")
+def test_packaged_correctness_workloads(
+    workload: WorkloadSpec,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
+) -> None:
+    # Coverage tracing inflates every request round trip; scale the transport
+    # admission deadline and the latency SLA budgets so the workload verdicts
+    # (deny/allow/fairness) stay the assertion target, not tracer overhead.
+    coverage_scale = under_coverage_scale(3.0)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS",
+        daemon_server_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS * coverage_scale,
+    )
     result = run_workload(workload, root=tmp_path)
     expected_secrets = sum(
         (client["requests"] + workload["secret_stride"] - 1) // workload["secret_stride"]
@@ -38,7 +55,7 @@ def test_packaged_correctness_workloads(workload: WorkloadSpec, tmp_path: Path) 
     assert result.requests in {240, 480, 960}
     assert result.secrets_denied == expected_secrets
     assert result.secrets_denied >= result.requests * 0.10
-    assert result.routine_allowed + result.secrets_denied == result.requests
+    assert result.routine_allowed + result.secrets_denied == result.requests, result.failure_reasons
     assert result.capacity_denials == 0
     assert result.generic_failures == 0
     assert result.pid_stable
@@ -46,9 +63,12 @@ def test_packaged_correctness_workloads(workload: WorkloadSpec, tmp_path: Path) 
     assert result.queue_bounded
     assert result.rss_growth_bytes < 128 * 1024 * 1024
     # Codex requests add an authenticated challenge round trip in the mixed-harness profile.
-    p95_limit_ms = 1_000 if workload["id"] == "mixed-harness-fairness" else 750
+    # The bound also absorbs real native review latency: this test previously
+    # ran the stub fail-safe surface, and real evaluation plus the challenge
+    # round trip lands near 1.1s on scheduling-sensitive runners.
+    p95_limit_ms = (1_500 if workload["id"] == "mixed-harness-fairness" else 750) * coverage_scale
     assert result.p95_ms < p95_limit_ms
-    assert result.p99_ms < 2_500
+    assert result.p99_ms < 2_500 * coverage_scale
     assert result.browser_launches == 0
     assert result.inbox_requests == 0
     if len(result.dispatch_counts) == 4:

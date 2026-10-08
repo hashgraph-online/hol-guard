@@ -15,6 +15,7 @@ from lab_support import (
     read_json,
 )
 
+from codex_plugin_scanner.guard.json_transport import escape_json_for_html
 from codex_plugin_scanner.guard.mdm.cloud_control import ContractError
 
 
@@ -35,11 +36,12 @@ class CloudHandler(BaseHTTPRequestHandler):
         payload: object | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> None:
-        body = b"" if payload is None else json_bytes(payload)
+        body = b"" if payload is None else escape_json_for_html(json_bytes(payload))
         self.send_response(status)
         for key, value in (headers or {}).items():
             self.send_header(key, value)
-        self.send_header("content-type", "application/json")
+        self.send_header("content-type", "application/json; charset=utf-8")
+        self.send_header("x-content-type-options", "nosniff")
         self.send_header("cache-control", "private, no-store")
         self.send_header("content-length", str(len(body)))
         self.send_header("connection", "close")

@@ -14,9 +14,10 @@ import mimetypes
 import os
 import platform
 import secrets
+import select
 import socket
 import sqlite3
-import stat
+import sys
 import tempfile
 import threading
 import time
@@ -41,12 +42,8 @@ from ..approval_gate import (
     disable_totp,
     require_high_risk,
 )
-from ..approval_gate import (
-    input_from_mapping as approval_gate_input_from_mapping,
-)
-from ..approval_gate import (
-    public_config as approval_gate_public_config,
-)
+from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
+from ..approval_gate import public_config as approval_gate_public_config
 from ..approval_gate import (
     revoke_cooldown as revoke_approval_gate_cooldown,
 )
@@ -81,6 +78,11 @@ from ..cli.connect_flow import (
     resolve_guard_oauth_client_config,
     start_guard_browser_session,
 )
+from ..cli.connect_sync_result import (
+    apply_guard_connect_sync_result,
+    failed_browser_connect_flow_state,
+    headless_sync_retry_summary,
+)
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_setup_plan,
@@ -94,6 +96,7 @@ from ..cloud_exception_requests import (
     fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
+from ..codex_binding_capture_writer import start_codex_binding_capture_writer
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..codex_resume import get_request_resume_status, retry_request_resume
@@ -111,12 +114,22 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..directory_path_authority import (
+    DirectoryPathTrustError,
+    trusted_guard_directory_roots,
+    validate_guard_directory_path,
+    validated_owned_temporary_workspace,
+)
+from ..fork_safety import forget_in_child
+from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..insights_share import publish_insights_share
+from ..json_transport import escape_json_for_html
 from ..local_dashboard_session import (
     DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS,
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
     LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM,
     MAX_LOCAL_DASHBOARD_SESSION_AGE_SECONDS,
+    PROTECTION_REPAIR_DASHBOARD_SURFACE,
     build_local_dashboard_session_token,
 )
 from ..local_supply_chain import (
@@ -127,7 +140,13 @@ from ..local_supply_chain import (
     sync_supply_chain_cloud_state,
 )
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
-from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
+from ..models import (
+    DECISION_SCOPE_VALUES,
+    DecisionScope,
+    GuardRuntimeRegistration,
+    PolicyDecision,
+    format_local_http_origin,
+)
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
@@ -149,12 +168,17 @@ from ..policy_bundle_trusted_keys import (
     validate_synced_policy_bundle,
 )
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
+from ..project_folder_picker import (
+    ProjectFolderPickerBusyError,
+    ProjectFolderPickerUnavailableError,
+    choose_project_folder,
+)
+from ..protection_posture import protection_is_off
 from ..receipts.manager import build_receipt
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
 from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
-from ..runtime.command_evaluation import evaluate_command
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.command_shadow_evaluation import (
     CommandShadowCohort,
@@ -163,9 +187,14 @@ from ..runtime.command_shadow_evaluation import (
     build_command_shadow_observation,
 )
 from ..runtime.extension_control_authority import ExtensionControlAuthorityError, ExtensionControlAuthorityView
-from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
+from ..runtime.extension_control_runtime import (
+    ExtensionControlRuntime,
+    ExtensionControlRuntimeSnapshot,
+    current_extension_control_snapshot,
+)
 from ..runtime.isolation_provider import load_managed_provider_registry
 from ..runtime.local_temp_paths import trusted_temporary_root_for_path
+from ..runtime.native_command_evaluation import evaluate_command_native
 from ..runtime.network_status import build_network_status, project_network_supervisor_health
 from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.runner import (
@@ -202,6 +231,7 @@ from ..shims import (
     probe_package_shim_intercepts,
     uninstall_package_shims,
 )
+from ..sqlite_recovery import quarantined_store_summary
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
@@ -216,6 +246,7 @@ from ..store_evidence import (
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
 from ..supply_chain_repair import coordinate_supply_chain_repair, repair_sync_intelligence
+from .aibom_inventory_persist import persist_aibom_inventory_context
 from .bounded_http import BoundedThreadingHTTPServer
 from .command_activity_api import (
     handle_command_activity_analytics,
@@ -251,16 +282,17 @@ from .discovery import (
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
 from .hook_process_runner import HookProcessRunner
-from .hook_worker_responses import prepare_native_hook_policy
+from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
+from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
+from .hook_worker_responses import _hook_harness_is_unmanaged, prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
-from .local_cli_api import LocalCliApiError, LocalCliApiService
-from .local_cli_http import handle_local_cli_list
+from .local_cli_api import LocalCliApiService
+from .local_cli_http import handle_local_cli_list, handle_local_cli_post
 from .managed_controls_api import managed_policy_rows
 from .managed_policy_delivery import daemon_managed_controls_candidate
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
-    acquire_guard_daemon_owner_lock,
     clear_guard_daemon_state_if_current,
     current_guard_daemon_runtime_fingerprint,
     load_guard_daemon_auth_token,
@@ -268,12 +300,25 @@ from .manager import (
     repair_approval_center_locator,
     write_guard_daemon_state,
 )
-from .protection_repair_retry import confirmed_containment_repair_signals, incomplete_protection_repair_payload
+from .protection_repair_retry import containment_repair_outcome, incomplete_protection_repair_payload
+from .protection_repair_stages import (
+    harness_hooks_repair_reason,
+    integrity_repair_reasons,
+    record_incomplete_protection_repair,
+    repair_daemon_registration,
+)
 from .request_executor import BoundedRequestExecutor as _BoundedRequestExecutor
 from .runtime_heartbeat import RuntimeHeartbeatWriter
-from .runtime_hook_deadline import RuntimeHookDeadline
+from .runtime_hook_deadline import PROMPT_ADMISSION_SECONDS, RuntimeHookDeadline
 from .runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from .runtime_hook_scheduler import RuntimeHookAdmissionReason, RuntimeHookLane, RuntimeHookScheduler
+from .service_lifecycle import (
+    begin_service,
+    contain_failed_service_start,
+    enable_full_capacity_for_generation,
+    start_serve_thread,
+    startup_generation_is_current,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -301,6 +346,32 @@ _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
+_EXTENSION_CONTROL_PATHS = frozenset(
+    {
+        "/v1/extension-controls/preview",
+        "/v1/extension-controls/test",
+        "/v1/extension-controls/inspect",
+        "/v1/extension-controls/apply",
+        "/v1/extension-controls/refresh",
+        "/v1/extension-controls/recover-authority",
+        "/v1/extension-controls/acknowledge-degraded",
+    }
+)
+_LOCAL_CLI_PATHS = frozenset(
+    {
+        "/v1/local-clis/preview",
+        "/v1/local-clis/apply",
+        "/v1/local-clis/recognize",
+        "/v1/local-clis/discover",
+        "/v1/local-clis/provider-actions",
+        "/v1/local-clis/provider-workflows",
+        "/v1/local-clis/registry-search",
+        "/v1/local-clis/registry-setup",
+        "/v1/local-clis/refresh-job",
+        "/v1/local-clis/skills",
+        "/v1/local-clis/mcp-skills",
+    }
+)
 
 
 class _HookPathValidationError(ValueError):
@@ -378,6 +449,7 @@ _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
 _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS = 3.0
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
 _RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS = 2.75
+_RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS = WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS = 5.0
 _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
@@ -394,6 +466,7 @@ _DAEMON_CRITICAL_PATHS = frozenset(
     {
         "/healthz",
         "/v1/daemon/identity-challenge",
+        "/v1/desktop/bootstrap",
     }
 )
 
@@ -442,7 +515,6 @@ _PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbor
 
 class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     request_queue_size = _MAX_CONCURRENT_DAEMON_CONNECTIONS
-
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
@@ -457,10 +529,12 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     shutdown_started: threading.Event
     package_firewall_connect_state: dict[str, object] | None
     package_firewall_connect_state_lock: threading.Lock
+    onefile_extraction_status: dict[str, object] | None
     guard_cloud_connect_state: dict[str, object] | None
     guard_cloud_connect_state_lock: threading.Lock
     guard_cloud_browser_session_lock: threading.Lock
     package_firewall_action_rate_limiter: PackageFirewallActionRateLimiter
+    package_firewall_mutation_lock: threading.Lock
     package_firewall_session_nonces: dict[str, float]
     package_firewall_session_nonces_lock: threading.Lock
     approval_attention: ApprovalAttentionCoordinator
@@ -471,6 +545,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     containment_health_cache: dict[str, object] | None
     containment_health_cache_monotonic: float
     containment_health_cache_lock: threading.Lock
+    containment_health_refreshing: bool
+    containment_health_refresh_event: threading.Event
+    containment_health_generation: int
+    containment_health_completed_generation: int
     network_supervisor: NetworkSupervisor
     active_hook_requests: int
     rejected_hook_requests: int
@@ -489,12 +567,15 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     critical_request_capacity: threading.BoundedSemaphore
     critical_request_capacity_limit: int
     active_requests: int
+    normal_connections: set[int]
     rejected_requests: int
     request_capacity_kinds: dict[int, str]
     request_accepted_at: dict[int, float]
     active_connections: dict[int, socket.socket]
     request_capacity_lock: threading.Lock
     unclassified_connections: dict[int, tuple[socket.socket, float]]
+    pending_classifications: dict[int, tuple[tuple[str, int], float]]
+    saturation_probes: dict[int, tuple[socket.socket, tuple[str, int], float]]
     unclassified_connections_lock: threading.Lock
     unclassified_watchdog_stop: threading.Event
     unclassified_watchdog_thread: threading.Thread | None
@@ -505,9 +586,11 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     request_executors_stopped: bool
     diagnostics: DaemonDiagnostics
     auth_audit_lock: threading.Lock
+    denial_audit_lock: threading.Lock
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: GuardDaemonServer | None
     home_dir: Path
+    workspace_dir: Path | None
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """Suppress expected peer disconnects without hiding server defects."""
@@ -531,6 +614,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         writer = getattr(self, "runtime_hook_evidence_writer", None)
         if writer is not None:
             _ = writer.stop(timeout_seconds=1.0)
+        capture_writer = getattr(self, "codex_binding_capture_writer", None)
+        if capture_writer is not None:
+            capture_writer.stop_capture()
         super().server_close()
 
     def __init__(
@@ -544,6 +630,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         runtime_session_id: str,
         runtime_started_at: str,
         home_dir: Path,
+        workspace_dir: Path | None,
         idle_timeout_seconds: float | None,
         shutdown_started: threading.Event,
         diagnostics: DaemonDiagnostics,
@@ -558,6 +645,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.runtime_session_id = runtime_session_id
         self.runtime_started_at = runtime_started_at
         self.home_dir = home_dir.resolve(strict=False)
+        self.workspace_dir = workspace_dir.resolve(strict=False) if workspace_dir is not None else None
         self.idle_timeout_seconds = idle_timeout_seconds
         self.last_activity_monotonic = time.monotonic()
         self.start_monotonic = time.monotonic()
@@ -565,15 +653,17 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.active_stream_clients_lock = threading.Lock()
         self.shutdown_started = shutdown_started
         self.diagnostics = diagnostics
-        self.auth_audit_lock = threading.Lock()
+        self.auth_audit_lock, self.denial_audit_lock = threading.Lock(), threading.Lock()
         self.auth_audit_windows = {}
         self.command_queue_lifecycle = None
         self.package_firewall_connect_state = None
         self.package_firewall_connect_state_lock = threading.Lock()
+        self.onefile_extraction_status = None
         self.guard_cloud_connect_state = None
         self.guard_cloud_connect_state_lock = threading.Lock()
         self.guard_cloud_browser_session_lock = threading.Lock()
         self.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
+        self.package_firewall_mutation_lock = threading.Lock()
         self.package_firewall_session_nonces = {}
         self.package_firewall_session_nonces_lock = threading.Lock()
         self.daemon_discovery_challenges = {}
@@ -583,6 +673,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.containment_health_refreshing = False
+        self.containment_health_refresh_event = threading.Event()
+        self.containment_health_generation = 0
+        self.containment_health_completed_generation = 0
         self.network_supervisor = NetworkSupervisor()
         self.active_hook_requests = 0
         self.rejected_hook_requests = 0
@@ -607,12 +701,15 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.critical_request_capacity_limit = _MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS
         self.critical_request_capacity = threading.BoundedSemaphore(self.critical_request_capacity_limit)
         self.active_requests = 0
+        self.normal_connections = set()
         self.rejected_requests = 0
         self.request_capacity_kinds = {}
         self.request_accepted_at = {}
         self.active_connections = {}
         self.request_capacity_lock = threading.Lock()
         self.unclassified_connections = {}
+        self.pending_classifications = {}
+        self.saturation_probes = {}
         self.unclassified_connections_lock = threading.Lock()
         self.unclassified_watchdog_stop = threading.Event()
         self.unclassified_watchdog_thread = None
@@ -627,6 +724,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         )
         self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
+        self.codex_binding_capture_writer = start_codex_binding_capture_writer()
         self._initialize_request_services()
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
@@ -635,7 +733,12 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         from .hook_worker import HookWorker
 
         try:
-            self.hook_worker = HookWorker(store=self.store, activity_writer=self.runtime_hook_evidence_writer)
+            self.hook_worker = HookWorker(
+                store=self.store,
+                workspace=self.workspace_dir,
+                activity_writer=self.runtime_hook_evidence_writer,
+                capture_writer=self.codex_binding_capture_writer,
+            )
             self.extension_control_runtime = ExtensionControlRuntime(
                 self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
             )
@@ -670,44 +773,185 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 if executor is not None:
                     _ = executor.shutdown(timeout_seconds=1.0)
             _ = self.runtime_hook_evidence_writer.stop(timeout_seconds=1.0)
+            if self.codex_binding_capture_writer is not None:
+                self.codex_binding_capture_writer.stop_capture()
             _ = self.hook_process_runner.close_contained()
             raise
 
     def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
-        view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+        from ..native_command_control_authority_io import NativeCommandControlMutationRequiredError
+
+        try:
+            view = self.store.read_extension_control_authority_for_registry(
+                BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=True
+            )
+        except NativeCommandControlMutationRequiredError:
+            # Release the shared read before a migration takes an exclusive
+            # lease and re-verifies authority. Routine refreshes must coexist
+            # with the native decision's shared mutation fence.
+            view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
         return self.extension_control_runtime.refresh(view)
 
     def process_request(self, request: Any, client_address: Any) -> None:
         request_socket = cast(socket.socket, request)
-        if not self._guard_admit_request(request_socket):
+        accepted_at = time.monotonic()
+        admission_deadline = accepted_at + _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS
+        # Do not wait for bytes on the accept thread. A saturated burst of
+        # idle peers would otherwise hold the next connection, including
+        # health, until each of those peers had been polled.
+        path = self._peek_request_path(request_socket)
+        control = path in _DAEMON_CONTROL_PATHS or path in _DAEMON_CRITICAL_PATHS
+        if path is not None and not control and self._normal_admission_full():
+            with self.request_capacity_lock:
+                self.rejected_requests += 1
+            self._guard_reject_overload(request_socket)
+            return
+        reserved_normal = False
+        if not control:
+            reserved_normal = self._reserve_normal_connection(request_socket)
+            # Park only while a connection permit remains. That permit is
+            # reserved for control, so an in-flight line must not take it.
+            # A full pool still goes through admission and can evict.
+            if (
+                path is None
+                and not reserved_normal
+                and self._normal_admission_full()
+                and self.connection_capacity.acquire(blocking=False)
+            ):
+                self.connection_capacity.release()
+                self._park_saturation_probe(request_socket, client_address, accepted_at)
+                return
+        pending = not control and not reserved_normal
+        self._accept_classified_request(
+            request_socket,
+            client_address,
+            control=control,
+            pending=pending,
+            accepted_at=accepted_at,
+            admission_deadline=admission_deadline,
+        )
+
+    def _accept_classified_request(
+        self,
+        request_socket: socket.socket,
+        client_address: Any,
+        *,
+        control: bool,
+        pending: bool,
+        accepted_at: float,
+        admission_deadline: float,
+    ) -> None:
+        # A live holder keeps its slot until it finishes or the watchdog
+        # expires it. Evicting it here would admit the newcomer and hide overload.
+        try:
+            guard_admitted = self._guard_admit_request(request_socket)
+        except BaseException:
+            with self.request_capacity_lock:
+                self.normal_connections.discard(id(request_socket))
+            raise
+        if not guard_admitted:
+            with self.request_capacity_lock:
+                self.normal_connections.discard(id(request_socket))
+                self.rejected_requests += 1
             return
         admitted = self.connection_capacity.acquire(blocking=False)
         if not admitted:
             self._evict_oldest_unclassified_connection()
             admitted = self.connection_capacity.acquire(
                 blocking=True,
-                timeout=_DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS,
+                timeout=max(0.0, admission_deadline - time.monotonic()),
             )
         if not admitted:
             with self.request_capacity_lock:
                 self.rejected_requests += 1
-            self.shutdown_request(request_socket)
-            self._guard_release_request()
+            try:
+                self.shutdown_request(request_socket)
+            finally:
+                self._guard_release_request()
+                with self.request_capacity_lock:
+                    self.normal_connections.discard(id(request_socket))
             return
         with suppress(OSError):
             request_socket.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
-        self._register_unclassified_connection(request_socket)
+        self._register_unclassified_connection(request_socket, accepted_at=accepted_at)
         with self.request_capacity_lock:
             self.active_requests += 1
+        if pending:
+            # Do not serialize partial-header waits on the accept thread.
+            # These sockets still own both outer permits; the existing bounded
+            # watchdog classifies them within this admission's original budget.
+            with self.unclassified_connections_lock:
+                if id(request_socket) in self.unclassified_connections:
+                    self.pending_classifications[id(request_socket)] = (
+                        cast(tuple[str, int], client_address),
+                        min(admission_deadline, accepted_at + _DAEMON_REQUEST_READ_TIMEOUT_SECONDS),
+                    )
+            return
+        self._submit_transport_request(request_socket, client_address, control=control)
+
+    def _park_saturation_probe(self, request: socket.socket, client_address: Any, accepted_at: float) -> None:
+        deadline = accepted_at + 0.15
+        limit = max(1, self.connection_capacity_limit)
+        displaced: tuple[socket.socket, tuple[str, int], float] | None = None
+        with self.unclassified_connections_lock:
+            # A full probe table is older unread clients. Closing the newcomer
+            # drops a health check that has not sent its request line yet.
+            if len(self.saturation_probes) >= limit:
+                displaced = self.saturation_probes.pop(next(iter(self.saturation_probes)))
+            self.saturation_probes[id(request)] = (request, cast(tuple[str, int], client_address), deadline)
+        if displaced is None:
+            return
+        with self.request_capacity_lock:
+            self.rejected_requests += 1
+        self._close_unclassified_socket(displaced[0])
+
+    def _submit_transport_request(self, request_socket: socket.socket, client_address: Any, *, control: bool) -> None:
+        # An unread socket stays on the evictable set. Starting a worker
+        # classifies it and holds its connection permit until the read times
+        # out, which closes a later health check without a response.
+        # Classification advancement removes the socket before submit, so a
+        # completed header does not return here.
+        if not self._buffered_request_headers_complete(request_socket, pending=True):
+            with self.unclassified_connections_lock:
+                current = self.unclassified_connections.get(id(request_socket))
+                if current is not None and current[0] is request_socket:
+                    self.pending_classifications[id(request_socket)] = (
+                        cast(tuple[str, int], client_address),
+                        current[1],
+                    )
+                    return
         executor = (
             self.control_request_executor
-            if self._transport_request_is_control(request_socket)
+            if control or self._transport_request_is_control(request_socket)
             else self.general_request_executor
         )
-        if not executor.submit(request_socket, client_address):
+        try:
+            submitted = executor.submit(request_socket, client_address)
+        except BaseException:
+            self._discard_request(request_socket)
+            raise
+        if not submitted:
             with self.request_capacity_lock:
                 self.rejected_requests += 1
             self._discard_request(request_socket)
+
+    def _normal_admission_limit(self) -> int:
+        capacity = min(self.connection_capacity_limit, self._guard_capacity_limit)
+        reserved = min(self.control_request_capacity_limit + self.critical_request_capacity_limit, capacity // 4)
+        return capacity - reserved
+
+    def _normal_admission_full(self) -> bool:
+        with self.request_capacity_lock:
+            return len(self.normal_connections) >= self._normal_admission_limit()
+
+    def _reserve_normal_connection(self, request: socket.socket) -> bool:
+        # Reserve within both admission bounds, including a smaller configured
+        # outer HTTP limit. No new sockets, workers or priority authorization.
+        with self.request_capacity_lock:
+            if len(self.normal_connections) >= self._normal_admission_limit():
+                return False
+            self.normal_connections.add(id(request))
+        return True
 
     def _process_request_worker(self, request_socket: socket.socket, client_address: tuple[str, int]) -> None:
         try:
@@ -720,14 +964,17 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self._release_request_capacity(request_socket)
 
     def _discard_request(self, request_socket: socket.socket) -> None:
-        self.shutdown_request(request_socket)
-        self._release_request_capacity(request_socket)
+        try:
+            self.shutdown_request(request_socket)
+        finally:
+            self._release_request_capacity(request_socket)
 
     def _release_request_capacity(self, request: socket.socket) -> None:
         self.classify_connection(request)
         with self.request_capacity_lock:
             was_active = self.request_accepted_at.pop(id(request), None) is not None
             self.active_connections.pop(id(request), None)
+            self.normal_connections.discard(id(request))
             if was_active:
                 self.active_requests -= 1
             capacity_kind = self.request_capacity_kinds.pop(id(request), None)
@@ -737,8 +984,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.connection_capacity.release()
             self._guard_release_request()
 
-    def _register_unclassified_connection(self, request: socket.socket) -> None:
-        accepted_at = time.monotonic()
+    def _register_unclassified_connection(self, request: socket.socket, *, accepted_at: float | None = None) -> None:
+        if accepted_at is None:
+            accepted_at = time.monotonic()
         deadline = accepted_at + _DAEMON_REQUEST_READ_TIMEOUT_SECONDS
         with self.request_capacity_lock:
             self.request_accepted_at[id(request)] = accepted_at
@@ -752,23 +1000,42 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         return accepted_at + timeout_seconds
 
     @staticmethod
-    def _transport_request_is_control(request: socket.socket) -> bool:
+    def _peek_request_path(request: socket.socket, *, deadline: float | None = None) -> str | None:
         try:
             request.setblocking(False)
-            buffered = request.recv(4_096, socket.MSG_PEEK)
-        except (BlockingIOError, InterruptedError, OSError):
-            return False
+            while True:
+                try:
+                    buffered = request.recv(4_096, socket.MSG_PEEK)
+                except (BlockingIOError, InterruptedError):
+                    buffered = b""
+                if b"\n" in buffered:
+                    break
+                if deadline is None or time.monotonic() >= deadline or len(buffered) >= 4_096:
+                    return None
+                remaining = max(0.0, deadline - time.monotonic())
+                if buffered:
+                    # MSG_PEEK keeps a partial line readable, so select would
+                    # spin on the same prefix. Keep this wait on the one budget.
+                    time.sleep(min(0.001, remaining))
+                else:
+                    select.select([request], [], [], remaining)
+        except (BlockingIOError, InterruptedError, OSError, ValueError):
+            return None
         finally:
             with suppress(OSError):
                 request.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
         request_line = buffered.splitlines()[0] if buffered else b""
         parts = request_line.split()
-        if len(parts) < 2:
-            return False
+        if len(parts) != 3 or not parts[2].startswith(b"HTTP/"):
+            return None
         try:
-            path = parts[1].decode("ascii").split("?", 1)[0]
+            return parts[1].decode("ascii").split("?", 1)[0]
         except UnicodeDecodeError:
-            return False
+            return None
+
+    @staticmethod
+    def _transport_request_is_control(request: socket.socket, *, deadline: float | None = None) -> bool:
+        path = _GuardDaemonHTTPServer._peek_request_path(request, deadline=deadline)
         return path in _DAEMON_CONTROL_PATHS or path in _DAEMON_CRITICAL_PATHS
 
     def _stop_request_executors(self) -> bool:
@@ -776,8 +1043,18 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             return True
         with self.request_capacity_lock:
             requests = list(self.active_connections.values())
-        for request in requests:
+        with self.unclassified_connections_lock:
+            pending = set(self.pending_classifications)
+            self.pending_classifications.clear()
+            probes = [probe[0] for probe in self.saturation_probes.values()]
+            self.saturation_probes.clear()
+        for request in probes:
             self._close_unclassified_socket(request)
+        for request in requests:
+            if id(request) in pending:
+                self._discard_request(request)
+            else:
+                self._close_unclassified_socket(request)
         general_stopped = self.general_request_executor.shutdown(timeout_seconds=5.0)
         control_stopped = self.control_request_executor.shutdown(timeout_seconds=5.0)
         self.request_executors_stopped = general_stopped and control_stopped
@@ -786,6 +1063,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     def classify_connection(self, request: socket.socket) -> None:
         with self.unclassified_connections_lock:
             self.unclassified_connections.pop(id(request), None)
+            self.pending_classifications.pop(id(request), None)
+            self.saturation_probes.pop(id(request), None)
 
     def _evict_oldest_unclassified_connection(self) -> None:
         with self.unclassified_connections_lock:
@@ -824,24 +1103,134 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
 
     def _watch_unclassified_connections(self) -> None:
         while not self.unclassified_watchdog_stop.wait(_DAEMON_UNCLASSIFIED_WATCHDOG_POLL_SECONDS):
+            self._advance_pending_classifications()
+            self._advance_saturation_probes()
             now = time.monotonic()
             with self.unclassified_connections_lock:
                 expired = [request for request, deadline in self.unclassified_connections.values() if deadline <= now]
             for request in expired:
-                if self._buffered_request_headers_complete(request):
-                    self.classify_connection(request)
-                else:
+                headers_complete = self._buffered_request_headers_complete(request)
+                with self.unclassified_connections_lock:
+                    current = self.unclassified_connections.get(id(request))
+                    if current is None or current[0] is not request or current[1] > now:
+                        continue
+                    owned_by_pending = id(request) in self.pending_classifications
+                    if not owned_by_pending:
+                        self.unclassified_connections.pop(id(request))
+                        if not headers_complete:
+                            self._close_unclassified_socket(request)
+                if owned_by_pending:
+                    self._discard_request(request)
+
+    def _advance_pending_classifications(self) -> None:
+        with self.unclassified_connections_lock:
+            pending = [
+                (self.unclassified_connections[key][0], address, deadline)
+                for key, (address, deadline) in self.pending_classifications.items()
+                if key in self.unclassified_connections
+            ]
+        for request, address, deadline in pending:
+            with self.unclassified_connections_lock:
+                if id(request) not in self.pending_classifications:
+                    continue
+            if time.monotonic() >= deadline or self._unread_peer_closed(request):
+                self._discard_request(request)
+                continue
+            if not self._buffered_request_headers_complete(request, pending=True):
+                continue
+            control = self._transport_request_is_control(request)
+            with self.unclassified_connections_lock:
+                if self.pending_classifications.pop(id(request), None) is None:
+                    continue
+                self.unclassified_connections.pop(id(request), None)
+            if not control and not self._reserve_normal_connection(request):
+                # The socket reserved its seat before its headers were ready.
+                # A full pool makes a second reserve fail even though this
+                # request already counts toward the limit.
+                with self.request_capacity_lock:
+                    already_reserved = id(request) in self.normal_connections
+                    if not already_reserved:
+                        self.rejected_requests += 1
+                if not already_reserved:
+                    self._discard_request(request)
+                    continue
+            try:
+                self._submit_transport_request(request, address, control=control)
+            except BaseException:
+                # Submission already discarded this socket and its permits.
+                self.handle_error(request, address)
+
+    def _advance_saturation_probes(self) -> None:
+        with self.unclassified_connections_lock:
+            probes = list(self.saturation_probes.values())
+        for request, address, deadline in probes:
+            path = self._peek_request_path(request)
+            if path is None and time.monotonic() < deadline:
+                continue
+            with self.unclassified_connections_lock:
+                current = self.saturation_probes.pop(id(request), None)
+            if current is None or current[0] is not request:
+                continue
+            control = path in _DAEMON_CONTROL_PATHS or path in _DAEMON_CRITICAL_PATHS
+            if path is None or not control:
+                with self.request_capacity_lock:
+                    self.rejected_requests += 1
+                if path is None:
                     self._close_unclassified_socket(request)
+                else:
+                    self._guard_reject_overload(request)
+                continue
+            accepted_at = time.monotonic()
+            try:
+                self._accept_classified_request(
+                    request,
+                    address,
+                    control=True,
+                    pending=False,
+                    accepted_at=accepted_at,
+                    admission_deadline=accepted_at + _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS,
+                )
+            except BaseException:
+                self.handle_error(request, address)
 
     @staticmethod
-    def _buffered_request_headers_complete(request: socket.socket) -> bool:
-        nonblocking_flag = getattr(socket, "MSG_DONTWAIT", None)
-        if nonblocking_flag is None:
-            return False
+    def _unread_peer_closed(request: socket.socket) -> bool:
+        """Return whether the peer closed before sending a request line."""
+        timeout = request.gettimeout()
         try:
-            buffered = request.recv(65_536, socket.MSG_PEEK | nonblocking_flag)
-        except (BlockingIOError, InterruptedError, OSError):
+            if not select.select([request], [], [], 0)[0]:
+                return False
+            request.setblocking(False)
+            peeked = request.recv(1, socket.MSG_PEEK | (getattr(socket, "MSG_DONTWAIT", 0) or 0))
+        except (BlockingIOError, InterruptedError):
             return False
+        except OSError:
+            return True
+        finally:
+            with suppress(OSError):
+                request.settimeout(timeout)
+        return peeked == b""
+
+    @staticmethod
+    def _buffered_request_headers_complete(request: socket.socket, *, pending: bool = False) -> bool:
+        nonblocking_flag = getattr(socket, "MSG_DONTWAIT", None)
+        if nonblocking_flag is None and not pending:
+            return False
+        timeout = request.gettimeout()
+        try:
+            if not select.select([request], [], [], 0)[0]:
+                return False
+            if pending:
+                # This socket has not been handed to any request worker. Do
+                # not let Python's timeout-mode select wrap a kernel peek.
+                request.setblocking(False)
+            buffered = request.recv(65_536, socket.MSG_PEEK | (nonblocking_flag or 0))
+        except (BlockingIOError, InterruptedError, OSError, ValueError):
+            return False
+        finally:
+            if pending:
+                with suppress(OSError):
+                    request.settimeout(timeout)
         return b"\r\n\r\n" in buffered or b"\n\n" in buffered
 
     def claim_request_capacity(self, request: socket.socket, path: str) -> bool:
@@ -1243,35 +1632,30 @@ def _run_headless_cloud_sync(
             except GuardSyncAuthorizationExpiredError as retry_error:
                 auth_error = retry_error
             except GuardSyncNotConfiguredError as retry_error:
-                store.record_latest_guard_connect_sync_result(
-                    status="retry_required",
-                    milestone="first_sync_failed",
-                    now=recorded_at,
-                    reason=str(retry_error),
+                return headless_sync_retry_summary(
+                    store,
+                    status="not_configured",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                    record_retry=True,
                 )
-                summary = {
-                    "status": "not_configured",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
             except GuardSyncNotAvailableError as retry_error:
-                summary = {
-                    "status": "not_available",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
+                return headless_sync_retry_summary(
+                    store,
+                    status="not_available",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                )
             except Exception as retry_error:
-                summary = {
-                    "status": "pending",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
+                return headless_sync_retry_summary(
+                    store,
+                    status="pending",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                )
             else:
                 store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
                 return summary
@@ -1293,37 +1677,32 @@ def _run_headless_cloud_sync(
             try:
                 summary = _perform_sync()
             except GuardSyncAuthorizationExpiredError as retry_error:
-                store.record_latest_guard_connect_sync_result(
-                    status="retry_required",
-                    milestone="first_sync_failed",
-                    now=recorded_at,
-                    reason=str(retry_error),
+                return headless_sync_retry_summary(
+                    store,
+                    status="auth_expired",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                    record_retry=True,
                 )
-                summary = {
-                    "status": "auth_expired",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
             except GuardSyncNotConfiguredError as retry_error:
                 config_error = retry_error
             except GuardSyncNotAvailableError as retry_error:
-                summary = {
-                    "status": "not_available",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
+                return headless_sync_retry_summary(
+                    store,
+                    status="not_available",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                )
             except Exception as retry_error:
-                summary = {
-                    "status": "pending",
-                    "message": str(retry_error),
-                    "authorization_repair": repair,
-                }
-                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
-                return summary
+                return headless_sync_retry_summary(
+                    store,
+                    status="pending",
+                    error=retry_error,
+                    repair=repair,
+                    recorded_at=recorded_at,
+                )
             else:
                 store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
                 return summary
@@ -1905,20 +2284,14 @@ def _finalize_daemon_guard_connect_payload(
             managed_controls_publish,
         )
     except GuardSyncNotAvailableError as error:
-        store.record_latest_guard_connect_sync_result(
-            status="connected",
-            milestone="sync_not_available",
+        payload = apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
-        )
-        payload.update(
-            {
-                "milestone": "sync_not_available",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": str(error),
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
+            error=error,
+            recorded_status="connected",
+            recorded_milestone="sync_not_available",
+            repair_message=str(error),
         )
         reconciled_state = reconcile_connect_state_with_oauth_entitlement(store, now=now)
         if reconciled_state is not None:
@@ -1926,45 +2299,30 @@ def _finalize_daemon_guard_connect_payload(
             payload["latest_connect_state"] = reconciled_state
         return payload
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
+        return apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
+            error=error,
+            recorded_status="retry_required",
+            recorded_milestone="first_sync_failed",
+            repair_message="Run Guard Cloud connect again to refresh local authorization.",
+            payload_status="retry_required",
         )
-        payload.update(
-            {
-                "status": "retry_required",
-                "milestone": "first_sync_failed",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": "Run Guard Cloud connect again to refresh local authorization.",
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
-        )
-        return payload
     except (RuntimeError, TimeoutError) as error:
-        repair_message = (
-            "Guard Cloud pairing finished, but the first proof sync is still pending. Local Guard will retry while "
-            "the daemon is running."
-        )
-        store.record_latest_guard_connect_sync_result(
-            status="connected",
-            milestone="first_sync_pending",
+        return apply_guard_connect_sync_result(
+            store,
+            payload,
             now=now,
-            reason=str(error),
+            error=error,
+            recorded_status="connected",
+            recorded_milestone="first_sync_pending",
+            repair_message=(
+                "Guard Cloud pairing finished, but the first proof sync is still pending. Local Guard will retry while "
+                "the daemon is running."
+            ),
+            payload_status="connected",
         )
-        payload.update(
-            {
-                "status": "connected",
-                "milestone": "first_sync_pending",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": repair_message,
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
-        )
-        return payload
     latest_state = store.record_latest_guard_connect_sync_success(
         sync_payload=sync_payload,
         now=str(sync_payload.get("synced_at") or now),
@@ -1990,11 +2348,108 @@ def _finalize_daemon_guard_connect_payload(
     return payload
 
 
+def _complete_browser_oauth_connect(
+    *,
+    store: GuardStore,
+    session: Any,
+    connect_url: str,
+    browser_opened: bool,
+    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None),
+) -> dict[str, object]:
+    _, allowed_origin = resolve_connect_url(connect_url)
+    oauth_client = resolve_guard_oauth_client_config(allowed_origin)
+    callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
+    if callback is None or callback.code is None:
+        raise RuntimeError("Guard OAuth callback missing authorization code.")
+    token_result = exchange_guard_authorization_code(
+        token_endpoint=oauth_client.token_endpoint,
+        client_id=oauth_client.client_id,
+        code=callback.code,
+        redirect_uri=session.redirect_uri,
+        code_verifier=session.pkce_verifier,
+        dpop_key_material=session.dpop_key_material,
+    )
+    if token_result.refresh_token is None:
+        raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
+    timestamp = _now()
+    _persist_oauth_local_credentials(
+        store=store,
+        issuer=oauth_client.issuer,
+        client_id=oauth_client.client_id,
+        refresh_token=token_result.refresh_token,
+        dpop_key_material=session.dpop_key_material,
+        grant_id=token_result.grant_id,
+        **token_result.target_binding(),
+        supply_chain_entitlement=token_result.supply_chain_entitlement,
+        workspace_id=token_result.workspace_id,
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        access_token=token_result.access_token,
+        access_token_expires_at=token_result.access_token_expires_at,
+        now=timestamp,
+    )
+    sync_url = f"{allowed_origin}/api/guard/receipts/sync"
+    return _finalize_daemon_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={
+            "status": "connected",
+            "connect_mode": "browser_oauth",
+            "browser_opened": browser_opened,
+            "authorize_url": session.authorize_url,
+            "redirect_uri": session.redirect_uri,
+            "grant_id": token_result.grant_id,
+            "machine_id": token_result.machine_id,
+            "workspace_id": token_result.workspace_id,
+            "connect_url": connect_url,
+            "sync_url": sync_url,
+            "_guard_sync_auth_context": _build_sync_auth_context(
+                access_token=token_result.access_token,
+                dpop_key_material=session.dpop_key_material,
+                sync_url=sync_url,
+            ),
+        },
+        now=timestamp,
+        managed_controls_publish=managed_controls_publish,
+    )
+
+
 _PROTECTION_REPAIR_PROBE_COMMAND = "git status --porcelain=v1"
 
 
-def _repair_command_activity_persistence_health(store: GuardStore) -> None:
-    evaluation = evaluate_command(_PROTECTION_REPAIR_PROBE_COMMAND)
+def _repair_command_activity_persistence_health(store: GuardStore) -> str | None:
+    """Probe command-evidence persistence; return the reason it could not run.
+
+    A probe that cannot evaluate the native policy engine proves nothing, so it
+    must not mutate persistence health. Real probe failures still surface through
+    ``probe_command_activity_persistence``.
+    """
+
+    snapshot = current_extension_control_snapshot()
+    if snapshot is None:
+        try:
+            snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+                store.read_extension_control_authority_for_registry(
+                    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+                    read_only=True,
+                )
+            )
+        except Exception:
+            snapshot = None
+    try:
+        evaluation = (
+            evaluate_command_native(
+                _PROTECTION_REPAIR_PROBE_COMMAND,
+                guard_home=store.guard_home,
+                extension_control_snapshot=snapshot,
+            )
+            if snapshot is not None
+            else None
+        )
+    except Exception:
+        evaluation = None
+    if evaluation is None:
+        return "native_evaluation_unavailable"
     occurred_at = datetime.now(timezone.utc)
     activity_id = f"activity:protection-repair-probe:{uuid.uuid4().hex}"
     decision_reason = ActivityDecisionReason.EXTENSION_MATCH if evaluation.matches else ActivityDecisionReason.NO_MATCH
@@ -2037,9 +2492,76 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> None:
         shadow=shadow,
         shadow_evaluation_succeeded=shadow_evaluation_succeeded,
     )
+    return None
 
 
 _GuardDaemonHttpServer = _GuardDaemonHTTPServer
+
+_CONTAINMENT_HEALTH_CACHE_SECONDS = 10.0
+
+
+def cached_containment_health(
+    server: _GuardDaemonHttpServer,
+    *,
+    force_refresh: bool,
+    probe: Callable[[], dict[str, object]],
+) -> dict[str, object] | None:
+    """Return containment health without holding the cache lock across the probe.
+
+    A fresh cache is shared. When the cache is due, one caller runs the probe
+    and everyone else keeps the previous payload. Callers only wait together
+    when no payload exists yet.
+    """
+
+    arrived_generation: int | None = None
+    probe_generation = 0
+    while True:
+        with server.containment_health_cache_lock:
+            if arrived_generation is None:
+                arrived_generation = server.containment_health_generation
+            cached = server.containment_health_cache
+            age = time.monotonic() - server.containment_health_cache_monotonic
+            if cached is not None and age <= _CONTAINMENT_HEALTH_CACHE_SECONDS and not force_refresh:
+                return dict(cached)
+            if server.containment_health_refreshing:
+                if cached is not None and not force_refresh:
+                    return dict(cached)
+                event = server.containment_health_refresh_event
+                run_probe = False
+            else:
+                event = threading.Event()
+                server.containment_health_refresh_event = event
+                server.containment_health_refreshing = True
+                server.containment_health_generation += 1
+                probe_generation = server.containment_health_generation
+                run_probe = True
+        if not run_probe:
+            event.wait()
+            with server.containment_health_cache_lock:
+                done = server.containment_health_completed_generation
+                if force_refresh and arrived_generation is not None and done <= arrived_generation:
+                    continue
+                return None if server.containment_health_cache is None else dict(server.containment_health_cache)
+        break
+    payload: dict[str, object] | None = None
+    failed = False
+    try:
+        payload = probe()
+    except (OSError, RuntimeError, TypeError, ValueError):
+        payload = None
+        failed = True
+    except BaseException:
+        failed = True
+        raise
+    finally:
+        with server.containment_health_cache_lock:
+            if failed or payload is not None:
+                server.containment_health_cache = None if payload is None else dict(payload)
+                server.containment_health_cache_monotonic = time.monotonic()
+            server.containment_health_refreshing = False
+            server.containment_health_completed_generation = probe_generation
+            event.set()
+    return None if payload is None else dict(payload)
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
@@ -2070,6 +2592,39 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_empty(status=200, extra_headers=headers)
 
+    def _serve_desktop_bootstrap(self, store: GuardStore) -> None:
+        """Return the desktop bootstrap document without queueing behind hook traffic.
+
+        The token is accepted only as a header. A query-string token is rejected
+        the same way as the other v1 routes. Failure is a 503 so the CLI falls
+        through to the full bootstrap command.
+        """
+
+        parsed = urlparse(self.path)
+        if self._query_has_guard_token(parsed.query):
+            self._record_query_token_rejection()
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        if not self._header_token_is_valid():
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        try:
+            from ..cli.commands_dispatch_desktop import desktop_bootstrap_document_for_running_daemon
+
+            document = desktop_bootstrap_document_for_running_daemon(
+                store=store,
+                home_dir=self.server.home_dir,
+                daemon_url=f"http://127.0.0.1:{self.server.daemon_port()}",
+                auth_token=self.server.auth_token,
+            )
+        except Exception:
+            diagnostics = getattr(self.server, "diagnostics", None)
+            if diagnostics is not None:
+                diagnostics.record_exception("desktop_bootstrap_unavailable")
+            self._write_json({"error": "desktop_bootstrap_unavailable"}, status=503)
+            return
+        self._write_json(document)
+
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
         parsed = urlparse(self.path)
@@ -2086,6 +2641,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
             self._write_json(self._detailed_healthz_payload())
+            return
+        if parsed.path == "/v1/desktop/bootstrap":
+            self._serve_desktop_bootstrap(store)
             return
         if parsed.path == "/v1/events/stream":
             if self._query_has_guard_token(parsed.query):
@@ -2171,17 +2729,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 managed_controls_publish=_managed_controls_publish_for(self._daemon_server()),
             )
             config = load_guard_config(store.guard_home)
+            daemon_server = self._daemon_server()
             include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)
             snapshot = build_runtime_snapshot(
                 store=store,
                 approval_center_url=format_local_http_origin(
-                    self._daemon_server().daemon_host(),
-                    self._daemon_server().daemon_port(),
+                    daemon_server.daemon_host(),
+                    daemon_server.daemon_port(),
                 ),
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
                 include_items=self._query_bool(parsed.query, "include_items", default=True),
                 receipt_limit=25 if include_receipts else 0,
                 containment_health=self._containment_health_payload(),
+                serving_runtime={
+                    "session_id": daemon_server.runtime_session_id,
+                    "daemon_host": daemon_server.runtime_host,
+                    "daemon_port": daemon_server.daemon_port(),
+                    "started_at": daemon_server.runtime_started_at,
+                    "last_heartbeat_at": _now(),
+                },
             )
             self._write_json(
                 {
@@ -2257,6 +2823,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             config = maybe_auto_revert_watch(store.guard_home)
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
+        if parsed.path == "/v1/cloud-review":
+            from .cloud_review_settings import cloud_review_settings_status
+
+            self._write_json(cloud_review_settings_status(store), extra_headers={"Cache-Control": "no-store"})
+            return
         if parsed.path == "/v1/update/status":
             self._write_json(
                 merge_dashboard_update_progress(
@@ -2310,8 +2881,43 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/connect/state":
             self._write_legacy_pairing_disabled()
             return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "business-summary":
+            from .business_review_summary import handle_business_review_summary
+
+            handle_business_review_summary(self, path_parts[2])
+            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
+            if approval is None and not self._is_hosted_dashboard_origin():
+                from .business_review_queue import NativeBusinessReviewQueueReadError, native_request_detail
+
+                try:
+                    native_detail = native_request_detail(store, unquote(path_parts[2]))
+                except NativeBusinessReviewQueueReadError:
+                    self._write_json(
+                        {
+                            "error": "native_local_business_queue_read_failed",
+                            "message": (
+                                "Saved request details could not be verified. "
+                                "Refresh this request or return to the queue."
+                            ),
+                            "recovery": {
+                                "code": "request_unavailable",
+                                "title": "Request details are unavailable.",
+                                "body": (
+                                    "The saved request could not be checked. "
+                                    "Refresh this request or return to the queue."
+                                ),
+                                "queue_url": self._local_queue_url(),
+                            },
+                        },
+                        status=503,
+                        extra_headers={"Cache-Control": "no-store"},
+                    )
+                    return
+                if native_detail is not None:
+                    self._write_json(native_detail, extra_headers={"Cache-Control": "no-store"})
+                    return
             if approval is None:
                 self._write_json(
                     {
@@ -2552,23 +3158,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        extension_control_paths = {
-            "/v1/extension-controls/preview",
-            "/v1/extension-controls/test",
-            "/v1/extension-controls/apply",
-            "/v1/extension-controls/refresh",
-            "/v1/extension-controls/recover-authority",
-            "/v1/extension-controls/acknowledge-degraded",
-        }
-        local_cli_paths = {
-            "/v1/local-clis/preview",
-            "/v1/local-clis/apply",
-            "/v1/local-clis/recognize",
-        }
-        if parsed.path in extension_control_paths | local_cli_paths and not self._header_token_is_valid():
+        if parsed.path in _EXTENSION_CONTROL_PATHS | _LOCAL_CLI_PATHS and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path in extension_control_paths | local_cli_paths:
+        if parsed.path in _EXTENSION_CONTROL_PATHS | _LOCAL_CLI_PATHS:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -2612,7 +3205,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/update/reconnect/verify":
             self._handle_dashboard_reconnect_verify(payload)
             return
-        if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid(payload=payload):
+        proof_authorized = challenge_auth(parsed.path, payload, self._consume_codex_daemon_challenge)
+        requires_token = self._requires_header_token(parsed.path, path_parts)
+        if not request_auth(requires_token, proof_authorized, payload, self._header_token_is_valid):
             if (
                 len(path_parts) == 4
                 and path_parts[:2] == ["v1", "requests"]
@@ -2637,16 +3232,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             else:
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path == "/v1/hooks/codex" and not self._consume_codex_daemon_challenge(payload):
+        if parsed.path in CHALLENGE_HOOK_PATHS and not proof_authorized:
             self._write_json(
                 {"error": "daemon_identity_required", "repair": "Run `hol-guard daemon repair`."},
                 status=401,
             )
             return
-        if parsed.path in extension_control_paths:
+        if parsed.path in _EXTENSION_CONTROL_PATHS:
             try:
                 if parsed.path.endswith("/test"):
                     response = self._daemon_server().extension_control_api.test_command(payload)
+                elif parsed.path.endswith("/inspect"):
+                    response = self._daemon_server().extension_control_api.inspect_command(payload)
                 elif parsed.path.endswith("/preview"):
                     response = self._daemon_server().extension_control_api.preview(payload)
                 elif parsed.path.endswith("/apply"):
@@ -2654,7 +3251,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 elif parsed.path.endswith("/acknowledge-degraded"):
                     response = self._daemon_server().extension_control_api.acknowledge_degraded(payload)
                 elif parsed.path.endswith("/recover-authority"):
-                    response = self._daemon_server().extension_control_api.recover_authority(payload)
+                    response = self._daemon_server().extension_control_api.recover_authority(
+                        payload,
+                        require_fresh_totp=self._request_uses_protection_repair_session(),
+                    )
                 else:
                     response = self._daemon_server().extension_control_api.refresh()
             except ExtensionControlApiError as error:
@@ -2662,18 +3262,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             self._write_json(response, extra_headers={"Cache-Control": "no-store"})
             return
-        if parsed.path in local_cli_paths:
-            try:
-                if parsed.path.endswith("/preview"):
-                    response = self._daemon_server().local_cli_api.preview(payload)
-                elif parsed.path.endswith("/recognize"):
-                    response = self._daemon_server().local_cli_api.recognize(payload)
-                else:
-                    response = self._daemon_server().local_cli_api.apply(payload)
-            except LocalCliApiError as error:
-                self._write_json(error.to_payload(), status=error.status)
-                return
-            self._write_json(response, extra_headers={"Cache-Control": "no-store"})
+        if parsed.path in _LOCAL_CLI_PATHS:
+            handle_local_cli_post(self, parsed.path, payload)
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
@@ -2683,6 +3273,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
             self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
+            return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
+            self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])
             return
         if parsed.path == "/v1/clients/attach":
             self._handle_client_attach(payload)
@@ -2732,8 +3325,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/command-queue/worker/refresh":
             self._handle_command_queue_worker_refresh()
             return
+        if parsed.path == "/v1/cloud-review":
+            self._handle_cloud_review_settings(payload)
+            return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
+            return
+        if parsed.path == "/v1/protection/repair/approval-gate/setup":
+            self._handle_protection_repair_approval_gate_setup(payload)
             return
         if parsed.path == "/v1/settings":
             self._handle_settings_update(payload)
@@ -2764,7 +3363,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_protection_repair(payload)
             return
         if parsed.path == "/v1/supply-chain/repair":
-            self._handle_supply_chain_repair(payload)
+            self._run_package_firewall_mutation("repair_all", lambda: self._handle_supply_chain_repair(payload))
             return
         if parsed.path == "/v1/insights/share":
             self._handle_insights_share_publish(payload)
@@ -2796,10 +3395,28 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             and path_parts[:3] == ["v1", "supply-chain", "package-shims"]
             and path_parts[3] in _SUPPLY_CHAIN_PACKAGE_ACTIONS
         ):
-            self._handle_supply_chain_package_firewall_action(path_parts[3], payload)
+            action = path_parts[3]
+
+            def handle_package_action() -> None:
+                self._handle_supply_chain_package_firewall_action(action, payload)
+
+            if action in {"install", "repair", "uninstall", "remove", "activate", "open-shell", "sync"}:
+                self._run_package_firewall_mutation(action, handle_package_action)
+            else:
+                handle_package_action()
+            return
+        if parsed.path == "/v1/supply-chain/choose-folder":
+            self._handle_supply_chain_choose_folder()
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
-            self._handle_supply_chain_package_firewall_action(path_parts[2], payload)
+            action = path_parts[2]
+            if action == "sync":
+                self._run_package_firewall_mutation(
+                    action,
+                    lambda: self._handle_supply_chain_package_firewall_action(action, payload),
+                )
+            else:
+                self._handle_supply_chain_package_firewall_action(action, payload)
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
@@ -2937,22 +3554,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         contract_digest=scope_contract_digest,
                     )
                 except StaleApprovalScopeContractError as error:
-                    self._write_json(
-                        {"resolved": False, "error": str(error), **error.contract.to_dict()},
-                        status=409,
-                    )
+                    self._write_stale_approval_scope_error(error)
                     return
                 except IneligibleApprovalScopeError as error:
-                    self._write_json(
-                        {
-                            "resolved": False,
-                            "error": str(error),
-                            "action": error.action,
-                            "requested_scope": error.requested_scope,
-                            **error.contract.to_dict(),
-                        },
-                        status=422,
-                    )
+                    self._write_ineligible_approval_scope_error(error)
                     return
                 except ValueError as error:
                     self._write_json({"resolved": False, "error": str(error)}, status=400)
@@ -2993,22 +3598,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_approval_gate_error(error, resolved=False)
             return
         except StaleApprovalScopeContractError as error:
-            self._write_json(
-                {"resolved": False, "error": str(error), **error.contract.to_dict()},
-                status=409,
-            )
+            self._write_stale_approval_scope_error(error)
             return
         except IneligibleApprovalScopeError as error:
-            self._write_json(
-                {
-                    "resolved": False,
-                    "error": str(error),
-                    "action": error.action,
-                    "requested_scope": error.requested_scope,
-                    **error.contract.to_dict(),
-                },
-                status=422,
-            )
+            self._write_ineligible_approval_scope_error(error)
             return
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
@@ -3246,6 +3839,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
             else:
                 result = self._run_headless_managed_action(adapter.harness, harness_action, payload, context)
+        except ApprovalGateError as error:
+            return error.status, error.to_payload()
         except ValueError as error:
             return _headless_action_error_payload(
                 operation=operation,
@@ -3310,6 +3905,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             if confirmation != expected_confirmation:
                 raise ValueError("confirmation_required")
+            require_harness_disconnect_gate(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                payload,
+                harness=harness,
+            )
         install_command = "uninstall" if action == "uninstall" else "install"
         return apply_managed_install(
             install_command,
@@ -3655,7 +4255,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._enforce_package_firewall_rate_limit(operation, payload):
             return
         entitlement = self._supply_chain_entitlement()
-        context = self._supply_chain_context(payload)
+        try:
+            context = self._supply_chain_context(
+                payload,
+                reject_invalid_explicit=operation == "audit",
+            )
+        except ValueError as error:
+            self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
+            return
         current_status = package_shim_status(context)
         if not package_firewall_operation_allowed(
             entitlement,
@@ -3697,15 +4304,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_approval_gate_error(error)
             return
         except ValueError as error:
-            error_code = str(error)
-            error_payload: dict[str, object] = {"error": error_code, "operation": operation}
-            if error_code == "workspace_dir_required":
-                error_payload["message"] = (
-                    "Guard needs a project folder with package manifests before it can run "
-                    "the workspace audit. Open Guard from a connected app workspace or pass "
-                    "workspace_dir in the audit request."
-                )
-            self._write_json(error_payload, status=400)
+            self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
             return
         except Exception as error:
             status, error_payload = _supply_chain_package_action_error_response(
@@ -3799,7 +4398,60 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         raise ValueError("unsupported_supply_chain_operation")
 
-    def _resolve_supply_chain_workspace_dir(self, payload: dict[str, object]) -> Path | None:
+    def _handle_supply_chain_choose_folder(self) -> None:
+        try:
+            selected = choose_project_folder()
+        except ProjectFolderPickerBusyError:
+            self._write_json(
+                {
+                    "error": "folder_picker_busy",
+                    "message": "A folder selection is already open.",
+                    "operation": "choose-folder",
+                },
+                status=409,
+            )
+            return
+        except ProjectFolderPickerUnavailableError:
+            self._write_json(
+                {
+                    "error": "folder_picker_unavailable",
+                    "message": "Folder selection is unavailable. Paste a project folder path instead.",
+                    "operation": "choose-folder",
+                },
+                status=503,
+            )
+            return
+        if selected is None:
+            self._write_json({"cancelled": True, "operation": "choose-folder", "workspace_dir": None})
+            return
+        try:
+            resolved = self._resolve_supply_chain_workspace_dir(
+                {"workspace_dir": selected},
+                reject_invalid_explicit=True,
+            )
+        except ValueError as error:
+            self._write_json(self._supply_chain_value_error_payload("choose-folder", str(error)), status=400)
+            return
+        if resolved is None:
+            self._write_json(
+                self._supply_chain_value_error_payload("choose-folder", "workspace_dir_invalid"),
+                status=400,
+            )
+            return
+        self._write_json(
+            {
+                "cancelled": False,
+                "operation": "choose-folder",
+                "workspace_dir": str(resolved),
+            }
+        )
+
+    def _resolve_supply_chain_workspace_dir(
+        self,
+        payload: dict[str, object],
+        *,
+        reject_invalid_explicit: bool = False,
+    ) -> Path | None:
         allowed_roots = (
             Path.home().resolve(),
             Path.cwd().resolve(),
@@ -3811,15 +4463,38 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace_value=payload.get("workspace"),
             allowed_roots=allowed_roots,
             managed_workspace_dirs=managed_workspace_dirs,
+            reject_invalid_explicit=reject_invalid_explicit,
         )
 
-    def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
-        workspace_dir = self._resolve_supply_chain_workspace_dir(payload)
+    def _supply_chain_context(
+        self,
+        payload: dict[str, object],
+        *,
+        reject_invalid_explicit: bool = False,
+    ) -> HarnessContext:
+        workspace_dir = self._resolve_supply_chain_workspace_dir(
+            payload,
+            reject_invalid_explicit=reject_invalid_explicit,
+        )
         return HarnessContext(
             home_dir=Path.home().resolve(),
             workspace_dir=workspace_dir,
             guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
+
+    @staticmethod
+    def _supply_chain_value_error_payload(operation: str, error_code: str) -> dict[str, object]:
+        error_payload: dict[str, object] = {"error": error_code, "operation": operation}
+        if error_code == "workspace_dir_required":
+            error_payload["message"] = (
+                "Guard needs a project folder with package manifests before it can run the workspace audit. "
+                "Choose a local project folder and try again."
+            )
+        elif error_code == "workspace_dir_invalid":
+            error_payload["message"] = (
+                "Guard could not use the selected project folder. Choose an existing local folder and try again."
+            )
+        return error_payload
 
     @staticmethod
     def _supply_chain_managers(payload: dict[str, object]) -> tuple[tuple[str, ...] | None, str | None]:
@@ -3942,59 +4617,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
         def _complete_connect() -> None:
             try:
-                _, allowed_origin = resolve_connect_url(connect_url)
-                oauth_client = resolve_guard_oauth_client_config(allowed_origin)
-                callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
-                if callback is None or callback.code is None:
-                    raise RuntimeError("Guard OAuth callback missing authorization code.")
-                token_result = exchange_guard_authorization_code(
-                    token_endpoint=oauth_client.token_endpoint,
-                    client_id=oauth_client.client_id,
-                    code=callback.code,
-                    redirect_uri=session.redirect_uri,
-                    code_verifier=session.pkce_verifier,
-                    dpop_key_material=session.dpop_key_material,
-                )
-                if token_result.refresh_token is None:
-                    raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
-                timestamp = _now()
-                _persist_oauth_local_credentials(
+                payload = _complete_browser_oauth_connect(
                     store=store,
-                    issuer=oauth_client.issuer,
-                    client_id=oauth_client.client_id,
-                    refresh_token=token_result.refresh_token,
-                    dpop_key_material=session.dpop_key_material,
-                    grant_id=token_result.grant_id,
-                    **token_result.target_binding(),
-                    supply_chain_entitlement=token_result.supply_chain_entitlement,
-                    workspace_id=token_result.workspace_id,
-                    runtime_id="hol-guard",
-                    runtime_label="HOL Guard CLI",
-                    access_token=token_result.access_token,
-                    access_token_expires_at=token_result.access_token_expires_at,
-                    now=timestamp,
-                )
-                payload = _finalize_daemon_guard_connect_payload(
-                    store=store,
+                    session=session,
                     connect_url=connect_url,
-                    payload={
-                        "status": "connected",
-                        "connect_mode": "browser_oauth",
-                        "browser_opened": browser_opened,
-                        "authorize_url": session.authorize_url,
-                        "redirect_uri": session.redirect_uri,
-                        "grant_id": token_result.grant_id,
-                        "machine_id": token_result.machine_id,
-                        "workspace_id": token_result.workspace_id,
-                        "connect_url": connect_url,
-                        "sync_url": f"{allowed_origin}/api/guard/receipts/sync",
-                        "_guard_sync_auth_context": _build_sync_auth_context(
-                            access_token=token_result.access_token,
-                            dpop_key_material=session.dpop_key_material,
-                            sync_url=f"{allowed_origin}/api/guard/receipts/sync",
-                        ),
-                    },
-                    now=timestamp,
+                    browser_opened=browser_opened,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                 )
                 resolved_entitlement = resolve_package_firewall_entitlement(store)
@@ -4007,24 +4634,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 _set_package_firewall_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    {
-                        **running_state,
-                        "state": "failed",
-                        "title": "Guard Cloud sign-in needs attention",
-                        "detail": repair_message,
-                        "poll_after_ms": None,
-                    },
+                    failed_browser_connect_flow_state(running_state, detail=repair_message),
                 )
             except Exception as error:
                 _set_package_firewall_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    {
-                        **running_state,
-                        "state": "failed",
-                        "title": "Guard Cloud sign-in needs attention",
-                        "detail": str(error),
-                        "poll_after_ms": None,
-                    },
+                    failed_browser_connect_flow_state(running_state, detail=str(error)),
                 )
             finally:
                 session.close()
@@ -4043,6 +4658,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             {
                 "connect_required": connect_flow is not None,
                 "connect_flow": connect_flow,
+                "dashboard_url": _package_firewall_connect_url(store).removesuffix("/connect"),
             }
         )
 
@@ -4054,6 +4670,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "error": "guard_cloud_connect_not_required",
                     "connect_required": False,
                     "connect_flow": None,
+                    "dashboard_url": _package_firewall_connect_url(store).removesuffix("/connect"),
                     "message": "Guard Cloud connect is not required to publish insights from this machine.",
                 },
                 status=409,
@@ -4074,10 +4691,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "request_id": request_id,
             "poll_after_ms": _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
         }
-        started, current = _begin_guard_cloud_connect_state(  # type: ignore[arg-type]
-            self.server,
-            starting_state,
-        )
+        started, current = _begin_guard_cloud_connect_state(self.server, starting_state)  # type: ignore[arg-type]
         if not started:
             self._write_json({"connect_required": True, "connect_flow": current}, status=202)
             return
@@ -4128,59 +4742,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
         def _complete_connect() -> None:
             try:
-                _, allowed_origin = resolve_connect_url(connect_url)
-                oauth_client = resolve_guard_oauth_client_config(allowed_origin)
-                callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
-                if callback is None or callback.code is None:
-                    raise RuntimeError("Guard OAuth callback missing authorization code.")
-                token_result = exchange_guard_authorization_code(
-                    token_endpoint=oauth_client.token_endpoint,
-                    client_id=oauth_client.client_id,
-                    code=callback.code,
-                    redirect_uri=session.redirect_uri,
-                    code_verifier=session.pkce_verifier,
-                    dpop_key_material=session.dpop_key_material,
-                )
-                if token_result.refresh_token is None:
-                    raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
-                timestamp = _now()
-                _persist_oauth_local_credentials(
+                payload = _complete_browser_oauth_connect(
                     store=store,
-                    issuer=oauth_client.issuer,
-                    client_id=oauth_client.client_id,
-                    refresh_token=token_result.refresh_token,
-                    dpop_key_material=session.dpop_key_material,
-                    grant_id=token_result.grant_id,
-                    **token_result.target_binding(),
-                    supply_chain_entitlement=token_result.supply_chain_entitlement,
-                    workspace_id=token_result.workspace_id,
-                    runtime_id="hol-guard",
-                    runtime_label="HOL Guard CLI",
-                    access_token=token_result.access_token,
-                    access_token_expires_at=token_result.access_token_expires_at,
-                    now=timestamp,
-                )
-                payload = _finalize_daemon_guard_connect_payload(
-                    store=store,
+                    session=session,
                     connect_url=connect_url,
-                    payload={
-                        "status": "connected",
-                        "connect_mode": "browser_oauth",
-                        "browser_opened": browser_opened,
-                        "authorize_url": session.authorize_url,
-                        "redirect_uri": session.redirect_uri,
-                        "grant_id": token_result.grant_id,
-                        "machine_id": token_result.machine_id,
-                        "workspace_id": token_result.workspace_id,
-                        "connect_url": connect_url,
-                        "sync_url": f"{allowed_origin}/api/guard/receipts/sync",
-                        "_guard_sync_auth_context": _build_sync_auth_context(
-                            access_token=token_result.access_token,
-                            dpop_key_material=session.dpop_key_material,
-                            sync_url=f"{allowed_origin}/api/guard/receipts/sync",
-                        ),
-                    },
-                    now=timestamp,
+                    browser_opened=browser_opened,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                 )
                 if _guard_cloud_connect_succeeded(store):
@@ -4191,24 +4757,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 _set_guard_cloud_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    {
-                        **running_state,
-                        "state": "failed",
-                        "title": "Guard Cloud sign-in needs attention",
-                        "detail": repair_message,
-                        "poll_after_ms": None,
-                    },
+                    failed_browser_connect_flow_state(running_state, detail=repair_message),
                 )
             except Exception as error:
                 _set_guard_cloud_connect_state(  # type: ignore[arg-type]
                     self.server,
-                    {
-                        **running_state,
-                        "state": "failed",
-                        "title": "Guard Cloud sign-in needs attention",
-                        "detail": str(error),
-                        "poll_after_ms": None,
-                    },
+                    failed_browser_connect_flow_state(running_state, detail=str(error)),
                 )
             finally:
                 session.close()
@@ -4547,6 +5101,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if dry_run:
             self._write_json(build_harness_setup_plan(action, adapter.harness, context, dry_run=True))
             return
+        if action == "uninstall":
+            try:
+                require_harness_disconnect_gate(
+                    self.server.store.guard_home,  # type: ignore[attr-defined]
+                    payload,
+                    harness=adapter.harness,
+                )
+            except ApprovalGateError as error:
+                self._write_approval_gate_error(error)
+                return
         install_command = "uninstall" if action == "uninstall" else "install"
         try:
             result = apply_managed_install(
@@ -4609,8 +5173,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "invalid_status"}, status=400)
             return
         include_totals = self._query_bool(query_string, "include_totals", default=True)
+        from .business_review_queue import NativeBusinessReviewQueueReadError, local_request_page
+
         try:
-            page = self.server.store.list_approval_request_page(  # type: ignore[attr-defined]
+            read_page = (
+                self.server.store.list_approval_request_page
+                if self._is_hosted_dashboard_origin()
+                else (lambda **options: local_request_page(self.server.store, **options))
+            )
+            page = read_page(
                 status=status_filter,
                 limit=limit,
                 cursor=self._query_string(query_string, "cursor"),
@@ -4618,6 +5189,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 search=self._query_string(query_string, "search"),
                 include_totals=include_totals,
             )
+        except NativeBusinessReviewQueueReadError:
+            self._write_json(
+                {"error": "native_local_business_queue_read_failed"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
         except InvalidApprovalCursorError:
             self._write_json(
                 {
@@ -4631,7 +5209,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=400,
             )
             return
-        self._write_json(page)
+        self._write_json(page, extra_headers={"Cache-Control": "no-store"})
 
     @staticmethod
     def _optional_bool(value: object, *, default: bool) -> bool:
@@ -4653,6 +5231,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if "remember" in payload:
             return True if self._optional_bool(payload.get("remember"), default=False) else None
         return None
+
+    def _write_stale_approval_scope_error(self, error: StaleApprovalScopeContractError) -> None:
+        self._write_json(
+            {"resolved": False, "error": str(error), **error.contract.to_dict()},
+            status=409,
+        )
+
+    def _write_ineligible_approval_scope_error(self, error: IneligibleApprovalScopeError) -> None:
+        self._write_json(
+            {
+                "resolved": False,
+                "error": str(error),
+                "action": error.action,
+                "requested_scope": error.requested_scope,
+                **error.contract.to_dict(),
+            },
+            status=422,
+        )
 
     def _write_approval_gate_error(self, error: ApprovalGateError, *, resolved: bool | None = None) -> None:
         payload = error.to_payload()
@@ -4751,10 +5347,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
         return parsed if isinstance(parsed, dict) else None
 
+    def _record_incomplete_protection_repair(self, check_reasons: Mapping[str, str]) -> None:
+        record_incomplete_protection_repair(self._daemon_server().diagnostics, check_reasons)
+
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
         store = self.server.store  # type: ignore[attr-defined]
         if check_id in {"all", "policy_engine", "rule_packs", "tamper_checks"}:
+            repaired_check_ids: list[str] = []
+            pending_check_ids: list[str] = []
+            failed_check_ids: list[str] = []
+            check_reasons: dict[str, str] = {}
+            if check_id == "all":
+                daemon_server = self._daemon_server()
+                registration_reason = repair_daemon_registration(
+                    store,
+                    session_id=daemon_server.runtime_session_id,
+                    registration=GuardRuntimeRegistration(
+                        daemon_host=daemon_server.runtime_host,
+                        daemon_port=daemon_server.daemon_port(),
+                        started_at=daemon_server.runtime_started_at,
+                    ),
+                    last_heartbeat_at=_now(),
+                )
+                if registration_reason is None:
+                    repaired_check_ids.append("daemon")
+                else:
+                    failed_check_ids.append("daemon")
+                    check_reasons["daemon"] = registration_reason
             try:
                 status = store.setup_policy_integrity(now=_now(), include_items=False)
                 if status.get("mode") != "protected":
@@ -4764,10 +5384,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         include_items=False,
                     )
             except (OSError, RuntimeError, TypeError, ValueError):
+                check_reasons.update(integrity_repair_reasons(restored=False))
+                self._record_incomplete_protection_repair(check_reasons)
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
                         "message": "Guard could not restore integrity protection automatically.",
+                        "check_reasons": check_reasons,
                     },
                     status=409,
                 )
@@ -4775,9 +5398,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             repaired = status.get("mode") == "protected"
             degraded_reasons = status.get("degraded_reasons")
             reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
-            repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
-            pending_check_ids: list[str] = []
-            failed_check_ids: list[str] = []
+            if repaired:
+                repaired_check_ids.extend(["policy_engine", "rule_packs", "tamper_checks"])
+            else:
+                failed_check_ids.extend(["policy_engine", "rule_packs", "tamper_checks"])
+                check_reasons.update(integrity_repair_reasons(restored=False))
+            hook_failures: list[str] | tuple[str, ...] = []
             if check_id == "all":
                 hook_repair_unknown = False
                 try:
@@ -4791,17 +5417,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 if hook_failures or hook_repair_unknown or not has_active_hooks:
                     failed_check_ids.append("harness_hooks")
+                    check_reasons["harness_hooks"] = harness_hooks_repair_reason(
+                        has_active_hooks=has_active_hooks,
+                        hook_failures=hook_failures,
+                        hook_repair_unknown=hook_repair_unknown,
+                    )
                 else:
                     repaired_check_ids.append("harness_hooks")
                 if repaired:
-                    containment_repaired, containment_failed = confirmed_containment_repair_signals(
-                        lambda: self._containment_health_payload(force_refresh=True)
-                    )
+                    (
+                        containment_repaired,
+                        containment_failed,
+                        containment_reasons,
+                    ) = containment_repair_outcome(lambda: self._containment_health_payload(force_refresh=True))
                     repaired_check_ids.extend(containment_repaired)
                     failed_check_ids.extend(containment_failed)
+                    for failed_check_id in containment_failed:
+                        check_reasons[failed_check_id] = containment_reasons[failed_check_id]
                     try:
                         config = load_guard_config(store.guard_home)
-                        _repair_command_activity_persistence_health(store)
+                        probe_reason = _repair_command_activity_persistence_health(store)
                         store.maintain_command_activity(
                             now=datetime.now(timezone.utc),
                             detail_retain_days=config.evidence_retain_days,
@@ -4809,11 +5444,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         evidence_health = store.get_command_activity_persistence_health()
                         if evidence_health.active_error_count > 0:
                             failed_check_ids.append("decision_stream")
+                            check_reasons["decision_stream"] = "decision_stream_degraded"
+                        elif probe_reason is not None:
+                            pending_check_ids.append("decision_stream")
+                            check_reasons["decision_stream"] = probe_reason
                         else:
                             repaired_check_ids.append("decision_stream")
                     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                         failed_check_ids.append("decision_stream")
+                        check_reasons["decision_stream"] = "decision_stream_health_unavailable"
                 if repaired and (failed_check_ids or pending_check_ids):
+                    self._record_incomplete_protection_repair(check_reasons)
                     self._write_json(
                         incomplete_protection_repair_payload(
                             repaired_check_ids=repaired_check_ids,
@@ -4823,17 +5464,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             has_active_hooks=has_active_hooks,
                             hook_failures=hook_failures,
                             hook_repair_unknown=hook_repair_unknown,
+                            check_reasons=check_reasons,
                         ),
                         status=409,
                     )
                     return
+            if not repaired or failed_check_ids or pending_check_ids:
+                self._record_incomplete_protection_repair(check_reasons)
             self._write_json(
                 {
                     **({"error": "local_integrity_repair_incomplete"} if not repaired else {}),
                     "repaired": repaired,
                     "repair_scope": "local_integrity",
                     "check_ids": repaired_check_ids,
+                    **({"failed_check_ids": failed_check_ids} if failed_check_ids else {}),
                     "pending_check_ids": pending_check_ids,
+                    "check_reasons": check_reasons,
                     "message": (
                         "Integrity protection restored."
                         if repaired
@@ -4849,29 +5495,69 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
         if check_id == "decision_stream":
+            check_reasons: dict[str, str] = {}
             try:
                 config = load_guard_config(store.guard_home)
-                _repair_command_activity_persistence_health(store)
+                probe_reason = _repair_command_activity_persistence_health(store)
+            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                check_reasons["decision_stream"] = "decision_stream_health_unavailable"
+                self._record_incomplete_protection_repair(check_reasons)
+                self._write_json(
+                    {
+                        "error": "protection_repair_failed",
+                        "message": "Guard could not verify the command evidence store.",
+                        "check_reasons": check_reasons,
+                    },
+                    status=409,
+                )
+                return
+            if probe_reason is not None:
+                check_reasons["decision_stream"] = probe_reason
+                self._record_incomplete_protection_repair(check_reasons)
+                self._write_json(
+                    {
+                        "repaired": False,
+                        "repair_scope": "local_integrity",
+                        "check_ids": [],
+                        "pending_check_ids": ["decision_stream"],
+                        "check_reasons": check_reasons,
+                        "message": (
+                            "Guard could not run the native policy engine to prove command evidence. "
+                            "Existing evidence was not changed."
+                        ),
+                    },
+                    status=409,
+                )
+                return
+            try:
                 store.maintain_command_activity(
                     now=datetime.now(timezone.utc),
                     detail_retain_days=config.evidence_retain_days,
                 )
                 health = store.get_command_activity_persistence_health()
             except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                check_reasons["decision_stream"] = "decision_stream_health_unavailable"
+                self._record_incomplete_protection_repair(check_reasons)
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
                         "message": "Guard could not verify the command evidence store.",
+                        "check_reasons": check_reasons,
                     },
                     status=409,
                 )
                 return
             repaired = health.active_error_count == 0
+            if not repaired:
+                check_reasons["decision_stream"] = "decision_stream_degraded"
+                self._record_incomplete_protection_repair(check_reasons)
             self._write_json(
                 {
                     "repaired": repaired,
                     "repair_scope": "local_integrity",
-                    "check_ids": ["decision_stream"],
+                    "check_ids": ["decision_stream"] if repaired else [],
+                    **({"failed_check_ids": ["decision_stream"]} if not repaired else {}),
+                    "check_reasons": check_reasons,
                     "message": (
                         "Command evidence is healthy."
                         if repaired
@@ -4884,9 +5570,36 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self._write_json({"error": "unsupported_protection_check"}, status=400)
 
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
+        self._apply_settings_payload(payload, missing_error="invalid_settings")
+
+    def _handle_protection_repair_approval_gate_setup(self, payload: dict[str, object]) -> None:
+        if not self._protection_repair_approval_gate_setup_payload_is_allowed(payload):
+            self._write_json({"error": "invalid_settings"}, status=400)
+            return
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        gate_config = approval_gate_public_config(guard_home)
+        if gate_config.configured or gate_config.enabled:
+            self._write_json({"error": "approval_gate_setup_unavailable"}, status=409)
+            return
+        self._apply_settings_payload(payload, missing_error="invalid_settings")
+
+    def _protection_repair_approval_gate_setup_payload_is_allowed(self, payload: object) -> bool:
+        if not isinstance(payload, dict) or set(payload) != {"settings"}:
+            return False
+        settings = payload.get("settings")
+        if not isinstance(settings, dict) or set(settings) != {"approval_gate"}:
+            return False
+        gate_payload = settings.get("approval_gate")
+        return (
+            isinstance(gate_payload, dict)
+            and set(gate_payload) == {"enabled", "new_password", "confirm_password"}
+            and gate_payload.get("enabled") is True
+        )
+
+    def _apply_settings_payload(self, payload: dict[str, object], *, missing_error: str) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
-            self._write_json({"error": "invalid_settings"}, status=400)
+            self._write_json({"error": missing_error}, status=400)
             return
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
         previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
@@ -4900,11 +5613,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             proof_input = approval_gate_input_from_mapping(payload)
             if proof_input is not None:
                 gate_input = proof_input
+        presentation_only_keys = {
+            "presentation_mode",
+            "presentation_mode_explicit",
+            "presentation_schema_version",
+            "presentation_revision",
+        }
+        presentation_only = gate_payload is None and bool(settings) and set(settings).issubset(presentation_only_keys)
         try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=gate_input,
+            approval_gate_grant = (
+                None
+                if presentation_only
+                else require_high_risk(
+                    guard_home,
+                    purpose="settings_write",
+                    approval_gate_input=gate_input,
+                )
             )
             if isinstance(gate_payload, dict):
                 validate_approval_gate_settings(
@@ -4919,6 +5643,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 config_settings,
                 approval_gate_grant=approval_gate_grant,
                 cloud_sync_entitled=bool(entitlement.get("allowed")),
+                skip_approval_gate=presentation_only,
             )
             if isinstance(gate_payload, dict):
                 update_approval_gate_settings(
@@ -4966,62 +5691,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_settings_import(self, payload: dict[str, object]) -> None:
-        settings = payload.get("settings")
-        if not isinstance(settings, dict):
-            self._write_json({"error": "invalid_settings_import"}, status=400)
-            return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
-        gate_payload = settings.get("approval_gate")
-        gate_input = (
-            approval_gate_input_from_mapping({"approval_gate": gate_payload})
-            if isinstance(gate_payload, dict)
-            else None
-        )
-        if payload.get("approval_password") or payload.get("approval_totp_code"):
-            proof_input = approval_gate_input_from_mapping(payload)
-            if proof_input is not None:
-                gate_input = proof_input
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=gate_input,
-            )
-            if isinstance(gate_payload, dict):
-                validate_approval_gate_settings(
-                    guard_home,
-                    gate_payload,
-                    approval_gate_grant=approval_gate_grant,
-                )
-            config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
-            config = update_guard_settings(
-                guard_home,
-                config_settings,
-                approval_gate_grant=approval_gate_grant,
-                cloud_sync_entitled=bool(entitlement.get("allowed")),
-            )
-            if isinstance(gate_payload, dict):
-                update_approval_gate_settings(
-                    guard_home,
-                    gate_payload,
-                    approval_gate_grant=approval_gate_grant,
-                )
-                config = load_guard_config(guard_home)
-            if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
-                    self.server.store,
-                    level=config.receipt_redaction_level,
-                    changed_at=_now(),
-                )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
-            return
-        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
+        self._apply_settings_payload(payload, missing_error="invalid_settings_import")
 
     def _handle_settings_reset(self, payload: dict[str, object]) -> None:
         confirm = payload.get("confirm")
@@ -5198,108 +5868,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_mcp_policy_decision(self, request_id: str, payload: dict[str, object]) -> None:
-        """Resolve an MCP policy creation request via human approval.
+        from .mcp_policy_decisions import handle_mcp_policy_decision
 
-        POST /v1/mcp-policy/requests/<id>/decision
-        Body: {"action": "approve" | "decline", ...approval_gate_input}
-
-        On approve: obtains the ApprovalGateGrant via require_high_risk
-        (purpose="policy_import"), then calls apply_pending_policy_request
-        with the grant.  On decline: calls decline_pending_policy_request.
-        """
-
-        from codex_plugin_scanner.guard.mcp.policy_errors import PolicyToolError
-        from codex_plugin_scanner.guard.mcp.policy_tools import (
-            apply_pending_policy_request,
-            decline_pending_policy_request,
-        )
-
-        action = payload.get("action")
-        if not isinstance(action, str) or action.strip() not in {"approve", "decline"}:
-            self._write_json(
-                {"resolved": False, "error": "missing_required_fields"},
-                status=400,
-            )
-            return
-        action = action.strip()
-        store = self.server.store  # type: ignore[attr-defined]
-        guard_home = store.guard_home
-
-        if action == "decline":
-            try:
-                decline_result = decline_pending_policy_request(store, request_id)
-            except PolicyToolError as error:
-                if error.code == "approval_already_resolved":
-                    # VPC047: a terminal/expired/declined request is stable.
-                    # Return the honest current state so the dashboard renders
-                    # disabled controls instead of an error.
-                    from codex_plugin_scanner.guard.mcp.policy_store import (
-                        MCPolicyRequestRepository,
-                    )
-
-                    repo = MCPolicyRequestRepository(store)
-                    current = repo.get_request(request_id)
-                    if current is not None:
-                        self._write_json(
-                            {
-                                "resolved": True,
-                                "requestId": current.request_id,
-                                "status": current.status,
-                                "resolvedAt": current.resolved_at,
-                            }
-                        )
-                        return
-                self._write_json(
-                    {"resolved": False, "error": error.code, "message": error.message},
-                    status=400,
-                )
-                return
-            self._write_json({"resolved": True, **decline_result})
-            return
-
-        # action == "approve" — obtain the grant and apply.
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="policy_import",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-
-        try:
-            apply_result = apply_pending_policy_request(
-                store,
-                request_id,
-                approval_gate_grant=approval_gate_grant,
-            )
-        except PolicyToolError as error:
-            if error.code == "approval_already_resolved":
-                # VPC047: re-approving a terminal request is stable; return
-                # the honest current state so controls render disabled.
-                from codex_plugin_scanner.guard.mcp.policy_store import (
-                    MCPolicyRequestRepository,
-                )
-
-                repo = MCPolicyRequestRepository(store)
-                current = repo.get_request(request_id)
-                if current is not None:
-                    self._write_json(
-                        {
-                            "resolved": True,
-                            "requestId": current.request_id,
-                            "status": current.status,
-                            "resolvedAt": current.resolved_at,
-                        }
-                    )
-                    return
-            self._write_json(
-                {"resolved": False, "error": error.code, "message": error.message},
-                status=400,
-            )
-            return
-        self._write_json({"resolved": True, **apply_result})
+        handle_mcp_policy_decision(self, request_id, payload)
 
     def _handle_initialize(self, payload: dict[str, object]) -> None:
         client_name = self._optional_string(payload.get("client_name")) or "guard-client"
@@ -5640,6 +6211,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             request,
             payload,
             home_dir=home_dir,
+            guard_home=daemon_server.store.guard_home,
             claimed_saved_allow_hash=claimed_saved_allow_hash,
             claimed_approval_request_id=claimed_approval_request_id,
             reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: (
@@ -5653,10 +6225,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     deadline=time.monotonic() + _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS,
                     claim_saved_approval=False,
                     claimed_saved_allow_hash=claimed_hash,
-                    claimed_trusted_request_override=claimed_hash is not None,
                     claimed_approval_request_id=claimed_request_id,
                 ).payload
             ),
+        )
+
+    def _handle_cloud_review_settings(self, payload: dict[str, object]) -> None:
+        from .cloud_review_settings_route import handle_cloud_review_settings
+
+        lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
+        handle_cloud_review_settings(
+            self.server.store,
+            payload,
+            refresh_workers=lifecycle.refresh_command_queue_worker if lifecycle is not None else None,
+            write_json=self._write_json,
+            write_approval_gate_error=self._write_approval_gate_error,
         )
 
     def _handle_command_queue_worker_refresh(self) -> None:
@@ -5687,20 +6270,125 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             status=410,
         )
 
-    def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
-        from ..runtime.hook_payload_reference import (
-            HookPayloadReferenceError,
-            hook_payload_reference_size,
+    def _handle_hook_readiness(
+        self,
+        payload: dict[str, object],
+        query: str,
+        *,
+        default_harness: str,
+    ) -> None:
+        """Prepare the active workspace before a host's timed hook starts.
+
+        This route is deliberately separate from semantic hook review. It gives
+        the native publisher and isolated worker the existing setup budget so a
+        first tool call does not spend its short host deadline on cold startup.
+        """
+
+        params = parse_qs(query)
+        workspace_candidate = self._normalized_hook_workspace_string(
+            params.get("workspace", [None])[-1] or payload.get("workspace") or payload.get("cwd")
+        )
+        try:
+            _ = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            if _hook_harness_is_unmanaged(self._daemon_server(), default_harness):
+                self._write_json(
+                    {"ready": True, "native_required": False, "workspace_acknowledged": False, "worker_ready": True},
+                    extra_headers={"Cache-Control": "no-store"},
+                )
+                return
+            workspace = self._validated_hook_directory_string(
+                "workspace",
+                workspace_candidate,
+                roots=self._hook_safe_roots(),
+            )
+        except _HookPathValidationError as error:
+            self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+            self._write_json(
+                {"ready": False, "reason_code": f"invalid_{error.parameter.replace('-', '_')}"},
+                status=400,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        if workspace is None:
+            self._write_json(
+                {"ready": False, "reason_code": "workspace_required"},
+                status=400,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        if not _native_mode_requires_rust():
+            self._write_json(
+                {
+                    "ready": True,
+                    "native_required": False,
+                    "workspace_acknowledged": False,
+                    "worker_ready": True,
+                },
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        daemon_server = self._daemon_server()
+        readiness_deadline = time.monotonic() + _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS
+        try:
+            prepared_policy = daemon_server.hook_worker.prepare_workspace_policy(
+                Path(workspace),
+                deadline=readiness_deadline,
+            )
+        except Exception:
+            daemon_server.diagnostics.record_exception("native_workspace_readiness_failed")
+            prepared_policy = None
+        if not isinstance(prepared_policy, dict):
+            self._write_json(
+                {"ready": False, "reason_code": "native_policy_not_ready"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        remaining_seconds = max(0.0, readiness_deadline - time.monotonic())
+        worker_ready = daemon_server.hook_process_runner.wait_for_capacity(
+            minimum_workers=1,
+            timeout_seconds=remaining_seconds,
+        )
+        if not worker_ready:
+            self._write_json(
+                {"ready": False, "reason_code": "native_worker_not_ready"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        self._write_json(
+            {
+                "ready": True,
+                "native_required": True,
+                "native_route": "native_resident",
+                "workspace_acknowledged": True,
+                "worker_ready": True,
+            },
+            extra_headers={"Cache-Control": "no-store"},
         )
 
-        transport_deadline = self._daemon_server().request_deadline(
-            self.request,
-            _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS,
+    def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
+        from .hook_request_parsing import (
+            HookPayloadReferenceError,
+            hook_payload_reference_size,
+            runtime_hook_event_name,
         )
+
+        prompt_event = runtime_hook_event_name(payload) == "UserPromptSubmit"
+        admission_seconds = PROMPT_ADMISSION_SECONDS if prompt_event else _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
+        transport_deadline = self._daemon_server().request_deadline(self.request, admission_seconds)
         params = parse_qs(query)
-        remaining_hint = _runtime_hook_remaining_hint(payload)
-        hinted_deadline = RuntimeHookDeadline.from_remaining_hint(remaining_hint)
-        hook_deadline = RuntimeHookDeadline(expires_at=min(hinted_deadline.expires_at, transport_deadline))
+        hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
+        hook_deadline = RuntimeHookDeadline.for_admission(
+            _runtime_hook_remaining_hint(payload),
+            hint_missing=hint_missing,
+            prompt_event=prompt_event,
+            admission_seconds=admission_seconds,
+            transport_deadline=transport_deadline,
+        )
         hook_env = _runtime_hook_env_overlay_from_payload(payload)
         payload = {key: value for key, value in payload.items() if key != "hook_env"}
         daemon_server = self._daemon_server()
@@ -5925,77 +6613,79 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
         event = self._optional_string(payload.get("hook_event_name", payload.get("event"))) or "PreToolUse"
         daemon_server = getattr(self, "server", None)
+        workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
+        guard_home = None if daemon_server is None else cast(_GuardDaemonHttpServer, daemon_server).store.guard_home
         try:
-            observe_mode = (
-                daemon_server is not None
-                and load_guard_config(cast(_GuardDaemonHttpServer, daemon_server).store.guard_home).mode == "observe"
+            loaded = (
+                None
+                if guard_home is None
+                else load_guard_config(guard_home, workspace=workspace_path, require_canonical_workspace=True)
             )
+            observe_mode = loaded is not None and protection_is_off(posture=loaded.protection_posture, mode=loaded.mode)
         except (OSError, RuntimeError, TypeError, ValueError):
             observe_mode = False
         if observe_mode and not native_authoritative:
             if harness in {"pi", "omp"}:
-                return {
-                    "decision": "allow",
-                    "reason_code": reason_code,
-                    "observed_review_failure": True,
-                }
+                return {"decision": "allow", "reason_code": reason_code, "observed_review_failure": True}
             if event == "PermissionRequest":
                 return {
                     "reason_code": reason_code,
-                    "hookSpecificOutput": {
-                        "hookEventName": event,
-                        "decision": {
-                            "behavior": "allow",
-                        },
-                    },
+                    "hookSpecificOutput": {"hookEventName": event, "decision": {"behavior": "allow"}},
                 }
             if event == "PreToolUse":
                 return {
                     "reason_code": reason_code,
-                    "hookSpecificOutput": {
-                        "hookEventName": event,
-                        "permissionDecision": "allow",
-                    },
+                    "hookSpecificOutput": {"hookEventName": event, "permissionDecision": "allow"},
                 }
-            return {
-                "continue": True,
-                "reason_code": reason_code,
-                "observed_review_failure": True,
-            }
-        if harness in {"pi", "omp"}:
-            return {
-                "decision": "deny",
-                "reason": reason,
-                "model_output_action": "block",
-                "notice": "warning",
-                "reason_code": reason_code,
-            }
-        if event == "PermissionRequest":
-            return {
-                "reason_code": reason_code,
-                "hookSpecificOutput": {
-                    "hookEventName": event,
-                    "decision": {
-                        "behavior": "deny",
-                        "message": reason,
-                    },
-                },
-            }
-        if event == "PreToolUse":
-            return {
-                "reason_code": reason_code,
-                "hookSpecificOutput": {
-                    "hookEventName": event,
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                },
-            }
-        return {
-            "continue": False,
-            "stopReason": reason,
-            "systemMessage": reason,
-            "reason_code": reason_code,
-        }
+            return {"continue": True, "reason_code": reason_code, "observed_review_failure": True}
+        from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
+        from .hook_availability_policy import availability_harness_response
+
+        payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
+        return availability_harness_response(
+            payload_dict,
+            harness=harness,
+            event_name=event,
+            reason_code=reason_code,
+            reason=reason,
+            workspace=workspace_path,
+            home_dir=home_path,
+            guard_home=guard_home,
+            recording_only=(
+                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None))
+                if native_authoritative
+                else observe_mode
+            ),
+        )
+
+    def _validated_fail_safe_hook_paths(
+        self,
+        params: Mapping[str, list[str]],
+    ) -> tuple[Path | None, Path | None]:
+        """Return workspace and home directories that passed hook path validation."""
+
+        return (
+            self._validated_fail_safe_directory(params, "workspace"),
+            self._validated_fail_safe_directory(params, "home"),
+        )
+
+    def _validated_fail_safe_directory(
+        self,
+        params: Mapping[str, list[str]],
+        parameter: str,
+    ) -> Path | None:
+        value = self._optional_string(params.get(parameter, [None])[-1])
+        if not value:
+            return None
+        try:
+            validated = self._validated_hook_directory_string(
+                parameter,
+                value,
+                roots=self._hook_safe_roots(),
+            )
+        except _HookPathValidationError:
+            return None
+        return Path(validated) if validated else None
 
     def _execute_runtime_hook(
         self,
@@ -6011,39 +6701,46 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None = None,
     ) -> None:
         if self._hook_fast_path_enabled() or _native_mode_requires_rust():
-            result = self._handle_runtime_hook_fast(
-                payload,
-                params,
-                default_harness=default_harness,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-                deadline=deadline,
-            )
-            if result is not None:
-                if deadline is not None and time.monotonic() >= deadline:
-                    result = self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
-                        reason_code="daemon_hook_deadline_exhausted",
-                        native_authoritative=_native_mode_requires_rust(),
-                    )
-                self._write_json(result)
-                return
-            if _native_mode_requires_rust():
-                self._write_json(
-                    self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete the native hook decision safely.",
-                        reason_code="native_hook_worker_unavailable",
-                        native_authoritative=True,
-                    )
+            from contextlib import nullcontext
+
+            from ..sqlite_tuning import sqlite_operation_deadline
+
+            with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+                result = self._handle_runtime_hook_fast(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    deadline=deadline,
                 )
-                return
+                if result is not None:
+                    if deadline is not None and time.monotonic() >= deadline:
+                        result = self._runtime_hook_fail_safe_response(
+                            payload,
+                            params,
+                            default_harness=default_harness,
+                            reason=(
+                                "HOL Guard could not complete local review within the hook deadline. Retry this action."
+                            ),
+                            reason_code="daemon_hook_deadline_exhausted",
+                            native_authoritative=_native_mode_requires_rust(),
+                        )
+                    self._write_json(result)
+                    return
+                if _native_mode_requires_rust():
+                    self._write_json(
+                        self._runtime_hook_fail_safe_response(
+                            payload,
+                            params,
+                            default_harness=default_harness,
+                            reason="HOL Guard could not complete the native hook decision safely.",
+                            reason_code="native_hook_worker_unavailable",
+                            native_authoritative=True,
+                        )
+                    )
+                    return
 
         self._handle_runtime_hook_compatibility_cli(
             payload,
@@ -6073,50 +6770,42 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None,
     ) -> dict[str, object] | None:
         """Try the resident hook worker; only explicit rollback may fall back."""
-        from .hook_worker import HookWorkerUnsupported
+        from contextlib import nullcontext
+
+        from ..sqlite_tuning import sqlite_operation_deadline
 
         daemon_server = self._daemon_server()
         effective_home_dir = Path(home_dir) if home_dir is not None else daemon_server.home_dir
         effective_guard_home = Path(guard_home) if guard_home is not None else daemon_server.store.guard_home
 
-        try:
-            worker = daemon_server.hook_worker
-            return worker.review_http_payload(
-                payload=payload,
-                params=params,
-                default_harness=default_harness,
-                home_dir=effective_home_dir,
-                guard_home=effective_guard_home,
-                workspace=Path(workspace) if workspace else None,
-                deadline=deadline,
-            )
-        except HookWorkerUnsupported:
-            if _native_mode_requires_rust():
+        # Keep failure rendering on the same storage clock as direct review.
+        with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+            try:
+                worker = daemon_server.hook_worker
+                return worker.review_http_payload(
+                    payload=payload,
+                    params=params,
+                    default_harness=default_harness,
+                    home_dir=effective_home_dir,
+                    guard_home=effective_guard_home,
+                    workspace=Path(workspace) if workspace else None,
+                    deadline=deadline,
+                )
+            except Exception as error:
+                # Fail safe: deny/block. Do not fall back to compatibility CLI for
+                # requests that omitted full output and supplied only guard_source_ref.
+                self._daemon_server().hook_worker.metrics.record_failure(
+                    stage="server",
+                    exception_type=type(error).__name__,
+                )
                 return self._runtime_hook_fail_safe_response(
                     payload,
                     params,
                     default_harness=default_harness,
-                    reason="HOL Guard could not complete the native hook decision safely.",
-                    reason_code="native_hook_worker_unsupported",
-                    native_authoritative=True,
+                    reason="HOL Guard could not complete local hook review safely.",
+                    reason_code="daemon_worker_exception",
+                    native_authoritative=_native_mode_requires_rust(),
                 )
-            # Explicit off/shadow compatibility keeps the existing CLI path.
-            return None
-        except Exception as error:
-            # Fail safe: deny/block. Do not fall back to compatibility CLI for
-            # requests that omitted full output and supplied only guard_source_ref.
-            self._daemon_server().hook_worker.metrics.record_failure(
-                stage="server",
-                exception_type=type(error).__name__,
-            )
-            return self._runtime_hook_fail_safe_response(
-                payload,
-                params,
-                default_harness=default_harness,
-                reason="HOL Guard could not complete local hook review safely.",
-                reason_code="daemon_worker_exception",
-                native_authoritative=_native_mode_requires_rust(),
-            )
 
     def _handle_runtime_hook_compatibility_cli(
         self,
@@ -6182,7 +6871,41 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             queued=scheduler_stats["queued"],
         )
         if review.payload is not None and time.monotonic() < process_deadline:
-            self._write_json(review.payload)
+            receipt_accepted = False
+            if review.receipt is not None:
+                with suppress(Exception):
+                    receipt_accepted = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(
+                        review.receipt
+                    )
+            with suppress(Exception):
+                activity_action = review.payload.get("policy_action")
+                event = payload.get("hook_event_name", payload.get("hookEventName"))
+                if (
+                    isinstance(event, str)
+                    and event.replace("_", "").lower() == "pretooluse"
+                    and _native_mode_requires_rust()
+                    and isinstance(activity_action, str)
+                ):
+                    _ = daemon_server.runtime_hook_evidence_writer.submit_command_activity(
+                        harness=harness,
+                        event="PreToolUse",
+                        payload=payload,
+                        succeeded=True,
+                        policy_action=activity_action,
+                        receipt_id=self._optional_string((review.receipt or {}).get("decision_id"))
+                        if receipt_accepted
+                        else None,
+                        prompted=review.payload.get("prompted") is True,
+                        approval_reuse_status=self._optional_string(review.payload.get("approval_reuse_status"))
+                        or "not-applicable",
+                    )
+            from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
+
+            observation = transition_hook_observation(payload, review.receipt)
+            response = dict(review.payload)
+            if observation is not None:
+                response[OBSERVATION_FIELD] = observation
+            self._write_json(response)
             return
         reason_code = (
             "daemon_hook_process_deadline_exhausted"
@@ -6552,11 +7275,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _record_bounded_denial_event(self, event_name: str, payload: dict[str, object]) -> None:
         daemon_server = self._daemon_server()
-        try:
-            with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
-                daemon_server.store.add_event(event_name, payload, _now())
-        except Exception:
-            daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
+        with daemon_server.denial_audit_lock:
+            for attempt in range(2):
+                try:
+                    with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
+                        daemon_server.store.add_event(event_name, payload, _now())
+                except TimeoutError:
+                    daemon_server.diagnostics.record_exception("auth_audit_persistence_timeout")
+                    return
+                except sqlite3.OperationalError as error:
+                    if attempt == 0 and any(
+                        marker in str(error).lower() for marker in ("database is locked", "database table is locked")
+                    ):
+                        continue
+                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
+                except sqlite3.DatabaseError:
+                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
+                else:
+                    return
 
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")
@@ -6636,13 +7372,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         remaining_seconds = absolute_expires_at - time.time()
         if remaining_seconds < 1:
             return None
-        refreshed_surface = surface if surface in {"approval-center", "dashboard", "cloud-dashboard"} else "dashboard"
+        claim_surface = self._optional_string(claims.get("surface"))
+        if claim_surface == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+            refreshed_surface = PROTECTION_REPAIR_DASHBOARD_SURFACE
+        elif surface in {"approval-center", "dashboard", "cloud-dashboard"}:
+            refreshed_surface = surface
+        else:
+            refreshed_surface = "dashboard"
         return build_local_dashboard_session_token(
             auth_token=self.server.auth_token,  # type: ignore[attr-defined]
             surface=refreshed_surface,
             expires_in_seconds=min(DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS, int(remaining_seconds)),
             session_started_at=started_at,
         )
+
+    def _request_uses_protection_repair_session(self) -> bool:
+        session_token = self.headers.get("X-Guard-Dashboard-Session")
+        authorization = self.headers.get("Authorization")
+        bearer_token = None
+        if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+            bearer_token = authorization[7:].strip()
+        candidates = [
+            candidate for candidate in (session_token, bearer_token) if isinstance(candidate, str) and candidate.strip()
+        ]
+        for candidate in candidates:
+            claims = self._dashboard_session_token_claims(candidate)
+            if claims is not None and claims.get("surface") == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+                return True
+        return False
 
     def _refreshable_dashboard_session_claims(self) -> dict[str, object] | None:
         session_token = self.headers.get("X-Guard-Dashboard-Session")
@@ -6661,7 +7418,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if claims is None:
                 continue
             surface = self._optional_string(claims.get("surface"))
-            if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
+            if surface in {
+                "approval-center",
+                "dashboard",
+                "cloud-dashboard",
+                PROTECTION_REPAIR_DASHBOARD_SURFACE,
+            }:
                 return claims
         return None
 
@@ -6674,6 +7436,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         surface = self._optional_string(claims.get("surface"))
         path = urlparse(self.path).path
         path_parts = [part for part in path.split("/") if part]
+        if surface == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+            return self._protection_repair_session_request_is_allowed(path, payload=payload)
         if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
             return self._path_supports_dashboard_session(path, path_parts)
         action_path = self._optional_string(claims.get("action_path"))
@@ -6733,6 +7497,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _local_surface_session_request_is_allowed(self, path: str, path_parts: list[str]) -> bool:
         if path in {
+            "/v1/cloud-review",
             "/v1/capabilities",
             "/v1/sessions",
             "/v1/runtime",
@@ -6790,6 +7555,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
         if self.command == "GET":
+            if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "business-summary":
+                return True
             if len(path_parts) == 4 and path_parts[:3] == ["v1", "mcp-policy", "requests"]:
                 return True
             if len(path_parts) == 3 and path_parts[:2] in (
@@ -6832,6 +7599,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return True
         return False
 
+    def _protection_repair_session_request_is_allowed(
+        self,
+        path: str,
+        *,
+        payload: dict[str, object] | None,
+    ) -> bool:
+        if self.command == "GET" and path in {
+            "/v1/runtime",
+            "/v1/settings",
+            "/v1/extension-controls/effective",
+            "/v1/update/status",
+        }:
+            return True
+        if self.command != "POST":
+            return False
+        return path in {
+            "/v1/initialize",
+            "/v1/extension-controls/recover-authority",
+        }
+
     def _path_supports_dashboard_session(self, path: str, path_parts: list[str]) -> bool:
         return self._is_hosted_dashboard_api_path(path, path_parts) or self._local_surface_session_request_is_allowed(
             path,
@@ -6870,6 +7657,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             status=429,
         )
         return False
+
+    def _run_package_firewall_mutation(self, operation: str, action: Callable[[], None]) -> None:
+        lock = self.server.package_firewall_mutation_lock  # type: ignore[attr-defined]
+        if not lock.acquire(blocking=False):
+            self._write_json(
+                {
+                    "error": "operation_in_progress",
+                    "message": (
+                        "Guard is still finishing a package protection change. Check its status before retrying."
+                    ),
+                    "operation": operation,
+                },
+                status=409,
+            )
+            return
+        try:
+            action()
+        finally:
+            lock.release()
 
     def _consume_dashboard_session_nonce(self, nonce: str) -> bool:
         now = time.monotonic()
@@ -7068,9 +7874,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/extension-controls/recover-authority",
             "/v1/extension-controls/acknowledge-degraded",
             "/v1/local-clis",
-            "/v1/local-clis/preview",
-            "/v1/local-clis/apply",
-            "/v1/local-clis/recognize",
+            *_LOCAL_CLI_PATHS,
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",
@@ -7086,6 +7890,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/receipts/latest",
             "/v1/runtime",
             "/v1/settings",
+            "/v1/protection/repair/approval-gate/setup",
             "/v1/settings/export",
             "/v1/settings/import",
             "/v1/settings/reset",
@@ -7138,22 +7943,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _containment_health_payload(self, *, force_refresh: bool = False) -> dict[str, object] | None:
         from ..runtime.containment_health import probe_containment_health
 
-        server = self._daemon_server()
-        with server.containment_health_cache_lock:
-            age = time.monotonic() - server.containment_health_cache_monotonic
-            if not force_refresh and server.containment_health_cache is not None and age <= 10.0:
-                return dict(server.containment_health_cache)
-            try:
-                payload = probe_containment_health(
-                    daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
-                ).to_dict()
-            except (OSError, RuntimeError, TypeError, ValueError):
-                server.containment_health_cache = None
-                server.containment_health_cache_monotonic = time.monotonic()
-                return None
-            server.containment_health_cache = payload
-            server.containment_health_cache_monotonic = time.monotonic()
-            return dict(payload)
+        def probe() -> dict[str, object]:
+            return probe_containment_health(
+                daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
+            ).to_dict()
+
+        return cached_containment_health(self._daemon_server(), force_refresh=force_refresh, probe=probe)
 
     def _detailed_healthz_payload(self) -> dict[str, object]:
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
@@ -7218,6 +8013,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "hook_evidence_writer": evidence_writer_stats,
             "sqlite_profile": sqlite_profile,
             "sqlite_migration_gate": sqlite_migration_gate,
+            "quarantined_store": quarantined_store_summary(store.guard_home),
+            "onefile_extraction": daemon_server.onefile_extraction_status,
             "uptime_seconds": uptime,
             "pid": os.getpid(),
             "tables": store.list_table_names(),
@@ -7552,59 +8349,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         roots: tuple[Path, ...] | None = None,
     ) -> Path:
-        expanded = os.path.expanduser(value)
-        if not os.path.isabs(expanded):
-            raise _HookPathValidationError(parameter, "relative_path")
         try:
-            candidate = os.path.realpath(expanded)
-        except OSError:
-            raise _HookPathValidationError(parameter, "path_resolve_failed") from None
-        effective_roots = roots
-        if parameter in {"home", "workspace"} and effective_roots is None:
-            effective_roots = self._hook_safe_roots()
-        if effective_roots is not None:
-            root_match = False
-            for root in effective_roots:
-                root_path = os.path.realpath(os.fspath(root))
-                try:
-                    if os.path.commonpath([candidate, root_path]) == root_path:
-                        root_match = True
-                        break
-                except ValueError:
-                    continue
-            if not root_match and parameter == "workspace":
-                root_match = self._is_owned_temporary_hook_workspace(candidate)
-            if not root_match:
-                raise _HookPathValidationError(parameter, "unexpected_root")
-        return Path(candidate)
+            return validate_guard_directory_path(
+                value,
+                self._hook_safe_roots() if roots is None else roots,
+                allow_owned_temporary=parameter == "workspace",
+            )
+        except DirectoryPathTrustError as error:
+            raise _HookPathValidationError(parameter, error.reason) from error
 
     @staticmethod
     def _is_owned_temporary_hook_workspace(candidate: str) -> bool:
-        candidate_path = Path(candidate)
-        try:
-            temporary_root = trusted_temporary_root_for_path(candidate_path)
-        except OSError:
-            return False
-        if temporary_root is None:
-            return False
-        try:
-            # codeql[py/path-injection] candidate is canonical and contained by a trusted temp root.
-            candidate_stat = candidate_path.stat()
-        except OSError:
-            return False
-        if not stat.S_ISDIR(candidate_stat.st_mode):
-            return False
-        getuid = getattr(os, "getuid", None)
-        if not callable(getuid):
-            current_home = Path.home().resolve()
-            return _GuardDaemonHandler._path_is_within_root(
-                temporary_root,
-                current_home,
-            ) and _GuardDaemonHandler._path_is_within_root(
-                candidate_path,
-                temporary_root,
-            )
-        return candidate_stat.st_uid == getuid()
+        return _GuardDaemonHandler._validated_owned_temporary_hook_workspace(candidate) is not None
+
+    @staticmethod
+    def _validated_owned_temporary_hook_workspace(candidate: str) -> Path | None:
+        return validated_owned_temporary_workspace(candidate)
 
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
@@ -7622,12 +8382,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return expected
 
     def _hook_safe_roots(self) -> tuple[Path, ...]:
-        current_home = Path.home().resolve()
-        roots: list[Path] = [current_home]
-        guard_home_root = self._daemon_server().store.guard_home.expanduser().resolve().parent
-        if not self._path_is_within_root(guard_home_root, current_home):
-            roots.append(guard_home_root)
-        return tuple(roots)
+        return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
 
     @staticmethod
     def _path_is_within_root(candidate: Path | str, root: Path | str) -> bool:
@@ -7677,6 +8432,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _requires_header_token(path: str, path_parts: list[str]) -> bool:
         if path in {
+            "/v1/cloud-review",
             "/v1/clients/attach",
             "/v1/clients/heartbeat",
             "/v1/sessions/start",
@@ -7702,6 +8458,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
             "/v1/protection/repair",
+            "/v1/protection/repair/approval-gate/setup",
             "/v1/insights/share",
             "/v1/cloud/connect",
             "/v1/notifications/setup",
@@ -7756,14 +8513,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         status: int = 200,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
-        body = json.dumps(payload).encode("utf-8")
-        headers = dict(extra_headers or {})
+        body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
+        headers = {**dict(extra_headers or {}), "X-Content-Type-Options": "nosniff"}
         cors_headers = self._cors_headers_for_request(allow_methods="GET, POST, OPTIONS")
         if cors_headers is not None:
             headers = {**cors_headers, **headers}
         try:
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             for key, value in self._validated_headers(headers).items():
                 self.send_header(key, value)
@@ -7798,6 +8555,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "Location",
             "Pragma",
             "Vary",
+            "X-Content-Type-Options",
         }
         validated: dict[str, str] = {}
         for key, value in (extra_headers or {}).items():
@@ -7860,6 +8618,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/feed-health",
             "/settings",
             "/about",
+            "/protection/repair",
             "/requests",
             "/approvals",
         }:
@@ -7937,7 +8696,13 @@ class GuardDaemonServer:
             self._diagnostics.close(timeout_seconds=0.5)
             raise
         self._shutdown_started = threading.Event()
+        self._lifecycle_lock = threading.Lock()
+        self._lifecycle_generation = 0
+        self._active_start_generation: int | None = None
         self._finish_service_lock = threading.Lock()
+        self._finish_service_completed = False
+        self._owned_service_ready = False
+        self._serve_thread_error: BaseException | None = None
         self._owner_lock: BinaryIO | None = None
         try:
             self._server = _GuardDaemonHttpServer(
@@ -7949,6 +8714,7 @@ class GuardDaemonServer:
                 runtime_session_id=uuid.uuid4().hex,
                 runtime_started_at=_now(),
                 home_dir=(home_dir or Path.home()).expanduser().resolve(strict=False),
+                workspace_dir=workspace_dir.expanduser().resolve(strict=False) if workspace_dir is not None else None,
                 idle_timeout_seconds=_guard_daemon_idle_timeout_seconds(
                     store.guard_home,
                     idle_timeout_seconds=idle_timeout_seconds,
@@ -7976,6 +8742,7 @@ class GuardDaemonServer:
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
         self._command_activity_maintenance_thread: threading.Thread | None = None
+        self._onefile_extraction_reclaim_thread: threading.Thread | None = None
         self._extension_control_refresh_thread: threading.Thread | None = None
         self._extension_control_refresh_interval_seconds = extension_control_refresh_interval_seconds
         self._cloud_review_sync_worker: CloudReviewSyncWorker | None = None
@@ -7992,85 +8759,89 @@ class GuardDaemonServer:
             return
         self._thread = None
         self._begin_service()
+        generation = self._active_start_generation
         serve_thread_started = False
         try:
-            self._serve_loop_started.clear()
-            self._thread = threading.Thread(target=self._serve_forever, daemon=True)
-            self._thread.start()
+            start_serve_thread(self)
             serve_thread_started = True
             if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                 raise RuntimeError("Guard daemon serve thread did not become ready")
-            self._server.hook_process_runner.enable_full_capacity()
+            enable_full_capacity_for_generation(self, generation)
         except BaseException as error:
-            self._diagnostics.record_exception("daemon_start_thread_failed")
-            serve_thread_contained = True
-            if serve_thread_started and self._thread is not None:
-                self._server.shutdown()
-                self._thread.join(timeout=5)
-                serve_thread_contained = not self._thread.is_alive()
-            else:
-                try:
-                    self._server.server_close()
-                except Exception:
-                    serve_thread_contained = False
-            if serve_thread_contained:
-                self._thread = None
-            if not self._finish_service() or not serve_thread_contained:
-                add_note = getattr(error, "add_note", None)
-                if callable(add_note):
-                    add_note("Guard retained daemon ownership because startup containment was unconfirmed.")
+            contain_failed_service_start(
+                self,
+                error,
+                serve_thread_started=serve_thread_started,
+            )
             raise
 
     def serve(self) -> None:
-        self._begin_service()
-        self._server.hook_process_runner.enable_full_capacity()
-        self._serve_forever()
+        self._serve_thread_error = None
+        try:
+            self._begin_service(publish_before_workers=True)
+        except RuntimeError as error:
+            if str(error) == "Guard daemon stopped during startup":
+                return
+            raise
+        generation = self._active_start_generation
+        serve_thread = self._thread
+        try:
+            enable_full_capacity_for_generation(self, generation)
+            if serve_thread is None:
+                self._serve_forever()
+                return
+            serve_thread.join()
+            serve_error = self._serve_thread_error
+            if serve_error is not None:
+                raise serve_error
+        except RuntimeError as error:
+            if str(error) == "Guard daemon stopped during startup":
+                return
+            contain_failed_service_start(
+                self,
+                error,
+                serve_thread_started=serve_thread is not None,
+            )
+            raise
+        except BaseException as error:
+            contain_failed_service_start(
+                self,
+                error,
+                serve_thread_started=serve_thread is not None,
+            )
+            raise
 
     def stop(self) -> None:
         self._record_lifecycle("shutdown_requested", reason="explicit_stop")
         self._diagnostics.record("daemon_shutdown_requested")
-        self._shutdown_started.set()
-        self._server.shutdown()
-        self._server.server_close()
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-            if not self._thread.is_alive():
-                self._thread = None
+        with self._lifecycle_lock:
+            self._lifecycle_generation += 1
+            self._shutdown_started.set()
+        with self._finish_service_lock:
+            serve_thread = self._thread
+            self._server.request_serve_stop()
+            if serve_thread is None:
+                self._server.server_close()
         _ = self._finish_service()
+        if (
+            self._join_service_thread(serve_thread, deadline=time.monotonic() + 5) is None
+            and self._thread is serve_thread
+        ):
+            self._thread = None
 
-    def _begin_service(self) -> None:
-        self._record_lifecycle("start_requested")
-        if self._is_quarantined():
-            if self._aibom_refresh_thread is not None and self._aibom_refresh_thread.is_alive():
-                raise RuntimeError("AIBOM inventory refresh is still stopping")
-            self._require_command_activity_maintenance_stopped()
-            raise RuntimeError("This Guard daemon is quarantined after unconfirmed containment.")
-        self._owner_lock = acquire_guard_daemon_owner_lock(self._server.store.guard_home)
-        try:
-            self._begin_owned_service()
-        except BaseException as error:
-            self._diagnostics.record_exception("daemon_start_failed")
-            self._record_lifecycle("start_failed", reason="initialization_failed")
-            if not self._finish_service():
-                add_note = getattr(error, "add_note", None)
-                if callable(add_note):
-                    add_note("Guard retained daemon ownership because partial-start containment was unconfirmed.")
-            raise
+    def _begin_service(self, *, publish_before_workers: bool = False) -> None:
+        begin_service(self, publish_before_workers=publish_before_workers)
 
-    def _begin_owned_service(self) -> None:
-        if self._aibom_refresh_thread is not None:
-            if self._aibom_refresh_thread.is_alive():
-                raise RuntimeError("AIBOM inventory refresh is still stopping")
-            self._aibom_refresh_thread = None
-        self._require_command_activity_maintenance_stopped()
-        self._shutdown_started.clear()
-        self._server.hook_process_runner.start(defer_backfill=True)
-        self._server.hook_process_runner.require_initial_capacity()
-        self._reconcile_runtime_artifacts_best_effort()
-        self._maintain_command_activity_best_effort()
-        self._persist_aibom_inventory_context()
+    def _publish_listen_state(self) -> None:
         self._server.last_activity_monotonic = time.monotonic()
         self._server.publish_trust_state()
+        self._server.runtime_heartbeat.register(
+            GuardRuntimeRegistration(
+                daemon_host=self._server.runtime_host,
+                daemon_port=self.port,
+                started_at=self._server.runtime_started_at,
+            )
+        )
         self._server.store.upsert_runtime_state(
             session_id=self._server.runtime_session_id,
             daemon_host=self._server.runtime_host,
@@ -8078,41 +8849,172 @@ class GuardDaemonServer:
             started_at=self._server.runtime_started_at,
             last_heartbeat_at=_now(),
         )
-        self._server.start_unclassified_watchdog()
-        self._server.runtime_heartbeat.start()
-        approval_attention = getattr(self._server, "approval_attention", None)
-        if approval_attention is not None:
-            approval_attention.start()
-        self._start_watchdog()
-        self._start_headless_cloud_sync()
-        self._start_supply_chain_bundle_refresh()
-        self._start_aibom_inventory_refresh()
-        self._start_extension_control_refresh()
-        self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
-        self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
-            self._server.store,
-            self._cloud_review_sync_worker,
-        )
-        self._start_command_activity_maintenance()
-        self._record_lifecycle("ready")
-        self._diagnostics.record("daemon_ready")
+
+    def _begin_owned_service(
+        self,
+        generation: int | None = None,
+        *,
+        publish_before_workers: bool = False,
+        continue_after_listen: bool = True,
+    ) -> None:
+        generation = generation if generation is not None else self._active_start_generation
+        with self._lifecycle_lock:
+            if generation != self._lifecycle_generation or self._shutdown_started.is_set():
+                raise RuntimeError("Guard daemon stopped during startup")
+        if self._aibom_refresh_thread is not None:
+            if self._aibom_refresh_thread.is_alive():
+                raise RuntimeError("AIBOM inventory refresh is still stopping")
+            self._aibom_refresh_thread = None
+        self._require_command_activity_maintenance_stopped()
+        self._server.hook_process_runner.start(defer_backfill=publish_before_workers)
+        if publish_before_workers:
+            # Desktop `desktop bootstrap --json` waits for the daemon state
+            # file, not for hook workers or artifact reconciliation. Accept
+            # HTTP and publish that file before the 60s+ cold-home work.
+            start_serve_thread(self, already_locked=True)
+            if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
+                raise RuntimeError("Guard daemon serve thread did not become ready")
+            # Re-check under _finish_service_lock: shutdown may have been
+            # requested while the serve loop was coming up. Publishing or
+            # registering after shutdown would resurrect a stopped daemon.
+            if self._shutdown_started.is_set() or not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
+            self._publish_listen_state()
+            self._diagnostics.record("daemon_listen_ready")
+            self._warm_desktop_bootstrap_cache()
+            if not continue_after_listen:
+                return
+        self._complete_owned_service_after_listen(generation, already_locked=True)
+
+    def _complete_owned_service_after_listen(
+        self,
+        generation: int | None,
+        *,
+        already_locked: bool = False,
+    ) -> None:
+        if not startup_generation_is_current(self, generation):
+            raise RuntimeError("Guard daemon stopped during startup")
+        self._server.hook_process_runner.require_initial_capacity()
+        self._reconcile_runtime_artifacts_best_effort()
+        if not startup_generation_is_current(self, generation):
+            raise RuntimeError("Guard daemon stopped during startup")
+        self._maintain_command_activity_best_effort()
+        if not startup_generation_is_current(self, generation):
+            raise RuntimeError("Guard daemon stopped during startup")
+        self._persist_aibom_inventory_context()
+
+        def start_post_listen_workers() -> None:
+            # The shutdown/generation re-check and the registration publish
+            # must stay atomic under _finish_service_lock: _finish_service
+            # takes the same lock, so a completed shutdown can never be
+            # followed by a late register()/heartbeat start resurrecting the
+            # runtime row.
+            if self._shutdown_started.is_set() or not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
+            self._publish_listen_state()
+            self._server.start_unclassified_watchdog()
+            self._server.runtime_heartbeat.start()
+            approval_attention = getattr(self._server, "approval_attention", None)
+            if approval_attention is not None:
+                approval_attention.start()
+            self._start_watchdog()
+            self._start_headless_cloud_sync()
+            self._start_supply_chain_bundle_refresh()
+            self._start_aibom_inventory_refresh()
+            self._start_extension_control_refresh()
+            self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
+            self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
+                self._server.store,
+                self._cloud_review_sync_worker,
+                on_authority_changed=self._start_command_queue_after_authority,
+            )
+            self._start_command_activity_maintenance()
+            self._start_onefile_extraction_reclaim()
+            self._record_lifecycle("ready")
+            self._owned_service_ready = True
+            self._diagnostics.record("daemon_ready")
+
+        if already_locked:
+            start_post_listen_workers()
+            return
+        with self._finish_service_lock:
+            start_post_listen_workers()
+
+    def _warm_desktop_bootstrap_cache(self) -> None:
+        """Fill the bootstrap document before Desktop's first open poll.
+
+        This runs beside artifact reconciliation. A failure leaves the cache
+        empty; the request path builds the document or returns 503.
+        """
+
+        server = self._server
+
+        def warm() -> None:
+            try:
+                from ..cli.commands_dispatch_desktop import desktop_bootstrap_document_for_running_daemon
+
+                desktop_bootstrap_document_for_running_daemon(
+                    store=server.store,
+                    home_dir=server.home_dir,
+                    daemon_url=f"http://127.0.0.1:{server.daemon_port()}",
+                    auth_token=server.auth_token,
+                )
+            except Exception:
+                self._diagnostics.record_exception("desktop_bootstrap_warmup_failed")
+                return
+
+        threading.Thread(target=warm, name="desktop-bootstrap-warm", daemon=True).start()
 
     def refresh_command_queue_worker(self) -> dict[str, object]:
-        """Apply a changed local Cloud Review capability without a daemon restart."""
+        """Apply changed Cloud connectivity and consent without a daemon restart."""
 
-        with self._finish_service_lock:
+        if not self._finish_service_lock.acquire(blocking=False):
+            return {
+                "operation": "guard.review.resolveExact",
+                "running": False,
+                "sync_running": False,
+            }
+        try:
+            if not self._owned_service_ready or self._shutdown_started.is_set():
+                return {
+                    "operation": "guard.review.resolveExact",
+                    "running": False,
+                    "sync_running": False,
+                }
             self._command_queue_worker, running = refresh_command_queue_worker(
                 self._server.store,
                 self._command_queue_worker,
                 shutting_down=self._shutdown_started.is_set(),
             )
+            from ..runtime.cloud_review_sync_worker import refresh_cloud_review_sync_worker
+
+            self._cloud_review_sync_worker, sync_running = refresh_cloud_review_sync_worker(
+                self._server.store,
+                self._cloud_review_sync_worker,
+                shutting_down=self._shutdown_started.is_set(),
+                on_authority_changed=self._start_command_queue_after_authority,
+            )
+        finally:
+            self._finish_service_lock.release()
         return {
             "operation": "guard.review.resolveExact",
             "running": running,
+            "sync_running": sync_running,
         }
 
+    def _start_command_queue_after_authority(self) -> bool:
+        if self._shutdown_started.is_set() or not self._finish_service_lock.acquire(blocking=False):
+            return False
+        try:
+            if not self._owned_service_ready or self._shutdown_started.is_set():
+                return False
+            self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
+            return True
+        finally:
+            self._finish_service_lock.release()
+
     def _reconcile_runtime_artifacts_best_effort(self) -> None:
-        """Align existing Guard-owned artifacts before publishing readiness."""
+        """Align existing Guard-owned artifacts before reporting daemon_ready."""
         try:
             result = reconcile_runtime_artifacts(
                 self._server.store,
@@ -8205,22 +9107,67 @@ class GuardDaemonServer:
             self._maintain_command_activity_best_effort()
             storage_complete = self._maintain_storage_best_effort()
 
-    def _persist_aibom_inventory_context(self) -> None:
-        workspace_id = self._server.store.get_cloud_workspace_id()
-        if (
-            workspace_id is None
-            or workspace_id != self._aibom_context_workspace_id
-            or self._aibom_workspace_dir is None
-        ):
+    def _start_onefile_extraction_reclaim(self) -> None:
+        if not getattr(sys, "frozen", False):
             return
-        payload: dict[str, object] = {
-            "workspace_dir": str(self._aibom_workspace_dir),
-            "workspace_id": workspace_id,
+        if self._onefile_extraction_reclaim_thread is not None and self._onefile_extraction_reclaim_thread.is_alive():
+            return
+        self._onefile_extraction_reclaim_thread = threading.Thread(
+            target=self._onefile_extraction_reclaim_loop,
+            daemon=True,
+        )
+        self._onefile_extraction_reclaim_thread.start()
+
+    def _onefile_extraction_reclaim_loop(self) -> None:
+        while not self._shutdown_started.is_set():
+            self._reclaim_onefile_extraction_dirs_once()
+            if self._shutdown_started.wait(3_600):
+                return
+
+    def _reclaim_onefile_extraction_dirs_once(self) -> None:
+        try:
+            from ..onefile_extraction import reclaim_orphaned_extraction_dirs
+
+            result = reclaim_orphaned_extraction_dirs(
+                temp_root=Path(tempfile.gettempdir()),
+                current_meipass=getattr(sys, "_MEIPASS", None),
+                now=datetime.now(timezone.utc),
+                should_stop=self._shutdown_started.is_set,
+            )
+        except Exception:
+            self._diagnostics.record_exception("onefile_extraction_reclaim_failed")
+            self._server.onefile_extraction_status = {
+                "last_run_at": datetime.now(timezone.utc).isoformat(),
+                "error": "reclaim_failed",
+            }
+            return
+        self._server.onefile_extraction_status = {
+            "last_run_at": datetime.now(timezone.utc).isoformat(),
+            "reclaimed_count": result.reclaimed_count,
+            "reclaimed_bytes": result.reclaimed_bytes,
+            "killed_launches_last_run": result.killed_launches,
+            "unmarked_legacy_count": result.unmarked_count,
+            "unmarked_legacy_bytes_estimate": result.unmarked_bytes_estimate,
+            "error_count": len(result.errors),
         }
-        if self._aibom_home_dir is not None:
-            payload["home_dir"] = str(self._aibom_home_dir)
-        now = _now()
-        self._server.store.set_sync_payload("aibom_inventory_context", payload, now)
+        self._diagnostics.record(
+            "onefile_extraction_reclaimed",
+            detail=(
+                f"reclaimed={result.reclaimed_count} bytes={result.reclaimed_bytes} "
+                f"killed={result.killed_launches} unmarked={result.unmarked_count} "
+                f"unmarked_bytes_estimate={result.unmarked_bytes_estimate} errors={len(result.errors)}"
+            ),
+        )
+
+    def _persist_aibom_inventory_context(self) -> None:
+        persist_aibom_inventory_context(
+            store=self._server.store,
+            cached_workspace_id=self._aibom_context_workspace_id,
+            workspace_dir=self._aibom_workspace_dir,
+            home_dir=self._aibom_home_dir,
+            now=_now(),
+            record_diagnostic=self._diagnostics.record,
+        )
 
     def _serve_forever(self) -> None:
         stop_reason = "serve_loop_returned"
@@ -8229,8 +9176,12 @@ class GuardDaemonServer:
             self._server.serve_forever()
             if self._shutdown_started.is_set():
                 stop_reason = "requested_shutdown"
-        except BaseException:
+        except KeyboardInterrupt:
+            self._shutdown_started.set()
+            stop_reason = "requested_shutdown"
+        except BaseException as error:
             stop_reason = "serve_loop_failed"
+            self._serve_thread_error = error
             self._record_lifecycle("serve_failed", reason="unexpected_exception")
             self._diagnostics.record_exception("daemon_serve_failed")
             raise
@@ -8239,6 +9190,8 @@ class GuardDaemonServer:
             self._server.server_close()
             _ = self._finish_service()
             self._record_lifecycle("stopped", reason=stop_reason)
+            if self._thread is threading.current_thread():
+                self._thread = None
 
     def _record_lifecycle(self, event: str, *, reason: str | None = None) -> None:
         with suppress(Exception):
@@ -8259,11 +9212,23 @@ class GuardDaemonServer:
                     finish_lock = threading.Lock()
                     self._finish_service_lock = finish_lock
         with finish_lock:
-            return self._finish_service_locked()
+            if getattr(self, "_finish_service_completed", False):
+                return True
+            contained = self._finish_service_locked()
+            if contained:
+                self._finish_service_completed = True
+            return contained
 
     def _finish_service_locked(self) -> bool:
+        self._owned_service_ready = False
         self._shutdown_started.set()
         contained = True
+        close_discovery = getattr(getattr(self._server, "local_cli_api", None), "close_discovery", None)
+        if callable(close_discovery):
+            try:
+                contained = close_discovery() is not False and contained
+            except Exception:
+                contained = False
         stop_request_executors = getattr(self._server, "_stop_request_executors", None)
         if callable(stop_request_executors):
             try:
@@ -8295,6 +9260,10 @@ class GuardDaemonServer:
         runtime_heartbeat = getattr(self._server, "runtime_heartbeat", None)
         if runtime_heartbeat is not None:
             try:
+                runtime_heartbeat.clear_registration()
+            except Exception:
+                contained = False
+            try:
                 contained = runtime_heartbeat.stop(timeout_seconds=1.0) is not False and contained
             except Exception:
                 contained = False
@@ -8302,6 +9271,16 @@ class GuardDaemonServer:
         if runtime_hook_evidence_writer is not None:
             try:
                 contained = runtime_hook_evidence_writer.stop(timeout_seconds=1.0) is not False and contained
+            except Exception:
+                contained = False
+        hook_worker = getattr(self._server, "hook_worker", None)
+        if hook_worker is not None:
+            try:
+                close_contained = getattr(hook_worker, "close_contained", None)
+                if callable(close_contained):
+                    contained = close_contained() is not False and contained
+                else:
+                    contained = hook_worker.close() is not False and contained
             except Exception:
                 contained = False
         hook_process_runner = getattr(self._server, "hook_process_runner", None)
@@ -8323,7 +9302,7 @@ class GuardDaemonServer:
             )
         with suppress(Exception):
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-        if contained and self._is_quarantined():
+        if contained and (self._thread is None or self._is_quarantined()):
             try:
                 self._server.server_close()
             except Exception:
@@ -8377,6 +9356,10 @@ class GuardDaemonServer:
             getattr(self, "_command_activity_maintenance_thread", None),
             deadline=deadline,
         )
+        self._onefile_extraction_reclaim_thread = self._join_service_thread(
+            getattr(self, "_onefile_extraction_reclaim_thread", None),
+            deadline=deadline,
+        )
         return all(
             thread is None
             for thread in (
@@ -8386,6 +9369,7 @@ class GuardDaemonServer:
                 self._extension_control_refresh_thread,
                 self._headless_cloud_sync_thread,
                 self._command_activity_maintenance_thread,
+                self._onefile_extraction_reclaim_thread,
             )
         )
 
@@ -8792,3 +9776,6 @@ def _int_query_value(query: str, key: str) -> int:
         return int(str(raw_value))
     except ValueError:
         return 0
+
+
+forget_in_child(GuardDaemonServer._quarantined_services)

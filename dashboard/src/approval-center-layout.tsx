@@ -61,6 +61,7 @@ type RuntimeState =
 export type { BulkGateCredentials } from "./approval-gate-utils";
 
 type LayoutProps = {
+  onRetryDetail?: () => void;
   view: AppView;
   requests: RequestState;
   detail: DetailState;
@@ -79,6 +80,7 @@ type LayoutProps = {
   supplyChainHubContent?: ReactNode;
   policyContent?: ReactNode;
   aboutContent?: ReactNode;
+  protectionRepairContent?: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
@@ -100,7 +102,6 @@ type LayoutProps = {
   onClearEvidence?: () => void;
   onRetryResume?: () => void;
   onGuardReconnected?: () => void;
-  enableUpdateStatus?: boolean;
 };
 
 function InboxWatchBanner(props: { onRestored?: () => void; onOpenSettings: () => void }) {
@@ -158,6 +159,9 @@ function renderInboxContent(props: LayoutProps): ReactNode {
     <ReviewWorkspace
       requests={props.requests.items}
       activeRequestId={props.activeRequestId}
+      detailError={props.detail.kind === "error" ? props.detail.message : null}
+      detailLoading={props.detail.kind === "loading"}
+      onRetryDetail={props.onRetryDetail}
       detail={
         props.detail.kind === "ready"
           ? {
@@ -203,6 +207,9 @@ function renderViewContent(props: LayoutProps): ReactNode {
   }
   if (props.view === "extensions") {
     return props.extensionsContent;
+  }
+  if (props.view === "protection-repair") {
+    return props.protectionRepairContent ?? null;
   }
   if (props.view === "settings") {
     return props.settingsContent;
@@ -265,7 +272,8 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     updateError,
     onUpdateGuard,
     onReinstallGuard,
-  } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
+    onSetUpdateChannel,
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
 
   return (
     <div className="min-h-screen bg-white text-brand-dark">
@@ -281,6 +289,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         updateError={updateError}
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
+        onSetUpdateChannel={onSetUpdateChannel}
         approvalGate={props.approvalGate ?? null}
         cloudUserProfile={
           props.runtime.kind === "ready"

@@ -16,7 +16,6 @@ from .approval_context import (
 )
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
-from .command_rules import matcher_index_hints
 from .command_tokens import executable_name
 from .custom_extension_suggestion import common_utility_reject_message, is_common_shell_utility
 
@@ -91,20 +90,7 @@ def catalog_owned_executables(
 ) -> frozenset[str]:
     """Return lowercase executable names already owned by built-in extensions."""
 
-    names: set[str] = set()
-    for extension in registry.extensions:
-        for executable in extension.executables:
-            normalized = executable.strip().lower()
-            if normalized:
-                names.add(normalized)
-        for rule in extension.rules:
-            if rule.matcher is None:
-                continue
-            for executable in matcher_index_hints(rule.matcher).executables:
-                normalized = executable.strip().lower()
-                if normalized:
-                    names.add(normalized)
-    return frozenset(names)
+    return registry.owned_executables
 
 
 def identify_unlisted_cli(
@@ -217,7 +203,7 @@ def recognize_operator_cli(
             return None, "common_shell_utility", common_utility_reject_message(exe)
         if exe is not None and is_reserved_tool_name(exe):
             return None, "reserved_tool", "Guard itself is not added as a custom extension."
-        if exe is not None and exe in owned:
+        if exe is not None and exe in owned and not _is_interpreter_name(exe):
             return None, "already_built_in", f"{exe} is already a built-in Guard extension."
         if "&&" in candidate or "||" in candidate or "|" in candidate:
             last_code = "compound_command"

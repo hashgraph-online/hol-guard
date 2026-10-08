@@ -46,6 +46,9 @@ jobs:
       - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
           category: /language:${{ matrix.language }}
+          # SARIF results and the incremental analysis cache are still uploaded
+          # on every run. Bundle downloadable databases during maintenance runs.
+          upload-database: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
   codeql:
     name: CodeQL

@@ -418,8 +418,8 @@ def _run_guard_abom_command(
     payload = _build_abom_payload(store)
     if args.format == "markdown" and not getattr(args, "json", False):
         print(payload["markdown"])
-        return 0
-    _emit("abom", payload, True)
+    else:
+        _emit("abom", payload, True)
     return 0
 
 

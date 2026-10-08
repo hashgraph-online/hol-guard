@@ -7,6 +7,10 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import native_execution as _native_execution
+from .containment_execution_support import (
+    contained_process_effect_decision as _contained_decision,
+)
 from .containment_execution_support import (
     containment_positive_proof as _proof_from_result,
 )
@@ -24,27 +28,7 @@ from .runtime.contained_execution_common import (
 )
 from .runtime.containment_contract import ContainmentPolicy, ContainmentRequest
 from .runtime.containment_executor import execute_contained, file_sha256
-from .runtime.effect_contract import (
-    ContainmentRequirement,
-    DecisionBasis,
-    EffectAssessment,
-    EffectBlastRadius,
-    EffectConfidence,
-    EffectEvidenceSource,
-    EffectKind,
-    EffectReversibility,
-    EffectTargetScope,
-    ProofRequirement,
-    ProofRoute,
-)
-from .runtime.effect_decision import (
-    DecisionFactor,
-    DecisionFactorSource,
-    EffectDecision,
-    EffectDecisionRequest,
-    PositiveProof,
-    evaluate_effect_decision,
-)
+from .runtime.effect_decision import EffectDecision, PositiveProof
 from .runtime.package_intent_parser import parse_package_intent
 from .runtime.typescript_snapshot_inputs import typescript_snapshot_inputs
 
@@ -77,10 +61,20 @@ def try_execute_contained_typescript(
     intent = parse_package_intent(
         _shell_join(("npx", *argv)),
         workspace=canonical_workspace,
+        guard_home=guard_home,
     )
     if intent is None or len(intent.local_executions) != 1:
         return None
     local_execution = intent.local_executions[0]
+    native_result = _native_execution.contained_typescript_execute_native(
+        workspace,
+        manager.strip().lower(),
+        argv,
+        guard_home=guard_home,
+        evidence=local_execution.to_dict(),
+    )
+    if native_result is not None:
+        return native_result
     evidence = local_execution.typescript_launch
     if evidence is None or evidence.status != "complete" or evidence.direct_silent_verification:
         return None
@@ -136,51 +130,15 @@ def try_execute_contained_typescript(
         proof = _proof_from_result(result, request, health, runtime_fingerprint)
     except ValueError:
         return None
-    decision = _contained_decision(proof)
+    decision = _contained_decision(
+        proof,
+        operation_id="typecheck",
+        producer_ref="containment:typescript-v1",
+        reason_code="routine-typecheck-contained",
+    )
     if decision.disposition.value != "silent-contained":
         return None
     return ContainedTypeScriptResult(result.exit_code, result.stdout, result.stderr, proof, decision)
-
-
-def _contained_decision(proof: PositiveProof) -> EffectDecision:
-    requirements = frozenset(
-        {
-            ProofRequirement.OPERATION_AND_TARGETS,
-            ProofRequirement.WORKSPACE_IDENTITY,
-            ProofRequirement.WORKING_DIRECTORY_IDENTITY,
-            ProofRequirement.EXECUTABLE_IDENTITY,
-            ProofRequirement.LAUNCH_CHAIN,
-            ProofRequirement.PARSER_CONFIDENCE,
-            ProofRequirement.EXPECTED_EFFECTS,
-            ProofRequirement.CONTAINMENT_IDENTITY,
-        }
-    )
-    assessment = EffectAssessment(
-        kind=EffectKind.PROCESS_EXECUTION,
-        target_scope=EffectTargetScope.WORKSPACE,
-        reversibility=EffectReversibility.TRIVIALLY_RECOVERABLE,
-        blast_radius=EffectBlastRadius.WORKSPACE,
-        evidence_source=EffectEvidenceSource.CONTAINMENT,
-        confidence=EffectConfidence.STRONG,
-        containment=ContainmentRequirement.REQUIRED,
-        proof_requirements=requirements,
-    )
-    return evaluate_effect_decision(
-        EffectDecisionRequest(
-            factors=(
-                DecisionFactor(
-                    source=DecisionFactorSource.EFFECT,
-                    reason_code="routine-typecheck-contained",
-                    basis=DecisionBasis("allow", ProofRoute.CONTAINED),
-                    operation_ref="operation:typecheck",
-                    producer_ref="containment:typescript-v1",
-                    evidence_digest=proof.binding_digest,
-                    assessment=assessment,
-                    proof=proof,
-                ),
-            )
-        )
-    )
 
 
 def _compiler_args(argv: tuple[str, ...]) -> tuple[str, ...] | None:

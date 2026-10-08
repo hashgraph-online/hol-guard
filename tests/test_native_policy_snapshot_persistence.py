@@ -124,6 +124,7 @@ def test_floor_only_ack_materializes_strictly_new_generation(tmp_path: Path, mon
                     "generation": snapshot["generation"],
                     "policy_digest": "d" * 64,
                     "idempotent": False,
+                    "resident_generation": 1,
                 }
             ).encode()
         return _ack(payload)
@@ -155,12 +156,14 @@ def test_floor_only_ack_materializes_strictly_new_generation(tmp_path: Path, mon
             "generation": 1,
             "policy_digest": "d" * 64,
             "idempotent": True,
+            "resident_generation": 1,
         },
         {
             "status": POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION,
             "generation": 1,
             "policy_digest": "d" * 64,
             "idempotent": False,
+            "resident_generation": 1,
             "unexpected": True,
         },
     ),
@@ -192,6 +195,32 @@ def test_floor_recovery_requires_exact_typed_ack(
         assert calls == 1
         assert not publisher.is_ready()
         assert publisher.last_error == "native_policy_snapshot_ack_invalid"
+    finally:
+        publisher.close()
+
+
+def test_publisher_surfaces_resident_start_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    master = b"s" * 32
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+
+    def client_request(**_kwargs: object) -> bytes:
+        return b'{"error":"native_resident_start_timeout","retryable":false}'
+
+    publisher = NativePolicySnapshotPublisher(
+        store=store,
+        status_provider=_status,
+        client_request=client_request,
+        poll_interval_seconds=0.05,
+    )
+    try:
+        publisher._publish_once()
+        assert not publisher.is_ready()
+        assert publisher.last_error == "native_resident_start_timeout"
     finally:
         publisher.close()
 
@@ -318,7 +347,7 @@ def test_renewal_failure_keeps_barrier_closed_at_expiry(
         first = publisher.current_snapshot()
         assert first is not None
         publisher._publish_once(renew_after_generation=first["generation"])
-        assert not publisher.is_ready()
+        assert publisher.is_ready()
         clock.wall = first["expires_at_ms"] / 1_000
         assert not publisher.is_ready()
     finally:

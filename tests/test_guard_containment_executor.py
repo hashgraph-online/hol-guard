@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import containment_executor
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentBackend,
     ContainmentFailure,
@@ -48,6 +49,30 @@ def _force_available_backend(monkeypatch: pytest.MonkeyPatch) -> None:
         "codex_plugin_scanner.guard.runtime.containment_executor._select_backend",
         select_backend,
     )
+
+
+def test_linux_backend_uses_only_synthetic_localhost_name_service_files(tmp_path: Path) -> None:
+    workspace = (tmp_path / "workspace").resolve()
+    workspace.mkdir()
+    request = _request(workspace, ("/usr/bin/true",))
+    temp_root = (tmp_path / "contained").resolve()
+    temp_root.mkdir()
+
+    linux_etc = containment_executor._write_linux_name_service_files(temp_root)  # pyright: ignore[reportPrivateUsage]
+    argv = containment_executor._linux_argv(  # pyright: ignore[reportPrivateUsage]
+        "/usr/bin/bwrap",
+        request,
+        temp_root,
+        linux_etc,
+    )
+
+    assert (linux_etc / "hosts").read_text(encoding="ascii") == (
+        "127.0.0.1 localhost\n::1 localhost ip6-localhost ip6-loopback\n"
+    )
+    assert (linux_etc / "nsswitch.conf").read_text(encoding="ascii") == "hosts: files\n"
+    assert "/etc/resolv.conf" not in argv
+    assert argv[argv.index("/etc/hosts") - 1] == str(linux_etc / "hosts")
+    assert argv[argv.index("/etc/nsswitch.conf") - 1] == str(linux_etc / "nsswitch.conf")
 
 
 def test_unsupported_platform_fails_closed(tmp_path: Path) -> None:

@@ -30,11 +30,10 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Enforce permanent source ownership
         env:
           OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -46,7 +45,29 @@ jobs:
           uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py "${args[@]}"
       - name: Enforce native approval contract ownership
         run: uv run --no-sync python scripts/ci/native_approval_contract_gate.py --root .
+      - name: Reject production Python semantic hook reachability
+        run: uv run --no-sync python scripts/ci/python_hook_semantic_callgraph_gate.py --root .
+      - name: Enforce native receipt persistence contract at exact HEAD
+        run: uv run --no-sync python scripts/ci/native_receipt_persistence_gate.py --root . --json native-receipt-persistence.json
+      - name: Build source compiler for package projections
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+      - name: Prove source and built artifact capability ownership
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
+        run: |
+          PACKAGE_ARTIFACT_DIR=$(mktemp -d)
+          uv build --wheel --sdist --out-dir "$PACKAGE_ARTIFACT_DIR"
+          BUILT_WHEEL=$(find "$PACKAGE_ARTIFACT_DIR" -maxdepth 1 -name '*.whl' -print -quit)
+          BUILT_SDIST=$(find "$PACKAGE_ARTIFACT_DIR" -maxdepth 1 -name '*.tar.gz' -print -quit)
+          test -n "$BUILT_WHEEL"
+          test -n "$BUILT_SDIST"
+          uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py \
+            --root . --artifact "$BUILT_WHEEL" --artifact "$BUILT_SDIST" \
+            --json python-capability-cleanup.json
+      # Retain standalone qualification unless the required main CI already runs this proof.
       - name: Compile and lint complete Rust workspace
+        if: >-
+          !((github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
@@ -54,9 +75,14 @@ jobs:
           cargo fmt --manifest-path rust/Cargo.toml --all --check
           cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
           cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - name: Build native ownership runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
           rust/target/release/hol-guard-runtime self-test --json
       - name: Run compiled PreToolUse adversarial integration
         run: |
@@ -94,7 +120,7 @@ jobs:
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: |
           uv run --no-sync pytest -q ci/native_runtime/test_native_hol_guard_wheel.py --tb=short
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: rust-authority-ownership-evidence
@@ -103,5 +129,7 @@ jobs:
             rust-pretool-authority.json
             rust-posttool-authority.json
             rust-authority-performance.json
+            native-receipt-persistence.json
+            python-capability-cleanup.json
           if-no-files-found: error
           retention-days: 30

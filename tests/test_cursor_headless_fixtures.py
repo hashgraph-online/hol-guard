@@ -12,7 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hooks import install_cursor_hooks
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from tests.conftest import guard_commands_module
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "cursor-hooks"
 RED_TEAM_DIR = Path(__file__).parent / "fixtures" / "guard-red-team"
@@ -101,7 +101,10 @@ def _cursor_hook_env(tmp_path: Path) -> tuple[HarnessContext, Path]:
     assert hook_script.is_file()
     source = hook_script.read_text(encoding="utf-8")
     assert "GUARD_CLI" in source
-    assert "GUARD_PYTHON" not in source
+    # The managed launcher may carry explicit test-only oracle markers, but it
+    # must not embed the removed direct Python interpreter fallback.
+    assert "GUARD_PYTHON = " not in source
+    assert "GUARD_HOOK_LAUNCHER" not in source
     return context, hook_script
 
 
@@ -131,6 +134,7 @@ class TestCursorHeadlessHookExecution:
         _load_expected_cases(),
         ids=[name for name, _ in _load_expected_cases()],
     )
+    @pytest.mark.usefixtures("native_hook_force")
     def test_cursor_hook_fixture_permission(
         self,
         cursor_hook_env: tuple[HarnessContext, Path],

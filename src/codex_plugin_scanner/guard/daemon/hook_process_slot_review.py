@@ -35,13 +35,16 @@ def review_hook_worker_slot(
         return HookProcessReview(None, "daemon_hook_process_timeout")
     except (BrokenPipeError, EOFError, OSError):
         increment_metric("failures")
+        # Withdraw the failed slot before waiting for or reserving replacement
+        # capacity. Otherwise the scheduler can observe stale capacity while
+        # the failed slot is still registered with the runner.
+        replace_slot(slot)
         retry_slot = _retry_slot_for_idempotent_review(
             payload=payload,
             ready_slots=ready_slots,
             wait_for_capacity=wait_for_capacity,
             review_deadline=review_deadline,
         )
-        replace_slot(slot)
         if not runtime_hook_review_is_idempotent(payload):
             return HookProcessReview(None, "daemon_hook_process_failed")
         if retry_slot is None:
@@ -63,12 +66,18 @@ def review_hook_worker_slot(
 
 
 def _send_review_to_slot(slot: HookWorkerSlot, request: dict[str, object], review_deadline: float) -> object:
-    slot.connection.send(("review", request))
-    slot.request_exposed = True
     remaining_seconds = max(0.0, review_deadline - time.monotonic())
-    if not slot.connection.poll(remaining_seconds):
+    if not slot.handshake_lock.acquire(timeout=remaining_seconds):
         raise TimeoutError
-    return slot.connection.recv()
+    try:
+        slot.connection.send(("review", request))
+        slot.request_exposed = True
+        remaining_seconds = max(0.0, review_deadline - time.monotonic())
+        if not slot.connection.poll(remaining_seconds):
+            raise TimeoutError
+        return slot.connection.recv()
+    finally:
+        slot.handshake_lock.release()
 
 
 def _retry_slot_for_idempotent_review(

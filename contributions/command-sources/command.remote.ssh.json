@@ -1,0 +1,295 @@
+{
+  "extension": {
+    "action_classes": [
+      "SSH remote execution command",
+      "SSH configured execution command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews SSH invocations that explicitly execute a remote command.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.remote.ssh",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "SSH remote execution protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "SSH configured execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies SSH options that configure local, host-key, proxy, or remote shell commands.",
+        "example_command": "ssh -o BatchMode=yes web-1 'uptime'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "SSH configured command execution",
+        "permission_id": "command.remote.ssh.permission.configured-execution",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Move connection-only settings into reviewed SSH configuration and omit command-bearing options."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "SSH remote execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies SSH commands that provide an explicit command to execute after the destination.",
+        "example_command": "ssh web-1 'sudo rm -rf /var/log/app'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Explicit SSH remote execution",
+        "permission_id": "command.remote.ssh.permission.execution",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Connect interactively first or inspect the resolved SSH configuration with ssh -G."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://man.openbsd.org/ssh",
+      "https://man.openbsd.org/ssh_config"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "SSH remote execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies SSH commands that provide an explicit command to execute after the destination.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "executables": [
+              "ssh",
+              "ssh.cmd",
+              "ssh.exe"
+            ],
+            "forbidden_flags": [
+              "-G",
+              "-N",
+              "-O",
+              "-Q",
+              "-V",
+              "-W"
+            ],
+            "minimum_operands": 2,
+            "options_with_values": [
+              "-B",
+              "-D",
+              "-E",
+              "-F",
+              "-I",
+              "-J",
+              "-L",
+              "-O",
+              "-P",
+              "-Q",
+              "-R",
+              "-S",
+              "-W",
+              "-b",
+              "-c",
+              "-e",
+              "-i",
+              "-l",
+              "-m",
+              "-o",
+              "-p",
+              "-w"
+            ]
+          },
+          "op": "leading-operand-count.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.remote.ssh.permission.execution",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.remote.ssh.execution",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Connect interactively first or inspect the resolved SSH configuration with ssh -G."
+        ],
+        "severity": "high",
+        "title": "Explicit SSH remote execution"
+      },
+      {
+        "action_classes": [
+          "SSH configured execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies SSH options that configure local, host-key, proxy, or remote shell commands.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "cluster_options_with_values": [
+                  "-B",
+                  "-D",
+                  "-E",
+                  "-F",
+                  "-I",
+                  "-J",
+                  "-L",
+                  "-O",
+                  "-P",
+                  "-Q",
+                  "-R",
+                  "-S",
+                  "-W",
+                  "-b",
+                  "-c",
+                  "-e",
+                  "-i",
+                  "-l",
+                  "-m",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "executables": [
+                  "ssh",
+                  "ssh.cmd",
+                  "ssh.exe"
+                ],
+                "forbidden_flags": [
+                  "-G",
+                  "-O",
+                  "-Q",
+                  "-V"
+                ],
+                "ignored_values": [
+                  "none"
+                ],
+                "option_names": [
+                  "-o"
+                ],
+                "required_key_values": [],
+                "value_keys": [
+                  "knownhostscommand",
+                  "proxycommand",
+                  "remotecommand"
+                ]
+              },
+              "op": "option-value-key.v1"
+            },
+            {
+              "config": {
+                "cluster_options_with_values": [
+                  "-B",
+                  "-D",
+                  "-E",
+                  "-F",
+                  "-I",
+                  "-J",
+                  "-L",
+                  "-O",
+                  "-P",
+                  "-Q",
+                  "-R",
+                  "-S",
+                  "-W",
+                  "-b",
+                  "-c",
+                  "-e",
+                  "-i",
+                  "-l",
+                  "-m",
+                  "-o",
+                  "-p",
+                  "-w"
+                ],
+                "executables": [
+                  "ssh",
+                  "ssh.cmd",
+                  "ssh.exe"
+                ],
+                "forbidden_flags": [
+                  "-G",
+                  "-O",
+                  "-Q",
+                  "-V"
+                ],
+                "ignored_values": [
+                  "none"
+                ],
+                "option_names": [
+                  "-o"
+                ],
+                "required_key_values": [
+                  [
+                    "permitlocalcommand",
+                    "yes"
+                  ]
+                ],
+                "value_keys": [
+                  "localcommand"
+                ]
+              },
+              "op": "option-value-key.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.remote.ssh.permission.configured-execution",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.remote.ssh.configured-execution",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Move connection-only settings into reviewed SSH configuration and omit command-bearing options."
+        ],
+        "severity": "high",
+        "title": "SSH configured command execution"
+      }
+    ],
+    "safer_alternatives": [
+      "Connect interactively or inspect resolved connection settings with ssh -G first."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

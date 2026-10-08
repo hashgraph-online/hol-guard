@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     classify_github_shell_capabilities,
     extract_sensitive_tool_action_request,
 )
+from tests.native_command_test_support import extract_sensitive_tool_action_request_native_test
 
 _EXPECTED_FLOORS = {
     "read_local": "allow",
@@ -60,6 +61,7 @@ _EXPECTED_FLOORS = {
         (("pr", "merge", "17"), ("merge_remote",), False),
         (("pr", "merge", "17", "--delete-branch"), ("merge_remote", "delete_remote"), False),
         (("api", "repos/o/r/pulls/17/merge", "-X", "PUT"), ("merge_remote",), False),
+        (("api", "repos/o/r/pulls/17/merge?x=y", "-X", "PUT"), ("merge_remote",), False),
         (("release", "create", "v1"), ("publish_remote",), False),
         (("api", "repos/o/r/releases", "-X", "POST", "-f", "tag_name=v1"), ("publish_remote",), False),
         (("workflow", "run", "ci.yml"), ("workflow_remote",), False),
@@ -138,6 +140,8 @@ def test_admin_merge_action_class_is_preserved_with_branch_deletion() -> None:
         "gh pr merge 17 --squash",
         "gh pr merge 4751 --repo example/project --squash",
         "gh pr merge 4751 -R github.com/example/project --squash",
+        "gh pr merge 17 --squash --delete-branch=false",
+        "gh pr merge 4751 --repo example/project --squash --delete-branch=false",
     ),
 )
 def test_routine_squash_merge_is_prompt_free(command: str) -> None:
@@ -151,6 +155,20 @@ def test_routine_squash_merge_cleanup_followed_by_read_is_prompt_free() -> None:
             "command": (
                 "gh pr merge 5134 --repo example/project --squash --delete-branch && "
                 "gh pr view 5134 --repo example/project --json state,mergedAt,mergeCommit,url"
+            )
+        },
+    )
+
+    assert match is None
+
+
+def test_explicit_false_delete_branch_squash_merge_with_sleep_is_prompt_free() -> None:
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "gh pr merge 252 --repo example/project --squash --delete-branch=false && "
+                "sleep 20 && gh run list --repo example/project --limit 1"
             )
         },
     )
@@ -359,7 +377,7 @@ def test_no_remote_mutation_is_prompt_free(tmp_path: Path, command: str) -> None
     ),
 )
 def test_branch_deletion_keeps_a_destructive_floor(tmp_path: Path, command: str) -> None:
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+    match = extract_sensitive_tool_action_request_native_test("Bash", {"command": command}, cwd=tmp_path)
 
     assert match is not None
     assert match.action_class == "git destructive command"

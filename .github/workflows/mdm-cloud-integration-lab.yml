@@ -10,7 +10,6 @@ on:
       - "docs/guard/mdm-cloud-integration-lab-*.md"
       - "docs/guard/schemas/mdm-cloud-*.json"
       - ".github/workflows/mdm-cloud-integration-lab.yml"
-      - "ci/test-suite-ratchet-baseline.json"
   push:
     branches: [release/3.0]
     paths:
@@ -20,7 +19,6 @@ on:
       - "docs/guard/mdm-cloud-integration-lab-*.md"
       - "docs/guard/schemas/mdm-cloud-*.json"
       - ".github/workflows/mdm-cloud-integration-lab.yml"
-      - "ci/test-suite-ratchet-baseline.json"
   workflow_dispatch:
 
 permissions:
@@ -64,6 +62,7 @@ jobs:
             pyproject.toml
             uv.lock
           save-cache: false
+      - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Generate an ephemeral MDM lab admin token
         shell: bash

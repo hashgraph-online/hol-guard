@@ -63,8 +63,20 @@ export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
       return envelopeText;
     }
   }
-  if (item.launch_target?.trim()) {
-    return item.launch_target;
+  const launchTarget = item.launch_target?.trim();
+  const launchTargetIsRequestSummary =
+    item.artifact_type === "tool_action_request" &&
+    launchTarget?.startsWith("Requested `") &&
+    launchTarget.includes(" action `");
+  const launchSummary = item.launch_summary?.trim();
+  if (launchTargetIsRequestSummary && launchSummary) {
+    const launchSummaryCommand = launchSummary.match(/^Launches with `(.+)`\.$/);
+    if (launchSummaryCommand?.[1]) {
+      return launchSummaryCommand[1];
+    }
+  }
+  if (launchTarget) {
+    return launchTarget;
   }
   if (item.launch_summary?.trim()) {
     const commandMatch = item.launch_summary.match(/`([^`]+)`/);
@@ -191,7 +203,7 @@ function normalizeDuplicateReviewText(value: string): string {
 
 function stripDuplicateReviewContextPrefix(value: string): string | null {
   const stripped = value.replace(
-    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini|grok|kimi)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
+    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini|grok|kimi|devin)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
     "",
   );
   return stripped === value ? null : stripped;

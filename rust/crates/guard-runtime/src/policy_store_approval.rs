@@ -9,6 +9,45 @@ pub(crate) struct ApprovalPolicyFence<'a> {
 }
 
 impl PolicySnapshotStore {
+    /// Fence an approval challenge to the resident's current authenticated
+    /// snapshot. The callback runs while the state mutex is held, so action
+    /// reconstruction and binding derivation cannot observe a policy push in
+    /// between. The callback must not call APIs that reacquire `state`.
+    pub(crate) fn with_approval_fence<F, T>(
+        &self,
+        envelope: &guard_contracts::GuardHookEnvelopeV2,
+        callback: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce(&AdmittedPolicySnapshot) -> Result<T, String>,
+    {
+        let now = now_ms()?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
+        let snapshot = self.validate_request_snapshot_locked(
+            &state,
+            &envelope.policy_snapshot,
+            &envelope.source.guard_home,
+            envelope.policy_generation,
+            now,
+        )?;
+        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
+        callback(snapshot.as_ref())
+    }
+
+    pub(crate) fn approval_v4_authority(
+        &self,
+    ) -> Result<&crate::policy_store::approval_v4_authority::ApprovalV4Authority, String> {
+        if !policy_store_authority::authorities_unchanged(self) {
+            return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
+        }
+        self.approval_v4_authority
+            .as_ref()
+            .ok_or_else(|| "native_approval_v4_authority_unavailable".to_owned())
+    }
+
     #[cfg(test)]
     pub(crate) fn test_approval_signing_seed(&self) -> [u8; 32] {
         [17u8; 32]
@@ -20,18 +59,28 @@ impl PolicySnapshotStore {
     }
 
     pub(crate) fn approval_binding(&self, purpose_domain: &[u8]) -> Result<String, String> {
-        let authority = self
-            .approval_authority
-            .as_ref()
-            .ok_or_else(|| "native_approval_signing_authority_unavailable".to_owned())?;
         if !policy_store_authority::authorities_unchanged(self) {
             return Err("native_approval_signing_authority_replaced".to_owned());
         }
+        let (device_binding, installation_binding) =
+            if let Some(authority) = self.approval_authority.as_ref() {
+                (
+                    authority.device_binding.clone(),
+                    authority.installation_binding.clone(),
+                )
+            } else if let Some(authority) = self.approval_v4_authority.as_ref() {
+                (
+                    authority.device_binding.clone(),
+                    authority.installation_binding.clone(),
+                )
+            } else {
+                return Err("native_approval_signing_authority_unavailable".to_owned());
+            };
         if purpose_domain == guard_contracts::NATIVE_APPROVAL_DEVICE_BINDING_DOMAIN {
-            return Ok(authority.device_binding.clone());
+            return Ok(device_binding);
         }
         if purpose_domain == guard_contracts::NATIVE_APPROVAL_INSTALLATION_BINDING_DOMAIN {
-            return Ok(authority.installation_binding.clone());
+            return Ok(installation_binding);
         }
         Err("native_approval_binding_invalid".to_owned())
     }
@@ -104,6 +153,7 @@ impl PolicySnapshotStore {
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
+        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
         if snapshot.expires_at_ms <= now {
             return Err("native_approval_receipt_expired".to_owned());
         }
@@ -144,6 +194,7 @@ impl PolicySnapshotStore {
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
+        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
         if snapshot.expires_at_ms <= now {
             return Err("native_approval_receipt_expired".to_owned());
         }

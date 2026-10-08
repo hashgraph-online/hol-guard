@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { GuardApprovalRequest } from "./guard-types";
-import { resolveSecondaryRiskSummary } from "./secondary-risk-dedupe";
+import { resolveSecondaryRiskSummary, resolveStoppedCommandText } from "./secondary-risk-dedupe";
 
 const BASE_REQUEST: GuardApprovalRequest = {
   request_id: "srd-req-1",
@@ -32,6 +32,41 @@ const BASE_REQUEST: GuardApprovalRequest = {
 
 const COMPOUND_SHELL_PRIMARY_DETAIL =
   "Sensitive native tool action (unresolved shell execution context): Guard could not prove the working directory for every shell segment and requires one conservative decision before the user confirms execution (shell_cwd_workspace_escape). Use a literal, existing in-workspace directory with deterministic cd/pushd/popd control flow, or run the command from the intended directory.";
+
+const definitionSummary = "Guard reviewed the definition at /workspace/.omp/skills/memory/SKILL.md. No separate shell launch command was recorded for this item.";
+assert.equal(resolveStoppedCommandText({ ...BASE_REQUEST, artifact_type: "skill", launch_summary: definitionSummary }), definitionSummary);
+
+const NATIVE_TOOL_ACTION_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_action_request",
+  launch_target: "Requested `bash` action `rm -f /workspace/project/output.txt` (Destructive shell command).",
+  launch_summary: "Launches with `rm -f /workspace/project/output.txt`.",
+};
+assert.equal(
+  resolveStoppedCommandText(NATIVE_TOOL_ACTION_REQUEST),
+  "rm -f /workspace/project/output.txt",
+  "SRD-00: dashboard prefers the full native command over a nested request summary target",
+);
+assert.equal(
+  resolveStoppedCommandText({
+    ...NATIVE_TOOL_ACTION_REQUEST,
+    launch_summary: "  Launches with `rm -f /workspace/project/output.txt`.  ",
+  }),
+  "rm -f /workspace/project/output.txt",
+  "SRD-00a: dashboard trims padded native launch summaries before extraction",
+);
+
+const LONG_NATIVE_COMMAND = `rm -f ${"x".repeat(200)}`;
+assert.equal(
+  resolveStoppedCommandText({
+    ...BASE_REQUEST,
+    artifact_type: "tool_action_request",
+    launch_target: LONG_NATIVE_COMMAND,
+    launch_summary: `Launches with \`${LONG_NATIVE_COMMAND.slice(0, 139)}…\`.`,
+  }),
+  LONG_NATIVE_COMMAND,
+  "SRD-00b: dashboard preserves a full structured native command over a truncated prose summary",
+);
 
 const COMPOUND_FINDINGS_DUPLICATE_RISK_REQUEST: GuardApprovalRequest = {
   ...BASE_REQUEST,

@@ -14,8 +14,16 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
+from typing_extensions import override
 
 from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters.claude_daemon_hook_transport import DaemonIdentityError
+from tests.codex_daemon_hook_bridge_fixtures import (
+    _DaemonHandler as _AuthenticatedDaemonHandler,
+)
+from tests.codex_daemon_hook_bridge_fixtures import (
+    _write_authenticated_daemon_files,
+)
 
 
 class _CapturingProxyHandler(BaseHTTPRequestHandler):
@@ -43,6 +51,48 @@ class _CapturingProxyHandler(BaseHTTPRequestHandler):
         return
 
 
+@pytest.mark.parametrize("reason", ["missing authority", "fallback timed out", "capacity exhausted", "validator fault"])
+@pytest.mark.parametrize("event", ["PreToolUse", "PermissionRequest"])
+def test_unverified_degradation_never_grants_tool_permission(reason: str, event: str) -> None:
+    response = json.loads(bridge._degraded(reason, json.dumps({"hook_event_name": event})))
+    output = response["hookSpecificOutput"]
+    if event == "PreToolUse":
+        assert output["permissionDecision"] == "deny"
+        assert reason in output["permissionDecisionReason"]
+    else:
+        assert output["decision"]["behavior"] == "deny"
+        assert reason in output["decision"]["message"]
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {},
+        {"hookSpecificOutput": {}},
+        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "unknown"}},
+        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": ["allow"]}},
+        {"hookSpecificOutput": {"hookEventName": "Stop", "permissionDecision": "allow"}},
+    ],
+)
+def test_incomplete_or_wrong_event_tool_response_requires_native_approval(output):
+    response = bridge._valid_hook_json_or_degraded(
+        json.dumps(output),
+        reason="invalid tool response",
+        data=json.dumps({"hook_event_name": "PreToolUse"}),
+    )
+    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("event", ["PermissionRequest", "PermissionRequestV2"])
+def test_empty_permission_response_is_denied(event):
+    response = bridge._valid_hook_json_or_degraded(
+        "{}",
+        reason="invalid permission response",
+        data=json.dumps({"hook_event_name": event}),
+    )
+    assert json.loads(response)["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+
+
 def test_assert_loopback_http_url_rejects_remote_host() -> None:
     with pytest.raises(ValueError, match="loopback"):
         bridge._assert_loopback_http_url("http://evil.example:5474/v1/hooks/claude-code")
@@ -53,41 +103,14 @@ def test_daemon_url_rejects_non_loopback_fallback() -> None:
         bridge._daemon_url("/nonexistent/daemon-state.json", "http://proxy.internal:5474/")
 
 
-class _DaemonHandler(BaseHTTPRequestHandler):
-    response_marker = "from-real-daemon"
-    captured_guard_token: ClassVar[str | None] = None
-    raw_response_body: ClassVar[bytes | None] = None
-
-    def do_POST(self) -> None:
-        type(self).captured_guard_token = self.headers.get("X-Guard-Token")
-        length = int(self.headers.get("Content-Length", "0"))
-        _ = self.rfile.read(length)
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        if type(self).raw_response_body is not None:
-            self.wfile.write(type(self).raw_response_body)
-            return
-        self.wfile.write(
-            json.dumps(
-                {
-                    "marker": type(self).response_marker,
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                    },
-                }
-            ).encode("utf-8")
-        )
-
-    def log_message(self, fmt: str, *args: object) -> None:
-        return
-
-
-class _StreamingDaemonHandler(BaseHTTPRequestHandler):
+class _StreamingDaemonHandler(_AuthenticatedDaemonHandler):
     status_code = 200
 
+    @override
     def do_POST(self) -> None:
+        if self.path == "/v1/daemon/identity-challenge":
+            super().do_POST()
+            return
         length = int(self.headers.get("Content-Length", "0"))
         _ = self.rfile.read(length)
         self.send_response(self.status_code)
@@ -115,21 +138,16 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
     proxy_thread = threading.Thread(target=proxy_server.serve_forever, daemon=True)
     proxy_thread.start()
 
-    auth_token = "test-guard-token"
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(mode=0o700)
-    token_path = guard_home / "daemon-auth-token"
-    token_path.write_text(auth_token, encoding="utf-8")
-    if os.name != "nt":
-        os.chmod(token_path, 0o600)
     state_path = guard_home / "daemon-state.json"
 
-    daemon_server = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
+    daemon_server = HTTPServer(("127.0.0.1", 0), _AuthenticatedDaemonHandler)
     daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
     daemon_thread.start()
     daemon_port = daemon_server.server_address[1]
-    _DaemonHandler.captured_guard_token = None
-    _DaemonHandler.raw_response_body = None
+    _write_authenticated_daemon_files(guard_home, daemon_port)
+    _AuthenticatedDaemonHandler.response_body = json.dumps({"marker": "from-real-daemon"}).encode()
 
     monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy_server.server_address[1]}")
     monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy_server.server_address[1]}")
@@ -138,8 +156,8 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
 
     try:
         response_body = bridge._post_to_loopback_daemon(
-            f"http://127.0.0.1:{daemon_port}/v1/hooks/claude-code?guard-home=%2Ftmp",
-            "{}",
+            f"http://127.0.0.1:{daemon_port}/v1/hooks/claude-code?guard-home={guard_home}",
+            '{"hook_event_name":"PreToolUse"}',
             state_path=state_path,
         )
     finally:
@@ -147,11 +165,39 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
         daemon_server.shutdown()
         proxy_thread.join(timeout=5)
         daemon_thread.join(timeout=5)
+        _AuthenticatedDaemonHandler.response_body = b"{}"
 
     payload = json.loads(response_body)
-    assert payload["marker"] == _DaemonHandler.response_marker
+    assert payload["marker"] == "from-real-daemon"
     assert _CapturingProxyHandler.captured_paths == []
-    assert _DaemonHandler.captured_guard_token == auth_token
+    assert _AuthenticatedDaemonHandler.captured_challenge_guard_token is None
+    assert _AuthenticatedDaemonHandler.captured_guard_token is None
+
+
+def test_post_to_loopback_daemon_does_not_send_token_before_identity_proof(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    daemon_server = HTTPServer(("127.0.0.1", 0), _AuthenticatedDaemonHandler)
+    daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
+    daemon_thread.start()
+    daemon_port = daemon_server.server_address[1]
+    _write_authenticated_daemon_files(guard_home, daemon_port)
+    _AuthenticatedDaemonHandler.challenge_mode = "wrong-proof"
+
+    try:
+        with pytest.raises(DaemonIdentityError, match="authentication failed"):
+            bridge._post_to_loopback_daemon(
+                f"http://127.0.0.1:{daemon_port}/v1/hooks/claude-code",
+                '{"hook_event_name":"PreToolUse"}',
+                state_path=guard_home / "daemon-state.json",
+            )
+    finally:
+        daemon_server.shutdown()
+        daemon_thread.join(timeout=5)
+        _AuthenticatedDaemonHandler.challenge_mode = "valid"
+
+    assert _AuthenticatedDaemonHandler.captured_challenge_guard_token is None
+    assert _AuthenticatedDaemonHandler.captured_guard_token is None
 
 
 @pytest.mark.parametrize("handler", [_StreamingDaemonHandler, _StreamingErrorDaemonHandler])
@@ -161,15 +207,15 @@ def test_post_to_loopback_daemon_enforces_absolute_streaming_deadline(
 ) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(mode=0o700)
-    (guard_home / "daemon-auth-token").write_text("test-token", encoding="utf-8")
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     server.daemon_threads = True
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
+    _write_authenticated_daemon_files(guard_home, server.server_address[1])
     started_at = time.monotonic()
 
     try:
-        with pytest.raises(TimeoutError, match="absolute deadline"):
+        with pytest.raises(TimeoutError, match="deadline"):
             bridge._post_to_loopback_daemon(
                 f"http://127.0.0.1:{server.server_address[1]}/v1/hooks/claude-code",
                 "{}",
@@ -191,12 +237,12 @@ def test_main_degrades_when_daemon_returns_malformed_json(
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     state_path = guard_home / "daemon-state.json"
-    daemon_server = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
+    daemon_server = HTTPServer(("127.0.0.1", 0), _AuthenticatedDaemonHandler)
     daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
     daemon_thread.start()
     daemon_port = daemon_server.server_address[1]
-    _DaemonHandler.captured_guard_token = None
-    _DaemonHandler.raw_response_body = b"not-json"
+    _write_authenticated_daemon_files(guard_home, daemon_port)
+    _AuthenticatedDaemonHandler.response_body = b"not-json"
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
     try:
@@ -204,17 +250,81 @@ def test_main_degrades_when_daemon_returns_malformed_json(
             state_path=state_path,
             fallback_daemon_url=f"http://127.0.0.1:{daemon_port}",
             fallback_command=("python3", "-c", "print('{}')"),
-            query="guard-home=%2Ftmp",
+            query=f"guard-home={guard_home}",
         )
         assert exit_code == 0
     finally:
         daemon_server.shutdown()
         daemon_thread.join(timeout=5)
-        _DaemonHandler.raw_response_body = None
+        _AuthenticatedDaemonHandler.response_body = b"{}"
     output = capsys.readouterr().out
     payload = json.loads(output)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_main_stamps_caller_environment_before_daemon_forwarding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured: list[str] = []
+
+    def fake_post(
+        endpoint: str,
+        data: str,
+        *,
+        state_path: str | Path,
+        deadline: float | None = None,
+    ) -> str:
+        del endpoint, state_path, deadline
+        captured.append(data)
+        return json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                }
+            }
+        )
+
+    monkeypatch.setenv("PATH", "/claude/outer/bin")
+    monkeypatch.setenv("HOME", "/claude/outer/home")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "claude-caller-secret-not-serialized")
+    monkeypatch.setattr(bridge, "state_path_for_query", lambda state_path, query: state_path)
+    monkeypatch.setattr(bridge, "_daemon_url", lambda state_path, fallback: "http://127.0.0.1:5474")
+    monkeypatch.setattr(bridge, "_post_to_loopback_daemon", fake_post)
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "guard_execution_environment": {"path": "/model-supplied"},
+                }
+            )
+        ),
+    )
+
+    assert (
+        bridge.main(
+            state_path=tmp_path / "daemon-state.json",
+            fallback_daemon_url="http://127.0.0.1:5474",
+            fallback_command=(sys.executable, "-c", "print('{}')"),
+            query="guard-home=/tmp/guard-home",
+        )
+        == 0
+    )
+
+    assert len(captured) == 1
+    forwarded = json.loads(captured[0])
+    context = forwarded["guard_execution_environment"]
+    assert context["path"] == "/claude/outer/bin"
+    assert context["home"] == "/claude/outer/home"
+    assert context["path"] != "/model-supplied"
+    assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
+    assert "claude-caller-secret-not-serialized" not in captured[0]
+    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_run_local_fallback_degrades_invalid_json() -> None:
@@ -226,8 +336,24 @@ def test_run_local_fallback_degrades_invalid_json() -> None:
 
     payload = json.loads(response)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "malformed hook JSON" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_degraded_pretool_requires_review_even_for_read() -> None:
+    response = bridge._degraded(
+        "daemon unavailable",
+        json.dumps(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "src/app.ts"},
+            }
+        ),
+    )
+
+    payload = json.loads(response)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_valid_hook_json_degrades_empty_daemon_body() -> None:
@@ -239,8 +365,7 @@ def test_valid_hook_json_degrades_empty_daemon_body() -> None:
 
     payload = json.loads(response)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "full HOL Guard approval flow" in payload["systemMessage"]
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_daemon_response_body_is_size_bounded() -> None:
@@ -260,15 +385,31 @@ def test_oversized_hook_input_fails_safe_without_daemon_contact(
     monkeypatch.setattr("sys.stdin", io.StringIO("x" * (bridge._MAX_HOOK_INPUT_BYTES + 1)))
 
     result = bridge.main(
-        state_path="/missing/state.json",
+        state_path="/missing/daemon-state.json",
         fallback_daemon_url="http://127.0.0.1:5474",
         fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
-        query="",
+        query="guard-home=/missing",
     )
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "exceeded the safe size limit" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_oversized_permission_request_uses_nested_deny() -> None:
+    payload = json.loads(bridge._limit_denied("hook input", "PermissionRequest"))
+    decision = payload["hookSpecificOutput"]["decision"]
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
+    assert decision["behavior"] == "deny"
+    assert "exceeded the safe size limit" in decision["message"]
+    truncated = '{"hook_event_name":"PermissionRequest","tool_name":"Write","prompt":"' + "x" * 80
+    assert bridge._event_name(truncated) == "PermissionRequest"
+    prompt = json.loads(bridge._limit_denied("hook input", "UserPromptSubmit"))
+    assert prompt["decision"] == "block"
+    notice = json.loads(bridge._limit_denied("hook input", "Notification"))
+    assert notice["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert notice["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
 
 
 def test_bridge_timeouts_stay_under_harness_budget() -> None:
@@ -331,7 +472,7 @@ def test_main_recovers_missing_daemon_and_retries_hook(
         state_path=tmp_path / "guard-home" / "daemon-state.json",
         fallback_daemon_url="http://127.0.0.1:5474",
         fallback_command=("python3", "-c", "raise SystemExit(99)"),
-        query="guard-home=%2Ftmp",
+        query=f"guard-home={tmp_path / 'guard-home'}",
     )
 
     assert result == 0
@@ -340,7 +481,7 @@ def test_main_recovers_missing_daemon_and_retries_hook(
     assert len(set(phase_deadlines)) == 1
     assert len(recovery_commands) == 1
     assert recovery_commands[0][1:3] == ("-I", "-c")
-    assert "recover_guard_daemon_after_hook_failure" in recovery_commands[0][3]
+    assert "schedule_guard_daemon_recovery" in recovery_commands[0][3]
     assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
@@ -363,13 +504,30 @@ def test_authenticated_daemon_failure_denies_without_local_fallback(
         state_path=tmp_path / "daemon-state.json",
         fallback_daemon_url="http://127.0.0.1:5474",
         fallback_command=("python3", "-c", "print('{}')"),
-        query="guard-home=%2Ftmp",
+        query=f"guard-home={tmp_path}",
     )
 
     payload = json.loads(capsys.readouterr().out)
     assert result == 0
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "authentication failed" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_authenticated_failure_denies_permission_request_behavior() -> None:
+    payload = json.loads(
+        bridge._authenticated_control_plane_failure(
+            "invalid daemon token",
+            json.dumps({"hook_event_name": "PermissionRequest"}),
+        )
+    )
+    assert payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    v2 = json.loads(
+        bridge._authenticated_control_plane_failure(
+            "invalid daemon token",
+            json.dumps({"hook_event_name": "PermissionRequestV2"}),
+        )
+    )
+    assert v2["hookSpecificOutput"]["decision"]["behavior"] == "deny"
 
 
 def test_recovery_only_restarts_for_transport_and_server_failures() -> None:
@@ -411,7 +569,7 @@ def test_fallback_timeout_kills_descendants(tmp_path: Path) -> None:
     )
     time.sleep(0.4)
 
-    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert not marker.exists()
 
 
@@ -425,7 +583,7 @@ def test_recovery_command_preserves_custom_home_and_guard_home(tmp_path: Path) -
     )
 
     assert command[1:3] == ("-I", "-c")
-    assert "recover_guard_daemon_after_hook_failure" in command[3]
+    assert "schedule_guard_daemon_recovery" in command[3]
     assert str(guard_home) in command[3]
     assert str(home_dir) in command[3]
 
@@ -441,3 +599,42 @@ def test_loopback_redirect_handler_rejects_remote_redirect() -> None:
             {},
             "http://evil.example/allow",
         )
+
+
+@pytest.mark.parametrize("event", ["PermissionRequest", "PermissionRequestV2"])
+def test_explicit_permission_passthrough_defers_to_claude_dialog(event):
+    output = json.dumps(
+        {
+            "guard_permission_passthrough": True,
+            "systemMessage": "HOL Guard context",
+            "hookSpecificOutput": {"hookEventName": event, "additionalContext": "context"},
+        }
+    )
+    response = bridge._valid_hook_json_or_degraded(
+        output,
+        reason="invalid permission response",
+        data=json.dumps({"hook_event_name": event}),
+    )
+    assert response == output
+    assert "decision" not in json.loads(response)["hookSpecificOutput"]
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"guard_permission_passthrough": "true", "hookSpecificOutput": {"hookEventName": "PermissionRequest"}},
+        {"guard_permission_passthrough": True, "hookSpecificOutput": {"hookEventName": "PreToolUse"}},
+        {"guard_permission_passthrough": True},
+        {
+            "guard_permission_passthrough": True,
+            "hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "maybe"}},
+        },
+    ],
+)
+def test_malformed_permission_passthrough_is_denied(output):
+    response = bridge._valid_hook_json_or_degraded(
+        json.dumps(output),
+        reason="invalid permission response",
+        data=json.dumps({"hook_event_name": "PermissionRequest"}),
+    )
+    assert json.loads(response)["hookSpecificOutput"]["decision"]["behavior"] == "deny"

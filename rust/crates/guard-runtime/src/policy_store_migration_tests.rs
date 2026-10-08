@@ -6,12 +6,11 @@ fn legacy_snapshot_and_floor_migrate_to_one_authority_record() {
     let key = install_test_key(&root, 13);
     let snapshot = signed_snapshot(7, &key, &root);
     let snapshot_value = serde_json::to_value(&snapshot).unwrap();
-    fs::write(
-        root.join(SNAPSHOT_FILE_NAME),
-        canonical_json_bytes(&snapshot_value).unwrap(),
-    )
-    .unwrap();
-    protect_test_file(&root.join(SNAPSHOT_FILE_NAME));
+    let snapshot_path = root.join(SNAPSHOT_FILE_NAME);
+    fixture_file(
+        &snapshot_path,
+        &canonical_json_bytes(&snapshot_value).unwrap(),
+    );
     #[cfg(unix)]
     fs::set_permissions(
         root.join(SNAPSHOT_FILE_NAME),
@@ -19,12 +18,8 @@ fn legacy_snapshot_and_floor_migrate_to_one_authority_record() {
     )
     .unwrap();
     let floor_value = legacy_floor_value(7, &snapshot.policy_digest, &key);
-    fs::write(
-        root.join(GENERATION_FLOOR_FILE_NAME),
-        canonical_json_bytes(&floor_value).unwrap(),
-    )
-    .unwrap();
-    protect_test_file(&root.join(GENERATION_FLOOR_FILE_NAME));
+    let floor_path = root.join(GENERATION_FLOOR_FILE_NAME);
+    fixture_file(&floor_path, &canonical_json_bytes(&floor_value).unwrap());
     #[cfg(unix)]
     fs::set_permissions(
         root.join(GENERATION_FLOOR_FILE_NAME),
@@ -39,6 +34,7 @@ fn legacy_snapshot_and_floor_migrate_to_one_authority_record() {
         &root.join(SNAPSHOT_FILE_NAME),
         AUTHORITY_RECORD_MAX_BYTES,
         "state",
+        &root,
     )
     .unwrap()
     .unwrap();
@@ -54,12 +50,8 @@ fn floor_only_migration_preserves_generation_and_allows_only_newer_push() {
     let key = install_test_key(&root, 14);
     let digest = "b".repeat(64);
     let floor_value = legacy_floor_value(9, &digest, &key);
-    fs::write(
-        root.join(GENERATION_FLOOR_FILE_NAME),
-        canonical_json_bytes(&floor_value).unwrap(),
-    )
-    .unwrap();
-    protect_test_file(&root.join(GENERATION_FLOOR_FILE_NAME));
+    let floor_path = root.join(GENERATION_FLOOR_FILE_NAME);
+    fixture_file(&floor_path, &canonical_json_bytes(&floor_value).unwrap());
     #[cfg(unix)]
     fs::set_permissions(
         root.join(GENERATION_FLOOR_FILE_NAME),

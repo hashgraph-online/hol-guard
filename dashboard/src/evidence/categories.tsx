@@ -218,6 +218,8 @@ export function detectCategory(receipt: GuardReceipt): ReceiptCategory {
   if (SECRET_PATTERNS.some((p) => p.test(text))) return "secret";
   if (DESTRUCTIVE_PATTERNS.some((p) => p.test(text))) return "destructive";
   if (HIDDEN_PATTERNS.some((p) => p.test(text))) return "hidden";
+  if (receipt.action_envelope_json?.action_type === "file_write") return "file-write";
+  if (receipt.action_envelope_json?.action_type === "file_read") return "other";
   if (artifactType === "mcp_tool" || MCP_PATTERNS.some((p) => p.test(text))) return "mcp";
   if (SKILL_PATTERNS.some((p) => p.test(text))) return "skill";
   if (artifactType === "package_script" || SUPPLY_CHAIN_PATTERNS.some((p) => p.test(text))) return "supply-chain";

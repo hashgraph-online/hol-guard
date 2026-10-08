@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 from ..adapters.kimi_hooks import normalize_kimi_prompt
-from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
 
 
 def _canonical_harness_name(value: str) -> str:
@@ -35,7 +34,6 @@ def load_hook_payload(
     if not isinstance(payload, dict):
         return {}
     if normalize:
-        payload = hydrate_hook_payload_reference(payload)
         return normalize_hook_payload(payload, harness=harness)
     return payload
 

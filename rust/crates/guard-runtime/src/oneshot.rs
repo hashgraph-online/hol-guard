@@ -5,6 +5,7 @@ use guard_command::{parse_command, CommandModelRequestV1};
 use guard_contracts::{NativeHookRequestV1, NATIVE_PROTOCOL_VERSION};
 use guard_hook_core::review_post_tool;
 use guard_policy_snapshot::{validate as validate_policy_snapshot, PolicySnapshotV1};
+#[cfg(not(windows))]
 use guard_secure_fs::read_bounded;
 use serde::Deserialize;
 use serde_json::Value;
@@ -43,9 +44,7 @@ fn validate_durable_policy_generation(
     let canonical_guard_home = std::fs::canonicalize(Path::new(guard_home))
         .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
     let state_path = canonical_guard_home.join(POLICY_GENERATION_STATE_NAME);
-    let state_bytes = read_bounded(&state_path, MAX_POLICY_GENERATION_STATE_BYTES)
-        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
-        .bytes;
+    let state_bytes = read_durable_generation_bytes(&canonical_guard_home, &state_path)?;
     let state: DurablePolicyGenerationState = serde_json::from_slice(&state_bytes)
         .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
     if state.schema != POLICY_GENERATION_STATE_SCHEMA || state.generation == 0 {
@@ -57,7 +56,36 @@ fn validate_durable_policy_generation(
     Ok(())
 }
 
-#[cfg(test)]
+fn read_durable_generation_bytes(
+    canonical_guard_home: &Path,
+    state_path: &Path,
+) -> Result<Vec<u8>, String> {
+    #[cfg(windows)]
+    {
+        use std::io::Read;
+        let mut file = crate::resident_state::open_private_read(
+            state_path,
+            MAX_POLICY_GENERATION_STATE_BYTES as u64,
+            "generation_state",
+            canonical_guard_home,
+        )
+        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
+        .ok_or_else(|| "native_policy_generation_state_invalid".to_owned())?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)
+            .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
+        Ok(bytes)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = canonical_guard_home;
+        Ok(read_bounded(state_path, MAX_POLICY_GENERATION_STATE_BYTES)
+            .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
+            .bytes)
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) static POLICY_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), String> {
@@ -201,7 +229,7 @@ pub(crate) fn evaluate_pre_tool_request(
     crate::encode_response(&pre_tool_response(None, evaluate_pre_tool(request)?))
 }
 
-#[cfg(test)]
+#[cfg_attr(not(test), allow(dead_code, unused_imports))]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -236,16 +264,24 @@ mod tests {
         let digest = digest_character.repeat(64);
         let guard_home = generation_state_root();
         fs::create_dir_all(&guard_home).expect("create generation fixture");
-        fs::write(
-            guard_home.join(POLICY_GENERATION_STATE_NAME),
-            serde_json::to_vec(&json!({
-                "schema": POLICY_GENERATION_STATE_SCHEMA,
-                "generation": generation,
-                "policy_digest": digest.clone(),
-            }))
-            .expect("encode generation fixture"),
-        )
-        .expect("write generation fixture");
+        #[cfg(windows)]
+        crate::resident_state::protect_windows_private_path(&guard_home, true, &guard_home)
+            .expect("protect generation fixture");
+        let state_path = guard_home.join(POLICY_GENERATION_STATE_NAME);
+        let state_bytes = serde_json::to_vec(&json!({
+            "schema": POLICY_GENERATION_STATE_SCHEMA,
+            "generation": generation,
+            "policy_digest": digest.clone(),
+        }))
+        .expect("encode generation fixture");
+        #[cfg(windows)]
+        {
+            let mut file = crate::resident_state::private_file(&state_path, false, &guard_home)
+                .expect("create private generation fixture");
+            std::io::Write::write_all(&mut file, &state_bytes).expect("write generation fixture");
+        }
+        #[cfg(not(windows))]
+        fs::write(&state_path, &state_bytes).expect("write generation fixture");
         json!({
             "guard_home": guard_home,
             "policy_snapshot": {

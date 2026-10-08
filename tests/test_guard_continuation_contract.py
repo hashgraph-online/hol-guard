@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.continuation_contract import (
     ContinuationResult,
     capability_offer,
 )
+from tests.coverage_ci import under_coverage_scale
 
 CORRELATION_ID = "gcr_018f0a0a-1234-7abc-8def-0123456789ab"
 NOW = datetime(2026, 8, 24, tzinfo=timezone.utc)
@@ -205,7 +206,7 @@ def test_bounded_adapter_cancels_a_hung_worker_and_records_timeout() -> None:
     started = monotonic()
     result = coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=0.02)
 
-    assert monotonic() - started < 0.2
+    assert monotonic() - started < 0.2 * under_coverage_scale(5.0)
     assert result.status == "failed"
     assert result.reason == "continuation_adapter_timeout"
     assert attempts == [result]

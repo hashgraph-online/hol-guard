@@ -21,6 +21,7 @@ from typing import Final
 
 ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-contracts/src/approval_contracts.rs"),
+    Path("rust/crates/guard-contracts/src/approval_v4_contracts.rs"),
     Path("rust/crates/guard-runtime/src/approval.rs"),
     Path("rust/crates/guard-runtime/src/approval_authority.rs"),
     Path("rust/crates/guard-runtime/src/approval_authority_tests.rs"),
@@ -28,6 +29,15 @@ ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-runtime/src/approval_enrollment.rs"),
     Path("rust/crates/guard-runtime/src/approval_enrollment_platform.rs"),
     Path("rust/crates/guard-runtime/src/approval_replay_memory.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_assertion_state.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_authority.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_authority_tests.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_crypto.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_enrollment.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_negative_tests.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_secure_state.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_tests.rs"),
     Path("rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs"),
     Path("rust/crates/guard-runtime/src/approval_v3_tests.rs"),
     Path("rust/crates/guard-runtime/src/edge.rs"),
@@ -44,14 +54,17 @@ ACTIVE_RUST_FILES: Final = (
 )
 DECODER = Path("src/codex_plugin_scanner/guard/native_response_decoder.py")
 PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_protocol.py")
+V4_PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_v4_protocol.py")
 ERRORS = Path("src/codex_plugin_scanner/guard/native_approval_errors.py")
 APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_contracts.rs")
+V4_APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_v4_contracts.rs")
 AUTHORITY = Path("rust/crates/guard-runtime/src/approval_authority.rs")
 RUNTIME_APPROVAL = Path("rust/crates/guard-runtime/src/approval.rs")
 REPLAY_MEMORY = Path("rust/crates/guard-runtime/src/approval_replay_memory.rs")
 POLICY_AUTHORITY = Path("rust/crates/guard-runtime/src/policy_store_authority.rs")
 RESIDENT_PROTOCOL = Path("rust/crates/guard-runtime/src/resident_protocol.rs")
 MANAGED_RESIDENT = Path("rust/crates/guard-runtime/src/managed_resident.rs")
+MANAGED_OWNER_LOCK = Path("rust/crates/guard-runtime/src/managed_resident_owner_lock.rs")
 WORKFLOW = Path(".github/workflows/rust-authority-ownership.yml")
 PUBLISH_WORKFLOW = Path(".github/workflows/publish.yml")
 ENROLLMENT_DOC = Path("docs/guard/native-approval-enrollment.md")
@@ -124,14 +137,45 @@ def _struct_fields(text: str, name: str) -> frozenset[str]:
 
 def _python_key_set(text: str, assignment: str) -> frozenset[str]:
     tree = ast.parse(text, filename=str(DECODER))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == assignment for target in node.targets
-        ):
-            value = node.value
-            if isinstance(value, ast.Call) and isinstance(value.args[0], (ast.Set, ast.List, ast.Tuple)):
-                return frozenset(element.value for element in value.args[0].elts if isinstance(element, ast.Constant))
-    raise RuntimeError(f"decoder key set is missing: {assignment}")
+    assignments = {
+        target.id: node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    resolving: set[str] = set()
+
+    def evaluate(node: ast.AST) -> frozenset[str]:
+        if isinstance(node, ast.Name):
+            if node.id in resolving or node.id not in assignments:
+                raise RuntimeError(f"decoder key set reference is invalid: {node.id}")
+            resolving.add(node.id)
+            try:
+                return evaluate(assignments[node.id])
+            finally:
+                resolving.remove(node.id)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"set", "frozenset"}:
+            if len(node.args) != 1 or node.keywords:
+                raise RuntimeError(f"decoder key set expression is invalid: {assignment}")
+            return evaluate(node.args[0])
+        if isinstance(node, (ast.Set, ast.List, ast.Tuple)):
+            values: list[str] = []
+            for element in node.elts:
+                if not isinstance(element, ast.Constant) or not isinstance(element.value, str):
+                    raise RuntimeError(f"decoder key set contains a non-string: {assignment}")
+                values.append(element.value)
+            return frozenset(values)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.BitOr, ast.Sub)):
+            left = evaluate(node.left)
+            right = evaluate(node.right)
+            return frozenset(left | right) if isinstance(node.op, ast.BitOr) else frozenset(left - right)
+        raise RuntimeError(f"decoder key set expression is unsupported: {assignment}")
+
+    value = evaluate(assignments.get(assignment, ast.Constant(value=None)))
+    if not value:
+        raise RuntimeError(f"decoder key set is missing: {assignment}")
+    return value
 
 
 def _error_codes(text: str, marker: str) -> frozenset[str]:
@@ -144,6 +188,17 @@ def _error_codes(text: str, marker: str) -> frozenset[str]:
     if end < 0:
         raise RuntimeError(f"approval error list is unterminated: {marker}")
     return frozenset(re.findall(r'"(native_[a-z0-9_]+|snapshot_expired)"', text[start:end]))
+
+
+def _uses_canonical_approval_error_import(text: str) -> bool:
+    tree = ast.parse(text, filename=str(DECODER))
+    return any(
+        isinstance(node, ast.ImportFrom)
+        and node.level == 1
+        and node.module == "native_approval_errors"
+        and any(alias.name == "NATIVE_APPROVAL_ERROR_CODES" and alias.asname is None for alias in node.names)
+        for node in ast.walk(tree)
+    )
 
 
 def _check_file_sizes(root: Path) -> None:
@@ -196,22 +251,36 @@ def _check_authority_fence(root: Path) -> None:
         raise RuntimeError("authority fence is not SHA-256 based")
     if "DefaultHasher" in source or "hash_map::DefaultHasher" in source:
         raise RuntimeError("authority fence uses a non-cryptographic hash")
-    if "authority_unchanged_fenced" not in _read(root / Path("rust/crates/guard-runtime/src/policy_store.rs")):
+    approval_store = _read(root / Path("rust/crates/guard-runtime/src/policy_store_approval.rs"))
+    if (
+        "authority_unchanged_fenced" not in approval_store
+        or "claim_approval_nonce_fenced" not in approval_store
+        or "consume_approval_nonce_fenced" not in approval_store
+    ):
         raise RuntimeError("approval path has no fenced authority recheck")
 
 
 def _check_contracts(root: Path) -> None:
     rust_contract = _read(root / APPROVAL_CONTRACT)
+    rust_v4_contract = _read(root / V4_APPROVAL_CONTRACT)
     decoder = _read(root / DECODER)
     protocol = _read(root / PROTOCOL)
+    protocol_v4 = _read(root / V4_PROTOCOL)
     errors = _read(root / ERRORS)
     if _struct_fields(rust_contract, "ApprovalReceiptV3") != RECEIPT_FIELDS:
         raise RuntimeError("native receipt fields do not match the declared contract")
     if _python_key_set(protocol, "_RECEIPT_KEYS") != RECEIPT_FIELDS:
         raise RuntimeError("Python receipt decoder fields drifted from the native contract")
+    for rust_name, python_name in (
+        ("ApprovalChallengeV4", "_CHALLENGE_V4_KEYS"),
+        ("ApprovalArtifactV4", "_ARTIFACT_V4_KEYS"),
+        ("ApprovalReceiptV4", "_RECEIPT_V4_KEYS"),
+    ):
+        if _struct_fields(rust_v4_contract, rust_name) != _python_key_set(protocol_v4, python_name):
+            raise RuntimeError(f"V4 {rust_name} fields drifted from the Python transport contract")
     if "resident_epoch" not in _python_key_set(protocol, "_CHALLENGE_KEYS"):
         raise RuntimeError("Python challenge decoder does not bind the resident epoch")
-    if "from .native_approval_errors import NATIVE_APPROVAL_ERROR_CODES" not in decoder:
+    if not _uses_canonical_approval_error_import(decoder):
         raise RuntimeError("Python response decoder does not use the canonical approval error vocabulary")
     if _error_codes(rust_contract, "NATIVE_APPROVAL_ERROR_CODES") != _python_key_set(
         errors, "NATIVE_APPROVAL_ERROR_CODES"
@@ -264,7 +333,8 @@ def _check_ownership_contract(root: Path) -> None:
         if name not in publish:
             raise RuntimeError(f"release workflow does not pass the pinned enrollment root: {name}")
     managed = _read(root / MANAGED_RESIDENT)
-    if "managed-resident-owner.v1.lock" not in managed or "_owner_lock" not in managed:
+    owner_lock = _read(root / MANAGED_OWNER_LOCK)
+    if "managed-resident-owner.v1.lock" not in managed + owner_lock or "_owner_lock" not in managed:
         raise RuntimeError("managed resident does not retain its owner lock for its full lifetime")
     managed_tests = _read(root / Path("rust/crates/guard-runtime/src/managed_resident_tests.rs"))
     if "managed_owner_lock_rejects_second_process" not in managed_tests:

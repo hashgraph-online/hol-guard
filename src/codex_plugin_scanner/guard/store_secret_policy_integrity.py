@@ -11,6 +11,8 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
+from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -185,7 +187,7 @@ class StoreSecretPolicyIntegrityMixin:
         return cast(SecretStore | None, secret_store)
 
     @_policy_integrity_secret_store.setter
-    def _policy_integrity_secret_store(self, value: SecretStore | None | object) -> None:
+    def _policy_integrity_secret_store(self, value: SecretStore | object | None) -> None:
         self.__policy_integrity_secret_store = value
 
     def _build_scoped_secret_ref(self, prefix: str) -> str:
@@ -275,6 +277,10 @@ class StoreSecretPolicyIntegrityMixin:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
+        if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
+            return secret_store.get_secret(secret_id)
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return self._get_secret_from_store(secret_store, secret_id)
         if isinstance(secret_store, FallbackSecretStore):
             fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
             if fallback_value is not None:
@@ -293,6 +299,15 @@ class StoreSecretPolicyIntegrityMixin:
                 timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS,
             )
         return self._get_secret_from_store(secret_store, secret_id)
+
+    @staticmethod
+    def _policy_integrity_secret_store_is_unavailable(secret_store: SecretStore | None) -> bool:
+        if isinstance(secret_store, SystemKeyringSecretStore):
+            return secret_store._is_unavailable()
+        if isinstance(secret_store, FallbackSecretStore):
+            primary = secret_store.primary
+            return isinstance(primary, SystemKeyringSecretStore) and primary._is_unavailable()
+        return False
 
     @staticmethod
     def _should_skip_policy_integrity_keychain_access(secret_store: SecretStore) -> bool:
@@ -406,9 +421,12 @@ class StoreSecretPolicyIntegrityMixin:
         return [token]
 
     def _policy_integrity_backend_name(self) -> str:
-        if self._policy_integrity_secret_store is None:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             return "unavailable"
-        return _secret_store_backend_name(self._policy_integrity_secret_store)
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return _secret_store_backend_name(secret_store.fallback)
+        return _secret_store_backend_name(secret_store)
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
         cached = self._cached_policy_integrity_secret_material
@@ -423,6 +441,19 @@ class StoreSecretPolicyIntegrityMixin:
             return None, None
         encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None and create:
+            from .native_command_control_authority import AUTHORITY_FILE_NAME
+            from .native_policy_snapshot_constants import (
+                NATIVE_POLICY_VERIFIER_KEY_NAME,
+                NATIVE_RUNTIME_STATE_DIRECTORY,
+            )
+
+            native_state = self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
+            if any(
+                os.path.lexists(native_state / name) for name in (AUTHORITY_FILE_NAME, NATIVE_POLICY_VERIFIER_KEY_NAME)
+            ):
+                # A different process may have armed native controls with an
+                # inaccessible keyring key. Never mint a second signing key.
+                return None, None
             generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
             try:
                 secret_store.set_secret(self._policy_integrity_key_ref, generated_key)
@@ -721,50 +752,14 @@ class StoreSecretPolicyIntegrityMixin:
         key_id: str,
         trusted_state: dict[str, object],
     ) -> dict[str, object]:
-        current_generation = _mapping_int(trusted_state, "generation")
-        if current_generation is None:
-            raise RuntimeError("Guard policy integrity control state is invalid.")
-        pending_generation = trusted_state.get("pending_generation")
-        if not isinstance(pending_generation, int) or pending_generation <= current_generation:
+        next_state = self._resolved_policy_integrity_pending_generation(
+            connection,
+            key=key,
+            key_id=key_id,
+            trusted_state=trusted_state,
+        )
+        if next_state is trusted_state:
             return trusted_state
-        rows = self._load_local_policy_rows(connection)
-        next_state: dict[str, object]
-        if not rows:
-            next_state = {
-                "cutover_complete": True,
-                "generation": pending_generation,
-                "pending_generation": None,
-                "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-            }
-        else:
-            (
-                has_legacy_rows,
-                pending_candidates,
-                pending_valid,
-                current_valid,
-            ) = self._classify_policy_integrity_pending_generation_rows(
-                rows,
-                key=key,
-                key_id=key_id,
-                current_generation=current_generation,
-                pending_generation=pending_generation,
-            )
-            if has_legacy_rows:
-                next_state = dict(trusted_state)
-                if pending_candidates > 0 and current_valid == len(rows):
-                    next_state["pending_generation"] = None
-            elif pending_valid == len(rows):
-                next_state = {
-                    "cutover_complete": True,
-                    "generation": pending_generation,
-                    "pending_generation": None,
-                    "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-                }
-            elif current_valid == len(rows):
-                next_state = dict(trusted_state)
-                next_state["pending_generation"] = None
-            else:
-                next_state = dict(trusted_state)
         if not self._store_policy_integrity_control_state(next_state):
             raise RuntimeError("Guard could not persist the policy integrity control state.")
         return next_state
@@ -1003,7 +998,8 @@ class StoreSecretPolicyIntegrityMixin:
             raw_key, key_id = cast(tuple[bytes | None, str | None], prefetched_secret_material)
         else:
             raw_key, key_id = self._policy_integrity_secret_material(create=create_key)
-        if self._policy_integrity_secret_store is None:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             warnings.append(POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE)
         elif raw_key is None or key_id is None:
             warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
@@ -1081,35 +1077,37 @@ class StoreSecretPolicyIntegrityMixin:
 
         def compute_prepared_state(base_state: dict[str, object]) -> dict[str, object]:
             connect_timeout_seconds = sqlite_connect_timeout_seconds()
-            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-            connection.row_factory = sqlite3.Row
-            try:
-                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                return self._prepared_startup_policy_integrity_state(
-                    connection,
-                    key=raw_key,
-                    key_id=key_id,
-                    trusted_state=base_state,
-                )
-            finally:
-                connection.close()
+            with self._hold_storage_gate(exclusive=False):
+                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+                connection.row_factory = sqlite3.Row
+                try:
+                    connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
+                    return self._prepared_startup_policy_integrity_state(
+                        connection,
+                        key=raw_key,
+                        key_id=key_id,
+                        trusted_state=base_state,
+                    )
+                finally:
+                    connection.close()
 
         prepared_state = compute_prepared_state(trusted_state)
         current_trusted_state = self._load_policy_integrity_control_state(create=False)
         if current_trusted_state is None:
             connect_timeout_seconds = sqlite_connect_timeout_seconds()
-            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-            connection.row_factory = sqlite3.Row
-            try:
-                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                still_matches = self._prefetched_startup_state_still_matches_local_rows(
-                    connection,
-                    key=raw_key,
-                    key_id=key_id,
-                    trusted_state=trusted_state,
-                )
-            finally:
-                connection.close()
+            with self._hold_storage_gate(exclusive=False):
+                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+                connection.row_factory = sqlite3.Row
+                try:
+                    connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
+                    still_matches = self._prefetched_startup_state_still_matches_local_rows(
+                        connection,
+                        key=raw_key,
+                        key_id=key_id,
+                        trusted_state=trusted_state,
+                    )
+                finally:
+                    connection.close()
             if prepared_state == trusted_state and still_matches:
                 self._startup_prefetched_policy_integrity_trusted_state = trusted_state
                 return

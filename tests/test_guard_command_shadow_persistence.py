@@ -30,7 +30,6 @@ from codex_plugin_scanner.guard.runtime.command_activity_lifecycle import (
     CommandActivityDecisionFacts,
     build_pre_hook_evidence,
 )
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
     COMMAND_SHADOW_SCHEMA_VERSION,
     CommandShadowCohort,
@@ -39,12 +38,13 @@ from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
     build_command_shadow_observation,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_test_support import real_native_command_evaluation
 
 _OCCURRED_AT = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
 
 
 def _evidence_and_shadow(*, activity_id: str = "activity:shadow"):
-    evaluation = evaluate_command("git push origin release/2.2 --force")
+    evaluation = real_native_command_evaluation("git push origin release/2.2 --force").evaluation
     evidence = build_pre_hook_evidence(
         evaluation,
         CommandActivityDecisionFacts(
@@ -510,6 +510,8 @@ def test_proposal_failure_records_activity_without_changing_hook_result(
     def fail_proposal(_evaluation: object) -> None:
         raise RuntimeError("injected proposal failure")
 
+    evaluation = real_native_command_evaluation("git push origin release/2.2 --force").evaluation
+    monkeypatch.setattr(activity_support, "_evaluate_payload_command", lambda *_args, **_kwargs: evaluation)
     monkeypatch.setattr(activity_support, "baseline_command_shadow_proposal", fail_proposal)
     result = record_pre_hook_command_activity_best_effort(
         store=store,

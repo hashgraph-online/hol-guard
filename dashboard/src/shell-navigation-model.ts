@@ -12,6 +12,7 @@ import {
 } from "react-icons/hi2";
 
 import type { AppView } from "./approval-center-primitives";
+import type { GuardUpdateChannelProof } from "./guard-api";
 import type {
   GuardApprovalGatePublicConfig,
   GuardCloudUserProfile,
@@ -20,7 +21,7 @@ import type {
 } from "./guard-types";
 
 export type NavigationGroup = "primary" | "manage" | "support";
-export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health">;
+export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health" | "protection-repair">;
 
 export type ShellNavigationItem = {
   href: string;
@@ -42,6 +43,7 @@ export type ShellNavigationProps = {
   updateStatus?: GuardUpdateStatus | null;
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
+  onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
   updatePhase?: GuardUpdatePhase;
   updateError?: string | null;
   approvalGate?: GuardApprovalGatePublicConfig | null;
@@ -145,6 +147,7 @@ export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: stri
 export function canonicalNavigationView(view: AppView): NavigationView {
   if (view === "app-detail") return "fleet";
   if (view === "audit" || view === "feed-health") return "supply-chain";
+  if (view === "protection-repair") return "extensions";
   return view;
 }
 

@@ -101,7 +101,12 @@ def _normalize_response(
         )
     results = response.get("results")
     acknowledged_through = response.get("acknowledgedThrough")
-    if not isinstance(results, list) or len(results) != len(events) or type(acknowledged_through) is not int:
+    if (
+        not isinstance(results, list)
+        or len(results) != len(events)
+        or type(acknowledged_through) is not int
+        or not 0 <= acknowledged_through <= 2**53 - 1
+    ):
         raise CloudReviewEventProtocolError(
             "Guard Cloud Review returned an invalid protocol 2 acknowledgement. Update HOL Guard before retrying."
         )
@@ -123,14 +128,17 @@ def _normalize_response(
                 "Guard Cloud Review acknowledgement stopped before an accepted event. "
                 "Retry sync after updating HOL Guard."
             )
-        normalized.append(
-            {
-                "index": index,
-                "accepted": accepted,
-                "code": item.get("code"),
-                "error": None if accepted else (item.get("code") or status),
-            }
-        )
+        normalized_item: dict[str, object] = {
+            "index": index,
+            "accepted": accepted,
+            "code": item.get("code"),
+            "error": None if accepted else (item.get("code") or status),
+        }
+        if status in {"accepted", "duplicate"} and item.get("nativeContextCommitted") is True:
+            normalized_item["nativeContextCommitted"] = True
+        if status == "rejected" and item.get("code") == "review_event_snapshot_sequence_collision":
+            normalized_item["eventId"] = expected_event_id
+        normalized.append(normalized_item)
     accepted_count = sum(bool(item["accepted"]) for item in normalized)
     if response.get("accepted") != accepted_count or response.get("rejected") != len(events) - accepted_count:
         raise CloudReviewEventProtocolError(
@@ -138,6 +146,7 @@ def _normalize_response(
         )
     normalized_response: dict[str, object] = {
         "accepted": accepted_count,
+        "delivered": sum(item.get("status") == "accepted" for item in results),
         "rejected": len(events) - accepted_count,
         "perEventResults": normalized,
         "acknowledgedThrough": acknowledged_through,

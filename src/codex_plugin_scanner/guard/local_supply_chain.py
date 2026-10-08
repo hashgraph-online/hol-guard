@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, TypeGuard, cast
@@ -26,13 +26,14 @@ from uuid import uuid4
 
 from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
 
+from . import native_execution as _native_execution
 from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .adapters.base import HarnessContext
-from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .approval_scope_support import package_request_runtime_workspace_scope
+from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig, resolve_risk_action
 from .mdm.network import managed_urlopen
-from .models import GuardAction, GuardArtifact, GuardReceipt
+from .models import GuardAction, GuardArtifact
 from .package_execution_context import PackageExecutionContext, build_package_execution_context
 from .redaction import redact_local_path, redact_text
 from .runtime.approval_context import (
@@ -52,6 +53,7 @@ from .runtime.approval_reuse import (
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
+    with_saved_artifact_hash_provenance,
 )
 from .runtime.lockfile_parse_result import LOCKFILE_PARSER_VERSION
 from .runtime.package_execution_policy import is_execution_permitted
@@ -68,6 +70,24 @@ from .runtime.package_intent_common import (
     version_target,
 )
 from .runtime.package_manifest_diff import parse_manifest_dependencies, parse_manifest_dependency_changes
+from .runtime.package_protect_projection import (
+    LOCAL_SUPPLY_CHAIN_HARNESS as _LOCAL_SUPPLY_CHAIN_HARNESS,
+)
+from .runtime.package_protect_projection import (
+    PackageProtectProjection as _PackageProtectProjection,
+)
+from .runtime.package_protect_projection import (
+    PackageProtectVerdictContext,
+)
+from .runtime.package_protect_projection import (
+    build_package_guard_receipt as _build_guard_receipt,
+)
+from .runtime.package_protect_projection import (
+    protect_target_payload as _protect_target_payload,
+)
+from .runtime.package_protect_projection import (
+    resolve_local_supply_chain_harness as _resolve_local_supply_chain_harness,
+)
 from .runtime.restricted_archive_download import RestrictedArchiveDownload
 from .runtime.supply_chain_support import ecosystem_support_matrix
 from .runtime.workspace_path_guard import (
@@ -79,7 +99,6 @@ from .shims import package_shim_dashboard_status, package_shim_supported_manager
 from .stable_digest import stable_digest_hex
 from .store import GuardStore
 
-_LOCAL_SUPPLY_CHAIN_HARNESS = "guard-cli"
 _MANIFEST_CANDIDATES = (
     "package.json",
     "requirements.txt",
@@ -238,8 +257,8 @@ def _package_firewall_entitlement_module():
     return importlib.import_module(".package_firewall_entitlement", __package__)
 
 
-def _package_intent_parser_module():
-    return importlib.import_module(".runtime.package_intent_parser", __package__)
+def _native_package_authority_module():
+    return importlib.import_module(".native_package_authority", __package__)
 
 
 def _supply_chain_package_eval_module():
@@ -267,44 +286,145 @@ def _resolve_guard_sync_auth_context(store: GuardStore):
 
 
 def evaluate_package_request_artifact(*args: object, **kwargs: object):
+    native = _evaluate_package_request_artifact_native(args, kwargs)
+    if native is not None:
+        return native
     return _supply_chain_package_eval_module().evaluate_package_request_artifact(*args, **kwargs)
+
+
+def _parse_package_intent_native(
+    raw_command: str,
+    *,
+    environment: Mapping[str, str] | None,
+    workspace: Path | None,
+    guard_home: Path,
+) -> PackageIntent | None:
+    """Try the resident ``package_intent_parse`` op.
+
+    ``None`` means the resident was unreachable or found no intent —
+    ``parse_package_intent`` is resident-sole-authority, so no Python
+    re-parse exists to fall back to."""
+    try:
+        payload = _native_package_authority_module().package_intent_parse_native(
+            raw_command,
+            workspace=workspace,
+            environment=dict(environment) if environment is not None else None,
+            guard_home=guard_home,
+        )
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return PackageIntent.from_dict(payload)
+    except (TypeError, ValueError):
+        return None
+
+
+def _native_cloud_transport_unavailable(payload: dict[str, object]) -> bool:
+    """The resident cloud client is still a stub. Treat that miss as transport
+    failure so the Python evaluator can observe the real timeout or network error.
+    """
+    reasons = payload.get("reasons")
+    if not isinstance(reasons, list):
+        return False
+    return any(isinstance(reason, dict) and reason.get("code") == "cloud_network_error" for reason in reasons)
+
+
+def _python_cloud_auth_failed(store: GuardStore) -> bool:
+    """A patched auth seam is the test contract for expired cloud sessions.
+    Production keeps the resident path and does not refresh tokens here.
+    """
+    from .runtime import runner
+    from .runtime import supply_chain_package_eval as package_eval
+    from .runtime.runner import GuardSyncAuthorizationExpiredError
+
+    resolver = package_eval._resolve_guard_sync_auth_context
+    if resolver is runner._resolve_guard_sync_auth_context:
+        return False
+    try:
+        resolver(store, allow_primary_repair=False)
+    except GuardSyncAuthorizationExpiredError:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def _evaluate_package_request_artifact_native(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any | None:
+    """Best-effort native evaluation through the resident package authority.
+
+    ``None`` means transport failure (or an unsupported call shape), so the
+    caller falls back to the Python evaluator. Business errors propagate.
+    """
+    if args:
+        return None
+    artifact = kwargs.get("artifact")
+    store = kwargs.get("store")
+    if artifact is None or store is None:
+        return None
+    to_dict = getattr(artifact, "to_dict", None)
+    if not callable(to_dict):
+        return None
+    guard_home = getattr(store, "guard_home", None)
+    store_path = getattr(store, "path", None)
+    if not isinstance(guard_home, Path) or not isinstance(store_path, Path):
+        return None
+    workspace_dir = kwargs.get("workspace_dir")
+    if workspace_dir is not None and not isinstance(workspace_dir, Path):
+        return None
+    now = kwargs.get("now")
+    if now is not None and not isinstance(now, str):
+        return None
+    if bool(kwargs.get("retain_external_archive_blob", False)):
+        return None
+    if _python_cloud_auth_failed(store):
+        return None
+    native_authority = _native_package_authority_module()
+    workspace_id = store.get_cloud_workspace_id()
+    if workspace_id is not None and not native_authority.supply_chain_cloud_transport_available():
+        # Cloud service calls remain in Python until the native client supports
+        # both credential resolution and HTTP. Do not let the current stub
+        # persist a false terminal verdict before the real client runs.
+        return None
+    payload = native_authority.supply_chain_eval_native(
+        artifact=to_dict(),
+        guard_home=guard_home,
+        store_path=store_path,
+        workspace_dir=workspace_dir,
+        now=now,
+        external_archive_network_authorized=bool(kwargs.get("external_archive_network_authorized", False)),
+        retain_external_archive_blob=bool(kwargs.get("retain_external_archive_blob", False)),
+        runtime_private_metadata=getattr(artifact, "runtime_private_metadata", None),
+    )
+    if payload is None:
+        return None
+    if _native_cloud_transport_unavailable(payload):
+        return None
+    # The resident returns the decision; the Python store still owns the
+    # evidence row. A payload that cannot be reconstructed falls back to the
+    # Python evaluator; a persist failure propagates — the Python evaluator
+    # would hit the same store error, so swallowing it just re-runs the eval.
+    now_text = now if isinstance(now, str) else None
+    if now_text is None:
+        from datetime import datetime, timezone
+
+        now_text = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        evaluation = native_authority.evaluation_from_native_payload(payload)
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+    _supply_chain_package_eval_module()._persist_evidence(
+        store=store,
+        artifact=artifact,
+        evaluation=evaluation,
+        now=now_text,
+    )
+    return evaluation
 
 
 def _is_package_request_evaluation(value: object) -> TypeGuard[Any]:
     return isinstance(value, _supply_chain_package_eval_module().PackageRequestEvaluation)
-
-
-def _build_guard_receipt(
-    *,
-    harness: str,
-    artifact_id: str,
-    artifact_hash: str,
-    policy_decision: GuardAction,
-    capabilities_summary: str,
-    changed_capabilities: list[str],
-    provenance_summary: str,
-    artifact_name: str | None,
-    source_scope: str | None,
-    scanner_evidence: tuple[dict[str, object], ...] = (),
-) -> GuardReceipt:
-    sample = ", ".join(changed_capabilities[:3])
-    suffix = " ..." if len(changed_capabilities) > 3 else ""
-    diff_summary = f"{len(changed_capabilities)} change(s): {sample}{suffix}" if changed_capabilities else None
-    return GuardReceipt(
-        receipt_id=f"guard-receipt-{uuid4()}",
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        harness=harness,
-        artifact_id=artifact_id,
-        artifact_hash=artifact_hash,
-        policy_decision=policy_decision,
-        capabilities_summary=capabilities_summary,
-        changed_capabilities=tuple(changed_capabilities),
-        provenance_summary=provenance_summary,
-        artifact_name=artifact_name,
-        source_scope=source_scope,
-        diff_summary=diff_summary,
-        scanner_evidence=scanner_evidence,
-    )
 
 
 def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
@@ -606,16 +726,20 @@ def resolve_supply_chain_audit_workspace_dir(
     workspace_value: object,
     allowed_roots: tuple[Path, ...],
     managed_workspace_dirs: Sequence[str] | None = None,
+    reject_invalid_explicit: bool = False,
 ) -> Path | None:
     for candidate in (workspace_dir_value, workspace_value):
-        if isinstance(candidate, str):
-            resolved = resolve_path_within_allowed_roots(
-                candidate,
-                allowed_roots,
-                require_exists=True,
-            )
-            if resolved is not None:
-                return resolved
+        if not isinstance(candidate, str) or not candidate.strip():
+            continue
+        resolved = resolve_path_within_allowed_roots(
+            candidate,
+            allowed_roots,
+            require_exists=True,
+        )
+        if resolved is not None:
+            return resolved
+        if reject_invalid_explicit:
+            raise ValueError("workspace_dir_invalid")
     cursor_project = os.environ.get("CURSOR_PROJECT_DIR", "").strip()
     if cursor_project:
         resolved = resolve_path_within_allowed_roots(
@@ -1245,6 +1369,7 @@ class _PackageProtectAuthority:
     additional_current_action: object | None
     additional_policy_context: dict[str, object] | None
     observe_mode: bool
+    invoking_harness: str = field(default_factory=_resolve_local_supply_chain_harness)
 
 
 _PackageApprovalClaimDisposition = Literal["consumed", "retained"]
@@ -1255,14 +1380,6 @@ class _StoredPackagePolicyResolution:
     evaluation: Any
     approval_reuse_decision: Mapping[str, object] | None = None
     claim_disposition: _PackageApprovalClaimDisposition | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class _PackageProtectProjection:
-    receipt: GuardReceipt
-    receipt_policy_metadata: dict[str, object]
-    verdict_action: GuardAction
-    risk_signals: tuple[str, ...]
 
 
 def _external_archive_downloads(evaluation: object) -> tuple[RestrictedArchiveDownload, ...]:
@@ -1410,6 +1527,7 @@ def _build_package_protect_authority(
     additional_current_action: object | None,
     additional_policy_context: dict[str, object] | None,
     external_archive_network_authorized: bool = False,
+    invoking_harness: str | None = None,
 ) -> _PackageProtectAuthority | None:
     try:
         launch_cwd = workspace_dir.expanduser().resolve(strict=True)
@@ -1417,15 +1535,21 @@ def _build_package_protect_authority(
         raise ValueError("package workspace must resolve to an existing directory") from None
     if not launch_cwd.is_dir():
         raise ValueError("package workspace must resolve to an existing directory")
+    from .native_context import bind_context_digest_home
+    from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+
+    provision_native_verifier_key_for_store(store)
+    bind_context_digest_home(store.guard_home)
     launch_environment = _package_manager_launch_environment(
         os.environ,
         guard_home=store.guard_home,
         launch_cwd=launch_cwd,
     )
-    intent = _package_intent_parser_module().parse_package_intent(
+    intent = _parse_package_intent_native(
         shlex.join(command),
-        workspace=launch_cwd,
         environment=launch_environment,
+        workspace=launch_cwd,
+        guard_home=store.guard_home,
     )
     if intent is None:
         return None
@@ -1489,6 +1613,9 @@ def _build_package_protect_authority(
             additional_policy_context=additional_policy_context,
         )
         return _PackageProtectAuthority(
+            invoking_harness=invoking_harness
+            if invoking_harness is not None
+            else _resolve_local_supply_chain_harness(),
             intent=sanitized_intent,
             artifact=artifact,
             evaluation=evaluation,
@@ -1522,6 +1649,9 @@ def _final_package_protect_authority(
 ) -> tuple[_PackageProtectAuthority, Any]:
     """Refresh mode, claim required approval, then rebuild authority before spawn."""
 
+    from .native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     additional_action: object | None = initial.additional_current_action
     additional_context: dict[str, object] | None = initial.additional_policy_context
     current_config = config
@@ -1591,6 +1721,7 @@ def _final_package_protect_authority(
         additional_current_action=additional_action,
         additional_policy_context=additional_context,
         external_archive_network_authorized=saved_approval_claimed,
+        invoking_harness=initial.invoking_harness,
     )
     if current is None:
         reuse = evaluate_approval_reuse(
@@ -1599,6 +1730,10 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason="approval_reuse_identity_changed",
         )
+        if reuse is None:
+            # Resident unreachable: preserve the initial evaluation unchanged —
+            # no saved approval is claimed.
+            return initial, initial.evaluation
         return initial, _package_evaluation_with_rejected_reuse(initial.evaluation, reuse)
     validation_reason: ApprovalReuseValidationFailure | None
     if current.artifact.artifact_id != initial.artifact.artifact_id:
@@ -1627,6 +1762,8 @@ def _final_package_protect_authority(
                 saved_decision_present=True,
                 validation_reason=validation_reason,
             )
+            if reuse is None:
+                return current, current_evaluation
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
         refreshed_saved_policy = _apply_stored_package_policy_override(
             current_evaluation,
@@ -1650,6 +1787,8 @@ def _final_package_protect_authority(
                 saved_decision_present=True,
                 validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
             )
+            if reuse is None:
+                return current, current_evaluation
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
         reuse = evaluate_approval_reuse(
             current.current_action,
@@ -1657,6 +1796,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             fresh_local_approval=True,
         )
+        if reuse is None:
+            return current, current_evaluation
         if reuse.accepted and reuse.saved_action == "allow":
             return current, _package_policy_override_evaluation(
                 current_evaluation,
@@ -1680,6 +1821,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=validation_reason,
         )
+        if reuse is None:
+            return current, current_evaluation
         return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     resolved = _apply_stored_package_policy_override(
         current_evaluation,
@@ -1699,7 +1842,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
         )
-        resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
+        if reuse is not None:
+            resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     return current, resolved
 
 
@@ -1715,22 +1859,17 @@ def _package_execution_policy_action(
     return "warn" if observed_action == "warn" else "allow"
 
 
-def _apply_package_protect_projection(
+def _package_protect_verdict_context(
     *,
-    payload: dict[str, object],
     authority: _PackageProtectAuthority,
     evaluation: Any,
-    command: Sequence[str],
-    blocking: bool,
-    executed: bool,
-    execution_policy_action: GuardAction | None = None,
-) -> _PackageProtectProjection:
-    """Project one authority/evaluation pair into every user and audit surface."""
+    execution_policy_action: GuardAction | None,
+) -> PackageProtectVerdictContext:
+    """Resolve the verdict presentation and stored receipt for one projection."""
 
     intent = authority.intent
     public_targets = [target.to_dict() for target in intent.targets]
     artifact = authority.artifact
-    artifact_hash = authority.artifact_hash
     observed_policy_action = _protect_action_for_policy_action(evaluation.policy_action)
     verdict_action = execution_policy_action or observed_policy_action
     observe_projected = authority.observe_mode and verdict_action != observed_policy_action
@@ -1760,10 +1899,12 @@ def _apply_package_protect_projection(
         receipt_policy_metadata["additional_policy_context"] = authority.additional_policy_context
     if approval_reuse_evidence:
         receipt_policy_metadata["approval_reuse"] = list(approval_reuse_evidence)
+    if authority.invoking_harness != _LOCAL_SUPPLY_CHAIN_HARNESS:
+        receipt_policy_metadata["invoking_harness"] = authority.invoking_harness
     receipt = _build_guard_receipt(
-        harness=_LOCAL_SUPPLY_CHAIN_HARNESS,
+        harness=authority.invoking_harness,
         artifact_id=artifact.artifact_id,
-        artifact_hash=artifact_hash,
+        artifact_hash=authority.artifact_hash,
         policy_decision=verdict_action,
         capabilities_summary=verdict_reason,
         changed_capabilities=[
@@ -1775,43 +1916,95 @@ def _apply_package_protect_projection(
         source_scope=artifact.source_scope,
         scanner_evidence=approval_reuse_evidence,
     )
-    matched_advisories = _matched_advisories(evaluation)
+    return PackageProtectVerdictContext(
+        matched_advisories=_matched_advisories(evaluation),
+        observe_projected=observe_projected,
+        observed_policy_action=observed_policy_action,
+        public_targets=public_targets,
+        receipt=receipt,
+        receipt_policy_metadata=receipt_policy_metadata,
+        risk_signals=risk_signals,
+        verdict_action=verdict_action,
+        verdict_reason=verdict_reason,
+    )
+
+
+def _apply_package_protect_projection(
+    *,
+    payload: dict[str, object],
+    authority: _PackageProtectAuthority,
+    evaluation: Any,
+    command: Sequence[str],
+    blocking: bool,
+    executed: bool,
+    execution_policy_action: GuardAction | None = None,
+) -> _PackageProtectProjection:
+    """Project one authority/evaluation pair into every user and audit surface."""
+
+    intent = authority.intent
+    context = _package_protect_verdict_context(
+        authority=authority,
+        evaluation=evaluation,
+        execution_policy_action=execution_policy_action,
+    )
     payload["request"] = {
         "command": shlex.split(intent.redacted_command),
         "redacted_command": intent.redacted_command,
         "install_kind": intent.intent_kind,
         "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
         "package_manager": intent.package_manager,
-        "harness": _LOCAL_SUPPLY_CHAIN_HARNESS,
-        "targets": public_targets,
+        "harness": authority.invoking_harness,
+        "targets": context.public_targets,
         "manifest_paths": list(intent.manifest_paths),
         "lockfile_paths": list(intent.lockfile_paths),
         "package_execution_context": authority.execution_context.to_evidence(),
     }
-    payload["targets"] = [_protect_target_payload(target) for target in intent.targets]
+    payload["targets"] = [
+        _protect_target_payload(target, harness=authority.invoking_harness) for target in intent.targets
+    ]
     payload["verdict"] = {
-        "action": verdict_action,
-        "reason": verdict_reason,
-        "risk_signals": list(risk_signals),
-        "matched_advisories": matched_advisories,
+        "action": context.verdict_action,
+        "reason": context.verdict_reason,
+        "risk_signals": list(context.risk_signals),
+        "matched_advisories": context.matched_advisories,
         "blocking": blocking,
     }
-    if observe_projected:
+    if context.observe_projected:
         payload["verdict"]["observe_mode"] = True
-        payload["verdict"]["observed_policy_action"] = observed_policy_action
+        payload["verdict"]["observed_policy_action"] = context.observed_policy_action
     payload["receipt"] = {
-        **receipt.to_dict(),
-        "action_envelope_json": receipt_policy_metadata,
+        **context.receipt.to_dict(),
+        "action_envelope_json": context.receipt_policy_metadata,
     }
-    payload["matched_advisories"] = matched_advisories
+    payload["matched_advisories"] = context.matched_advisories
     payload["supply_chain_evaluation"] = evaluation.to_dict()
     payload["executed"] = executed
     return _PackageProtectProjection(
-        receipt=receipt,
-        receipt_policy_metadata=receipt_policy_metadata,
-        verdict_action=verdict_action,
-        risk_signals=risk_signals,
+        receipt=context.receipt,
+        receipt_policy_metadata=context.receipt_policy_metadata,
+        verdict_action=context.verdict_action,
+        risk_signals=context.risk_signals,
     )
+
+
+def _install_time_event_payload(
+    *,
+    authority: _PackageProtectAuthority,
+    command: Sequence[str],
+    action: GuardAction,
+    risk_signals: tuple[str, ...] | list[str],
+    **extra: object,
+) -> dict[str, object]:
+    return {
+        "artifact_id": authority.artifact.artifact_id,
+        "artifact_name": authority.artifact.name,
+        "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
+        "harness": authority.invoking_harness,
+        "install_kind": authority.intent.intent_kind,
+        "action": action,
+        "risk_signals": list(risk_signals),
+        **extra,
+    }
 
 
 def _package_protect_denied_after_final_boundary(
@@ -1838,14 +2031,12 @@ def _package_protect_denied_after_final_boundary(
     )
     store.add_event(
         f"install_time_{projection.verdict_action}",
-        {
-            "artifact_id": authority.artifact.artifact_id,
-            "artifact_name": authority.artifact.name,
-            "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
-            "install_kind": authority.intent.intent_kind,
-            "action": projection.verdict_action,
-            "risk_signals": list(projection.risk_signals),
-        },
+        _install_time_event_payload(
+            authority=authority,
+            command=command,
+            action=projection.verdict_action,
+            risk_signals=projection.risk_signals,
+        ),
         now,
     )
     return payload, _package_execution_exit_code(evaluation.policy_action)
@@ -1878,7 +2069,6 @@ def build_package_protect_payload(
     )
     if authority is None:
         return None
-    sanitized_intent = authority.intent
     artifact = authority.artifact
     evaluation = authority.evaluation
     current_action = authority.current_action
@@ -1925,14 +2115,12 @@ def build_package_protect_payload(
         )
         store.add_event(
             f"install_time_{projection.verdict_action}",
-            {
-                "artifact_id": artifact.artifact_id,
-                "artifact_name": artifact.name,
-                "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
-                "install_kind": sanitized_intent.intent_kind,
-                "action": projection.verdict_action,
-                "risk_signals": list(projection.risk_signals),
-            },
+            _install_time_event_payload(
+                authority=authority,
+                command=command,
+                action=projection.verdict_action,
+                risk_signals=projection.risk_signals,
+            ),
             now,
         )
         return (payload, _package_execution_exit_code(execution_policy_action))
@@ -1971,7 +2159,11 @@ def build_package_protect_payload(
             saved_decision_present=True,
             validation_reason="approval_reuse_identity_changed",
         )
-        denied_evaluation = _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
+        denied_evaluation = (
+            final_authority.evaluation
+            if reuse is None
+            else _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
+        )
         denied = _package_protect_denied_after_final_boundary(
             payload=payload,
             authority=final_authority,
@@ -2008,7 +2200,6 @@ def build_package_protect_payload(
         _cleanup_external_archive_downloads(final_evaluation)
         return denied
     authority = final_authority
-    sanitized_intent = authority.intent
     artifact = authority.artifact
     evaluation = final_evaluation
     final_projection = _apply_package_protect_projection(
@@ -2041,15 +2232,13 @@ def build_package_protect_payload(
         )
         store.add_event(
             "install_time_execution_failed",
-            {
-                "artifact_id": artifact.artifact_id,
-                "artifact_name": artifact.name,
-                "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
-                "install_kind": sanitized_intent.intent_kind,
-                "action": verdict_action,
-                "error": type(error).__name__,
-                "risk_signals": list(risk_signals),
-            },
+            _install_time_event_payload(
+                authority=authority,
+                command=command,
+                action=verdict_action,
+                risk_signals=risk_signals,
+                error=type(error).__name__,
+            ),
             now,
         )
         _cleanup_external_archive_downloads(final_evaluation)
@@ -2068,28 +2257,24 @@ def build_package_protect_payload(
         )
         store.add_event(
             f"install_time_{verdict_action}",
-            {
-                "artifact_id": artifact.artifact_id,
-                "artifact_name": artifact.name,
-                "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
-                "install_kind": sanitized_intent.intent_kind,
-                "action": verdict_action,
-                "risk_signals": list(risk_signals),
-            },
+            _install_time_event_payload(
+                authority=authority,
+                command=command,
+                action=verdict_action,
+                risk_signals=risk_signals,
+            ),
             now,
         )
     else:
         store.add_event(
             "install_time_execution_failed",
-            {
-                "artifact_id": artifact.artifact_id,
-                "artifact_name": artifact.name,
-                "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
-                "install_kind": sanitized_intent.intent_kind,
-                "action": verdict_action,
-                "returncode": execution.returncode,
-                "risk_signals": list(risk_signals),
-            },
+            _install_time_event_payload(
+                authority=authority,
+                command=command,
+                action=verdict_action,
+                risk_signals=risk_signals,
+                returncode=execution.returncode,
+            ),
             now,
         )
     _cleanup_external_archive_downloads(final_evaluation)
@@ -2214,9 +2399,10 @@ def _resolve_stored_package_policy_override(
             decision = daemon_resolution.decision
             ignored_integrity = None
     diagnosed_reason: ApprovalReuseValidationFailure | None = None
+    diagnosed_stored_hash: str | None = None
     if not isinstance(decision, dict) and ignored_integrity is None:
         for policy_workspace in policy_workspaces:
-            raw_diagnosed_reason = store.approval_reuse_validation_reason(
+            raw_diagnosed_reason, raw_diagnosed_stored_hash = store.approval_reuse_diagnostic(
                 artifact.harness,
                 artifact.artifact_id,
                 artifact_hash,
@@ -2226,6 +2412,7 @@ def _resolve_stored_package_policy_override(
             )
             if raw_diagnosed_reason is not None:
                 diagnosed_reason = cast(ApprovalReuseValidationFailure, raw_diagnosed_reason)
+                diagnosed_stored_hash = raw_diagnosed_stored_hash
                 break
         if diagnosed_reason is None:
             return _StoredPackagePolicyResolution(current_evaluation)
@@ -2256,13 +2443,21 @@ def _resolve_stored_package_policy_override(
         _is_fresh_artifact_approval(decision, store=store) or legacy_local_approval
     )
     durable_exact_approval = isinstance(decision, dict) and _is_durable_exact_artifact_approval(decision)
-    reuse = evaluate_approval_reuse(
+    reuse_native = evaluate_approval_reuse(
         effective_current_action,
         action,
         saved_decision_present=True,
         validation_reason=validation_reason,
         fresh_local_approval=fresh_local_approval,
         durable_exact_approval=durable_exact_approval,
+    )
+    if reuse_native is None:
+        # Resident unreachable: preserve the caller's evaluation unchanged —
+        # the saved approval is not claimed or consumed.
+        return _StoredPackagePolicyResolution(current_evaluation)
+    reuse = with_saved_artifact_hash_provenance(
+        reuse_native,
+        decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
     )
     claim_disposition: _PackageApprovalClaimDisposition | None = None
     disposition_resolver = getattr(store, "approval_reuse_claim_disposition", None)
@@ -2289,15 +2484,23 @@ def _resolve_stored_package_policy_override(
         else:
             claim_succeeded = store.claim_approval_reuse_decision(decision, now=now)
     if claim_saved_approval and reuse.should_claim and not claim_succeeded:
-        reuse = evaluate_approval_reuse(
+        claim_failed_reuse = evaluate_approval_reuse(
             effective_current_action,
             action,
             saved_decision_present=True,
             validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
         )
+        if claim_failed_reuse is None:
+            # Resident unreachable after a failed claim: the claim already
+            # failed, so preserve the caller's evaluation unchanged.
+            return _StoredPackagePolicyResolution(current_evaluation)
+        reuse = with_saved_artifact_hash_provenance(
+            claim_failed_reuse,
+            decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
+        )
     if reuse.accepted and reuse.saved_action == "allow":
         if not isinstance(decision, dict) or decision.get("action") != "allow":
-            failed_reuse = evaluate_approval_reuse(
+            failed_reuse_native = evaluate_approval_reuse(
                 most_restrictive_guard_action(
                     effective_current_action,
                     "require-reapproval",
@@ -2306,6 +2509,12 @@ def _resolve_stored_package_policy_override(
                 "allow",
                 saved_decision_present=True,
                 validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+            )
+            if failed_reuse_native is None:
+                return _StoredPackagePolicyResolution(current_evaluation)
+            failed_reuse = with_saved_artifact_hash_provenance(
+                failed_reuse_native,
+                decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
             )
             return _StoredPackagePolicyResolution(
                 _package_evaluation_with_rejected_reuse(current_evaluation, failed_reuse)
@@ -2369,13 +2578,25 @@ def _is_fresh_artifact_approval(decision: dict[str, object], *, store: Any) -> b
         return False
     request_id = decision.get("request_id")
     request_getter = getattr(store, "get_approval_request", None)
-    if not isinstance(request_id, str) or not request_id or not callable(request_getter):
-        return False
-    try:
-        request = request_getter(request_id)
-    except Exception:
-        return False
-    return isinstance(request, dict) and request.get("resolution_scope") == "artifact"
+    if isinstance(request_id, str) and request_id:
+        if not callable(request_getter):
+            return False
+        try:
+            request = request_getter(request_id)
+        except Exception:
+            return False
+        return isinstance(request, dict) and request.get("resolution_scope") == "artifact"
+    # resolve_policy_decision_lookup has already applied expiry and local-row
+    # integrity checks. Expiring package rows do not retain request_id in
+    # policy_decisions, so their canonical local identity and context token are
+    # the bounded fresh-proof.
+    artifact_id = decision.get("artifact_id")
+    return (
+        decision.get("harness") == _LOCAL_SUPPLY_CHAIN_HARNESS
+        and isinstance(artifact_id, str)
+        and artifact_id.startswith(f"{_LOCAL_SUPPLY_CHAIN_HARNESS}:project:package-request:")
+        and parse_approval_context_token(decision.get("artifact_hash")) is not None
+    )
 
 
 def _is_durable_exact_artifact_approval(decision: dict[str, object]) -> bool:
@@ -2681,47 +2902,15 @@ def recompute_package_protect_artifact_hash(
     return authority.artifact_hash if authority is not None else None
 
 
-def _package_target_identities(artifact: GuardArtifact) -> tuple[ProtectTargetIdentity, ...]:
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
-    targets = metadata.get("targets")
-    if not isinstance(targets, list):
-        return ()
-    identities: list[ProtectTargetIdentity] = []
-    for item in targets:
-        if not isinstance(item, dict):
-            continue
-        ecosystem = str(item.get("ecosystem") or "")
-        package_name = item.get("package_name") if isinstance(item.get("package_name"), str) else None
-        raw_spec = str(item.get("raw_spec") or package_name or "")
-        version = item.get("requested_specifier") if isinstance(item.get("requested_specifier"), str) else None
-        source_url = item.get("source_url") if isinstance(item.get("source_url"), str) else None
-        artifact_id = f"{ecosystem}:{package_name or raw_spec}"
-        artifact_name = package_name or raw_spec
-        identities.append(
-            ProtectTargetIdentity(
-                artifact_id=artifact_id,
-                artifact_name=artifact_name,
-                ecosystem=ecosystem,
-                package_name=package_name,
-                package_url=build_package_url(ecosystem, package_name, version),
-                source_url=source_url,
-            )
-        )
-    return tuple(identities)
-
-
 def _package_matched_cached_advisory_ids(store: Any, artifact: GuardArtifact) -> tuple[str, ...]:
-    advisories = store.list_cached_advisories(limit=None)
-    identities = _package_target_identities(artifact)
-    matched_ids: set[str] = set()
-    for advisory in advisories:
-        for identity in identities:
-            if advisory_matches_target(advisory, identity):
-                advisory_id = advisory.get("id")
-                if isinstance(advisory_id, str) and advisory_id:
-                    matched_ids.add(advisory_id)
-                break
-    return tuple(sorted(matched_ids))
+    from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+
+    provision_native_verifier_key_for_store(store)
+    return _native_package_authority_module().package_advisory_ids_native(
+        artifact=artifact.to_dict(),
+        store_path=store.path,
+        guard_home=store.guard_home,
+    )
 
 
 def _package_feed_snapshot_hash(store: Any) -> str | None:
@@ -2854,6 +3043,9 @@ def _package_request_artifact_hash(
     additional_current_action: object | None = None,
     additional_policy_context: dict[str, object] | None = None,
 ) -> str:
+    from .native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     policy_context = _package_current_policy_context(
         artifact=artifact,
         store=store,
@@ -3125,7 +3317,15 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
     installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
     active_managers = sorted(set(_string_items(status.get("active_managers"))))
     missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
-    supported_managers = list(package_shim_supported_managers())
+    _native_managers = _native_execution.shim_admin_native(
+        "supported_managers",
+        guard_home=store.guard_home,
+    )
+    supported_managers = (
+        list(_native_managers)
+        if isinstance(_native_managers, list) and all(isinstance(item, str) for item in _native_managers)
+        else list(package_shim_supported_managers())
+    )
     detected_managers = sorted(set(_string_items(status.get("detected_managers"))))
     protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
     protected_set = set(protected_managers)
@@ -3852,14 +4052,12 @@ def _execute_cloud_workspace_audit_request(
     payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
     runner = _runtime_runner_module()
-    request_headers = runner._guard_sync_headers(auth_context, request_url=request_url, method=method)
-    if payload is not None:
-        request_headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(
-        request_url,
-        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
-        headers=request_headers,
+    request = build_cloud_workspace_audit_request(
+        auth_context=auth_context,
+        request_url=request_url,
         method=method,
+        payload=payload,
+        build_headers=runner._guard_sync_headers,
     )
     try:
         with managed_urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
@@ -4357,24 +4555,6 @@ def _matched_advisories(evaluation: object) -> list[dict[str, object]]:
                 }
             )
     return advisories
-
-
-def _protect_target_payload(target: PackageIntentTarget) -> dict[str, object]:
-    public_target = target.to_dict()
-    raw_spec = str(public_target.get("raw_spec") or "")
-    source_url = _string_value(public_target.get("source_url"))
-    return {
-        "artifact_id": f"{target.ecosystem}:{target.package_name or raw_spec}",
-        "artifact_name": target.package_name or raw_spec,
-        "artifact_type": "package_request",
-        "ecosystem": target.ecosystem,
-        "package_name": target.package_name,
-        "package_url": None,
-        "raw_spec": raw_spec,
-        "version": target.requested_specifier,
-        "source_url": source_url,
-        "harness": _LOCAL_SUPPLY_CHAIN_HARNESS,
-    }
 
 
 def _redact_command_token(token: str) -> str:

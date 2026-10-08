@@ -5,8 +5,6 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from codex_plugin_scanner.guard.daemon import hook_process_entrypoint as hook_entrypoint_module
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview, HookWorkerSlot
@@ -16,21 +14,15 @@ from codex_plugin_scanner.guard.native_route_receipt import (
 )
 
 
-def test_route_receipt_requires_a_current_native_claim(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(hook_entrypoint_module, "_native_mode_requires_rust", lambda: True)
+def test_route_receipt_requires_a_current_native_claim() -> None:
     reset_native_hook_route()
-    assert hook_entrypoint_module._current_decision_route() == "python_semantic"  # pyright: ignore[reportPrivateUsage]
+    assert hook_entrypoint_module._current_decision_route() == "native_fail_safe"  # pyright: ignore[reportPrivateUsage]
 
     record_native_hook_route("native_resident")
     assert hook_entrypoint_module._current_decision_route() == "native_resident"  # pyright: ignore[reportPrivateUsage]
 
     reset_native_hook_route()
-    assert hook_entrypoint_module._current_decision_route() == "python_semantic"  # pyright: ignore[reportPrivateUsage]
-
-    monkeypatch.setattr(hook_entrypoint_module, "_native_mode_requires_rust", lambda: False)
-    assert hook_entrypoint_module._current_decision_route() == "python_semantic"  # pyright: ignore[reportPrivateUsage]
+    assert hook_entrypoint_module._current_decision_route() == "native_fail_safe"  # pyright: ignore[reportPrivateUsage]
 
 
 def test_route_receipt_waits_for_metrics_lock(tmp_path: Path) -> None:

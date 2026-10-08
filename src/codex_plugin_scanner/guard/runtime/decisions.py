@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.runtime.signals import (
 )
 
 from .data_flow_sink import data_flow_sink_type
+from .payload_coercion import optional_string, required_string
 
 GuardDecisionAction = Literal["allow", "warn", "ask", "block"]
 
@@ -119,7 +120,7 @@ _ACTION_MESSAGES: dict[GuardAction, tuple[GuardDecisionAction, str, str, str]] =
     "require-reapproval": (
         "ask",
         "Fresh approval required",
-        "HOL Guard needs a fresh approval because this action changed.",
+        "HOL Guard needs a fresh approval before this action can run.",
         "Choose the smallest approval scope that matches your intent, then retry.",
     ),
     "block": (
@@ -180,16 +181,16 @@ class GuardDecisionV2:
         return cls(
             guard_action=guard_action,
             action=action,
-            reason=_required_string(payload, "reason"),
-            user_title=_required_string(payload, "user_title"),
-            user_body=_required_string(payload, "user_body"),
-            harness_message=_required_string(payload, "harness_message"),
-            dashboard_primary_detail=_required_string(payload, "dashboard_primary_detail"),
+            reason=required_string(payload, "reason"),
+            user_title=required_string(payload, "user_title"),
+            user_body=required_string(payload, "user_body"),
+            harness_message=required_string(payload, "harness_message"),
+            dashboard_primary_detail=required_string(payload, "dashboard_primary_detail"),
             approval_scopes=_parse_string_tuple(payload.get("approval_scopes"), "approval_scopes"),
-            retry_instruction=_optional_string(payload, "retry_instruction"),
+            retry_instruction=optional_string(payload, "retry_instruction"),
             signals=_parse_signals(payload.get("signals")),
             confidence=_parse_confidence(payload.get("confidence")),
-            package_review_cloud_reason_code=_optional_string(payload, "package_review_cloud_reason_code"),
+            package_review_cloud_reason_code=optional_string(payload, "package_review_cloud_reason_code"),
         )
 
 
@@ -274,8 +275,8 @@ class AuthoritativeGuardDecision:
         if schema_version != AUTHORITATIVE_DECISION_SCHEMA_VERSION or isinstance(schema_version, bool):
             raise ValueError(f"schema_version must be {AUTHORITATIVE_DECISION_SCHEMA_VERSION}")
         action = _parse_guard_action(payload.get("action"))
-        source = _required_string(payload, "source")
-        reason = _required_string(payload, "reason")
+        source = required_string(payload, "source")
+        reason = required_string(payload, "reason")
         raw_composition = payload.get("composition_trace")
         if not isinstance(raw_composition, Mapping) or not all(isinstance(key, str) for key in raw_composition):
             raise ValueError("composition_trace must be an object with string keys")
@@ -383,6 +384,22 @@ def authoritative_decision_from_artifact(
     return decision
 
 
+def _is_disabled_codex_skill_inventory(raw_item: Mapping[str, object], decision: AuthoritativeGuardDecision) -> bool:
+    """Only a disabled Codex skill inventory row may omit launch authority."""
+
+    artifact_id = raw_item.get("artifact_id")
+    return (
+        raw_item.get("inventory_only") is True
+        and raw_item.get("artifact_type") == "skill"
+        and isinstance(artifact_id, str)
+        and artifact_id.startswith("codex:")
+        and decision.action == "allow"
+        and decision.reason == "inventory_only"
+        and decision.composition_trace.get("inventory_only") is True
+        and decision.enforcement.authority_finalized is False
+    )
+
+
 def evaluation_authority_error(
     evaluation: Mapping[str, object],
     *,
@@ -450,8 +467,15 @@ def evaluation_authority_error(
         return AUTHORITATIVE_DECISION_INCONSISTENT
     if blocked != any(decision.enforcement.blocking for decision in decisions):
         return AUTHORITATIVE_DECISION_INCONSISTENT
-    if require_launch_permitted and any(not decision.enforcement.launch_permitted for decision in decisions):
-        return AUTHORITATIVE_DECISION_INCONSISTENT
+    if require_launch_permitted:
+        for raw_item, decision in zip(raw_artifacts, artifact_decisions, strict=True):
+            if decision.enforcement.launch_permitted:
+                continue
+            if isinstance(raw_item, Mapping) and _is_disabled_codex_skill_inventory(raw_item, decision):
+                continue
+            return AUTHORITATIVE_DECISION_INCONSISTENT
+        if any(not decision.enforcement.launch_permitted for decision in decisions[len(artifact_decisions) :]):
+            return AUTHORITATIVE_DECISION_INCONSISTENT
     return None
 
 
@@ -609,22 +633,6 @@ def _parse_string_tuple(value: object, key: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
         raise ValueError(f"{key} must be a list of non-empty strings")
     return tuple(value)
-
-
-def _required_string(payload: Mapping[str, object], key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{key} must be a non-empty string")
-    return value
-
-
-def _optional_string(payload: Mapping[str, object], key: str) -> str | None:
-    value = payload.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError(f"{key} must be a string or null")
-    return value
 
 
 def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
@@ -925,7 +933,7 @@ def _validate_artifact_approval_projection(
     reuse_status = raw_reuse.get("status")
     if reuse_status not in {"accepted", "rejected", "not-applicable"}:
         raise ValueError("approval_reuse.status must be a known status")
-    reuse_reason = _required_string(raw_reuse, "reason_code")
+    reuse_reason = required_string(raw_reuse, "reason_code")
     reuse_should_claim = raw_reuse.get("should_claim")
     if not isinstance(reuse_should_claim, bool):
         raise ValueError("approval_reuse.should_claim must be a boolean")

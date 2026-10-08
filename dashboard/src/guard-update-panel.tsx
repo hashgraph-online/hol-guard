@@ -13,6 +13,8 @@ import {
   type GuardUpdateChannelProof,
 } from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
+import { dashboardEmbedsInDesktop } from "./desktop-embed";
+import { shouldPromptRecoveryReinstall, updateHelpCopy, updateStatusLabel } from "./guard-update-copy";
 import { buildApprovalProofCredentials } from "./approval-proof-inline";
 import type {
   GuardApprovalGatePublicConfig,
@@ -21,7 +23,11 @@ import type {
   GuardUpdateStatus,
 } from "./guard-types";
 import { GuardModalLayer } from "./guard-modal-layer";
-import { GuardUpdateChannelSummary } from "./guard-update-channel-summary";
+import {
+  GuardUpdateChannelSummary,
+  GUARD_UPDATE_ACTION_BUTTON_CLASS,
+  GUARD_UPDATE_CONTROL_TEXT_CLASS,
+} from "./guard-update-channel-summary";
 
 const UPDATE_STATUS_POLL_MS = 60_000;
 const RECONNECT_POLL_MS = 1_500;
@@ -39,84 +45,25 @@ export type GuardUpdatePanelProps = {
   compact?: boolean;
 };
 
-function updateStatusLabel(status: GuardUpdateStatus | null | undefined): string {
-  if (!status) {
-    return "Checking version…";
-  }
-  if (status.update_available && status.latest_version) {
-    return `Version ${status.latest_version} is ready`;
-  }
-  return `Version ${status.current_version}`;
-}
-
-function shouldPromptRecoveryReinstall(status: GuardUpdateStatus | null | undefined): boolean {
-  return (
-    status?.recovery_reinstall_available === true &&
-    status?.auto_updatable !== true &&
-    status?.version_check?.update_available === true
-  );
-}
-
-function recoveryReinstallHelpCopy(status: GuardUpdateStatus | null | undefined): string | null {
-  if (!shouldPromptRecoveryReinstall(status)) {
-    return null;
-  }
-  const blockedReason = status?.blocked_reason ?? "";
-  if (blockedReason.includes("local wheel whose source file is no longer available")) {
-    return "This install came from a local wheel whose source file is no longer available, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
-  }
-  if (blockedReason.includes("local wheel")) {
-    return "This install came from a local wheel, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
-  }
-  return "This install came from a local folder, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
-}
-
-function updateHelpCopy(
-  status: GuardUpdateStatus | null | undefined,
-  phase: GuardUpdatePhase,
-  errorMessage?: string | null,
-): string | null {
-  if (phase === "updating") {
-    return "Guard is installing the update. The dashboard will pause briefly and reopen when ready.";
-  }
-  if (phase === "reconnecting") {
-    return "Reconnecting to Guard after the update…";
-  }
-  if (phase === "error") {
-    return errorMessage?.trim() || "The update did not finish. The installed version stays in place. Try again, or run hol-guard update from your terminal.";
-  }
-  if (status?.update_suppressed) {
-    if (status.retry_command) {
-      return `Automatic update already ran but this install is still behind. Run ${status.retry_command} in your terminal.`;
-    }
-    if (status.update_attempt_message) {
-      return status.update_attempt_message;
-    }
-    return "Automatic update already ran but this install is still behind the latest release.";
-  }
-  if (status?.update_available) {
-    return "This restarts Guard for a moment. Open approvals will stay saved.";
-  }
-  if (status && !status.auto_updatable && status.recovery_reinstall_available) {
-    return recoveryReinstallHelpCopy(status);
-  }
-  if (status && !status.auto_updatable && status.blocked_reason) {
-    return status.blocked_reason;
-  }
-  return null;
-}
-
 export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
-  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError);
+  const embeddedInDesktop = dashboardEmbedsInDesktop();
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
+  // Inside the Desktop window, updates belong to the app's own updater;
+  // a second button here would race it against the same runtime.
   const showUpdateButton =
+    !embeddedInDesktop &&
     props.updateStatus?.update_available === true &&
     props.updateStatus.auto_updatable &&
     props.updateStatus.update_suppressed !== true &&
     phase !== "updating" &&
     phase !== "reconnecting";
-  const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
+  const showReinstallButton =
+    !embeddedInDesktop &&
+    shouldPromptRecoveryReinstall(props.updateStatus) &&
+    phase !== "updating" &&
+    phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   const useAlpha = props.updateStatus?.release_channel === "alpha" || (
     props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha"
@@ -191,37 +138,48 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   }
 
   return (
-    <div className={props.compact ? "space-y-1" : "space-y-2"}>
+    <div
+      className={
+        props.compact
+          ? "space-y-1 border-t border-brand-blue/10 pt-1.5"
+          : "space-y-1.5 border-t border-brand-blue/10 pt-2"
+      }
+    >
       {updateChannelSummary}
       {props.updateStatus?.update_available ? (
-        <p className="text-[11px] leading-relaxed text-brand-dark/75">{updateStatusLabel(props.updateStatus)}</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]">
+            {updateStatusLabel(props.updateStatus)}
+          </p>
+          {showUpdateButton && props.onUpdateGuard ? (
+            <button
+              type="button"
+              onClick={props.onUpdateGuard}
+              aria-label="Update Guard to the latest version"
+              className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
+            >
+              <HiMiniArrowPath className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className={GUARD_UPDATE_CONTROL_TEXT_CLASS}>Update</span>
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {helpCopy ? (
-        <p className="text-[11px] leading-relaxed text-brand-dark/70">{helpCopy}</p>
-      ) : null}
-      {showUpdateButton && props.onUpdateGuard ? (
-        <button
-          type="button"
-          onClick={props.onUpdateGuard}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
-        >
-          <HiMiniArrowPath className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Update Guard
-        </button>
+        <p className="text-[10px] leading-4 text-brand-dark/70">{helpCopy}</p>
       ) : null}
       {showReinstallButton && props.onReinstallGuard ? (
         <button
           type="button"
           onClick={props.onReinstallGuard}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
+          className={GUARD_UPDATE_ACTION_BUTTON_CLASS}
         >
-          <HiMiniArrowPath className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Reinstall from PyPI
+          <HiMiniArrowPath className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className={GUARD_UPDATE_CONTROL_TEXT_CLASS}>Reinstall from PyPI</span>
         </button>
       ) : null}
       {busy && (
-        <p className="inline-flex min-h-11 items-center gap-2 text-[11px] font-medium text-brand-blue" role="status">
-          <HiMiniArrowPath className="h-4 w-4 animate-spin" aria-hidden="true" />
+        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue" role="status">
+          <HiMiniArrowPath className="h-3 w-3 animate-spin" aria-hidden="true" />
           {phase === "updating" ? "Updating Guard…" : "Reconnecting…"}
         </p>
       )}

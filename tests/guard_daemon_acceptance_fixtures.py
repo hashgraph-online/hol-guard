@@ -22,8 +22,34 @@ from unittest.mock import patch
 
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-daemon-acceptance" / "workloads.json"
+
+# The server advertises bounded transient signals while a resident worker warms
+# up or sheds load. Production callers retry every one of these "review did not
+# finish" signals, so workload clients mirror that instead of counting them as
+# denials.
+TRANSIENT_HOOK_REASON_CODES = {
+    "daemon_hook_process_not_ready",
+    "native_hook_event_unavailable",
+    "native_pre_tool_unavailable",
+    "native_post_tool_unavailable",
+    "native_hook_worker_unavailable",
+    "native_hook_worker_unavailable_before_compatibility",
+    "native_hook_edge_unavailable",
+    "native_policy_not_ready",
+}
+
+# Transport errors the hook endpoint can surface during the same warm-up and
+# overload windows as the reason codes above.
+TRANSIENT_HOOK_EXCEPTIONS = (
+    urllib.error.URLError,
+    http.client.HTTPException,
+    ConnectionError,
+    TimeoutError,
+    json.JSONDecodeError,
+)
 
 
 class ClientSpec(TypedDict):
@@ -120,11 +146,55 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         dict[str, object],
         json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")),
     )
+    target = max(1, int(daemon._server.hook_process_runner.stats()["target"]))
     if not daemon._server.hook_process_runner.wait_for_capacity(
-        minimum_workers=1,
+        minimum_workers=target,
         timeout_seconds=15,
     ):
         raise RuntimeError("production hook workers did not become ready")
+    # Worker-capacity readiness does not cover native policy prep: under
+    # HOL_GUARD_NATIVE=force the resident edge still compiles its snapshot on
+    # first use, and early requests would race it. Production callers retry
+    # `native_policy_not_ready` until the edge answers, so prime the same way
+    # before the measured workload begins.
+    warmup_query = (
+        f"guard-home={urllib.parse.quote(str(guard_home))}&"
+        f"home={urllib.parse.quote(str(root))}&"
+        f"workspace={urllib.parse.quote(str(workspace))}"
+    )
+    warmup_deadline = time.monotonic() + 60 * under_coverage_scale(1.0)
+    while time.monotonic() < warmup_deadline:
+        warmup_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?{warmup_query}",
+            data=json.dumps(
+                {
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Read",
+                    "tool_input": {"path": "docs/warmup.md"},
+                    "tool_response": [{"type": "text", "text": "warmup"}],
+                    "stdout": "warmup",
+                    "session_id": "warmup",
+                    "guard_remaining_ms": 30_000,
+                }
+            ).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "X-Guard-Token": daemon._server.auth_token,
+                "X-Guard-Remaining-Ms": "30000",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(warmup_request, timeout=30) as response:
+                warmup_result = cast(dict[str, object], json.loads(response.read()))
+        except TRANSIENT_HOOK_EXCEPTIONS:
+            time.sleep(0.1)
+            continue
+        if warmup_result.get("reason_code") not in TRANSIENT_HOOK_REASON_CODES:
+            break
+        time.sleep(0.1)
+    else:
+        raise RuntimeError("native policy did not become ready")
     initial_pid = os.getpid()
     initial_workers = threading.active_count()
     initial_rss = _rss_bytes()
@@ -134,6 +204,8 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
     failure_reasons: Counter[str] = Counter()
     latencies_ms: list[float] = []
     lock = threading.Lock()
+    remaining_ms = str(int(10_000 * under_coverage_scale(3.0)))
+    review_timeout_seconds = 30 * under_coverage_scale(3.0)
 
     def review(harness: str, client: str, index: int) -> None:
         started = time.monotonic()
@@ -148,15 +220,25 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
             "tool_response": [{"type": "text", "text": output}],
             "stdout": output,
             "session_id": client,
-            "guard_remaining_ms": 10_000,
+            "guard_remaining_ms": int(remaining_ms),
         }
         query = (
             f"guard-home={urllib.parse.quote(str(guard_home))}&"
             f"home={urllib.parse.quote(str(root))}&"
             f"workspace={urllib.parse.quote(str(workspace))}"
         )
-        try:
-            if harness == "codex":
+
+        def _transient_error(error: Exception) -> bool:
+            if isinstance(error, http.client.RemoteDisconnected):
+                return True
+            if isinstance(error, urllib.error.HTTPError) and error.code == 503:
+                return True
+            return isinstance(error, urllib.error.URLError) and isinstance(
+                getattr(error, "reason", None), http.client.RemoteDisconnected
+            )
+
+        def _submit_once() -> dict[str, object]:
+            if harness in {"codex", "claude-code"}:
                 result = None
                 for attempt in range(2):
                     nonce = secrets.token_hex(32)
@@ -185,7 +267,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                         challenge = cast(dict[str, object], json.loads(challenge_body))
                         connection.request(
                             "POST",
-                            f"/v1/hooks/codex?{query}",
+                            f"/v1/hooks/{harness}?{query}",
                             body=json.dumps(payload).encode(),
                             headers={
                                 "Connection": "close",
@@ -193,7 +275,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                                 "X-Guard-Token": daemon._server.auth_token,
                                 "X-Guard-Daemon-Nonce": nonce,
                                 "X-Guard-Daemon-Proof": str(challenge["proof"]),
-                                "X-Guard-Remaining-Ms": "10000",
+                                "X-Guard-Remaining-Ms": remaining_ms,
                             },
                         )
                         hook_response = connection.getresponse()
@@ -206,19 +288,37 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                         connection.close()
                 if result is None:
                     raise RuntimeError("codex-review-unavailable")
-            else:
-                request = urllib.request.Request(
-                    f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
-                    data=json.dumps(payload).encode(),
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-Guard-Token": daemon._server.auth_token,
-                        "X-Guard-Remaining-Ms": "10000",
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(request, timeout=12) as response:
-                    result = cast(dict[str, object], json.loads(response.read()))
+                return result
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
+                data=json.dumps(payload).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Remaining-Ms": remaining_ms,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=12) as response:
+                return cast(dict[str, object], json.loads(response.read()))
+
+        try:
+            # The server advertises bounded transient signals while a resident
+            # worker warms up or sheds load, and an overloaded listener can drop
+            # a connection mid-request. Production callers retry every one of
+            # these "review did not finish" signals, so mirror that here instead
+            # of counting them as denials.
+            for transient_attempt in range(5):
+                try:
+                    result = _submit_once()
+                except Exception as transient_error:
+                    if not _transient_error(transient_error) or transient_attempt == 4:
+                        raise
+                    time.sleep(0.05 * (transient_attempt + 1))
+                    continue
+                if result.get("reason_code") not in TRANSIENT_HOOK_REASON_CODES or transient_attempt == 4:
+                    break
+                time.sleep(0.05 * (transient_attempt + 1))
             blocked = _response_blocks_action(result)
             reason_code = result.get("reason_code")
             outcome = (
@@ -263,7 +363,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                 for index in range(client["requests"])
             ]
             for future in futures:
-                future.result(timeout=30)
+                future.result(timeout=review_timeout_seconds)
         worker_stats = daemon._server.hook_process_runner.stats()
         scheduler_stats = daemon._server.runtime_hook_scheduler.stats()
         final_inbox = len(store.list_approval_requests(status=None, limit=None))

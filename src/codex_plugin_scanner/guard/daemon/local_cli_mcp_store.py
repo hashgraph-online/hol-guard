@@ -9,6 +9,7 @@ from pathlib import Path
 from ..runtime.local_cli_identity import UnlistedCliIdentity
 from ..runtime.local_mcp_probe import mcp_launch_tokens
 from ..runtime.mcp_protection import build_mcp_server_identity
+from ..runtime.observed_mcp_tools import OBSERVED_MCP_PREFIX
 
 RecognizePayload = Callable[[str, dict[str, object], str, str], dict[str, object]]
 RecognizeSummary = Callable[[str, str, int], str]
@@ -71,7 +72,16 @@ def stored_mcp_recognition(
         count = len(raw_commands) if isinstance(raw_commands, list) else 0
         name = listed.get("name")
         label = name if isinstance(name, str) and name.strip() else found_id
-        return recognize_payload(found_id, listed, status, recognize_summary(label, status, count))
+        server_command = found.get("server_command")
+        if isinstance(server_command, str) and server_command.startswith(OBSERVED_MCP_PREFIX):
+            status = "ok" if count else "empty"
+            summary = (
+                f"Guard detected {count} tools from {label} in this harness. "
+                "Allow or block each listed tool. New tools keep the usual review."
+            )
+        else:
+            summary = recognize_summary(label, status, count)
+        return recognize_payload(found_id, listed, status, summary)
     except sqlite3.Error:
         return None
 

@@ -1,0 +1,1484 @@
+{
+  "extension": {
+    "action_classes": [
+      "Load balancer destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews load-balancer, target-group, listener, and forwarding-rule deletion through supported cloud CLIs.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.load-balancer",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Load balancer command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Load balancer destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies documented load balancer deletion operations through supported command-line tools.",
+        "example_command": "aws elb delete-load-balancer",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Load balancer deletion",
+        "permission_id": "command.load-balancer.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect listeners, targets, DNS, and active traffic before deletion."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.aws.amazon.com/cli/latest/reference/elbv2/delete-load-balancer.html",
+      "https://cloud.google.com/sdk/gcloud/reference/compute/forwarding-rules/delete",
+      "https://learn.microsoft.com/cli/azure/network/lb#az-network-lb-delete"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Load balancer destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies documented load balancer deletion operations through supported command-line tools.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "elb",
+                  "delete-load-balancer"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "elbv2",
+                  "delete-load-balancer"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "elbv2",
+                  "delete-listener"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "elbv2",
+                  "delete-rule"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "elbv2",
+                  "delete-target-group"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "elbv2",
+                  "delete-trust-store"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "compute",
+                  "forwarding-rules",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "alpha",
+                  "compute",
+                  "forwarding-rules",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "beta",
+                  "compute",
+                  "forwarding-rules",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "preview",
+                  "compute",
+                  "forwarding-rules",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "network",
+                  "lb",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.load-balancer.permission.delete",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.load-balancer.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "elb",
+                      "delete-load-balancer"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-load-balancer"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-listener"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-rule"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-target-group"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-trust-store"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "compute",
+                      "forwarding-rules",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "alpha",
+                      "compute",
+                      "forwarding-rules",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "beta",
+                      "compute",
+                      "forwarding-rules",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "preview",
+                      "compute",
+                      "forwarding-rules",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "network",
+                      "lb",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "elb",
+                      "delete-load-balancer"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-load-balancer"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-listener"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-rule"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-target-group"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "elbv2",
+                      "delete-trust-store"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect listeners, targets, DNS, and active traffic before deletion."
+        ],
+        "severity": "critical",
+        "title": "Load balancer deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect listeners, targets, DNS, and active traffic before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

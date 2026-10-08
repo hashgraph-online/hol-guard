@@ -18,8 +18,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final
 
-if __package__ is None:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+if not __package__:
+    _PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 
 SCHEMA: Final = "hol-guard.native-hook-io-privacy.v1"
@@ -68,7 +70,7 @@ _SAFE_KEY_EXCEPTIONS: Final = frozenset(
 )
 _SERIALIZERS: Final = (
     (
-        "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
+        "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_journal.py",
         "serialized",
         "_CommandActivityRecord",
     ),

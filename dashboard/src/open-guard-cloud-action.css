@@ -1,0 +1,78 @@
+.guard-navigation-drawer__quick-actions button {
+  display: grid;
+  min-height: 2.75rem;
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.55rem 0.75rem;
+  color: #334155;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-decoration: none;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+
+.guard-navigation-drawer__quick-actions button:hover:not(:disabled) {
+  border-color: rgb(45 117 219 / 0.3);
+  color: #0f172a;
+}
+
+.guard-navigation-drawer__quick-actions button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.guard-shell-sidebar__quick-actions > button {
+  display: grid;
+  min-height: 2.5rem;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  background: white;
+  padding: 0.45rem 0.65rem;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-decoration: none;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+
+.guard-shell-sidebar__quick-actions > a + button,
+.guard-shell-sidebar__quick-actions > button + a,
+.guard-shell-sidebar__quick-actions > button + button {
+  margin-top: 0.35rem;
+}
+
+.guard-shell-sidebar__quick-actions > button:hover:not(:disabled) {
+  border-color: rgb(45 117 219 / 0.28);
+  color: #0f172a;
+}
+
+.guard-shell-sidebar__quick-actions > button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.guard-open-guard-cloud-action__error,
+.guard-open-guard-cloud-action__manual {
+  margin: 0.25rem 0 0;
+  color: #7c3aed;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.guard-open-guard-cloud-action__manual {
+  display: inline-block;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}

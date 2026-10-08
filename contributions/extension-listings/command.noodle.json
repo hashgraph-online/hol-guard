@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.noodle",
+  "tagline": "Reviews Noodle terminal REST client request and collection runs.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "maintainerGithubIds": [
+    "23016174"
+  ]
+}

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Final, cast
 
 from ..durable_io import fsync_directory as _fsync_directory
+from ..private_file_io import read_private_regular_bytes
 from .command_activity_contract import CorrelationHandle, CorrelationKind
 from .command_activity_privacy import (
     InstallationCorrelationKey,
@@ -32,6 +33,12 @@ _KEY_BYTES: Final = 32
 # Only native, top-level request identifiers documented by these hook adapters
 # can pair pre- and post-execution evidence. Content and session fields are absent.
 _PROVEN_REQUEST_ID_FIELDS: Final[dict[tuple[str, str], str]] = {
+    ("grok", "PreToolUse"): "toolUseId",
+    ("grok", "PostToolUse"): "toolUseId",
+    ("grok", "PostToolUseFailure"): "toolUseId",
+    ("zcode", "PreToolUse"): "tool_use_id",
+    ("zcode", "PostToolUse"): "tool_use_id",
+    ("zcode", "PostToolUseFailure"): "tool_use_id",
     ("codex", "PreToolUse"): "tool_call_id",
     ("codex", "PostToolUse"): "tool_call_id",
     ("codex", "PostToolUseFailure"): "tool_call_id",
@@ -146,13 +153,37 @@ def _serialize_key(key: InstallationCorrelationKey) -> bytes:
     return (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("ascii")
 
 
+def load_existing_installation_correlation_key(guard_home: Path) -> InstallationCorrelationKey | None:
+    """Read existing private correlation material without creation or chmod.
+
+    Used by a locally authorized functional observer, never for diagnostics or
+    to repair missing authority. Missing or unsafe files remain unavailable.
+    """
+    raw = read_private_regular_bytes(
+        guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
+        max_bytes=4096,
+        require_private_parent=True,
+    )
+    if raw is None:
+        return None
+    return _parse_key(raw.decode("ascii"))
+
+
 def _read_key(path: Path) -> InstallationCorrelationKey:
     file_stat = path.lstat()
     if not stat.S_ISREG(file_stat.st_mode):
         raise ValueError("command activity correlation key must be a regular file")
     _set_private_mode(path)
     try:
-        raw_payload = cast(object, json.loads(path.read_text(encoding="ascii")))
+        raw = path.read_text(encoding="ascii")
+    except (OSError, UnicodeError) as error:
+        raise ValueError("invalid command activity correlation key file") from error
+    return _parse_key(raw)
+
+
+def _parse_key(raw: str) -> InstallationCorrelationKey:
+    try:
+        raw_payload = cast(object, json.loads(raw))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ValueError("invalid command activity correlation key file") from error
     if not isinstance(raw_payload, dict):

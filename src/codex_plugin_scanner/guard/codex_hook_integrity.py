@@ -17,18 +17,21 @@ import os
 import secrets
 import stat
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path
+from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path, check_hook_validation_deadline
+from .codex_install_transaction import record_codex_mutation
 from .durable_io import fsync_directory as _fsync_directory
 from .local_authority_integrity import (
     LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM,
     sign_local_authority_payload,
     verify_local_authority_payload,
 )
+from .private_file_io import read_private_regular_text
 
 HOOK_MANIFEST_SCHEMA_VERSION = 2
 HOOK_MANIFEST_MAC_ALGORITHM = LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
@@ -36,6 +39,7 @@ _HOOK_SECRET_SCHEMA_VERSION = 1
 _HOOK_KEY_BYTES = 32
 _HOOK_MANIFEST_INTEGRITY_PURPOSE = "codex-managed-hook-manifest"
 _PRIVATE_FILE_MODE = 0o600
+_MAX_HOOK_MANIFEST_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,11 +58,32 @@ def hook_secret_path(guard_home: Path) -> Path:
     return guard_home / "managed" / "codex" / "hook-manifest.key"
 
 
+def hook_authority_receipt_path(guard_home: Path, config_path: Path) -> Path:
+    manifest = hook_manifest_path(guard_home, config_path)
+    return manifest.with_name(manifest.name.replace(".manifest.json", ".authority-receipt.json"))
+
+
 def canonical_manifest_bytes(payload: Mapping[str, object]) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
 
 def load_or_create_hook_secret(guard_home: Path) -> HookSecretMaterial:
+    with _ordinary_hook_writer(guard_home, hook_secret_path(guard_home), actor="codex.authority-key"):
+        return _load_or_create_hook_secret_owned(guard_home)
+
+
+@contextmanager
+def _ordinary_hook_writer(guard_home: Path, target: Path, *, actor: str) -> Iterator[None]:
+    from .codex_install_transaction import codex_install_transaction
+    from .runtime_transition import assert_transition_mutation_allowed
+
+    assert_transition_mutation_allowed(guard_home)
+    with codex_install_transaction(guard_home, target, actor=actor):
+        assert_transition_mutation_allowed(guard_home)
+        yield
+
+
+def _load_or_create_hook_secret_owned(guard_home: Path) -> HookSecretMaterial:
     path = hook_secret_path(guard_home)
     _ensure_private_directory(path.parent, repair_mode=True)
     if path.exists() or path.is_symlink():
@@ -152,15 +177,36 @@ def load_authenticated_hook_manifest_path(
 ) -> dict[str, object]:
     """Authenticate an explicit private manifest path without creating state."""
 
+    check_hook_validation_deadline()
     if not path.exists() and not path.is_symlink():
         raise CodexHookIntegrityError(
             "codex_hook_manifest_missing",
             "The authenticated Codex hook manifest is missing; run `hol-guard install codex` to repair it.",
         )
     _validate_private_regular_file(path, reason_prefix="codex_hook_manifest", label="Codex hook manifest")
+    raw = read_private_regular_text(path, max_bytes=_MAX_HOOK_MANIFEST_BYTES)
+    check_hook_validation_deadline()
+    if raw is None:
+        raise CodexHookIntegrityError(
+            "codex_hook_manifest_invalid",
+            "The authenticated Codex hook manifest is unreadable; run `hol-guard install codex` to repair it.",
+        )
+    return authenticate_hook_manifest_text(guard_home, raw)
+
+
+def authenticate_hook_manifest_text(
+    guard_home: Path,
+    raw: str,
+    *,
+    _secret: HookSecretMaterial | None = None,
+) -> dict[str, object]:
+    """Authenticate bounded captured text; this does not validate its file or package."""
+    check_hook_validation_deadline()
+    if len(raw.encode("utf-8")) > _MAX_HOOK_MANIFEST_BYTES:
+        raise CodexHookIntegrityError("codex_hook_manifest_invalid", "Codex hook manifest exceeds its read limit.")
     try:
-        value: object = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        value: object = json.loads(raw)
+    except json.JSONDecodeError as exc:
         raise CodexHookIntegrityError(
             "codex_hook_manifest_invalid",
             "The authenticated Codex hook manifest is unreadable; run `hol-guard install codex` to repair it.",
@@ -184,7 +230,9 @@ def load_authenticated_hook_manifest_path(
             "The Codex hook manifest authentication metadata is invalid; repair the Codex installation.",
         )
 
-    secret = load_hook_secret(guard_home)
+    check_hook_validation_deadline()
+    secret = load_hook_secret(guard_home) if _secret is None else _secret
+    check_hook_validation_deadline()
     unsigned = dict(manifest)
     unsigned.pop("authentication", None)
     verification = verify_local_authority_payload(
@@ -220,10 +268,16 @@ def load_authenticated_hook_manifest_path(
             "codex_hook_manifest_authentication_invalid",
             "The Codex hook manifest generation binding is invalid; repair the Codex installation.",
         )
+    check_hook_validation_deadline()
     return manifest
 
 
 def write_hook_manifest(guard_home: Path, config_path: Path, manifest: dict[str, object]) -> Path:
+    with _ordinary_hook_writer(guard_home, config_path, actor="codex.authority-manifest"):
+        return _write_hook_manifest_owned(guard_home, config_path, manifest)
+
+
+def _write_hook_manifest_owned(guard_home: Path, config_path: Path, manifest: dict[str, object]) -> Path:
     path = hook_manifest_path(guard_home, config_path)
     _ensure_private_directory(path.parent, repair_mode=True)
     atomic_write_bytes(path, canonical_manifest_bytes(manifest) + b"\n", mode=_PRIVATE_FILE_MODE, private=True)
@@ -231,18 +285,41 @@ def write_hook_manifest(guard_home: Path, config_path: Path, manifest: dict[str,
 
 
 def remove_hook_manifest(guard_home: Path, config_path: Path) -> None:
+    with _ordinary_hook_writer(guard_home, config_path, actor="codex.remove-manifest"):
+        _remove_hook_manifest_owned(guard_home, config_path)
+
+
+def _remove_hook_manifest_owned(guard_home: Path, config_path: Path) -> None:
     path = hook_manifest_path(guard_home, config_path)
-    if path.is_symlink():
+    receipt = hook_authority_receipt_path(guard_home, config_path)
+    if path.is_symlink() or receipt.is_symlink():
         raise CodexHookIntegrityError(
             "codex_hook_manifest_not_regular",
             "Guard refused to remove a symlink in place of the Codex hook manifest.",
         )
+    # Explicit uninstall revokes the retained authority before removing the
+    # live manifest. A crash can leave protection without a repair receipt,
+    # but cannot leave a receipt behind after successful removal.
+    if receipt.exists():
+        before_receipt = snapshot_regular_file(receipt)
+        receipt.unlink()
+        _fsync_directory(receipt.parent)
+        record_codex_mutation("remove_authority_receipt", receipt, before_receipt, None)
     if path.exists():
+        before = snapshot_regular_file(path)
         path.unlink()
+        _fsync_directory(path.parent)
+        record_codex_mutation("remove_manifest", path, before, None)
 
 
 def remove_hook_secret_if_unused(guard_home: Path) -> None:
     """Remove the private key after an explicit uninstall removes its last manifest."""
+
+    with _ordinary_hook_writer(guard_home, hook_secret_path(guard_home), actor="codex.remove-unused-key"):
+        _remove_hook_secret_if_unused_owned(guard_home)
+
+
+def _remove_hook_secret_if_unused_owned(guard_home: Path) -> None:
 
     path = hook_secret_path(guard_home)
     managed_directory = path.parent
@@ -261,6 +338,7 @@ def remove_hook_secret_if_unused(guard_home: Path) -> None:
     )
     path.unlink()
     _fsync_directory(managed_directory)
+    record_codex_mutation("remove_unused_key", path, b"", None)
 
 
 def snapshot_regular_file(path: Path) -> bytes | None:
@@ -281,16 +359,34 @@ def restore_private_file(path: Path, payload: bytes | None) -> None:
                 "codex_hook_manifest_not_regular",
                 "Guard refused to replace a symlink in place of the Codex hook manifest.",
             )
+        before = snapshot_regular_file(path) if path.name != "hook-manifest.key" else (b"" if path.exists() else None)
         path.unlink(missing_ok=True)
+        if path.parent.exists():
+            _fsync_directory(path.parent)
+        record_codex_mutation("restore_absent", path, before, None)
         return
     atomic_write_bytes(path, payload, mode=_PRIVATE_FILE_MODE, private=True)
 
 
-def atomic_write_text(path: Path, text: str, *, mode: int = _PRIVATE_FILE_MODE) -> None:
-    atomic_write_bytes(path, text.encode("utf-8"), mode=mode, private=False)
+def atomic_write_text(
+    path: Path,
+    text: str,
+    *,
+    mode: int = _PRIVATE_FILE_MODE,
+    on_publish: Callable[[tuple[int, int, int, int, int]], None] | None = None,
+) -> None:
+    atomic_write_bytes(path, text.encode("utf-8"), mode=mode, private=False, on_publish=on_publish)
 
 
-def atomic_write_bytes(path: Path, payload: bytes, *, mode: int, private: bool) -> None:
+def atomic_write_bytes(
+    path: Path,
+    payload: bytes,
+    *,
+    mode: int,
+    private: bool,
+    on_publish: Callable[[tuple[int, int, int, int, int]], None] | None = None,
+    before_publish: Callable[[], None] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise CodexHookIntegrityError(
@@ -299,6 +395,7 @@ def atomic_write_bytes(path: Path, payload: bytes, *, mode: int, private: bool) 
         )
     if private:
         _ensure_private_directory(path.parent, repair_mode=True)
+    before = snapshot_regular_file(path) if path.name != "hook-manifest.key" else (b"" if path.exists() else None)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     temporary_path = Path(temporary_name)
     try:
@@ -309,9 +406,27 @@ def atomic_write_bytes(path: Path, payload: bytes, *, mode: int, private: bool) 
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
+            written = os.fstat(handle.fileno())
+        if before_publish is not None:
+            before_publish()
         os.replace(temporary_path, path)
         os.chmod(path, mode)
+        if on_publish is not None:
+            published = path.lstat()
+            if (published.st_dev, published.st_ino, published.st_size, published.st_mtime_ns) != (
+                written.st_dev,
+                written.st_ino,
+                written.st_size,
+                written.st_mtime_ns,
+            ):
+                raise CodexHookIntegrityError(
+                    "codex_hook_transaction_target_changed", "Codex configuration changed during publication."
+                )
+            on_publish(
+                (published.st_dev, published.st_ino, published.st_size, published.st_mtime_ns, published.st_ctime_ns)
+            )
         _fsync_directory(path.parent)
+        record_codex_mutation("publish", path, before, payload)
     finally:
         temporary_path.unlink(missing_ok=True)
 

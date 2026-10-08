@@ -56,10 +56,12 @@
 
 **Check**: Ensure you're running a recent version of HOL Guard whose CLI routes
 complete PreToolUse and PostToolUse envelopes through native hook authority.
-Python source-ref review remains only for explicit off/shadow compatibility
-boundaries. Supported file, package, MCP, network, process, browser, config,
-prompt, and harness PreToolUse actions receive a native review or block floor;
-an unrepresentable review is rendered as a conservative deny.
+Python source-ref review is retained only as an explicitly injected
+differential-test oracle. Production `off` is fail-safe, while `shadow`
+comparison requires a declared non-production diagnostic surface. Supported
+file, package, MCP, network, process, browser, config, prompt, and harness
+PreToolUse actions receive a native review or block floor; an unrepresentable
+review is rendered as a conservative deny.
 
 **Resolution**: Update HOL Guard: `hol-guard update`.
 

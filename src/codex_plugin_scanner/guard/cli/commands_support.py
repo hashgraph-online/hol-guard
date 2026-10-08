@@ -43,16 +43,10 @@ from . import commands_dispatch_trust as _commands_dispatch_trust
 from . import commands_dispatch_admin as _commands_dispatch_admin
 from . import commands_dispatch_cloud as _commands_dispatch_cloud
 from . import commands_dispatch_cloud_review as _commands_dispatch_cloud_review
-from . import commands_hook_copilot as _commands_hook_copilot
-from . import commands_hook_claude as _commands_hook_claude
-from . import commands_hook_runtime_state as _commands_hook_runtime_state
-from . import commands_hook_runtime_eval as _commands_hook_runtime_eval
-from . import commands_hook_runtime_review as _commands_hook_runtime_review
-from . import commands_hook_runtime_finish as _commands_hook_runtime_finish
-from . import commands_hook_generic as _commands_hook_generic
 from . import commands_hook as _commands_hook
 from . import commands_router as _commands_router
 from . import commands_isolation as _commands_isolation
+
 _SOURCE_MODULES: tuple[ModuleType, ...] = (
     __commands_shared,
     _commands_support_workspace,
@@ -87,13 +81,6 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_dispatch_admin,
     _commands_dispatch_cloud,
     _commands_dispatch_cloud_review,
-    _commands_hook_copilot,
-    _commands_hook_claude,
-    _commands_hook_runtime_state,
-    _commands_hook_runtime_eval,
-    _commands_hook_runtime_review,
-    _commands_hook_runtime_finish,
-    _commands_hook_generic,
     _commands_hook,
     _commands_router,
     _commands_isolation,

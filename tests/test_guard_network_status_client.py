@@ -175,6 +175,54 @@ def test_network_status_client_types_truncated_body_as_transport_failure(
     assert "private" not in str(error.value)
 
 
+def test_post_decodes_truncated_json_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    def fake_urlopen(_request: urllib.request.Request, *, timeout: float) -> _RawResponse:
+        del timeout
+        calls["count"] += 1
+        return _RawResponse(read_error=http.client.IncompleteRead(b'{"claimed": true}', 32))
+
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert client.claim_policy_decision({"decision_id": "1"}) is True
+    assert calls["count"] == 1
+
+
+def test_post_does_not_retry_truncated_non_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    def fake_urlopen(_request: urllib.request.Request, *, timeout: float) -> _RawResponse:
+        del timeout
+        calls["count"] += 1
+        return _RawResponse(read_error=http.client.IncompleteRead(b"private partial body", 100))
+
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(GuardDaemonTransportError, match="truncated") as error:
+        client.resolve_policy_decision({"action": "allow"})
+    assert "private" not in str(error.value)
+    assert calls["count"] == 1
+
+
+def test_network_status_retry_timeout_stays_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    def fake_urlopen(_request: urllib.request.Request, *, timeout: float) -> _RawResponse:
+        del timeout
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return _RawResponse(read_error=http.client.IncompleteRead(b"{", 8))
+        raise TimeoutError("private socket timeout")
+
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(GuardDaemonTimeoutError, match="timed out") as error:
+        client.network_status()
+    assert "private" not in str(error.value)
+    assert calls["count"] == 2
+
+
 @pytest.mark.parametrize("raw_payload", ("not-json", "[]"))
 def test_network_status_client_types_invalid_json_object(raw_payload: str) -> None:
     with pytest.raises(GuardDaemonResponseSchemaError):

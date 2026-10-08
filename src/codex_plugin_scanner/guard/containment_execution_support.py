@@ -8,8 +8,27 @@ from pathlib import Path
 from .runtime.containment_contract import ContainmentRequest
 from .runtime.containment_executor import ContainmentExecutionResult
 from .runtime.containment_health import ContainmentHealthEvidence, contained_positive_proof
-from .runtime.effect_contract import ProofRequirement
-from .runtime.effect_decision import PositiveProof
+from .runtime.effect_contract import (
+    ContainmentRequirement,
+    DecisionBasis,
+    EffectAssessment,
+    EffectBlastRadius,
+    EffectConfidence,
+    EffectEvidenceSource,
+    EffectKind,
+    EffectReversibility,
+    EffectTargetScope,
+    ProofRequirement,
+    ProofRoute,
+)
+from .runtime.effect_decision import (
+    DecisionFactor,
+    DecisionFactorSource,
+    EffectDecision,
+    EffectDecisionRequest,
+    PositiveProof,
+    evaluate_effect_decision,
+)
 
 _EXECUTION_PROOF_REQUIREMENTS = (
     ProofRequirement.OPERATION_AND_TARGETS,
@@ -58,4 +77,53 @@ def load_current_containment_health(guard_home: Path) -> tuple[ContainmentHealth
     return evidence, runtime_fingerprint
 
 
-__all__ = ["containment_positive_proof", "load_current_containment_health"]
+def contained_process_effect_decision(
+    proof: PositiveProof,
+    *,
+    operation_id: str,
+    producer_ref: str,
+    reason_code: str | None = None,
+) -> EffectDecision:
+    """Evaluate a contained process-execution effect for one local runner."""
+
+    requirements = frozenset(
+        {
+            ProofRequirement.OPERATION_AND_TARGETS,
+            ProofRequirement.WORKSPACE_IDENTITY,
+            ProofRequirement.WORKING_DIRECTORY_IDENTITY,
+            ProofRequirement.EXECUTABLE_IDENTITY,
+            ProofRequirement.LAUNCH_CHAIN,
+            ProofRequirement.PARSER_CONFIDENCE,
+            ProofRequirement.EXPECTED_EFFECTS,
+            ProofRequirement.CONTAINMENT_IDENTITY,
+        }
+    )
+    assessment = EffectAssessment(
+        kind=EffectKind.PROCESS_EXECUTION,
+        target_scope=EffectTargetScope.WORKSPACE,
+        reversibility=EffectReversibility.TRIVIALLY_RECOVERABLE,
+        blast_radius=EffectBlastRadius.WORKSPACE,
+        evidence_source=EffectEvidenceSource.CONTAINMENT,
+        confidence=EffectConfidence.STRONG,
+        containment=ContainmentRequirement.REQUIRED,
+        proof_requirements=requirements,
+    )
+    return evaluate_effect_decision(
+        EffectDecisionRequest(
+            factors=(
+                DecisionFactor(
+                    source=DecisionFactorSource.EFFECT,
+                    reason_code=reason_code or f"routine-{operation_id}-contained",
+                    basis=DecisionBasis("allow", ProofRoute.CONTAINED),
+                    operation_ref=f"operation:{operation_id}",
+                    producer_ref=producer_ref,
+                    evidence_digest=proof.binding_digest,
+                    assessment=assessment,
+                    proof=proof,
+                ),
+            )
+        )
+    )
+
+
+__all__ = ["contained_process_effect_decision", "containment_positive_proof", "load_current_containment_health"]

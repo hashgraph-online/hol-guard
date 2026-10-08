@@ -12,31 +12,96 @@ import pytest
 
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 
+pytest_plugins = [
+    "tests.bundle_first_cloud",
+    "tests.approval_mode_fixtures",
+    "tests.approval_reuse_fixtures",
+    "tests.native_runtime_fixtures",
+]
+
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"
 
-if str(SRC_PATH) not in sys.path:
+use_installed_package = os.environ.get("HOL_GUARD_TEST_USE_INSTALLED") == "1"
+if not use_installed_package and str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 if str(SUPPORT_PATH) not in sys.path:
     sys.path.insert(0, str(SUPPORT_PATH))
 
 existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
-pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path) not in pythonpath_entries]
+source_paths = (SUPPORT_PATH,) if use_installed_package else (SUPPORT_PATH, SRC_PATH)
+pythonpath_prefix = [str(path) for path in source_paths if str(path) not in pythonpath_entries]
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
 
+# Unit tests must never open real browser tabs. The flag is assigned at import
+# time so it is also inherited by helpers spawned from session-scoped fixtures,
+# and so an inherited value cannot silently re-enable launches.
+os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
+os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
+
 
 @pytest.fixture(autouse=True)
-def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep Python-engine unit tests on explicit ``off`` unless they set a mode.
+def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use the compiled authority in native regression jobs.
 
-    Production default remains ``auto``. Native-authority tests monkeypatch
-    ``native_mode`` or delete this variable themselves.
+    A caller's explicit mode is preserved, including deliberate unavailable
+    runtime tests. Regression CI supplies an exact native binary; defaulting
+    those jobs to ``off`` would disable the implementation they must test.
+    Ordinary isolated unit runs retain the explicit fail-safe surface.
     """
 
+    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
-        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
+        mode = "force" if os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" else "off"
+        monkeypatch.setenv("HOL_GUARD_NATIVE", mode)
+
+
+class _GuardCommandsProxy:
+    """Patch target that rebinds a symbol in every loaded guard module.
+
+    The hook pipeline is split across ``commands_*``/``commands_support_*``
+    modules that share bindings through the ``commands_support`` union, so a
+    name patched on ``cli.commands`` alone would never reach the moved call
+    sites. ``monkeypatch.setattr(guard_commands_module, name, value)`` fans
+    the rebind out to every loaded ``codex_plugin_scanner`` module that holds
+    the same object, and restores through the same fan-out on teardown.
+    """
+
+    @staticmethod
+    def _original(name: str) -> object:
+        sentinel = object()
+        commands = sys.modules.get("codex_plugin_scanner.guard.cli.commands")
+        if commands is not None:
+            value = getattr(commands, name, sentinel)
+            if value is not sentinel:
+                return value
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            value = getattr(module, name, sentinel)
+            if value is not sentinel:
+                return value
+        raise AttributeError(name)
+
+    def __getattr__(self, name: str) -> object:
+        return self._original(name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        original = self._original(name)
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            if getattr(module, name, None) is original:
+                setattr(module, name, value)
+
+
+guard_commands_module = _GuardCommandsProxy()
+
+
+
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -49,9 +114,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    fault_injection_enabled = os.environ.get("GUARD_FAULT_INJECTION") == "1"
     for item in items:
         for marker in invariant_markers_for_nodeid(item.nodeid):
             item.add_marker(marker)
+        if not fault_injection_enabled and item.get_closest_marker("fault_injection") is not None:
+            item.add_marker(pytest.mark.skip(reason="requires GUARD_FAULT_INJECTION=1"))
 
     if not config.getoption("--validate-test-invariants"):
         return
@@ -99,6 +167,8 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
 
     for guard_home in sorted(_test_guard_homes_with_daemon_state(test_tmp_path)):
         retire_all_guard_daemons_for_home(guard_home)
+
+
 
 
 @pytest.fixture(autouse=True)
@@ -167,7 +237,11 @@ def _isolate_daemon_background_refresh_workers(
         )
     if request.node.get_closest_marker("daemon_service_workers") is None:
         monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
-        monkeypatch.setattr(daemon_server, "start_cloud_sync_sync_worker", lambda _store, existing: existing)
+        monkeypatch.setattr(
+            daemon_server,
+            "start_cloud_sync_sync_worker",
+            lambda _store, existing, *, on_authority_changed=None: existing,
+        )
 
 
 class _FakeSystemKeyringModule:

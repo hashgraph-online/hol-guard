@@ -44,7 +44,7 @@ const BASE_REQUEST: GuardApprovalRequest = {
   policy_action: "require-reapproval",
   recommended_scope: "artifact",
   allowed_scopes: ["artifact", "workspace", "harness", "global"],
-  scope_contract_version: "guard.approval-scopes.v5",
+  scope_contract_version: "guard.approval-scopes.v6",
   scope_contract_digest: "scope-digest",
   allowed_scopes_by_action: {
     allow: ["artifact", "workspace", "harness", "global"],
@@ -85,7 +85,7 @@ const allowPayload = buildDecisionPayload({
 assert(allowPayload.scope === "global", "T-AS-01: eligible Everywhere selection is preserved");
 assert(allowPayload.workspace === undefined, "T-AS-02: artifact allow does not send a workspace");
 assert(
-  allowPayload.scope_contract_version === "guard.approval-scopes.v5" &&
+    allowPayload.scope_contract_version === "guard.approval-scopes.v6" &&
     allowPayload.scope_contract_digest === "scope-digest",
   "T-AS-03: resolution payload binds the displayed scope contract",
 );

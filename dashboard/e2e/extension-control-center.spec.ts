@@ -1,128 +1,13 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import {
-  defaultSettingsPayload,
-  emptyInventoryPayload,
-  emptyPoliciesPayload,
-  emptyReceiptsPayload,
-  freeStateSnapshot,
-} from "./fixture-states";
-
-const DAEMON_ORIGIN = "http://127.0.0.1:4175";
-const DIGEST = "a".repeat(64);
-
-function extension(id = "command.git", alias = "command.scm") {
-  const slug = id.slice("command.".length);
-  const ruleId = `${id}.hard-reset`;
-  const permissionId = `${id}.permission.hard-reset`;
-  return {
-    schema_version: 2,
-    extension_id: id,
-    version: "1.2.3",
-    name: slug === "git" ? "Git" : slug.replaceAll("-", " "),
-    description: "Canonical extension metadata <script>window.__ecc_xss = true</script>",
-    enabled: true,
-    required: false,
-    source: "built-in",
-    aliases: alias ? [alias] : [],
-    dependencies: [],
-    conflicts: [],
-    delegated_protection: null,
-    ecosystem_ids: [slug],
-    executables: [slug],
-    project_markers: [`.${slug}`],
-    reference_urls: ["https://example.com/reference"],
-    action_classes: [`${slug}.history.rewrite`],
-    risk_classes: ["destructive_shell"],
-    safer_alternatives: ["Create a checkpoint first."],
-    rule_count: 1,
-    rules: [{
-      rule_id: ruleId,
-      rule_version: 1,
-      title: "Hard reset",
-      description: "Detects destructive reset behavior.",
-      severity: "high",
-      risk_classes: ["destructive_shell"],
-      action_classes: [`${slug}.history.rewrite`],
-      safer_alternatives: ["Use a narrower restore operation."],
-      default_mode: "review",
-      matcher_kind: "ExecutableMatcher",
-      safe_variants: [{ variant_id: "status", title: "Status", matcher_kind: "ExecutableMatcher" }],
-      compatibility_fallback: false,
-    }],
-    permission_count: 1,
-    permissions: [{
-      permission_id: permissionId,
-      schema_version: 1,
-      extension_id: id,
-      implementation_version: "1.2.3",
-      label: "Hard reset",
-      description: "Controls destructive reset behavior.",
-      risk_tier: "high",
-      baseline_floor: "review",
-      default_enabled: true,
-      configurable: true,
-      fixed_reason: null,
-      typed_capabilities: [],
-      action_classes: [`${slug}.history.rewrite`],
-      rule_ids: [ruleId],
-      dependencies: [],
-      conflicts: [],
-      implied_permissions: [],
-      introduced_version: "1.0.0",
-      deprecated: false,
-      replacement_permission_id: null,
-      safer_guidance: ["Create a checkpoint first."],
-    }],
-  };
-}
-
-function catalog() {
-  return {
-    schema_version: "guard.daemon.extension-controls.v1",
-    control_schema_version: "1.0.0",
-    catalog_digest: DIGEST,
-    extensions: [extension(), extension("command.filesystem", ""), extension("command.cloud.aws", "")],
-    limits: { max_body_bytes: 1_000_000, max_controls: 4096, max_observations: 2048 },
-  };
-}
-
-function effective(overrides: Record<string, unknown> = {}) {
-  return {
-    schema_version: "guard.daemon.extension-controls.v1",
-    health: "protected",
-    revision: 7,
-    catalog_digest: DIGEST,
-    global_lockdown: false,
-    controls: [],
-    layers: [],
-    failures: [],
-    ...overrides,
-  };
-}
-
-async function mount(page: Page, options: { malformedCatalog?: boolean; effective?: Record<string, unknown>; runtime?: unknown } = {}) {
-  await page.route("**/v1/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    let body: unknown = {};
-    if (path.endsWith("/initialize")) body = { auth_token: "fixture-session-token" };
-    else if (path.endsWith("/runtime")) body = options.runtime ?? freeStateSnapshot;
-    else if (path.endsWith("/requests")) body = { items: [], next_cursor: null, total_pending_count: 0, total_count: 0, status: "pending" };
-    else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
-    else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
-    else if (path.endsWith("/settings")) body = defaultSettingsPayload;
-    else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
-    else if (path.endsWith("/extension-controls/catalog")) {
-      body = options.malformedCatalog ? { ...catalog(), extensions: [{ extension_id: "../../bad" }] } : catalog();
-    } else if (path.endsWith("/extension-controls/effective")) body = options.effective ?? effective();
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-  });
-}
-
-async function initialize(page: Page) {
-  await page.goto(`/extensions?guardDaemon=${DAEMON_ORIGIN}`);
-  await expect(page.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible();
-}
+  DAEMON_ORIGIN,
+  DIGEST,
+  effective,
+  initialize,
+  mount,
+} from "./extension-control-fixtures";
+import { freeStateSnapshot } from "./fixture-states";
 
 test("extension cards navigate through one canonical detail action", async ({ page }) => {
   await mount(page);
@@ -264,6 +149,50 @@ test("canonical Extension detail exposes managed authority without gating local 
   await expect(page.getByText("Managed Git safety")).toBeVisible();
   await expect(page.getByText(/cannot weaken this workspace restriction/)).toBeVisible();
   await expect(page.getByText(/Local protection and local tightening remain available/)).toBeVisible();
+});
+
+test("managed controls reports loading and unchanged refresh results", async ({ page }) => {
+  await mount(page, {
+    refreshEffectiveDelayMs: 50,
+    runtime: { ...freeStateSnapshot, cloud_policy_sync_error: "stale" },
+    runtimeRefresh: freeStateSnapshot,
+    effective: effective({
+      health: "degraded-unacknowledged",
+      failures: [{ code: "cloud_sync_stale", layer_kind: "signed-cloud" }],
+      layers: [{
+        schema_version: "1.0.0",
+        kind: "signed-cloud",
+        catalog_digest: DIGEST,
+        global_lockdown: false,
+        controls: [{ target_kind: "extension", target_id: "command.git", state: "enabled" }],
+      }],
+    }),
+  });
+  await initialize(page);
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await page.getByRole("tab", { name: "Managed controls" }).click();
+  await expect(page.getByText(/Guard Cloud data is stale/)).toBeVisible();
+  await page.getByRole("button", { name: "Check again", exact: true }).first().click();
+  await expect(page.getByRole("status").filter({ hasText: "No change detected" }).first()).toBeVisible();
+  const checkAgain = page.getByRole("button", { name: "Check again", exact: true }).last();
+  await checkAgain.click();
+  await expect(page.getByRole("button", { name: "Checking…", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status").filter({ hasText: "No change detected" })).toBeVisible();
+});
+
+test("managed controls reports a failed refresh without hiding the last state", async ({ page }) => {
+  await mount(page, {
+    failEffectiveRefresh: true,
+    effective: effective({
+      failures: [{ code: "cloud_sync_stale", layer_kind: "signed-cloud" }],
+    }),
+  });
+  await initialize(page);
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await page.getByRole("tab", { name: "Managed controls" }).click();
+  await page.getByRole("button", { name: "Check again", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "last verified local authority remains in force" })).toBeVisible();
+  await expect(page.getByText(/Guard Cloud data is stale/)).toBeVisible();
 });
 
 test("dirty permission drafts require confirmation before click or keyboard tab changes", async ({ page }) => {

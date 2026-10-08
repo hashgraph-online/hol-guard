@@ -9,6 +9,7 @@ use std::ptr::{null, null_mut};
 use winapi::shared::basetsd::SIZE_T;
 use winapi::shared::minwindef::{DWORD, FALSE, TRUE};
 use winapi::shared::ntdef::HANDLE;
+use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::errhandlingapi::GetLastError;
 #[cfg(test)]
 use winapi::um::fileapi::GetFileType;
@@ -20,7 +21,7 @@ use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
 use winapi::um::namedpipeapi::CreatePipe;
 use winapi::um::processthreadsapi::{
     CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
-    InitializeProcThreadAttributeList, TerminateProcess, UpdateProcThreadAttribute,
+    InitializeProcThreadAttributeList, OpenProcess, TerminateProcess, UpdateProcThreadAttribute,
     PROCESS_INFORMATION,
 };
 #[cfg(test)]
@@ -29,37 +30,101 @@ use winapi::um::synchapi::WaitForSingleObject;
 #[cfg(test)]
 use winapi::um::winbase::FILE_TYPE_UNKNOWN;
 use winapi::um::winbase::{
-    CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, HANDLE_FLAG_INHERIT, INFINITE,
-    STARTF_USESTDHANDLES, STARTUPINFOEXW, WAIT_OBJECT_0,
+    CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT,
+    HANDLE_FLAG_INHERIT, STARTF_USESTDHANDLES, STARTUPINFOEXW, WAIT_FAILED, WAIT_OBJECT_0,
 };
 use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE};
 
-// SAFETY: This module is the sole Win32 FFI boundary. Every borrowed handle is
-// valid for the duration of its call, and every newly owned handle is wrapped
-// exactly once in an RAII type before any fallible operation can return.
+#[path = "bound_open.rs"]
+mod bound_open;
+#[path = "directory_binding.rs"]
+mod directory_binding;
+#[path = "private_files.rs"]
+mod private_files;
+#[path = "process_lifecycle.rs"]
+mod process_lifecycle;
+pub use bound_open::{handle_file_id, open_bound_regular_file, regular_file_id, FileId};
+pub use directory_binding::{
+    bind_directory, bind_private_directory, create_private_directory, path_is_within,
+    PrivateDirectoryBinding,
+};
+pub use private_files::{
+    create_private_file, delete_private_file_handle, is_single_link_file, open_private_directory,
+    open_private_file, remove_file_if_same,
+};
+pub use process_lifecycle::{
+    process_start_marker, terminate_process, terminate_process_verified, wait_for_process_exit,
+};
+
+// SAFETY: This module is the sole Win32 FFI boundary; borrowed handles remain valid
+// for each call, and newly owned handles are wrapped exactly once before returning.
 
 // PROC_THREAD_ATTRIBUTE_HANDLE_LIST is missing from winapi 0.3.9's constants.
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
-const STILL_ACTIVE: DWORD = 259;
+
+fn open_process(process_id: u32, access: DWORD) -> io::Result<OwnedHandle> {
+    if process_id == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "process identifier must be non-zero",
+        ));
+    }
+    // SAFETY: Access mask and process ID are plain values; the returned handle is wrapped exactly once.
+    let process = unsafe { OpenProcess(access, FALSE, process_id) };
+    if process.is_null() {
+        Err(io::Error::last_os_error())
+    } else {
+        // SAFETY: OpenProcess returned this handle exactly once.
+        Ok(unsafe { OwnedHandle::from_raw_handle(process as RawHandle) })
+    }
+}
 
 /// A managed child process whose standard streams cannot leak to descendants.
 pub struct ManagedChild {
     process: OwnedHandle,
+    job: Option<OwnedHandle>,
     stdin: Option<std::fs::File>,
 }
 
 impl ManagedChild {
+    /// Return the process identifier associated with this owned process handle.
+    pub fn id(&self) -> u32 {
+        // SAFETY: `process` owns a valid process handle until this method returns.
+        unsafe {
+            winapi::um::processthreadsapi::GetProcessId(self.process.as_raw_handle() as HANDLE)
+        }
+    }
+
     /// Take ownership of the parent's write side of the child's standard input.
     pub fn take_stdin(&mut self) -> Option<std::fs::File> {
         self.stdin.take()
     }
 
+    /// Return the exact creation-time marker associated with this owned child.
+    pub fn start_marker(&self) -> io::Result<String> {
+        process_lifecycle::process_start_marker_for_handle(&self.process)
+    }
+
     /// Wait for the child and report whether it exited successfully.
     pub fn wait_success(&self) -> io::Result<bool> {
+        self.wait_success_with_timeout(std::time::Duration::from_secs(60 * 60 + 2))
+    }
+
+    /// Wait for the child with an explicit finite timeout.
+    pub fn wait_success_with_timeout(&self, timeout: std::time::Duration) -> io::Result<bool> {
         // SAFETY: `process` owns a live process handle until this method returns.
-        let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, INFINITE) };
-        if wait != WAIT_OBJECT_0 {
-            return Err(io::Error::last_os_error());
+        let millis = process_lifecycle::duration_to_wait_millis(timeout);
+        let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, millis) };
+        match wait {
+            WAIT_OBJECT_0 => {}
+            WAIT_TIMEOUT => {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "process wait timed out",
+                ))
+            }
+            WAIT_FAILED => return Err(io::Error::last_os_error()),
+            _ => return Err(io::Error::other("unexpected process wait result")),
         }
         let mut exit_code = 0;
         // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
@@ -73,25 +138,31 @@ impl ManagedChild {
 
     /// Terminate the child if it is still running, then wait for it to exit.
     pub fn terminate(&self) -> io::Result<()> {
-        let mut exit_code = 0;
-        // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
-        if unsafe { GetExitCodeProcess(self.process.as_raw_handle() as HANDLE, &mut exit_code) }
-            == FALSE
-        {
-            return Err(io::Error::last_os_error());
+        self.terminate_with_timeout(std::time::Duration::from_secs(2))
+    }
+
+    /// Terminate the child with an explicit finite timeout.
+    pub fn terminate_with_timeout(&self, timeout: std::time::Duration) -> io::Result<()> {
+        if let Some(job) = &self.job {
+            let _ = process_lifecycle::terminate_job(job);
         }
-        if exit_code == STILL_ACTIVE
+        if process_lifecycle::process_is_running(&self.process)? {
             // SAFETY: The process handle is owned and termination is followed by a wait.
-            && unsafe { TerminateProcess(self.process.as_raw_handle() as HANDLE, 1) } == FALSE
-        {
-            return Err(io::Error::last_os_error());
+            if unsafe { TerminateProcess(self.process.as_raw_handle() as HANDLE, 1) } == FALSE {
+                return Err(io::Error::last_os_error());
+            }
         }
+        let millis = process_lifecycle::duration_to_wait_millis(timeout);
         // SAFETY: `process` owns a live process handle until this method returns.
-        let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, INFINITE) };
-        if wait == WAIT_OBJECT_0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
+        let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, millis) };
+        match wait {
+            WAIT_OBJECT_0 => Ok(()),
+            WAIT_TIMEOUT => Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "process termination wait timed out",
+            )),
+            WAIT_FAILED => Err(io::Error::last_os_error()),
+            _ => Err(io::Error::other("unexpected process wait result")),
         }
     }
 }
@@ -139,7 +210,7 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
             null_mut(),
             null_mut(),
             TRUE,
-            CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED,
             null_mut(),
             null(),
             &mut startup.StartupInfo,
@@ -153,11 +224,27 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
     // SAFETY: CreateProcessW returned each handle exactly once on success.
     let process = unsafe { OwnedHandle::from_raw_handle(process_info.hProcess as RawHandle) };
     // SAFETY: CreateProcessW returned the thread handle exactly once on success.
-    let _thread = unsafe { OwnedHandle::from_raw_handle(process_info.hThread as RawHandle) };
+    let thread = unsafe { OwnedHandle::from_raw_handle(process_info.hThread as RawHandle) };
+    let job = process_lifecycle::create_process_job()
+        .and_then(|job| {
+            process_lifecycle::assign_process_to_job(&job, &process)?;
+            Ok(job)
+        })
+        .ok();
+    if let Err(error) = process_lifecycle::resume_thread(&thread) {
+        if let Some(job) = &job {
+            let _ = process_lifecycle::terminate_job(job);
+        }
+        // SAFETY: The process is still suspended; terminate the abandoned child.
+        let _ = unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, 1) };
+        return Err(error);
+    }
+    drop(thread);
     // SAFETY: `parent_stdin` is transferred exactly once into the File owner.
     let stdin = unsafe { std::fs::File::from_raw_handle(parent_stdin.into_raw_handle()) };
     Ok(ManagedChild {
         process,
+        job,
         stdin: Some(stdin),
     })
 }
@@ -211,11 +298,45 @@ fn create_null_handle(
     }
 }
 
+/// `MAX_PATH` includes the terminating NUL. A path already at that limit
+/// cannot be opened unless `CreateFileW` receives the `\\?\` prefix. Shorter
+/// paths stay in Win32 form: the prefix disables 8.3 expansion.
+pub(crate) const MAX_PATH: usize = 260;
+
 fn wide_path(path: &Path) -> io::Result<Vec<u16>> {
     if path.as_os_str().encode_wide().any(|unit| unit == 0) {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "NUL in path"));
     }
-    Ok(path.as_os_str().encode_wide().chain([0]).collect())
+    let wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    let mut wide = extend_over_max_path(wide, path.is_absolute());
+    wide.push(0);
+    Ok(wide)
+}
+
+fn extend_over_max_path(wide: Vec<u16>, absolute: bool) -> Vec<u16> {
+    const EXTENDED_PREFIX: &[u16] = &[92, 92, 63, 92];
+    const DEVICE_PREFIX: &[u16] = &[92, 92, 46, 92];
+    if wide.len() < MAX_PATH
+        || wide.starts_with(EXTENDED_PREFIX)
+        || wide.starts_with(DEVICE_PREFIX)
+        || !absolute
+    {
+        return wide;
+    }
+    // The verbatim prefix disables Win32 slash conversion.
+    let wide = wide
+        .into_iter()
+        .map(|unit| if unit == 47 { 92 } else { unit })
+        .collect::<Vec<_>>();
+    let mut extended = Vec::with_capacity(wide.len() + 8);
+    if wide.starts_with(&[92, 92]) {
+        extended.extend_from_slice(&[92, 92, 63, 92, 85, 78, 67, 92]);
+        extended.extend_from_slice(&wide[2..]);
+    } else {
+        extended.extend_from_slice(EXTENDED_PREFIX);
+        extended.extend_from_slice(&wide);
+    }
+    extended
 }
 
 fn command_line(executable: &OsStr, args: &[&OsStr]) -> io::Result<Vec<u16>> {
@@ -334,6 +455,82 @@ mod tests {
     const SENTINEL_ENV: &str = "HOL_GUARD_TEST_UNLISTED_HANDLE";
 
     #[test]
+    fn short_win32_path_keeps_8_3_form() {
+        let encoded = wide_path(Path::new(r"C:\Users\runneradmin\native-runtime")).unwrap();
+        assert!(!encoded.starts_with(&[92, 92, 63, 92]));
+    }
+
+    #[test]
+    fn over_max_path_drive_path_uses_verbatim_prefix() {
+        let long = format!(r"C:\Users\runneradmin\{}", "long-private-home-".repeat(14));
+        assert!(long.encode_utf16().count() >= MAX_PATH);
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let prefix: Vec<u16> = r"\\?\".encode_utf16().collect();
+        assert!(encoded.starts_with(&prefix));
+        assert!(!encoded[prefix.len()..].starts_with(&prefix));
+        assert_eq!(encoded.last().copied(), Some(0));
+    }
+
+    #[test]
+    fn over_max_path_unc_uses_unc_verbatim_prefix() {
+        let long = format!(r"\\server\share\{}", "long-private-home-".repeat(14));
+        assert!(long.encode_utf16().count() >= MAX_PATH);
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let prefix: Vec<u16> = r"\\?\UNC\".encode_utf16().collect();
+        assert!(encoded.starts_with(&prefix));
+        let tail: Vec<u16> = format!(r"server\share\{}", "long-private-home-".repeat(14))
+            .encode_utf16()
+            .chain([0])
+            .collect();
+        assert_eq!(&encoded[prefix.len()..], tail.as_slice());
+    }
+
+    #[test]
+    fn over_max_path_forward_slashes_are_normalized() {
+        let long = format!("C:/Users/runneradmin/{}", "long-private-home-".repeat(14));
+        assert!(long.encode_utf16().count() >= MAX_PATH);
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let prefix: Vec<u16> = r"\\?\".encode_utf16().collect();
+        let expected: Vec<u16> =
+            format!(r"C:\Users\runneradmin\{}", "long-private-home-".repeat(14))
+                .encode_utf16()
+                .chain([0])
+                .collect();
+        assert_eq!(&encoded[..prefix.len()], prefix.as_slice());
+        assert_eq!(&encoded[prefix.len()..], expected.as_slice());
+    }
+
+    #[test]
+    fn already_verbatim_long_path_is_not_reprefixed() {
+        let long = format!(
+            r"\\?\C:\Users\runneradmin\{}",
+            "long-private-home-".repeat(12)
+        );
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let expected: Vec<u16> = long.encode_utf16().chain([0]).collect();
+        assert_eq!(encoded, expected);
+    }
+
+    #[test]
+    fn long_device_path_is_not_rewritten() {
+        let long = format!(
+            r"\\.\C:\Users\runneradmin\{}",
+            "long-private-home-".repeat(12)
+        );
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let expected: Vec<u16> = long.encode_utf16().chain([0]).collect();
+        assert_eq!(encoded, expected);
+    }
+
+    #[test]
+    fn long_relative_path_is_not_verbatim() {
+        let long = "long-private-home-".repeat(20);
+        assert!(long.encode_utf16().count() >= MAX_PATH);
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        assert!(!encoded.starts_with(&[92, 92, 63, 92]));
+    }
+
+    #[test]
     fn inherited_handle_is_not_leaked() {
         if let Ok(raw_handle) = env::var(SENTINEL_ENV) {
             let handle = raw_handle.parse::<usize>().expect("test handle is numeric") as HANDLE;
@@ -372,7 +569,9 @@ mod tests {
         let mut stdin = child.take_stdin().unwrap();
         stdin.flush().unwrap();
         drop(stdin);
-        assert!(child.wait_success().unwrap());
+        assert!(child
+            .wait_success_with_timeout(std::time::Duration::from_secs(2))
+            .unwrap());
         env::remove_var(SENTINEL_ENV);
         drop(open_handles);
     }

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import http.client
+import json
+import time
+import urllib.error
 import urllib.request
 from collections.abc import Callable
 from typing import Protocol
@@ -27,9 +31,41 @@ def stub_authenticated_urlopen(
 ) -> None:
     """Route both public and authenticated urllib paths through one test double."""
 
-    monkeypatch.setattr(urllib.request, "urlopen", callback)
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda request, timeout=None, context=None: callback(request, timeout)
+    )
     monkeypatch.setattr(
         urllib.request,
         "build_opener",
         lambda *_handlers: _StubOpener(callback),
     )
+
+
+def urlopen_json(request: urllib.request.Request, *, timeout: float = 15, attempts: int = 3) -> dict[str, object]:
+    """Read one JSON object, retrying transient HTTP disconnects."""
+
+    last_error: BaseException | None = None
+    for _ in range(attempts):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if isinstance(payload, dict):
+                return payload
+            raise ValueError("hook response must be an object")
+        except urllib.error.HTTPError:
+            raise
+        except urllib.error.URLError as exc:
+            last_error = exc
+            time.sleep(0.05)
+        except (
+            BrokenPipeError,
+            ConnectionAbortedError,
+            ConnectionResetError,
+            TimeoutError,
+            http.client.IncompleteRead,
+            http.client.RemoteDisconnected,
+        ) as exc:
+            last_error = exc
+            time.sleep(0.05)
+    assert last_error is not None
+    raise last_error

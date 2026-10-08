@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import UNDER_COVERAGE_TRACING
 
 
 def _view(health: AuthorityHealth, revision: int) -> ExtensionControlAuthorityView:
@@ -117,6 +118,10 @@ def test_recovery_marks_runtime_fail_safe_before_reset(
     assert effective["revision"] == 4
 
 
+@pytest.mark.skipif(
+    UNDER_COVERAGE_TRACING,
+    reason="Concurrent-recovery interleavings shift under tracing; run untraced",
+)
 def test_concurrent_recovery_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     damaged = _view(AuthorityHealth.RECOVERY_REQUIRED, 9)

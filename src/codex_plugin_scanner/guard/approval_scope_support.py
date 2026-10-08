@@ -11,11 +11,13 @@ from typing import Final, Literal, cast
 
 from .models import DECISION_SCOPE_VALUES, DecisionScope
 from .package_execution_context import (
+    PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND,
     PACKAGE_EXECUTION_CONTEXT_VERSION,
     PackageExecutionContext,
     package_execution_context_from_scanner_evidence,
 )
 from .runtime.approval_context import parse_approval_context_token
+from .runtime.composio_contract import composio_requires_action_review
 from .runtime.github_workflow_runtime import approval_record_from_approval_request
 from .temporary_mcp_approvals import temporary_mcp_approval_payload
 from .trusted_local_tools import local_tool_approval_payload
@@ -34,8 +36,41 @@ _SCOPED_APPROVAL_FAMILIES = frozenset(
 )
 
 APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX: Final = "guard.approval-scopes.v"
-APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}5"
+APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}7"
 ResolutionAction = Literal["allow", "block"]
+
+_SCOPE_ACTION_ENVELOPE_KEYS: Final = (
+    "schema_version",
+    "harness",
+    "event_name",
+    "action_type",
+    "workspace_hash",
+    "tool_name",
+    "command",
+    "raw_command_text",
+    "command_text",
+    "commandText",
+    "prompt_excerpt",
+    "target_paths",
+    "network_hosts",
+    "mcp_server",
+    "mcp_tool",
+    "package_manager",
+    "package_name",
+    "command_category",
+    "package_intent_kind",
+    "package_targets",
+    "script_name",
+    "wrapper_chain",
+)
+
+_SCOPE_PACKAGE_CONTEXT_KEYS: Final = (
+    "kind",
+    "schema_version",
+    "portable",
+    "context_digest",
+    "components",
+)
 
 
 class StaleApprovalScopeContractError(ValueError):
@@ -135,6 +170,8 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
             block_scopes.append("publisher")
         block_scopes.extend(("harness", "global"))
     restrictions = ["reusable_allow_is_action_bound"]
+    if _unverified_provider_execution(request):
+        restrictions.append("provider_account_unverified_once_only")
     restrictions.append(
         "task_capability_exact_operation_only" if task_capability_eligible else "task_capability_not_enabled"
     )
@@ -182,6 +219,8 @@ def _reusable_allow_scopes(
     request: Mapping[str, object],
     artifact_scopes: tuple[DecisionScope, ...],
 ) -> tuple[DecisionScope, ...]:
+    if _unverified_provider_execution(request):
+        return artifact_scopes
     if not artifact_scopes or _request_scoped_family_key(request) is None:
         return artifact_scopes
     artifact_hash = _string_or_none(request.get("artifact_hash"))
@@ -207,6 +246,21 @@ def _reusable_allow_scopes(
     return tuple(scopes)
 
 
+def _unverified_provider_execution(request: Mapping[str, object]) -> bool:
+    if request.get("artifact_type") not in ("tool_call", "tool_action_request"):
+        return False
+    labels: list[object] = [request.get("artifact_name")]
+    envelope = request.get("action_envelope_json")
+    if isinstance(envelope, Mapping):
+        labels.extend(envelope.get(key) for key in ("tool_name", "mcp_tool"))
+    raw = request.get("raw_command_text")
+    if isinstance(raw, str) and raw.startswith("tool:"):
+        labels.append(raw.removeprefix("tool:"))
+    # Names can restrict approval scopes; they can never assert a verified
+    # account or expand authority. This profile has no trusted account resolver.
+    return any(isinstance(label, str) and composio_requires_action_review(label) for label in labels)
+
+
 def _tool_action_has_exact_context(request: Mapping[str, object]) -> bool:
     raw_command_text = _string_or_none(request.get("raw_command_text"))
     envelope = request.get("action_envelope_json")
@@ -230,7 +284,7 @@ def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, o
 def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bool:
     """Return whether an artifact allow can be saved as one exact action."""
 
-    if _allow_is_non_overridable(request):
+    if _allow_is_non_overridable(request) or _unverified_provider_execution(request):
         return False
     artifact_type = _string_or_none(request.get("artifact_type"))
     artifact_id = _string_or_none(request.get("artifact_id"))
@@ -458,32 +512,97 @@ def _scope_contract_digest(
         "task_capability_eligible": task_capability_eligible,
         "task_capability_reason_codes": task_capability_reason_codes,
         "exact_action_persistence_eligible": exact_action_persistence_eligible,
-        "request": {
-            key: _json_boundary_value(request.get(key))
-            for key in (
-                "harness",
-                "artifact_id",
-                "artifact_type",
-                "artifact_hash",
-                "policy_action",
-                "publisher",
-                "source_scope",
-                "config_path",
-                "workspace",
-                "launch_target",
-                "normalized_identity_key",
-                "action_identity",
-                "queue_group_id",
-                "transport",
-                "changed_fields",
-                "action_envelope_json",
-                "scanner_evidence",
-                "raw_command_text",
-            )
-        },
+        "request": _scope_contract_request_material(request),
     }
     encoded = json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _scope_contract_request_material(request: Mapping[str, object]) -> dict[str, object]:
+    """Return only values that can change authorization scope or its binding.
+
+    Queue rows are refreshed on every retry. Delivery metadata, risk copy, and
+    scanner explanations can legitimately change while the action remains the
+    same; including them made a browser decision stale before it could resolve.
+    Stable action fields, artifact identity, policy posture, package context,
+    and workflow lineage remain bound so a materially different action still
+    requires a fresh contract.
+    """
+
+    return {
+        "harness": _json_boundary_value(request.get("harness")),
+        "artifact_id": _json_boundary_value(request.get("artifact_id")),
+        "artifact_type": _json_boundary_value(request.get("artifact_type")),
+        "artifact_hash": _json_boundary_value(request.get("artifact_hash")),
+        "policy_action": _json_boundary_value(request.get("policy_action")),
+        "publisher": _json_boundary_value(request.get("publisher")),
+        # These fields feed runtime_tool_action_exact_match_context and must
+        # invalidate a browser contract when the target context changes.
+        "source_scope": _json_boundary_value(request.get("source_scope")),
+        "config_path": _json_boundary_value(request.get("config_path")),
+        "wrapper_chain": _scope_wrapper_chain_material(request),
+        "permission_mode": _scope_permission_mode_material(request),
+        "workspace": _json_boundary_value(_derived_workspace_scope_target(request)),
+        "action_identity": _json_boundary_value(request.get("action_identity")),
+        "action_envelope": _scope_action_envelope_material(request.get("action_envelope_json")),
+        "scanner_evidence": _scope_scanner_evidence_material(request.get("scanner_evidence")),
+        "raw_command_text": _json_boundary_value(request.get("raw_command_text")),
+    }
+
+
+def _scope_action_envelope_material(value: object) -> dict[str, object] | None:
+    if not isinstance(value, Mapping):
+        return None
+    material = {key: _json_boundary_value(value.get(key)) for key in _SCOPE_ACTION_ENVELOPE_KEYS}
+    raw_payload = value.get("raw_payload_redacted")
+    if isinstance(raw_payload, Mapping):
+        permission_mode = raw_payload.get("permission_mode")
+        if permission_mode is None:
+            permission_mode = raw_payload.get("permissionMode")
+        material["permission_mode"] = _json_boundary_value(permission_mode)
+    return material
+
+
+def _scope_wrapper_chain_material(request: Mapping[str, object]) -> list[object]:
+    wrapper_chain = request.get("wrapper_chain")
+    envelope = request.get("action_envelope_json")
+    if (not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str)) and isinstance(envelope, Mapping):
+        wrapper_chain = envelope.get("wrapper_chain")
+    if not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str | bytes):
+        return []
+    return [_json_boundary_value(item) for item in wrapper_chain]
+
+
+def _scope_permission_mode_material(request: Mapping[str, object]) -> object:
+    envelope = request.get("action_envelope_json")
+    if not isinstance(envelope, Mapping):
+        return None
+    raw_payload = envelope.get("raw_payload_redacted")
+    if not isinstance(raw_payload, Mapping):
+        return None
+    permission_mode = raw_payload.get("permission_mode")
+    if permission_mode is None:
+        permission_mode = raw_payload.get("permissionMode")
+    return _json_boundary_value(permission_mode)
+
+
+def _scope_scanner_evidence_material(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return []
+    material: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        if item.get("kind") == PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND:
+            material.append({key: _json_boundary_value(item.get(key)) for key in _SCOPE_PACKAGE_CONTEXT_KEYS})
+        elif item.get("source") == "github_workflow_approval_record":
+            material.append(
+                {
+                    "source": "github_workflow_approval_record",
+                    "record": _json_boundary_value(item.get("record")),
+                }
+            )
+    return material
 
 
 def _github_workflow_task_capability_eligible(request: Mapping[str, object]) -> bool:

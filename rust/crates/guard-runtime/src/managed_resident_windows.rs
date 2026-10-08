@@ -1,17 +1,20 @@
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::path::Path;
+use std::time::Instant;
 
-use guard_runtime_windows_process::spawn_managed_child;
+use guard_runtime_windows_process::{spawn_managed_child, ManagedChild};
 
-use super::hex_token;
+use super::containment::hex_token;
 
 pub(crate) fn spawn_managed(
     state_base: &Path,
     generation: u64,
     digest: &str,
     token: &[u8],
-) -> Result<(), String> {
+    owner_process_id: u32,
+    overall_deadline: Instant,
+) -> Result<ManagedChild, String> {
     let executable =
         std::env::current_exe().map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
     let arguments = vec![
@@ -20,6 +23,8 @@ pub(crate) fn spawn_managed(
         state_base.as_os_str().to_owned(),
         OsString::from("--generation"),
         OsString::from(generation.to_string()),
+        OsString::from("--owner-process-id"),
+        OsString::from(owner_process_id.to_string()),
         OsString::from("--runtime-sha256"),
         OsString::from(digest),
     ];
@@ -27,25 +32,37 @@ pub(crate) fn spawn_managed(
     let mut child = spawn_managed_child(&executable, &argument_refs)
         .map_err(|_| "native_resident_spawn_failed".to_owned())?;
     let write_result = {
-        let mut stdin = child
-            .take_stdin()
-            .ok_or_else(|| "native_resident_spawn_stdin_failed".to_owned())?;
+        let Some(mut stdin) = child.take_stdin() else {
+            super::containment::terminate_spawned_managed(
+                &mut child,
+                overall_deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(super::MANAGED_STOP_TIMEOUT),
+            )?;
+            return Err("native_resident_spawn_stdin_failed".to_owned());
+        };
         stdin
             .write_all(hex_token(token).as_bytes())
             .and_then(|()| stdin.write_all(b"\n"))
             .and_then(|()| stdin.flush())
     };
     if write_result.is_err() {
-        let _ = child.terminate();
+        super::containment::terminate_spawned_managed(
+            &mut child,
+            overall_deadline
+                .saturating_duration_since(Instant::now())
+                .min(super::MANAGED_STOP_TIMEOUT),
+        )?;
         return Err("native_resident_spawn_auth_failed".to_owned());
     }
-    Ok(())
+    Ok(child)
 }
 
 pub(crate) fn supervise_managed(
     state_base: &Path,
     generation: u64,
     expected_digest: &str,
+    _owner_process_id: u32,
     token: &[u8],
 ) -> Result<(), String> {
     let executable =
@@ -72,18 +89,20 @@ fn supervise_managed_child(
     let argument_refs: Vec<&OsStr> = arguments.iter().map(OsString::as_os_str).collect();
     let mut child = spawn_managed_child(executable, &argument_refs)
         .map_err(|_| "native_resident_spawn_failed".to_owned())?;
-    let mut liveness_writer = child
-        .take_stdin()
-        .ok_or_else(|| "native_resident_spawn_stdin_failed".to_owned())?;
+    let mut liveness_writer = child.take_stdin().ok_or_else(|| {
+        let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
+        "native_resident_spawn_stdin_failed".to_owned()
+    })?;
     let write_result = liveness_writer
         .write_all(hex_token(token).as_bytes())
         .and_then(|()| liveness_writer.write_all(b"\n"))
         .and_then(|()| liveness_writer.flush());
     if write_result.is_err() {
-        let _ = child.terminate();
+        let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
         return Err("native_resident_spawn_auth_failed".to_owned());
     }
-    let status_result = child.wait_success();
+    let status_result =
+        child.wait_success_with_timeout(super::MANAGED_IDLE_TIMEOUT + super::MANAGED_STOP_TIMEOUT);
     drop(liveness_writer);
     let status_success =
         status_result.map_err(|_| "native_resident_supervisor_wait_failed".to_owned())?;

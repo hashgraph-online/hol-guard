@@ -1,0 +1,133 @@
+"""Build command-extension catalog values from MCP server contributions."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Final
+
+from .command_extension_specs import CommandExtensionValues
+from .command_permission_catalog import permissions_for_action_classes
+from .mcp_server_contribution import (
+    catalog_id_for_mcp_id,
+    direct_mcp_command_name,
+    load_mcp_contribution_payloads,
+    remote_mcp_endpoint_identity,
+)
+
+# Runnable example per package launcher. `-y` is an npx flag (`uvx -y <pkg>` fails);
+# the other forms match the launcher subcommands mcp_protection recognizes.
+# Keep in sync with package_launch_example in native_command_source_mcp.rs.
+_PACKAGE_LAUNCH_PREFIX: Final[dict[str, str]] = {
+    "npx": "npx -y",
+    "npm": "npm exec --yes",
+    "pnpm": "pnpm dlx",
+    "yarn": "yarn dlx",
+    "pipx": "pipx run",
+}
+
+
+def package_launch_example(command: str, package: str) -> str:
+    return f"{_PACKAGE_LAUNCH_PREFIX.get(command, command)} {package}"
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str) and item.strip())
+
+
+def _encode_mcp_suffix(raw: str) -> str:
+    encoded: list[str] = []
+    for character in raw:
+        if character == "x":
+            encoded.append("xx")
+        elif character == ".":
+            encoded.append("xd")
+        elif character == "-":
+            encoded.append("xh")
+        else:
+            encoded.append(character)
+    return "".join(encoded)
+
+
+def _action_class_for(mcp_id: str) -> str:
+    return f"mcp {_encode_mcp_suffix(mcp_id.removeprefix('mcp.'))} tool"
+
+
+def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues:
+    mcp_id = payload.get("id")
+    if not isinstance(mcp_id, str):
+        raise ValueError("MCP contribution is missing id")
+    launch = payload.get("launch")
+    if not isinstance(launch, dict):
+        raise ValueError(f"{mcp_id} is missing launch metadata")
+    launch_kind = launch.get("kind")
+    executables: tuple[str, ...]
+    if launch_kind == "package-launcher":
+        command = launch.get("command")
+        package = launch.get("package")
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError(f"{mcp_id} launch command is invalid")
+        if not isinstance(package, str) or not package.strip():
+            raise ValueError(f"{mcp_id} launch package is invalid")
+        example = package_launch_example(command, package)
+        executables = (command,)
+    elif launch_kind == "direct-command":
+        command = launch.get("command")
+        if not isinstance(command, str) or direct_mcp_command_name(command) != command:
+            raise ValueError(f"{mcp_id} direct command is invalid")
+        example = command
+        executables = (command,)
+    elif launch_kind == "remote-http":
+        remote_url = launch.get("url")
+        example = remote_mcp_endpoint_identity(remote_url)
+        if example is None:
+            raise ValueError(f"{mcp_id} remote launch URL is invalid")
+        executables = ()
+    else:
+        raise ValueError(f"{mcp_id} launch kind is invalid")
+    name = payload.get("name")
+    description = payload.get("description")
+    version = payload.get("version")
+    if not isinstance(name, str) or not isinstance(description, str) or not isinstance(version, str):
+        raise ValueError(f"{mcp_id} is missing catalog metadata")
+    safer = _string_tuple(payload.get("saferAlternatives"))
+    if not safer:
+        raise ValueError(f"{mcp_id} requires safer alternatives")
+    risk_classes = _string_tuple(payload.get("riskClasses"))
+    if not risk_classes:
+        raise ValueError(f"{mcp_id} requires risk classes")
+    extension_id = catalog_id_for_mcp_id(mcp_id)
+    action_classes = (_action_class_for(mcp_id),)
+    return {
+        "extension_id": extension_id,
+        "version": version,
+        "name": name,
+        "description": description,
+        "action_classes": action_classes,
+        "risk_classes": risk_classes,
+        "safer_alternatives": safer,
+        "rules": (),
+        "permissions": permissions_for_action_classes(
+            extension_id,
+            version,
+            action_classes,
+            safer,
+            configurable=False,
+            example_command=example,
+        ),
+        "reference_urls": _string_tuple(payload.get("referenceUrls")),
+        "source": "built-in",
+        "required": False,
+        "delegated_protection": None,
+        "ecosystem_ids": (),
+        "executables": executables,
+        "project_markers": (),
+    }
+
+
+def mcp_command_extension_values() -> tuple[CommandExtensionValues, ...]:
+    return tuple(_values_for_payload(payload) for payload in load_mcp_contribution_payloads())
+
+
+MCP_COMMAND_EXTENSION_VALUES: Final[tuple[CommandExtensionValues, ...]] = mcp_command_extension_values()

@@ -40,6 +40,12 @@ def _windows_sid_class(sid: str | None, owner_sid: str | None) -> str:
     return "other"
 
 
+def _windows_owner_is_trusted(actual_sid: str, owner_sid: str) -> bool:
+    """Accept only owners that already control the local Windows host."""
+
+    return actual_sid in {owner_sid, _WINDOWS_SYSTEM_SID, _WINDOWS_ADMINISTRATORS_SID}
+
+
 def _windows_acl_not_private(
     *,
     protected: bool | None = None,
@@ -150,8 +156,9 @@ def _verify_owner(
     ctypes_module: Any,
     wintypes: Any,
 ) -> None:
-    if _sid_string(owner, convert_sid, local_free, ctypes_module, wintypes) != owner_sid:
-        raise _windows_acl_not_private(sid_class="other")
+    actual_sid = _sid_string(owner, convert_sid, local_free, ctypes_module, wintypes)
+    if not _windows_owner_is_trusted(actual_sid, owner_sid):
+        raise _windows_acl_not_private(sid_class=_windows_sid_class(actual_sid, owner_sid))
 
 
 def _verify_protected_control(descriptor: Any, advapi32: Any, ctypes_module: Any, wintypes: Any) -> bool:
@@ -294,8 +301,58 @@ def _verify_acl_entry(
     return sid
 
 
+def _windows_verify_private_owner(handle: Any, *, owner_sid: str) -> None:
+    """Reject a foreign owner before changing an existing object's DACL."""
+
+    from ctypes import wintypes
+
+    api = _snapshot_api()
+    advapi32 = api._windows_dll("advapi32")
+    descriptor = ctypes.c_void_p()
+    owner = ctypes.c_void_p()
+    get_security_info = advapi32.GetSecurityInfo
+    get_security_info.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    get_security_info.restype = wintypes.DWORD
+    if (
+        int(
+            get_security_info(
+                handle,
+                _WINDOWS_SE_FILE_OBJECT,
+                _WINDOWS_OWNER_SECURITY_INFORMATION,
+                ctypes.byref(owner),
+                None,
+                None,
+                None,
+                ctypes.byref(descriptor),
+            )
+        )
+        != 0
+        or not descriptor
+        or not owner
+    ):
+        raise NativePolicySnapshotError("native_policy_windows_acl_verify_failed")
+    kernel32 = api._windows_dll("kernel32")
+    local_free = kernel32.LocalFree
+    local_free.argtypes = [ctypes.c_void_p]
+    local_free.restype = ctypes.c_void_p
+    try:
+        convert_sid = _sid_converter(advapi32, ctypes, wintypes)
+        _verify_owner(owner, owner_sid, convert_sid, local_free, ctypes, wintypes)
+    finally:
+        local_free(descriptor)
+
+
 def _windows_verify_private_dacl(handle: Any, *, owner_sid: str, directory: bool) -> None:
-    """Require a protected DACL containing only owner and SYSTEM full access."""
+    """Require a protected DACL containing only the current principal and SYSTEM."""
 
     from ctypes import wintypes
 

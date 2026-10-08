@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
@@ -196,6 +196,7 @@ def record_local_custom_extension_mutation(
     expected_revision: int,
     command_states: Mapping[str, LocalCliCommandState],
     now: str,
+    provider_updates: Sequence[tuple[str, str, int]] = (),
 ) -> int:
     """Commit a local grant and its continuity tombstone/state/receipt atomically."""
 
@@ -268,17 +269,20 @@ def record_local_custom_extension_mutation(
                 CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: raw,
             },
             observation_preconditions={identity.cli_id: _observation_precondition(local)},
+            provider_updates={identity.cli_id: provider_updates} if provider_updates else None,
         )
     except ValueError as error:
-        if str(error) == "local_cli_revision_conflict":
+        if str(error) in {"local_cli_revision_conflict", "provider_action_revision_conflict"}:
             raise
         raise CustomExtensionContinuityError("local continuity state changed during local mutation") from error
 
 
-def _parse_observation(value: object) -> dict[str, object]:
+def _validated_observation_frame(value: object, *, schema_version: str) -> tuple[dict[str, object], list[object]]:
+    """Validate the shared observation frame and return (payload, raw items)."""
+
     if not isinstance(value, dict) or set(value) != _TOP_LEVEL_FIELDS:
         raise CustomExtensionContinuityError("continuity observation contains unsupported fields")
-    if value.get("schemaVersion") != CUSTOM_EXTENSION_CONTINUITY_SCHEMA:
+    if value.get("schemaVersion") != schema_version:
         raise CustomExtensionContinuityError("unsupported continuity observation schema")
     revision = value.get("revision")
     if type(revision) is not int or cast(int, revision) < 1:
@@ -292,6 +296,11 @@ def _parse_observation(value: object) -> dict[str, object]:
     raw_items = value.get("items")
     if not isinstance(raw_items, list) or len(raw_items) > _MAX_ITEMS:
         raise CustomExtensionContinuityError("continuity item limit exceeded")
+    return value, cast(list[object], raw_items)
+
+
+def _parse_observation(value: object) -> dict[str, object]:
+    payload, raw_items = _validated_observation_frame(value, schema_version=CUSTOM_EXTENSION_CONTINUITY_SCHEMA)
     items: list[dict[str, object]] = []
     seen: set[str] = set()
     for raw_item in raw_items:
@@ -305,7 +314,7 @@ def _parse_observation(value: object) -> dict[str, object]:
             raise CustomExtensionContinuityError("invalid continuity identity hash")
         seen.add(cli_id)
         items.append({"cliId": cli_id, "identityHash": identity_hash, "settings": _settings(raw_item.get("settings"))})
-    return {**value, "items": items}
+    return {**payload, "items": items}
 
 
 def _identity_from_local(local: dict[str, object]) -> UnlistedCliIdentity:

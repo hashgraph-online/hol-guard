@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from .manager import (
+    _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
     GuardDaemonHookFailureKind,
     clear_guard_daemon_recovery_reservation,
     recover_guard_daemon_after_hook_failure,
@@ -32,6 +33,7 @@ def main() -> int:
             guard_home_path,
             home_dir=Path(home_dir),
             failure_kind=failure_kind,
+            recovery_lock_timeout_seconds=_GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
         )
     finally:
         with suppress(OSError, RuntimeError, ValueError):

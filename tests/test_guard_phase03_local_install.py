@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import io
 import json
 import os
@@ -40,10 +41,16 @@ from tests.update_context_test_support import (
 
 
 @pytest.fixture(autouse=True)
-def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
+def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"test-runtime")
+    runtime.chmod(0o700)
     monkeypatch.setattr(update_commands, "build_trusted_update_context", build_legacy_update_context)
     monkeypatch.setattr(update_commands, "_status_installed_distribution", build_legacy_status_distribution)
     monkeypatch.setattr(update_commands, "stage_trusted_wheel", stage_legacy_wheel)
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: runtime)
+    monkeypatch.setattr(update_commands, "resolve_guard_home", lambda: tmp_path / "guard-home")
+    monkeypatch.setattr(update_commands, "_retire_native_resident_before_update", lambda _guard_home: True)
     monkeypatch.setattr(
         update_commands,
         "record_local_wheel_receipt",
@@ -129,6 +136,76 @@ def test_update_blocks_protected_authority_downgrade_before_installer_execution(
     assert payload["status"] == "blocked"
     assert payload["changed"] is False
     assert payload["reason_code"] == "extension_control_authority_downgrade_blocked"
+
+
+def test_update_retires_native_resident_before_installer_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.2.3-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"new-runtime")
+    runtime.chmod(0o700)
+    events: list[tuple[str, object]] = []
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.1")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.2.3")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.3")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: runtime)
+    monkeypatch.setattr(
+        update_commands,
+        "_retire_native_resident_before_update",
+        lambda guard_home: events.append(("retire", guard_home)) or True,
+    )
+    monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", lambda **_: (None, None))
+    monkeypatch.setattr(update_commands, "_repair_supported_harnesses", lambda **_: ([], []))
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        events.append(("install", command))
+        return subprocess.CompletedProcess(command, 0, "installed local wheel", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(
+        dry_run=False,
+        wheel=str(wheel),
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert exit_code == 0, json.dumps(payload, sort_keys=True)
+    assert payload["status"] == "updated"
+    assert [event[0] for event in events] == ["retire", "install"]
+
+
+def test_update_aborts_when_native_resident_retirement_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.2.3-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.1")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.3")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(update_commands, "_retire_native_resident_before_update", lambda _guard_home: False)
+    monkeypatch.setattr(
+        update_commands.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("installer must not execute")),
+    )
+
+    payload, exit_code = update_commands.run_guard_update(
+        dry_run=False,
+        wheel=str(wheel),
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert payload["changed"] is False
+    assert payload["reason_code"] == "update_native_resident_retirement_failed"
 
 
 def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -548,7 +625,7 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     context.guard_home.mkdir(parents=True)
     (context.guard_home / "daemon-state.json").write_text('{"port":5474}', encoding="utf-8")
     retirement_checks = iter([False, True])
-    monotonic_values = iter([0.0, 6.0, 10.0])
+    monotonic_values = iter([0.0, 6.0, 10.0, 10.0])
     retire_calls: list[Path] = []
 
     def fake_retire(guard_home: Path) -> list[int]:
@@ -574,8 +651,15 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     monkeypatch.setattr(manager, "publish_approval_center_locator", lambda _home, _url: None)
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", fake_ensure)
     monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5474")
-    monkeypatch.setattr(update_commands.time, "monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
+    clock = SimpleNamespace(monotonic=lambda: next(monotonic_values), sleep=lambda _seconds: None)
+    script_globals = {
+        "__builtins__": {
+            **vars(builtins),
+            "__import__": lambda name, *args, **kwargs: (
+                clock if name == "time" else builtins.__import__(name, *args, **kwargs)
+            ),
+        }
+    }
     monkeypatch.setattr(
         update_commands.sys,
         "stdin",
@@ -590,7 +674,7 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     )
 
     with pytest.raises(SystemExit) as exit_info:
-        exec(update_commands._DAEMON_REFRESH_SCRIPT, {})
+        exec(update_commands._DAEMON_REFRESH_SCRIPT, script_globals)
 
     assert exit_info.value.code == 0
     payload = json.loads(capsys.readouterr().out)

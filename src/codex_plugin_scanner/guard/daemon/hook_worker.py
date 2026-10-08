@@ -9,13 +9,18 @@ Security:
 - Never falls back to legacy CLI after a worker exception for a
   request that supplied only ``guard_source_ref`` without full output.
 - Never calls ``run_guard_command()``.
-- Native PostToolUse is decided by Rust for ``auto``/``force``. Native failure
-  fails closed instead of spilling into Python review. The Python engine is
-  constructed only for ``off``/``shadow``.
-- Supported generic PreToolUse is decided by Rust. Native failure fails closed
-  in auto/force; explicit off/shadow keeps its compatibility path.
-  Native review and block results are rendered mechanically and never escape to
-  the Python semantic CLI path.
+- Native PostToolUse is decided by Rust for ``auto``/``force``. When review
+  cannot complete, PostToolUse continues; protected PreToolUse pauses unless
+  acknowledged recording-only mode applies. Explicit ``off`` is a fail-safe
+  disablement with no Python semantic fallback.
+- Supported generic PreToolUse is decided by Rust. Native failure denies
+  protected actions without acknowledged recording-only mode authority.
+  Explicit off/shadow have no production semantic fallback. Native block
+  results stay mechanical. A command-policy authority block includes a local
+  repair link and does not rebuild protection from the hook. The current
+  action stays denied, and this worker never calls the CLI.
+  Native review pauses the tool and queues an approval-center request; it
+  never escapes to the Python semantic CLI path.
 """
 
 from __future__ import annotations
@@ -24,40 +29,38 @@ import time
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, final
+from typing import TYPE_CHECKING, Protocol, cast, final
 
 from ..cli.commands_support_command_activity import (
     hook_post_succeeded,
     record_post_hook_command_activity_best_effort,
 )
+from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..config import load_guard_config
+from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
-from ..native_pretool import review_pre_tool_native
-from ..native_route_receipt import record_python_semantic_hook_route
-from ..native_runtime import native_mode, native_runtime_status, review_post_tool_native
-from ..protection_posture import protection_is_off
-from ..runtime.hook_content_scanner import ContentScanner
-from ..runtime.hook_decision_cache import HookDecisionCache
-from ..runtime.hook_review_engine import HookReviewEngine
-from ..runtime.hook_review_types import HookOutputSummary, HookPayloadKind, HookReviewRequest, HookSourceFileRef
+from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
+from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
+from ..native_runtime import NativeRuntimeStatus, native_mode, native_runtime_status, review_post_tool_native
+from ..runtime.hook_review_types import (
+    HookReviewRequest,
+)
 from .hook_request_parsing import (
     build_hook_review_request,
-    parse_output_summary,
-    parse_source_ref,
-    payload_kind,
-    pre_tool_command,
     runtime_hook_event_name,
 )
+from .hook_worker_native import HookWorkerNativeMixin
+from .hook_worker_readiness import prepare_workspace_policy
 from .hook_worker_responses import (
-    harness_json_from_native_post_tool,
-    harness_json_from_native_pre_tool,
     harness_json_from_review_response,
-    post_tool_fail_safe_response,
-    post_tool_native_block_response,
+)
+from .hook_worker_responses import (
+    post_tool_unavailable_response as _post_tool_unavailable_response,
 )
 
 if TYPE_CHECKING:
+    from ..config import GuardConfig
     from ..store import GuardStore
 
 
@@ -72,93 +75,149 @@ class CommandActivityWriter(Protocol):
     ) -> bool: ...
 
 
-class HookWorkerUnsupported(RuntimeError):  # noqa: N818
-    """Raised only for explicit off/shadow compatibility requests."""
-
-
-_NATIVE_POLICY_READY_TIMEOUT_SECONDS = 0.25
+# Startup priming keeps the publish bound so a slow first publication never
+# delays worker construction. Requests that arrive during a resident restart
+# wait on the readiness bound instead, which needs a wider window everywhere:
+# republication is slower on macOS and Windows, and Linux CI runners under
+# parallel shard load miss the publish bound too.
+_NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
+_NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0
+# Session setup uses this bounded window before any timed runtime hook starts.
+WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS = _NATIVE_POLICY_READY_TIMEOUT_SECONDS
+_TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
+    {
+        "native_policy_snapshot_resident_changed",
+        "native_resident_restart_budget_busy",
+        "native_command_control_mutation_in_progress",
+        "native_business_source_mutation_in_progress",
+    }
+)
 
 
 @final
-class HookWorker:
+class HookWorker(HookWorkerNativeMixin):
     """Resident hook review worker for the daemon."""
 
-    def __init__(self, *, store: GuardStore, activity_writer: CommandActivityWriter | None = None):
+    def __init__(
+        self,
+        *,
+        store: GuardStore,
+        workspace: Path | None = None,
+        activity_writer: CommandActivityWriter | None = None,
+        capture_writer: CodexBindingCaptureWriter | None = None,
+        wait_for_native_policy: bool = True,
+        publish_native_policy: bool = True,
+        start_native_policy: bool = True,
+    ):
         self.store = store
         self.guard_home = store.guard_home
         self.activity_writer = activity_writer
-        self._engine: HookReviewEngine | None = None
-        self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
-        mode = native_mode()
-        if mode in {"auto", "force", "shadow"}:
-            self.policy_snapshot_publisher.start()
-        if mode in {"auto", "force"}:
-            wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
-            if callable(wait_until_ready):
-                _ = wait_until_ready(time.monotonic() + 0.25)
+        self.capture_writer = capture_writer
+        self._publish_native_policy = publish_native_policy
+        self._last_native_decision_receipt: dict[str, object] | None = None
         from .hook_metrics import HookMetricsRecorder
 
         self.metrics = HookMetricsRecorder()
+        self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
+        mode = native_mode()
+        if mode in {"auto", "force", "shadow"}:
+            # Resolve adapter modules before a managed hook request starts
+            # its deadline. This lookup grants no authority; native policy
+            # readiness remains the enforcement barrier.
+            from ..adapters import list_adapters
+
+            _ = list_adapters()
+        self._owns_policy_snapshot_publisher = publish_native_policy and mode in {"auto", "force", "shadow"}
+        if self._owns_policy_snapshot_publisher and start_native_policy:
+            if workspace is not None:
+                self.policy_snapshot_publisher.register_workspace(workspace)
+            self.policy_snapshot_publisher.start()
+        if wait_for_native_policy and start_native_policy and mode in {"auto", "force"}:
+            wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
+            if callable(wait_until_ready):
+                _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
 
     @property
-    def engine(self) -> HookReviewEngine:
-        if self._engine is None:
-            self._engine = HookReviewEngine(
-                store=self.store,
-                scanner=ContentScanner(),
-                cache=HookDecisionCache(self.store),
-                config_loader=self._load_config,
-                metrics=self.metrics,
-            )
-        return self._engine
+    def last_native_decision_receipt(self) -> dict[str, object] | None:
+        """Return the receipt produced by the most recent native review."""
 
-    def _load_config(self, guard_home: Path, workspace: Path | None):
+        return self._last_native_decision_receipt
+
+    def _load_config(self, guard_home: Path, workspace: Path | None) -> GuardConfig:
         return load_guard_config(guard_home, workspace=workspace)
 
-    def close(self) -> None:
-        """Stop the asynchronous native policy publisher with the worker."""
+    def _review_raw_hook_native(
+        self,
+        *,
+        payload: dict[str, object],
+        harness: str,
+        event: str,
+        guard_home: Path,
+        home_dir: Path,
+        cwd: Path | None,
+        source_ref_external_allowed: bool,
+        observe_mode: bool,
+        deadline: float | None,
+        policy_snapshot: Mapping[str, object] | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, object] | None:
+        runtime_status = self._native_runtime_status()
+        return review_raw_hook_native(
+            payload=payload,
+            harness=harness,
+            event=event,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            cwd=cwd,
+            source_ref_external_allowed=source_ref_external_allowed,
+            observe_mode=observe_mode,
+            deadline=deadline,
+            policy_snapshot=policy_snapshot,
+            runtime_status=runtime_status,
+            **({"request_id": request_id} if request_id is not None else {}),
+        )
 
-        self.policy_snapshot_publisher.close()
+    def _native_runtime_status(self) -> NativeRuntimeStatus:
+        current_runtime_status = getattr(self.policy_snapshot_publisher, "current_runtime_status", None)
+        if callable(current_runtime_status):
+            status = current_runtime_status()
+            if status is not None:
+                return cast(NativeRuntimeStatus, status)
+        return native_runtime_status()
+
+    def close(self, *, deadline_monotonic: float | None = None) -> bool:
+        """Stop the publisher only when this worker started publication."""
+
+        return self.close_contained(deadline_monotonic=deadline_monotonic)
+
+    def close_contained(self, *, deadline_monotonic: float | None = None) -> bool:
+        """Confirm this worker's publisher has stopped before releasing ownership."""
+
+        if self._owns_policy_snapshot_publisher:
+            close_contained = getattr(self.policy_snapshot_publisher, "close_contained", None)
+            if callable(close_contained):
+                if deadline_monotonic is None:
+                    return close_contained() is not False
+                return close_contained(deadline_monotonic=deadline_monotonic) is not False
+            if deadline_monotonic is None:
+                return self.policy_snapshot_publisher.close() is not False
+            return self.policy_snapshot_publisher.close(deadline_monotonic=deadline_monotonic) is not False
+        return True
 
     def prepare_workspace_policy(
+        self, workspace: Path | None = None, *, deadline: float | None = None
+    ) -> dict[str, object] | None:
+        return prepare_workspace_policy(self, workspace, deadline=deadline, now=time.monotonic())
+
+    def _native_policy_snapshot(
         self,
         workspace: Path | None = None,
         *,
         deadline: float | None = None,
     ) -> dict[str, object] | None:
-        """Prepare an ACKed workspace policy before admitting a native hook.
-
-        Workspace overlays are published asynchronously, so the first hook
-        for a workspace must complete this same barrier used by normal hook
-        evaluation. The barrier is always capped at the native readiness
-        budget; a timeout returns ``None`` and callers fail closed.
-        """
-
-        if native_mode() not in {"auto", "force", "shadow"}:
-            return None
-        register_workspace = getattr(self.policy_snapshot_publisher, "register_workspace", None)
-        if callable(register_workspace):
-            _ = register_workspace(workspace)
-        self.policy_snapshot_publisher.start()
-        if native_mode() in {"auto", "force"}:
-            wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
-            if callable(wait_until_ready):
-                readiness_deadline = time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS
-                if deadline is not None:
-                    readiness_deadline = min(readiness_deadline, deadline)
-                if not wait_until_ready(readiness_deadline):
-                    return None
-        current_snapshot_binding = getattr(self.policy_snapshot_publisher, "current_snapshot_binding", None)
-        if callable(current_snapshot_binding):
-            snapshot = current_snapshot_binding()
-            return snapshot if isinstance(snapshot, dict) else None
-        snapshot = self.policy_snapshot_publisher.current_snapshot()
-        return snapshot if isinstance(snapshot, dict) else None
-
-    def _native_policy_snapshot(self, workspace: Path | None = None) -> dict[str, object] | None:
         """Return only the last resident-ACKed snapshot for native hooks."""
 
-        return self.prepare_workspace_policy(workspace)
+        return self.prepare_workspace_policy(workspace, deadline=deadline)
 
     def review_http_payload(
         self,
@@ -170,22 +229,43 @@ class HookWorker:
         guard_home: Path,
         workspace: Path | None,
         deadline: float | None = None,
+        claim_saved_approval: bool = True,
+        claimed_saved_allow_hash: str | None = None,
+        claimed_approval_request_id: str | None = None,
     ) -> dict[str, object]:
         """Review a hook HTTP payload and return harness JSON.
 
-        ``off`` keeps the Python engine authoritative. ``shadow`` evaluates
-        Python first and exercises native only as non-authoritative evidence.
         ``auto`` and ``force`` require the native runtime. When native is
-        unavailable or returns no result, supported PreToolUse and PostToolUse
-        fail closed.
+        unavailable or returns no result, protected PreToolUse requests deny.
+        Acknowledged Watch and PostToolUse continue without claiming evaluated
+        protection. Local inspection needs the same trusted decision boundary.
+        ``off`` and ``shadow`` remain fail-safe without Python semantics.
         """
+        # Keep caller metadata intact across the resident boundary. The outer
+        # hook bridge stamps this field; a direct daemon caller has no trusted
+        # caller context and must not be replaced with the daemon environment.
+        payload = dict(payload)
+        payload.setdefault(HOOK_EXECUTION_ENVIRONMENT_KEY, None)
+        self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
+        if (
+            event_name == "Notification"
+            and harness.strip().lower().replace("_", "-") == "claude-code"
+            and str(payload.get("notification_type") or "") == "permission_prompt"
+        ):
+            return self._claude_permission_prompt_notification_response(payload)
+        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "claude-code":
+            from .claude_permission_request import claude_permission_request_response
+
+            return claude_permission_request_response(self.store, payload)
         mode = native_mode()
         if mode in {"auto", "force"}:
             # Send even unknown or malformed event labels to Rust. The edge
             # returns no semantic result for unsupported events, which this
             # method turns into a deterministic deny/fail-safe response.
+            # The concrete worker supplies the mixin host protocol, so bind
+            # these methods through the worker rather than the mixin class.
             return self._review_native_edge(
                 payload=payload,
                 harness=harness,
@@ -195,48 +275,36 @@ class HookWorker:
                 home_dir=home_dir,
                 workspace=workspace,
                 deadline=deadline,
+                claim_saved_approval=claim_saved_approval,
+                claimed_saved_allow_hash=claimed_saved_allow_hash,
+                claimed_approval_request_id=claimed_approval_request_id,
             )
-        if event_name not in {"PreToolUse", "PostToolUse"}:
-            raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
-        if event_name == "PreToolUse":
-            command = pre_tool_command(payload)
-            if command is None:
-                raise HookWorkerUnsupported("fast path PreToolUse requires a command")
-            config = self._load_config(guard_home, workspace)
-            recording_only = protection_is_off(
-                posture=config.protection_posture,
-                mode=config.mode,
-            )
-            native = review_pre_tool_native(
-                command,
+        mode_response = self._mode_surface_response(
+            harness,
+            event_name,
+            mode,
+            payload=payload,
+            workspace=workspace,
+            home_dir=home_dir,
+            guard_home=guard_home,
+        )
+        if mode_response is not None:
+            return self._apply_structured_unavailable_overlay(
+                mode_response,
+                harness=harness,
+                event_name=event_name,
                 guard_home=guard_home,
-                cwd=workspace,
+                workspace=workspace,
+            )
+        if event_name == "PreToolUse":
+            return self._review_pre_tool_http(
+                payload,
+                harness=harness,
                 home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
             )
-            if native is not None:
-                action = str(native.get("minimum_action") or "")
-                if action == "review" or (recording_only and action != "allow"):
-                    # Native established the minimum floor, but the CLI approval
-                    # path still owns the terminal semantic decision. Watch/observe
-                    # also records through that path instead of harness deny.
-                    record_python_semantic_hook_route()
-                    raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
-                return harness_json_from_native_pre_tool(harness, native)
-            if recording_only:
-                raise HookWorkerUnsupported("observe PreToolUse uses CLI recording")
-            status = native_runtime_status()
-            if status.mode == "off":
-                raise HookWorkerUnsupported("native PreToolUse runtime is off")
-            if status.mode == "shadow":
-                raise HookWorkerUnsupported("native PreToolUse runtime is unavailable")
-            return post_tool_fail_safe_response(
-                harness,
-                reason="HOL Guard could not complete the native PreToolUse decision safely.",
-                reason_code="native_pre_tool_unavailable",
-            )
-        if event_name != "PostToolUse":
-            raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
-        return self._review_post_tool_http(
+        post_response = self._review_post_tool_http(
             payload,
             harness=harness,
             default_harness=default_harness,
@@ -245,65 +313,48 @@ class HookWorker:
             workspace=workspace,
             deadline=deadline,
         )
-
-    def _review_native_edge(
-        self,
-        *,
-        payload: dict[str, object],
-        harness: str,
-        event_name: str,
-        default_harness: str,
-        home_dir: Path,
-        guard_home: Path,
-        workspace: Path | None,
-        deadline: float | None,
-    ) -> dict[str, object]:
-        policy_snapshot = self._native_policy_snapshot(workspace)
-        recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
-        edge = review_raw_hook_native(
-            payload=payload,
+        return self._apply_structured_unavailable_overlay(
+            post_response,
             harness=harness,
-            event=event_name,
+            event_name=event_name,
             guard_home=guard_home,
-            home_dir=home_dir,
-            cwd=workspace,
-            source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
-            observe_mode=recording_only,
-            deadline=deadline,
-            policy_snapshot=policy_snapshot,
+            workspace=workspace,
         )
-        if edge is None:
-            self.metrics.record_route("native_fail_safe")
-            if event_name == "PostToolUse":
-                self._record_post_tool_activity(
-                    harness=harness,
-                    payload=payload,
-                    succeeded=hook_post_succeeded(event_name, payload),
-                )
-            reason_code = {
-                "PostToolUse": "native_post_tool_unavailable",
-                "PreToolUse": "native_pre_tool_unavailable",
-            }.get(event_name, "native_hook_event_unavailable")
-            return post_tool_fail_safe_response(
-                harness,
-                reason="HOL Guard could not complete the native hook decision safely.",
-                reason_code=reason_code,
-            )
-        native_event = str(edge["event_name"])
-        native_harness = str(edge["harness"])
-        native_result = edge["result"]
-        if not isinstance(native_result, Mapping):
-            self.metrics.record_route("native_fail_safe")
-            return post_tool_fail_safe_response(harness, reason_code="native_hook_edge_invalid_response")
-        self.metrics.record_route("native_resident")
-        if native_event == "PreToolUse":
-            return harness_json_from_native_pre_tool(native_harness, native_result)
-        self._record_post_tool_activity(
-            harness=native_harness,
-            payload=payload,
-            succeeded=hook_post_succeeded(native_event, payload),
+
+    def _claude_permission_prompt_notification_response(
+        self,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        """Present the pending Guard approval when Claude shows a permission prompt."""
+        from ..cli._commands_shared import _now
+        from ..cli.commands_support_claude_approval import (
+            _claude_permission_prompt_additional_context,
+            _claude_permission_prompt_system_message,
         )
-        return harness_json_from_native_post_tool(native_harness, native_result)
+        from ..cli.commands_support_hook_state import (
+            _load_claude_permission_notice,
+            _mark_claude_pending_permission_prompt_seen,
+        )
+
+        notice = _load_claude_permission_notice(self.store, payload)
+        _mark_claude_pending_permission_prompt_seen(store=self.store, payload=payload, notice=notice)
+        self.store.add_event(
+            "claude/permission_prompt",
+            {
+                "session_id": payload.get("session_id"),
+                "notification_type": payload.get("notification_type"),
+                "tool_name": payload.get("tool_name"),
+                "notice": notice or {},
+            },
+            _now(),
+        )
+        return {
+            "systemMessage": _claude_permission_prompt_system_message(payload=payload, notice=notice),
+            "hookSpecificOutput": {
+                "hookEventName": "Notification",
+                "additionalContext": _claude_permission_prompt_additional_context(notice),
+            },
+        }
 
     def _review_post_tool_http(
         self,
@@ -329,7 +380,7 @@ class HookWorker:
         mode = native_mode()
         native_required = mode in {"auto", "force"}
         if native_required:
-            policy_snapshot = self._native_policy_snapshot(workspace)
+            policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
             recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
             response = review_post_tool_native(
                 request,
@@ -342,20 +393,29 @@ class HookWorker:
                     payload=payload,
                     succeeded=hook_post_succeeded(event_name, payload),
                 )
-                return post_tool_fail_safe_response(
-                    harness,
-                    reason="HOL Guard could not complete the native local hook review safely.",
+                return _post_tool_unavailable_response(
+                    payload,
+                    harness=harness,
                     reason_code="native_post_tool_unavailable",
+                    workspace=workspace,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
                 )
         else:
-            response = self.engine.review(request)
-            if mode == "shadow":
-                with suppress(Exception):
-                    _ = review_post_tool_native(
-                        request,
-                        observe_mode=response.observe_mode,
-                        policy_snapshot=self._native_policy_snapshot(workspace),
-                    )
+            self._record_post_tool_activity(
+                harness=harness,
+                payload=payload,
+                succeeded=hook_post_succeeded(event_name, payload),
+            )
+            reason_code = "native_hook_disabled" if mode == "off" else "native_shadow_diagnostic_disabled"
+            return _post_tool_unavailable_response(
+                payload,
+                harness=harness,
+                reason_code=reason_code,
+                workspace=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+            )
 
         self._record_post_tool_activity(
             harness=harness,
@@ -372,6 +432,10 @@ class HookWorker:
         succeeded: bool,
     ) -> None:
         if self.activity_writer is not None:
+            discovery_writer = getattr(self.activity_writer, "submit_composio_discovery", None)
+            if callable(discovery_writer):
+                with suppress(Exception):
+                    discovery_writer(harness=harness, payload=payload, succeeded=succeeded)
             _ = self.activity_writer.submit_command_activity(
                 harness=harness,
                 event="PostToolUse",
@@ -418,19 +482,7 @@ class HookWorker:
     def _hook_event_name(self, payload: Mapping[str, object]) -> str:
         return runtime_hook_event_name(payload)
 
-    def _payload_kind(self, payload: Mapping[str, object]) -> HookPayloadKind:
-        return payload_kind(payload)
-
-    def _parse_output_summary(self, payload: Mapping[str, object]) -> HookOutputSummary | None:
-        return parse_output_summary(payload)
-
-    def _parse_source_ref(self, payload: Mapping[str, object]) -> HookSourceFileRef | None:
-        return parse_source_ref(payload)
-
 
 __all__ = [
     "HookWorker",
-    "HookWorkerUnsupported",
-    "post_tool_fail_safe_response",
-    "post_tool_native_block_response",
 ]

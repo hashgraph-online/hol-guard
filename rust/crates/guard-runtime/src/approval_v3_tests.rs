@@ -5,12 +5,13 @@ use guard_contracts::{
     PreToolOperationV1, GUARD_HOOK_ENVELOPE_V2_SCHEMA, NATIVE_APPROVAL_CHALLENGE_V3_SCHEMA,
 };
 use guard_policy_snapshot::{
-    config_digest, digest_bytes, integrity_mac, policy_digest, verifier_key_id,
-    EffectiveNativePolicyV3, PolicySnapshotV3, ScopeContractV3, SnapshotIntegrityV3,
-    POLICY_SNAPSHOT_INTEGRITY_ALGORITHM, POLICY_SNAPSHOT_PUSH_SCHEMA, POLICY_SNAPSHOT_SCHEMA,
+    config_digest, integrity_mac, policy_digest, verifier_key_id, EffectiveNativePolicyV3,
+    PolicySnapshotV3, ScopeContractV3, SnapshotIntegrityV3, POLICY_SNAPSHOT_INTEGRITY_ALGORITHM,
+    POLICY_SNAPSHOT_PUSH_SCHEMA, POLICY_SNAPSHOT_SCHEMA,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
+#[cfg(not(windows))]
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -28,21 +29,27 @@ fn policy() -> EffectiveNativePolicyV3 {
         harness_actions: BTreeMap::new(),
         publisher_actions: BTreeMap::new(),
         artifact_actions: BTreeMap::new(),
+        mcp_tool_actions: BTreeMap::new(),
+        mcp_provider_actions: BTreeMap::new(),
+        mcp_provider_catalog_hash: None,
         sandbox_analysis: "off".into(),
         receipt_redaction_level: "full".into(),
     }
 }
 
 fn scope_digest(root: &Path) -> String {
-    digest_bytes(root.to_string_lossy().as_bytes())
+    crate::policy_store::scope_digest_for_test(root)
 }
 
-fn root(label: &str) -> PathBuf {
+pub(super) fn root(label: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "hol-guard-approval-{label}-{}-{}",
         std::process::id(),
         now_ms().unwrap()
     ));
+    #[cfg(windows)]
+    let path = crate::resident_state::ensure_private_directory(&path, true).unwrap();
+    #[cfg(not(windows))]
     fs::create_dir(&path).unwrap();
     #[cfg(unix)]
     {
@@ -71,6 +78,8 @@ fn snapshot(root: &Path, key: &[u8; 32]) -> PolicySnapshotV3 {
             workspace_binding: "request-source".into(),
         },
         effective_policy,
+        command_extensions: None,
+        business_policy: None,
         issued_at_ms: now_ms().unwrap().saturating_sub(1),
         expires_at_ms: now_ms().unwrap() + 60_000,
         integrity: SnapshotIntegrityV3 {
@@ -84,7 +93,7 @@ fn snapshot(root: &Path, key: &[u8; 32]) -> PolicySnapshotV3 {
     snapshot
 }
 
-fn store_and_envelope(
+pub(super) fn store_and_envelope(
     label: &str,
 ) -> (
     PathBuf,
@@ -113,7 +122,15 @@ fn store_and_envelope_with_runtime(
 ) {
     let root = root(label);
     let key = [7u8; 32];
-    fs::write(root.join("policy-verifier.key"), key).unwrap();
+    let verifier_path = root.join("policy-verifier.key");
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let mut file = crate::resident_state::private_file(&verifier_path, true, &root).unwrap();
+        file.write_all(&key).unwrap();
+    }
+    #[cfg(not(windows))]
+    fs::write(&verifier_path, key).unwrap();
     let approval_seed = [17u8; 32];
     let approval_key = approval_public_key_for_tests(&approval_seed);
     crate::policy_store::approval_authority::write_test_record(&root, &approval_key, 1);
@@ -152,6 +169,7 @@ fn store_and_envelope_with_runtime(
             home_dir: root.to_string_lossy().into_owned(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     (root, store, envelope)
@@ -333,7 +351,6 @@ fn binding_mutations_are_rejected_even_when_resigned() {
     let challenge = challenge_for(&store, &envelope);
     let key = store.test_approval_signing_seed();
     let base = artifact_from_challenge(&challenge, &key);
-
     macro_rules! assert_rejected {
         ($mutation:expr) => {{
             let mut artifact = base.clone();
@@ -350,8 +367,8 @@ fn binding_mutations_are_rejected_even_when_resigned() {
     assert_rejected!(|artifact| artifact.action_digest = "b".repeat(64));
     assert_rejected!(|artifact| artifact.action_type = PreToolActionTypeV1::FileRead);
     assert_rejected!(|artifact| artifact.operation = PreToolOperationV1::Read);
-    assert_rejected!(|artifact| artifact.intrinsic_action = "require-reapproval".into());
-    assert_rejected!(|artifact| artifact.minimum_action = "require-reapproval".into());
+    assert_rejected!(|artifact| artifact.intrinsic_action = "allow".into());
+    assert_rejected!(|artifact| artifact.minimum_action = "allow".into());
     assert_rejected!(|artifact| artifact.policy_generation = 2);
     assert_rejected!(|artifact| artifact.policy_digest = "b".repeat(64));
     assert_rejected!(|artifact| artifact.rule_digest = "b".repeat(64));
@@ -370,7 +387,7 @@ fn binding_mutations_are_rejected_even_when_resigned() {
     assert_rejected!(|artifact| artifact.scope_contract_digest = "b".repeat(64));
     assert_rejected!(|artifact| artifact.scope_binding = Some("b".repeat(64)));
     assert_rejected!(|artifact| artifact.resident_epoch = "b".repeat(64));
-    assert_rejected!(|artifact| artifact.requested_action = "require-reapproval".into());
+    assert_rejected!(|artifact| artifact.requested_action = "allow".into());
     assert_rejected!(|artifact| artifact.approved_action = "block".into());
 }
 

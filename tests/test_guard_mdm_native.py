@@ -287,6 +287,17 @@ def test_windows_native_verification_fails_closed_without_publisher_pin(tmp_path
     assert result.reason_code == "native_publisher_pin_absent"
 
 
+def test_windows_mdm_docs_exclude_desktop_artifact_signing_leaves() -> None:
+    verify_doc = " ".join((native.verify_native_install.__doc__ or "").split())
+    windows_doc = " ".join((native._verify_windows.__doc__ or "").split())
+    policy_source = Path(native.__file__).with_name("policy.py").read_text(encoding="utf-8")
+
+    assert "not Desktop Artifact Signing" in verify_doc
+    assert "Do not pin a rotating Azure Public Trust leaf" in verify_doc
+    assert "not a valid pin for this HOLGuardMachine identity" in windows_doc
+    assert "Do not store Azure Artifact Signing leaves" in policy_source
+
+
 def test_macos_native_verification_fails_closed_without_team_id(tmp_path: Path) -> None:
     result = native._verify_macos(tmp_path, expected_team_id=None)
 

@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal, final
 
-from .command_matcher_contracts import CommandMatcher, MatcherEvidence
+from .command_matcher_contracts import CommandMatcher, MatcherEvidence, canonical_contract_digest
 from .command_model import CanonicalCommand, CommandSegment
 from .command_option_parsing import (
     argument_semantics,
@@ -14,6 +14,7 @@ from .command_option_parsing import (
     known_option_advance,
     matches_subcommands_conservatively,
 )
+from .executable_flag_contract import _ExecutableContractBase
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
 CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"]
@@ -24,22 +25,10 @@ _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"
 
 @final
 @dataclass(frozen=True, slots=True)
-class ExecutableMatcher:
+class ExecutableMatcher(_ExecutableContractBase):
     """Match executable names with optional subcommand and flag constraints."""
 
-    executables: frozenset[str]
     subcommands: tuple[str, ...] = ()
-    required_flags: frozenset[str] = frozenset()
-    forbidden_flags: frozenset[str] = frozenset()
-    allow_leading_options: bool = False
-    leading_options_with_values: frozenset[str] = frozenset()
-    interspersed_options_with_values: frozenset[str] = frozenset()
-    interspersed_flags: frozenset[str] = frozenset()
-    options_with_values: frozenset[str] = frozenset()
-    inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset()
-    required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
-    required_flags_in_all_arguments: bool = False
-    fail_secure_unknown_options: bool = False
 
     def __post_init__(self) -> None:
         normalized = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -357,8 +346,10 @@ class CommandSafetyRule:
             "risk_classes": list(self.risk_classes),
             "action_classes": list(self.action_classes),
             "safer_alternatives": list(self.safer_alternatives),
+            "family": self.family,
             "default_mode": self.default_mode,
             "matcher_kind": type(self.matcher).__name__ if self.matcher is not None else "compatibility",
+            "matcher_contract_digest": canonical_contract_digest(self.matcher),
             "safe_variants": [variant.to_dict() for variant in self.safe_variants],
             "compatibility_fallback": self.compatibility_fallback,
         }
@@ -378,11 +369,12 @@ class CommandSafeVariant:
         if not self.title.strip():
             raise ValueError(f"Safe variant {self.variant_id} requires a title")
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "variant_id": self.variant_id,
             "title": self.title,
             "matcher_kind": type(self.matcher).__name__,
+            "matcher_contract_digest": canonical_contract_digest(self.matcher),
         }
 
 
@@ -528,6 +520,12 @@ def _without_options(
         if argument == "--":
             retained.extend(arguments[index + 1 :])
             break
+        if argument.startswith("--"):
+            option_name = argument.partition("=")[0]
+            if option_name not in options_with_values and option_name not in flags:
+                retained.append(argument)
+                index += 1
+                continue
         advance = known_option_advance(
             argument,
             options_with_values=options_with_values,

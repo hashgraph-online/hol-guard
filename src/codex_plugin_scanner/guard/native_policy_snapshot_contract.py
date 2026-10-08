@@ -9,6 +9,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from .native_command_control_binding import (
+    capture_native_command_control_binding,
+    validate_native_command_control_binding,
+)
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _digest_v3,
@@ -21,6 +25,7 @@ from .native_policy_snapshot_constants import (
     _INTEGRITY_FIELDS,
     _MAX_U16,
     _MAX_U64,
+    _OPTIONAL_SNAPSHOT_FIELDS,
     _PUBLISH_TIMEOUT_SECONDS,
     _PUSH_ENVELOPE_FIELDS,
     _PUSH_REQUEST_FIELDS,
@@ -64,19 +69,21 @@ def _snapshot_policy_digest_v3(
     rule_digest: str,
     runtime_identity: str,
     scope_digest: str,
+    command_extensions: Mapping[str, object] | None = None,
 ) -> str:
-    return _digest_v3(
-        {
-            "config_digest": config_digest,
-            "effective_policy_digest": _digest_v3(effective_policy),
-            "mode": mode,
-            "protocol_version": POLICY_SNAPSHOT_PROTOCOL_VERSION,
-            "rule_digest": rule_digest,
-            "runtime_identity": runtime_identity,
-            "scope_digest": scope_digest,
-            "version": POLICY_SNAPSHOT_V3_VERSION,
-        }
-    )
+    value: dict[str, object] = {
+        "config_digest": config_digest,
+        "effective_policy_digest": _digest_v3(effective_policy),
+        "mode": mode,
+        "protocol_version": POLICY_SNAPSHOT_PROTOCOL_VERSION,
+        "rule_digest": rule_digest,
+        "runtime_identity": runtime_identity,
+        "scope_digest": scope_digest,
+        "version": POLICY_SNAPSHOT_V3_VERSION,
+    }
+    if command_extensions is not None:
+        value["command_extensions_digest"] = _digest_v3(command_extensions)
+    return _digest_v3(value)
 
 
 def _require_snapshot_mapping_fields_v3(value: object, fields: frozenset[str]) -> Mapping[str, object]:
@@ -136,7 +143,13 @@ def _validate_snapshot_scope_v3(root: Mapping[str, object]) -> Mapping[str, obje
 
 
 def _validate_snapshot_policy_v3(root: Mapping[str, object]) -> Mapping[str, object]:
-    effective = _require_snapshot_mapping_fields_v3(root.get("effective_policy"), _EFFECTIVE_POLICY_FIELDS)
+    raw = root.get("effective_policy")
+    optional = frozenset(
+        field
+        for field in ("mcp_tool_actions", "mcp_provider_actions", "mcp_provider_catalog_hash")
+        if isinstance(raw, Mapping) and field in raw
+    )
+    effective = _require_snapshot_mapping_fields_v3(raw, _EFFECTIVE_POLICY_FIELDS | optional)
     for field in ("protection_posture", "security_level", "sandbox_analysis", "receipt_redaction_level"):
         if not _valid_bounded_string_v3(effective.get(field)):
             raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
@@ -172,6 +185,12 @@ def _validate_snapshot_policy_v3(root: Mapping[str, object]) -> Mapping[str, obj
     _harness_action_map(harness_actions)
     _string_map(publisher_actions)
     _string_map(artifact_actions)
+    from .native_policy_snapshot_policy import _observed_mcp_action_map, _provider_action_map
+
+    _observed_mcp_action_map(effective.get("mcp_tool_actions"))
+    _provider_action_map(effective.get("mcp_provider_actions"))
+    if "mcp_provider_catalog_hash" in effective and not _valid_digest_v3(effective["mcp_provider_catalog_hash"]):
+        raise NativePolicySnapshotError("native_provider_catalog_hash_invalid")
     return effective
 
 
@@ -204,6 +223,7 @@ def _verify_snapshot_digests_v3(
         rule_digest=cast(str, root["rule_digest"]),
         runtime_identity=cast(str, root["runtime_identity"]),
         scope_digest=cast(str, scope["scope_digest"]),
+        command_extensions=cast(Mapping[str, object] | None, root.get("command_extensions")),
     )
     if root.get("policy_digest") != expected_policy_digest:
         raise NativePolicySnapshotError("native_policy_snapshot_digest_mismatch")
@@ -214,21 +234,40 @@ def _validate_snapshot_v3(
     *,
     allow_empty_mac: bool = False,
     verify_digests: bool = True,
+    deadline_monotonic: float | None = None,
 ) -> None:
     """Apply the resident's typed v3 validation before signing or transport."""
 
     _validate_json_limits_v3(snapshot)
-    root = _require_snapshot_mapping_fields_v3(snapshot, _SNAPSHOT_FIELDS)
+    if "business_policy" in snapshot:
+        from .native_policy_snapshot_business_bridge import validate_business_snapshot_content
+
+        validate_business_snapshot_content(
+            snapshot,
+            allow_empty_mac=allow_empty_mac,
+            verify_digests=verify_digests,
+            deadline_monotonic=deadline_monotonic,
+        )
+        return
+    optional_fields = snapshot.keys() & _OPTIONAL_SNAPSHOT_FIELDS if isinstance(snapshot, Mapping) else frozenset()
+    root = _require_snapshot_mapping_fields_v3(snapshot, _SNAPSHOT_FIELDS | optional_fields)
     mode = _validate_snapshot_metadata_v3(root)
     scope = _validate_snapshot_scope_v3(root)
     effective = _validate_snapshot_policy_v3(root)
+    if "command_extensions" in root:
+        validate_native_command_control_binding(root["command_extensions"])
     _validate_snapshot_integrity_v3(root, allow_empty_mac=allow_empty_mac)
     if verify_digests:
         _verify_snapshot_digests_v3(root, effective, mode, scope)
 
 
-def _snapshot_integrity_mac_v3(snapshot: Mapping[str, object], verifier_key: bytes) -> str:
-    _validate_snapshot_v3(snapshot, allow_empty_mac=True)
+def _snapshot_integrity_mac_v3(
+    snapshot: Mapping[str, object],
+    verifier_key: bytes,
+    *,
+    deadline_monotonic: float | None = None,
+) -> str:
+    _validate_snapshot_v3(snapshot, allow_empty_mac=True, deadline_monotonic=deadline_monotonic)
     signing_value = dict(snapshot)
     signing_value.pop("integrity", None)
     return hmac.new(
@@ -252,6 +291,9 @@ def build_policy_snapshot_v3(
     generation: int,
     issued_at_ms: int | None = None,
     expires_at_ms: int | None = None,
+    command_extensions: Mapping[str, object] | None = None,
+    business_policy: Mapping[str, object] | None = None,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, object]:
     """Build and authenticate one Rust ``PolicySnapshotV3`` value."""
 
@@ -266,6 +308,7 @@ def build_policy_snapshot_v3(
     if not isinstance(verifier_key, bytes) or len(verifier_key) != _VERIFIER_KEY_BYTES:
         raise NativePolicySnapshotError("native_policy_verifier_key_invalid")
     effective_policy = effective_native_policy_v3(config)
+    binding = capture_native_command_control_binding(command_extensions) if command_extensions is not None else None
     raw_mode = _config_value(config, "mode", "prompt")
     if not isinstance(raw_mode, str) or raw_mode not in _VALID_INPUT_MODES:
         raise NativePolicySnapshotError("native_policy_snapshot_mode_invalid")
@@ -279,6 +322,7 @@ def build_policy_snapshot_v3(
         rule_digest=rule_digest,
         runtime_identity=runtime_identity,
         scope_digest=scope_digest,
+        command_extensions=binding,
     )
     issued = int(time.time() * 1_000) if issued_at_ms is None else issued_at_ms
     expires = issued + POLICY_SNAPSHOT_MAX_EXPIRY_MS if expires_at_ms is None else expires_at_ms
@@ -316,17 +360,72 @@ def build_policy_snapshot_v3(
             "mac": "",
         },
     }
-    _validate_snapshot_v3(snapshot, allow_empty_mac=True)
+    if binding is not None:
+        snapshot["command_extensions"] = binding
+    if business_policy is not None:
+        from .native_policy_snapshot_business_bridge import build_native_business_snapshot, capture_business_binding
+
+        request: dict[str, object] = {
+            field: snapshot[field]
+            for field in (
+                "generation",
+                "runtime_identity",
+                "rule_digest",
+                "mode",
+                "scope_contract",
+                "effective_policy",
+                "issued_at_ms",
+                "expires_at_ms",
+            )
+        }
+        captured_business = capture_business_binding(business_policy)
+        key = list(verifier_key)
+        try:
+            request.update(
+                schema="guard-native-policy-build.v1",
+                version=1,
+                verifier_key=key,
+                business_policy=captured_business,
+            )
+            if binding is not None:
+                request["command_extensions"] = binding
+            built = build_native_business_snapshot(request, deadline_monotonic=deadline_monotonic)
+            integrity = built.get("integrity")
+            if (
+                not isinstance(integrity, Mapping)
+                or integrity.get("key_id") != native_policy_verifier_key_id(verifier_key)
+                or not hmac.compare_digest(
+                    cast(str, integrity.get("mac")),
+                    _snapshot_integrity_mac_v3(
+                        built,
+                        verifier_key,
+                        deadline_monotonic=deadline_monotonic,
+                    ),
+                )
+            ):
+                raise NativePolicySnapshotError("native_policy_snapshot_cache_integrity_invalid")
+            return built
+        finally:
+            # Drop owned references only. CPython's shared integers, immutable
+            # caller bytes and JSON/subprocess copies cannot be reliably wiped.
+            # This transport does not establish secret custody or zeroization.
+            key.clear()
+            request.pop("verifier_key", None)
+    _validate_snapshot_v3(snapshot, allow_empty_mac=True, deadline_monotonic=deadline_monotonic)
     integrity = cast(dict[str, object], snapshot["integrity"])
     # The MAC is a fixed-size lowercase hex string. Validate the complete
     # canonical size with that exact placeholder before spending CPU on the
     # signing operation; Rust rejects the same 256 KiB boundary.
     integrity["mac"] = "0" * 64
-    _validate_snapshot_v3(snapshot)
+    _validate_snapshot_v3(snapshot, deadline_monotonic=deadline_monotonic)
     if len(_canonical_json_bytes_v3(snapshot)) > POLICY_SNAPSHOT_MAX_BYTES:
         raise NativePolicySnapshotError("native_policy_snapshot_too_large")
-    integrity["mac"] = _snapshot_integrity_mac_v3(snapshot, verifier_key)
-    _validate_snapshot_v3(snapshot)
+    integrity["mac"] = _snapshot_integrity_mac_v3(
+        snapshot,
+        verifier_key,
+        deadline_monotonic=deadline_monotonic,
+    )
+    _validate_snapshot_v3(snapshot, deadline_monotonic=deadline_monotonic)
     encoded = _canonical_json_bytes_v3(snapshot)
     if len(encoded) > POLICY_SNAPSHOT_MAX_BYTES:
         raise NativePolicySnapshotError("native_policy_snapshot_too_large")
@@ -355,13 +454,15 @@ def snapshot_bytes_v3(snapshot: Mapping[str, object]) -> bytes:
     return encoded
 
 
-def _policy_snapshot_push_bytes_v3(snapshot: Mapping[str, object]) -> bytes:
+def _policy_snapshot_push_bytes_v3(snapshot: Mapping[str, object], *, deadline_budget_ms: int | None = None) -> bytes:
     """Build the strict resident push envelope after validating its snapshot."""
 
     _validate_snapshot_v3(snapshot)
     envelope = {
         "operation": "policy_snapshot_push",
-        "deadline_budget_ms": int(_PUBLISH_TIMEOUT_SECONDS * 1_000),
+        "deadline_budget_ms": (
+            int(_PUBLISH_TIMEOUT_SECONDS * 1_000) if deadline_budget_ms is None else deadline_budget_ms
+        ),
         "request": {"schema": POLICY_SNAPSHOT_PUSH_SCHEMA, "snapshot": snapshot},
     }
     _require_snapshot_mapping_fields_v3(envelope, _PUSH_ENVELOPE_FIELDS)

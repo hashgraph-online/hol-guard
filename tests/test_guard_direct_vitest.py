@@ -18,6 +18,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 
 
 @pytest.fixture(autouse=True)
+def _native_vitest_intents(package_intent_native, native_mcp_probe, tmp_path: Path) -> None:
+    native_mcp_probe(tmp_path / "home" / ".guard")
+
+
+@pytest.fixture(autouse=True)
 def _exclude_workspace_virtualenv_from_path(  # pyright: ignore[reportUnusedFunction]
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -506,47 +511,32 @@ def test_trusted_path_command_fails_closed_for_shim_status_failures(
     )
 
 
-def test_verified_direct_vitest_run_is_explicitly_benign(
+def test_verified_direct_vitest_identity_does_not_bypass_uncontained_code_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home, caller, workspace, runner = _fixture(tmp_path)
     command = _command(workspace, runner)
     monkeypatch.setattr(direct_vitest, "_trusted_path_command", _trust_fixture_command)
-
-    assert (
-        extract_sensitive_tool_action_request(
-            "bash",
-            {"command": command},
-            cwd=caller,
-            home_dir=home,
-        )
-        is None
-    )
-    assert is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=caller,
-        home_dir=home,
-    )
+    request = extract_sensitive_tool_action_request("bash", {"command": command}, cwd=caller, home_dir=home)
+    assert request is not None
+    assert request.guard_default_action == "require-reapproval"
+    assert not is_explicitly_benign_tool_action_request("bash", {"command": command}, cwd=caller, home_dir=home)
+    # A verified launch location is not isolation from local credentials.
     assert (
         _hook_runtime_artifact(
             harness="pi",
-            payload={
-                "hook_event_name": "PreToolUse",
-                "tool_name": "bash",
-                "tool_input": {"command": command},
-            },
+            payload={"hook_event_name": "PreToolUse", "tool_name": "bash", "tool_input": {"command": command}},
             action_envelope=None,
             home_dir=home,
             guard_home=home / ".guard",
             workspace=caller,
         )
-        is None
+        is not None
     )
 
 
-def test_verified_npx_vitest_run_is_explicitly_benign(
+def test_verified_npx_vitest_still_requires_execution_authority(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -564,7 +554,7 @@ def test_verified_npx_vitest_run_is_explicitly_benign(
         )
         is None
     )
-    assert is_explicitly_benign_tool_action_request(
+    assert not is_explicitly_benign_tool_action_request(
         "bash",
         {"command": command},
         cwd=caller,
@@ -583,7 +573,7 @@ def test_verified_npx_vitest_run_is_explicitly_benign(
             guard_home=home / ".guard",
             workspace=caller,
         )
-        is None
+        is not None
     )
 
 

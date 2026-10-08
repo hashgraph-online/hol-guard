@@ -105,15 +105,39 @@ def scrubbed_scanner_env(
     return env
 
 
+def _validated_scanner_argv(argv: Sequence[str]) -> list[str]:
+    """Return argv with an absolute executable and intact data arguments."""
+
+    command = list(argv)
+    if not command or not all(isinstance(value, str) for value in command):
+        raise ValueError("scanner command must be a non-empty string argv")
+    if any("\x00" in value for value in command):
+        raise ValueError("scanner command arguments cannot contain NUL bytes")
+    executable = Path(command[0])
+    if not executable.is_absolute():
+        raise ValueError("scanner executable must use an absolute path")
+    try:
+        resolved_executable = executable.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("scanner executable could not be resolved") from exc
+    if not resolved_executable.is_file() or not os.access(executable, os.X_OK):
+        raise ValueError("scanner executable must be an executable file")
+    # Preserve an absolute venv launcher path instead of replacing it with its
+    # base-interpreter symlink target; Python uses that path to discover pyvenv.cfg.
+    command[0] = str(executable)
+    return command
+
+
 def run_bounded_scanner_process(
     argv: Sequence[str],
     *,
     env: Mapping[str, str],
     timeout_seconds: float,
 ) -> ScannerProcessResult:
+    command = _validated_scanner_argv(argv)
     with tempfile.TemporaryDirectory(prefix="hol-guard-scanner-") as working_directory:
         process, windows_job = _spawn_scanner_process(
-            argv,
+            command,
             env=env,
             timeout_seconds=timeout_seconds,
             working_directory=Path(working_directory),
@@ -269,9 +293,13 @@ def _exec_posix_scanner_with_lockdown() -> None:
     payload = json.loads(sys.argv[1])
     if not isinstance(payload, list) or not payload or not all(isinstance(value, str) for value in payload):
         raise RuntimeError("scanner lockdown bootstrap received invalid argv")
+    try:
+        command = _validated_scanner_argv(payload)
+    except ValueError as exc:
+        raise RuntimeError("scanner lockdown bootstrap received unsafe argv") from exc
     if sys.platform.startswith("linux"):
         _install_linux_process_group_lockdown()
-    os.execvpe(payload[0], payload, os.environ)
+    os.execve(command[0], command, os.environ)
 
 
 def _install_linux_process_group_lockdown() -> None:

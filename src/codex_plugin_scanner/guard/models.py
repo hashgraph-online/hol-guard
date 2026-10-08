@@ -248,6 +248,15 @@ class GuardApprovalRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class GuardRuntimeRegistration:
+    """Identity a serving daemon uses to recreate its runtime row after store loss."""
+
+    daemon_host: str
+    daemon_port: int
+    started_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class GuardRuntimeState:
     """Current local Guard runtime session exposed to thin clients."""
 

@@ -28,6 +28,10 @@ use serde::Serialize;
 #[path = "approval_replay_memory.rs"]
 pub(crate) mod approval_replay_memory;
 pub(crate) use approval_replay_memory::{ApprovalReplayBinding, ApprovalReplayMemory};
+#[path = "approval_v4.rs"]
+pub(crate) mod approval_v4;
+#[path = "approval_v4_crypto.rs"]
+pub(crate) mod approval_v4_crypto;
 
 const ACTION_IDENTITY_MAX_BYTES: usize = 4 * 1024;
 const APPROVAL_DEFAULT_TTL_MS: u64 = 5 * 60 * 1000;
@@ -42,6 +46,10 @@ use approval_context::{
     ensure_context_approvable, is_approvable_floor, is_lower_hex, now_ms, replay_binding,
     valid_binding, ApprovalContext,
 };
+
+pub(crate) fn binding_digest(label: &str, values: &[&str]) -> Result<String, String> {
+    approval_context::binding_digest(label, values)
+}
 
 fn encode_approval_response<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let encoded = crate::encode_response(value)?;

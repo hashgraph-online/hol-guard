@@ -135,6 +135,8 @@ class LeadingSubcommandMatcher:
     options_with_values: frozenset[str] = frozenset()
     forbidden_flags: frozenset[str] = frozenset()
     required_flags_anywhere: frozenset[str] = frozenset()
+    interleaved_options_with_values: frozenset[str] = frozenset()
+    forbidden_flags_before_delimiter: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -155,6 +157,54 @@ class LeadingSubcommandMatcher:
         object.__setattr__(self, "options_with_values", normalized_options)
         object.__setattr__(self, "forbidden_flags", normalized_forbidden)
         object.__setattr__(self, "required_flags_anywhere", normalized_required)
+        normalized_interleaved = frozenset(
+            _normalize_option_token(value) for value in self.interleaved_options_with_values if value.strip()
+        )
+        object.__setattr__(self, "interleaved_options_with_values", normalized_interleaved)
+        normalized_pre_delimiter = frozenset(
+            _normalize_option_token(value) for value in self.forbidden_flags_before_delimiter if value.strip()
+        )
+        object.__setattr__(self, "forbidden_flags_before_delimiter", normalized_pre_delimiter)
+
+    def _exits_before_execution(self, arguments: tuple[str, ...]) -> bool:
+        """Detect declared exit-only flags supplied ahead of the `--` delimiter."""
+
+        if not self.forbidden_flags_before_delimiter:
+            return False
+        for argument in arguments:
+            if argument == "--":
+                return False
+            if not argument.startswith("-") or argument == "-":
+                continue
+            if _normalize_option_token(argument.split("=", 1)[0]) in self.forbidden_flags_before_delimiter:
+                return True
+            if not argument.startswith("--") and len(argument) > 2:
+                for character in argument[1:]:
+                    if not character.isalnum():
+                        break
+                    if f"-{character}" in self.forbidden_flags_before_delimiter:
+                        return True
+        return False
+
+    def _operands_open_with_subcommands(self, operands: tuple[str, ...]) -> bool:
+        """Match the subcommand chain, skipping declared options between levels."""
+
+        position = 0
+        for expected in self.subcommands:
+            while position < len(operands) and self._is_interleaved_option(operands[position]):
+                token = operands[position]
+                position += 1
+                if "=" not in token:
+                    position += 1
+            if position >= len(operands) or operands[position].lower() != expected:
+                return False
+            position += 1
+        return True
+
+    def _is_interleaved_option(self, token: str) -> bool:
+        if not token.startswith("-") or token == "-":
+            return False
+        return _normalize_option_token(token.split("=", 1)[0]) in self.interleaved_options_with_values
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
@@ -165,8 +215,9 @@ class LeadingSubcommandMatcher:
                 segment.arguments,
                 options_with_values=self.options_with_values,
             )
-            lowered_operands = tuple(value.lower() for value in operands)
-            if self.forbidden_flags & leading_flags or lowered_operands[: len(self.subcommands)] != self.subcommands:
+            if self.forbidden_flags & leading_flags or self._exits_before_execution(segment.arguments):
+                continue
+            if not self._operands_open_with_subcommands(operands):
                 continue
             matched_flags = present_flags(
                 tuple(argument.lower() for argument in segment.arguments),

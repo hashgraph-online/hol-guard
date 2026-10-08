@@ -39,10 +39,9 @@ def repair_sync_intelligence(
     *,
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
-    from .daemon.server import (
-        _resolve_guard_sync_auth_context,
-        _sync_supply_chain_cloud_state_with_optional_auth_context,
-    )
+    del workspace_dir
+    from .daemon.server import _resolve_guard_sync_auth_context
+    from .local_supply_chain import sync_supply_chain_bundle
 
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
@@ -51,11 +50,10 @@ def repair_sync_intelligence(
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         raise _deferred_cloud_error(error) from error
     try:
-        return _sync_supply_chain_cloud_state_with_optional_auth_context(
-            store,
-            auth_context,
-            workspace_dir=workspace_dir,
-        )
+        # Restore is a local package-protection workflow. Workspace audits can
+        # take minutes across managed projects, so they must stay in explicit
+        # sync/audit actions and never hold the repair response open.
+        return sync_supply_chain_bundle(store, auth_context=auth_context) or {}
     except SupplyChainRepairDeferredError:
         raise
     except GuardSyncEndpointUntrustedError:

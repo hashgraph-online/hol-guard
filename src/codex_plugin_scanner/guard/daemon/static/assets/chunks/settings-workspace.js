@@ -1,5 +1,7 @@
-import { a4 as PROTECTION_POSTURE_COPY, a5 as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, a6 as getDefaultExportFromCjs, a7 as React, K as useFocusTrap, a8 as HiMiniKey, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, a9 as HiMiniLockClosed, aa as HiMiniBellAlert, ab as HiMiniAdjustmentsHorizontal, ac as HiMiniCircleStack, ad as TabBar, c as HiMiniChevronRight, ae as resolveProtectionLevelCopy, af as fetchSettings, ag as fetchRuntimeSnapshot, e as updateSettings, ah as clearPolicy, ai as clearReviewQueue, aj as revokeApprovalGateCooldown, ak as disableApprovalGateTotp, al as importSettings, am as resetSettings, an as enrollApprovalGateTotp, ao as verifyApprovalGateTotp, ap as clearEvidence, aq as exportDiagnostics, ar as repairApprovalCenter, as as exportSettings, at as setupDesktopNotifications, m as EmptyState, au as WorkspacePageHeader, W as WatchProtectionBanner, av as HiMiniMagnifyingGlass, C as HiMiniChevronDown, o as HiMiniCheckCircle, M as HiMiniExclamationTriangle, aw as isProtectionPosture, ax as deriveProtectionPosture, ay as Tag, az as approvalGateCooldownLabel, z as HiMiniXMark } from "../guard-dashboard.js";
+import { ag as PROTECTION_POSTURE_COPY, ah as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ai as getDefaultExportFromCjs, aj as React, M as useFocusTrap, ak as HiMiniKey, S as SectionLabel, A as ActionButton, w as HiMiniShieldCheck, al as HiMiniLockClosed, am as HiMiniBellAlert, an as HiMiniAdjustmentsHorizontal, ao as HiMiniCircleStack, ap as TabBar, c as HiMiniChevronRight, aq as fetchCloudReviewSettings, K as HiMiniCloud, ar as HiMiniArrowPath, C as HiMiniXMark, as as ApprovalProofFieldInputs, at as isApprovalProofSubmitDisabled, au as buildApprovalProofCredentials, av as changeCloudReviewSettings, aw as resolveProtectionLevelCopy, ax as fetchSettings, ay as fetchRuntimeSnapshot, e as updateSettings, az as clearPolicy, aA as clearReviewQueue, aB as revokeApprovalGateCooldown, aC as disableApprovalGateTotp, aD as importSettings, aE as resetSettings, aF as enrollApprovalGateTotp, aG as verifyApprovalGateTotp, aH as clearEvidence, aI as exportDiagnostics, aJ as repairApprovalCenter, aK as exportSettings, aL as setupDesktopNotifications, n as EmptyState, aM as WorkspacePageHeader, W as WatchProtectionBanner, aN as HiMiniMagnifyingGlass, I as HiMiniChevronDown, s as HiMiniCheckCircle, P as HiMiniExclamationTriangle, aO as humanizeList, aP as isProtectionPosture, aQ as deriveProtectionPosture, aR as Tag, aS as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
+import { u as useConfirmDialog } from "./confirm-dialog.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 const POSTURE_ORDER = ["protected", "extra_careful", "watch"];
 function ProtectionPosturePanel(props) {
   const copy = PROTECTION_POSTURE_COPY[props.posture];
@@ -1948,11 +1950,8 @@ function TotpEnrollmentQrPanel({ enrollment }) {
   ] }) });
 }
 function resolveSettingsSaveProofKind(input) {
-  if (!input.wasConfigured && input.draftGateEnabled) {
+  if (input.draftGateEnabled && !input.savedGateEnabled) {
     return "setup-gate";
-  }
-  if (input.wasConfigured && input.draftGateEnabled && !input.savedGateEnabled) {
-    return "verify-save";
   }
   if (input.savedGateEnabled) {
     return "verify-save";
@@ -2122,14 +2121,22 @@ function SettingsSaveProofModal(props) {
     },
     [props.onCancel, props.pending]
   );
-  const handleConfirm = reactExports.useCallback(() => {
+  const handleConfirm = reactExports.useCallback((event) => {
+    event.preventDefault();
+    if (props.pending || isSettingsSaveProofSubmitDisabled(
+      props.mode,
+      { currentPassword, newPassword, confirmPassword, totpCode },
+      totpRequired
+    )) {
+      return;
+    }
     props.onConfirm({
       ...currentPassword.trim().length > 0 ? { currentPassword } : {},
       ...newPassword.trim().length > 0 ? { newPassword } : {},
       ...confirmPassword.trim().length > 0 ? { confirmPassword } : {},
       ...totpCode.trim().length > 0 ? { totpCode } : {}
     });
-  }, [confirmPassword, currentPassword, newPassword, props, totpCode]);
+  }, [confirmPassword, currentPassword, newPassword, props, totpCode, totpRequired]);
   const credentials = {
     currentPassword,
     newPassword,
@@ -2149,10 +2156,11 @@ function SettingsSaveProofModal(props) {
       "aria-modal": "true",
       "aria-labelledby": "settings-save-proof-title",
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "div",
+        "form",
         {
           ref: dialogRef,
           className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl",
+          onSubmit: handleConfirm,
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
@@ -2237,7 +2245,7 @@ function SettingsSaveProofModal(props) {
                   children: "Go back"
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConfirm, disabled: props.pending || confirmDisabled, children: props.pending ? "Working…" : props.confirmLabel })
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: props.pending || confirmDisabled, children: props.pending ? "Working…" : props.confirmLabel })
             ] })
           ]
         }
@@ -2475,6 +2483,500 @@ function SettingsSelectRow({
     )
   ] });
 }
+function resolveApprovalPasswordSectionCopy(wasConfigured, enabled = true) {
+  if (wasConfigured) {
+    if (!enabled) {
+      return "Your approval password is set. Turn on Ask for proof above to change it or connect an authenticator.";
+    }
+    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
+  }
+  if (!enabled) {
+    return "Set an approval password to require proof before allow or trust changes stick. Setting one turns on Ask for proof.";
+  }
+  return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
+}
+function ApprovalPasswordSetupAction(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onClick, variant: "outline", children: "Set up approval password" });
+}
+function ApprovalPasswordSection(props) {
+  const copyEnabled = props.wasConfigured ? props.gateActive : props.enabled;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval password" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: resolveApprovalPasswordSectionCopy(props.wasConfigured, copyEnabled) }),
+    props.wasConfigured && props.gateActive ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => props.onOpenPasswordChangeModal(),
+        className: "text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80",
+        children: "Change password"
+      }
+    ) }) : null,
+    !props.wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalPasswordSetupAction, { onClick: () => props.onOpenPasswordChangeModal("setup-gate") }) : null
+  ] });
+}
+function cloudReviewProofIncomplete(gate, password, totp, requireFreshTotp) {
+  if (!gate?.enabled) return false;
+  if (isApprovalProofSubmitDisabled(
+    gate,
+    { approvalPassword: password, approvalTotpCode: totp },
+    false,
+    requireFreshTotp
+  )) return true;
+  return requireFreshTotp && totp.trim().length !== 6;
+}
+function cloudReviewConfirmationError(message) {
+  if (message === "TOTP code is required.") {
+    return "Enter the current six-digit code from your authenticator.";
+  }
+  if (message === "Approval password is required.") {
+    return "Enter your approval password to continue.";
+  }
+  return message;
+}
+function cloudReviewStatusCopy(status) {
+  if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
+  if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
+  if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
+  if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
+  if (status.isolated_events > 0) return "Cloud Review is enabled. Requests tied to another identity stay in local Review.";
+  if (status.delivery_state === "error") return "Cloud Review is enabled. Uploads are retrying; local review is still available.";
+  if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
+  return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
+}
+function CloudReviewSettings() {
+  const [status, setStatus] = reactExports.useState(null);
+  const [error, setError] = reactExports.useState(null);
+  const [loading, setLoading] = reactExports.useState(true);
+  const [action, setAction] = reactExports.useState(null);
+  const [pending, setPending] = reactExports.useState(false);
+  const [includeHeld, setIncludeHeld] = reactExports.useState(false);
+  const [password, setPassword] = reactExports.useState("");
+  const [totp, setTotp] = reactExports.useState("");
+  const dialog = reactExports.useRef(null);
+  const revision = reactExports.useRef(0);
+  useFocusTrap(action !== null, dialog);
+  const refresh = reactExports.useCallback(async (showLoading = true) => {
+    const current = ++revision.current;
+    if (showLoading) setLoading(true);
+    try {
+      const result = await fetchCloudReviewSettings();
+      if (current !== revision.current) return;
+      setStatus(result);
+      setError(null);
+    } catch {
+      if (current !== revision.current) return;
+      setStatus(null);
+      setError("Cloud Review status is unavailable. Refresh to check again; local review remains available.");
+    } finally {
+      if (current === revision.current) setLoading(false);
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    void refresh();
+    return () => {
+      revision.current += 1;
+    };
+  }, [refresh]);
+  reactExports.useEffect(() => {
+    const onFocus = () => {
+      if (action === null && !document.hidden) void refresh(false);
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    const timer = window.setInterval(onFocus, 15e3);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.clearInterval(timer);
+    };
+  }, [refresh, action]);
+  function openConfirmation(nextAction) {
+    revision.current += 1;
+    setAction(nextAction);
+    setError(null);
+  }
+  function close() {
+    if (pending) return;
+    setAction(null);
+    setPassword("");
+    setTotp("");
+    setIncludeHeld(false);
+  }
+  async function confirm() {
+    if (!status || !action || pending) return;
+    const requireFreshTotp2 = status.approval_gate.totp_enabled === true;
+    if (cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp2)) return;
+    const proof = status.approval_gate.enabled ? buildApprovalProofCredentials(
+      status.approval_gate,
+      { approvalPassword: password, approvalTotpCode: totp },
+      requireFreshTotp2
+    ) : {};
+    revision.current += 1;
+    setPending(true);
+    setError(null);
+    try {
+      const result = await changeCloudReviewSettings({
+        action,
+        workspace_id: status.workspace_id,
+        source: status.source,
+        include_held_requests: action === "enable" && includeHeld,
+        ...proof
+      });
+      setStatus(result);
+      setAction(null);
+      setIncludeHeld(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The change was not saved. Try again.");
+    } finally {
+      setPassword("");
+      setTotp("");
+      setPending(false);
+    }
+  }
+  const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
+  const requireFreshTotp = status?.approval_gate.totp_enabled === true;
+  const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
+  let confirmLabel = "Turn off Cloud Review";
+  if (action === "enable") confirmLabel = "Authorize this device";
+  if (pending) confirmLabel = "Saving...";
+  let statusCopy = error;
+  if (status) statusCopy = cloudReviewStatusCopy(status);
+  if (loading) statusCopy = "Checking device authorization...";
+  const deliveredAt = status?.last_synced_at && Number.isFinite(Date.parse(status.last_synced_at)) ? new Date(status.last_synced_at) : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cloud-review-heading", className: "border-t border-slate-200 pt-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { id: "cloud-review-heading", className: "flex items-center gap-2 text-sm font-semibold text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { "aria-hidden": "true", className: "h-5 w-5 shrink-0" }),
+          " Cloud Review"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", role: "status", children: statusCopy }),
+        status?.enabled && status.expires_at ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-600", children: [
+          "Authorized until ",
+          new Date(status.expires_at).toLocaleDateString(),
+          "."
+        ] }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          disabled: loading || pending,
+          onClick: () => void refresh(),
+          title: "Refresh Cloud Review status",
+          "aria-label": "Refresh Cloud Review status",
+          className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-brand-dark hover:bg-slate-100 disabled:opacity-50",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true", className: "h-4 w-4" })
+        }
+      )
+    ] }),
+    status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud connection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.connected ? "Connected" : "Not connected" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud decisions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.enabled ? "Enabled" : "Confirmation needed" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Last activity delivered" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: deliveredAt ? /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: deliveredAt.toISOString(), children: deliveredAt.toLocaleString(void 0, {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit"
+        }) }) : "Not recorded yet" })
+      ] })
+    ] }) : null,
+    status?.connected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-2", children: [
+      !status.enabled || needsRecovery ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          disabled: loading || pending,
+          onClick: () => openConfirmation("enable"),
+          className: "min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50",
+          children: status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"
+        }
+      ) : null,
+      status.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          disabled: loading || pending,
+          onClick: () => openConfirmation("disable"),
+          className: "min-h-10 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-50",
+          children: "Turn off Cloud Review"
+        }
+      ) : null
+    ] }) : null,
+    status && !status.connected ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectGuardCloudButton, { className: "mt-3" }) : null,
+    action && status ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4",
+        onKeyDown: (event) => {
+          if (event.key === "Escape") close();
+        },
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "form",
+          {
+            ref: dialog,
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-labelledby": "cloud-review-confirm-title",
+            noValidate: true,
+            onSubmit: (event) => {
+              event.preventDefault();
+              void confirm();
+            },
+            className: "max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cloud-review-confirm-title", className: "text-base font-semibold text-brand-dark", children: action === "enable" ? "Authorize Cloud Review" : "Turn off Cloud Review?" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    onClick: close,
+                    disabled: pending,
+                    "aria-label": "Close Cloud Review dialog",
+                    className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-slate-100",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { "aria-hidden": "true", className: "h-5 w-5" })
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-600", children: action === "enable" ? "Allow signed cloud decisions for exact requests from this device for 30 days. Existing pending requests will be refreshed automatically. Local protection stays on." : "Cloud decisions will stop on this device. You can still review requests locally; Cloud sync stays connected." }),
+              action === "enable" && status.held_events > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: includeHeld, onChange: (event) => setIncludeHeld(event.target.checked), disabled: pending, className: "mt-1" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                  "Also send ",
+                  status.held_events.toLocaleString(),
+                  " previously unassigned events to the connected workspace.",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs text-slate-600", children: "Requests tied to another account or workspace stay isolated." }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-1 block break-all text-xs text-slate-600", children: [
+                    "Workspace: ",
+                    status.workspace_id ?? "Not connected"
+                  ] })
+                ] })
+              ] }) : null,
+              status.approval_gate.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ApprovalProofFieldInputs,
+                {
+                  approvalGate: status.approval_gate,
+                  approvalPassword: password,
+                  approvalTotpCode: totp,
+                  requireFreshTotp,
+                  onApprovalPasswordChange: (event) => setPassword(event.target.value),
+                  onApprovalTotpCodeChange: (event) => setTotp(event.target.value)
+                }
+              ) }) : null,
+              error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: cloudReviewConfirmationError(error) }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap justify-end gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: close, disabled: pending, className: "min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark", children: "Cancel" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "submit",
+                    disabled,
+                    className: "min-h-10 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50",
+                    children: confirmLabel
+                  }
+                )
+              ] })
+            ]
+          }
+        )
+      }
+    ) : null
+  ] });
+}
+const PRESENTATION_SCHEMA_VERSION = 1;
+const LEGACY = {
+  simple: "everyday",
+  advanced: "technical",
+  developer: "technical"
+};
+function resolvePresentationMode(input) {
+  const revision = typeof input.revision === "number" && Number.isSafeInteger(input.revision) && input.revision >= 0 ? input.revision : 0;
+  const writable = input.writable !== false;
+  const resolved = (value, source, explicit, diagnostic2 = null) => ({
+    value,
+    source,
+    explicit,
+    writable,
+    schemaVersion: PRESENTATION_SCHEMA_VERSION,
+    revision,
+    diagnostic: diagnostic2
+  });
+  if (input.readError) return resolved("everyday", "read-error", false, "presentation_settings_unavailable");
+  if (input.sessionPreview === "everyday" || input.sessionPreview === "technical") {
+    return resolved(input.sessionPreview, "session-preview", true);
+  }
+  const unsupportedSchema = input.schemaVersion !== void 0 && input.schemaVersion !== PRESENTATION_SCHEMA_VERSION;
+  const persistedMode = !unsupportedSchema && (input.value === "everyday" || input.value === "technical") ? input.value : null;
+  if (persistedMode !== null && input.explicit === true) {
+    return resolved(persistedMode, "local-explicit", true);
+  }
+  if (!unsupportedSchema && typeof input.value === "string" && LEGACY[input.value]) {
+    return resolved(LEGACY[input.value], "migrated", true, `migrated_legacy_${input.value}_presentation_mode`);
+  }
+  if (input.cloudProfile === "everyday" || input.cloudProfile === "technical") {
+    return resolved(input.cloudProfile, "cloud-profile", false);
+  }
+  if (persistedMode !== null) {
+    return resolved(persistedMode, "default", false);
+  }
+  let diagnostic = null;
+  if (unsupportedSchema) {
+    diagnostic = "unsupported_presentation_schema_fell_back_to_everyday";
+  } else if (input.value !== void 0 && input.value !== null && input.value !== "") {
+    diagnostic = "unknown_presentation_mode_fell_back_to_everyday";
+  }
+  return resolved("everyday", "default", false, diagnostic);
+}
+const presentationModeOptions = [
+  { value: "everyday", label: "Everyday Mode - clear summaries" },
+  { value: "technical", label: "Technical Mode - show more detail" }
+];
+function resolveSettingsPresentation(settings) {
+  const resolved = resolvePresentationMode({
+    value: settings.presentation_mode,
+    explicit: settings.presentation_mode_explicit,
+    schemaVersion: settings.presentation_schema_version,
+    revision: settings.presentation_revision,
+    writable: settings.presentation?.writable ?? true
+  });
+  const authoritative = settings.presentation;
+  if (isAuthoritativePresentation(authoritative, resolved)) {
+    return {
+      ...resolved,
+      source: authoritative.source,
+      writable: authoritative.writable,
+      diagnostic: authoritative.diagnostic
+    };
+  }
+  return resolved;
+}
+function isAuthoritativePresentation(presentation, resolved) {
+  return presentation !== void 0 && presentation.value === resolved.value && presentation.explicit === resolved.explicit && presentation.schema_version === resolved.schemaVersion && presentation.revision === resolved.revision;
+}
+function buildSettingsUpdatePayload(draft, saved) {
+  const previous = saved ?? draft;
+  const presentationChanged = draft.presentation_mode !== previous.presentation_mode || draft.presentation_mode_explicit !== previous.presentation_mode_explicit;
+  const payload = { ...draft };
+  delete payload.presentation;
+  delete payload.presentation_diagnostic;
+  delete payload.presentation_mode;
+  delete payload.presentation_mode_explicit;
+  delete payload.presentation_schema_version;
+  delete payload.presentation_revision;
+  if (presentationChanged) {
+    payload.presentation_mode = draft.presentation_mode;
+    payload.presentation_mode_explicit = true;
+    payload.presentation_schema_version = PRESENTATION_SCHEMA_VERSION;
+    payload.presentation_revision = previous.presentation_revision;
+  }
+  return payload;
+}
+function normalizePresentationSettings(settings) {
+  const presentation = resolveSettingsPresentation(settings);
+  return {
+    ...settings,
+    presentation_mode: presentation.value,
+    presentation_mode_explicit: presentation.explicit,
+    presentation_schema_version: presentation.schemaVersion,
+    presentation_revision: presentation.revision,
+    presentation: {
+      value: presentation.value,
+      source: presentation.source,
+      explicit: presentation.explicit,
+      writable: presentation.writable,
+      schema_version: presentation.schemaVersion,
+      revision: presentation.revision,
+      diagnostic: presentation.diagnostic
+    },
+    presentation_diagnostic: presentation.diagnostic
+  };
+}
+function parsePresentationMode(value) {
+  if (value === "everyday" || value === "technical") {
+    return value;
+  }
+  return null;
+}
+function applyPresentationMode(settings, mode) {
+  return {
+    ...settings,
+    presentation_mode: mode,
+    presentation_mode_explicit: true,
+    presentation_schema_version: PRESENTATION_SCHEMA_VERSION
+  };
+}
+function presentationModeStatus(presentation) {
+  if (presentation.source === "migrated") {
+    return presentation.explicit ? "Chosen on this device. Your previous display preference was migrated." : "Recommended default. Your previous display preference was migrated.";
+  }
+  return presentation.explicit ? "Chosen on this device." : "Recommended default.";
+}
+const PRESENTATION_PAYLOAD_KEYS = /* @__PURE__ */ new Set([
+  "presentation_mode",
+  "presentation_mode_explicit",
+  "presentation_schema_version",
+  "presentation_revision"
+]);
+function settingsValueEquals(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, index) => settingsValueEquals(item, b[index]));
+  }
+  if (a !== null && b !== null && typeof a === "object" && typeof b === "object") {
+    const aRecord = a;
+    const bRecord = b;
+    const aKeys = Object.keys(aRecord);
+    const bKeys = Object.keys(bRecord);
+    if (aKeys.length !== bKeys.length) {
+      return false;
+    }
+    return aKeys.every((key) => settingsValueEquals(aRecord[key], bRecord[key]));
+  }
+  return false;
+}
+function isPresentationOnlyChange(draft, saved) {
+  const previous = saved ?? draft;
+  const presentationChanged = draft.presentation_mode !== previous.presentation_mode || draft.presentation_mode_explicit !== previous.presentation_mode_explicit;
+  if (!presentationChanged) {
+    return false;
+  }
+  for (const key of Object.keys(draft)) {
+    if (key === "presentation" || key === "presentation_diagnostic") {
+      continue;
+    }
+    if (PRESENTATION_PAYLOAD_KEYS.has(key)) {
+      continue;
+    }
+    if (!settingsValueEquals(draft[key], previous[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+function presentationOnlySavePayload(draft, saved) {
+  if (!isPresentationOnlyChange(draft, saved)) {
+    return null;
+  }
+  const base = buildSettingsUpdatePayload(draft, saved);
+  return {
+    presentation_mode: base.presentation_mode,
+    presentation_mode_explicit: base.presentation_mode_explicit,
+    presentation_schema_version: base.presentation_schema_version,
+    presentation_revision: base.presentation_revision
+  };
+}
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 function resolveInitialSettingsTab(search) {
   const section = new URLSearchParams(search).get("section");
@@ -2495,6 +2997,19 @@ function resolveFineTuningSectionDescription(securityLevel) {
 }
 function isFineTuningEditable(securityLevel) {
   return securityLevel === "custom";
+}
+const REPAIR_APPROVAL_CENTER_LABELS = {
+  locator: "stale approval link",
+  daemon_state: "stale service record",
+  daemon_process: "unresponsive background service",
+  daemon_discovery_key: "invalid discovery key"
+};
+function resolveRepairApprovalCenterMessage(cleared) {
+  if (cleared.length === 0) {
+    return "Nothing needed repair. The approval center is already reachable from this dashboard.";
+  }
+  const labels = cleared.map((code) => REPAIR_APPROVAL_CENTER_LABELS[code] ?? code);
+  return `Approval center repaired: cleared ${humanizeList(labels)}. Approval links reconnect the next time a hook reaches Guard.`;
 }
 function buildClearPolicyPayload(all) {
   return { all };
@@ -2523,11 +3038,8 @@ function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, st
   }
   return enabled !== gateConfig.enabled || cooldownSeconds !== gateConfig.cooldown_seconds || strictAllDecisions !== gateConfig.strict_all_decisions;
 }
-function resolveApprovalPasswordSectionCopy(wasConfigured) {
-  if (wasConfigured) {
-    return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
-  }
-  return "Choose a password when you save settings. Guard will ask for it before allow or trust changes stick.";
+function effectiveApprovalGateCooldownSeconds(cooldownSeconds, totpEnabled) {
+  return totpEnabled ? 0 : cooldownSeconds;
 }
 function resolveTotpSetupModalTitle(isConfirmStep) {
   if (isConfirmStep) {
@@ -2649,7 +3161,7 @@ function normalizeGuardSettings(settings) {
   }, {});
   const posture = isProtectionPosture(settings.protection_posture) ? settings.protection_posture : deriveProtectionPosture(settings.mode, securityLevel);
   return {
-    ...settings,
+    ...normalizePresentationSettings(settings),
     protection_posture: posture,
     watch_auto_revert_hours: settings.watch_auto_revert_hours ?? 24,
     security_level: securityLevel,
@@ -2710,7 +3222,7 @@ function buildConsequenceSummary(settings) {
     const postureLabel = PROTECTION_POSTURE_COPY[posture].label;
     return `Using custom rules on top of ${postureLabel}.`;
   }
-  return "Guard stops dangerous actions automatically and asks once about new or unknown work.";
+  return "Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate.";
 }
 function hasUnsavedChanges(saved, draft) {
   if (saved === null || draft === null) return false;
@@ -2766,11 +3278,13 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const settingsImportInputRef = reactExports.useRef(null);
   const saveSuccessTimerRef = reactExports.useRef(null);
   const savedSettingsRef = reactExports.useRef(null);
+  const setupGateRevertRef = reactExports.useRef(null);
   const [approvalGateEnabled, setApprovalGateEnabled] = reactExports.useState(false);
   const [approvalGateTotpCode, setApprovalGateTotpCode] = reactExports.useState("");
   const [approvalGateTotpDeviceLabel, setApprovalGateTotpDeviceLabel] = reactExports.useState("local-device");
   const [approvalGateStrictAllDecisions, setApprovalGateStrictAllDecisions] = reactExports.useState(false);
   const [approvalGateCooldown, setApprovalGateCooldown] = reactExports.useState(0);
+  const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
   const [totpEnrollment, setTotpEnrollment] = reactExports.useState(null);
   const [totpSetupOpen, setTotpSetupOpen] = reactExports.useState(false);
   const [totpSetupStep, setTotpSetupStep] = reactExports.useState("confirm");
@@ -2857,6 +3371,12 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     },
     []
   );
+  const handlePresentationModeChange = reactExports.useCallback((event) => {
+    const nextMode = parsePresentationMode(event.target.value);
+    if (nextMode === null) return;
+    setDraft((value) => value === null ? value : applyPresentationMode(value, nextMode));
+    setSaveError(null);
+  }, []);
   const handleSecurityLevelChange = reactExports.useCallback((securityLevel) => {
     setDraft((value) => {
       if (value === null) return value;
@@ -3052,11 +3572,17 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     if (proofModalPending) {
       return;
     }
+    const revertGateEnabled = setupGateRevertRef.current;
+    if (proofModalMode === "setup-gate" && revertGateEnabled !== null) {
+      setApprovalGateEnabled(revertGateEnabled);
+      setDraft((value) => value === null ? value : applyApprovalGateDraft(value, { enabled: revertGateEnabled, cooldown_seconds: approvalGateCooldown, strict_all_decisions: approvalGateStrictAllDecisions }));
+    }
+    setupGateRevertRef.current = null;
     setProofModalOpen(false);
     setPendingProofAction(null);
     setProofModalError(null);
-  }, [proofModalPending]);
-  const executeSave = reactExports.useCallback(async (proof) => {
+  }, [proofModalPending, proofModalMode, approvalGateCooldown, approvalGateStrictAllDecisions]);
+  const executeSave = reactExports.useCallback(async (proof, scope = "all") => {
     if (draft === null) {
       return;
     }
@@ -3083,11 +3609,21 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         ...proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {},
         ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
       };
-      const settingsToSave = {
-        ...draft,
-        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
-        approval_gate: approvalGateUpdate
-      };
+      let settingsToSave;
+      if (scope === "approval-gate") {
+        settingsToSave = { approval_gate: approvalGateUpdate };
+      } else {
+        const presentationOnlyPayload = presentationOnlySavePayload(draft, savedSettingsRef.current);
+        if (presentationOnlyPayload !== null) {
+          settingsToSave = presentationOnlyPayload;
+        } else {
+          settingsToSave = {
+            ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+            risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+            approval_gate: approvalGateUpdate
+          };
+        }
+      }
       const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
@@ -3253,7 +3789,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     setProofModalError(null);
     try {
       if (pendingProofAction.kind === "save") {
-        await executeSave(proof);
+        await executeSave(proof, pendingProofAction.scope);
       } else if (pendingProofAction.action === "import-settings") {
         if (pendingProofAction.importExport === void 0) {
           throw new Error("Missing settings import payload.");
@@ -3264,6 +3800,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       } else {
         await executeMaintenanceWithProof(pendingProofAction.action, proof);
       }
+      setupGateRevertRef.current = null;
       setProofModalOpen(false);
       setPendingProofAction(null);
     } catch (error) {
@@ -3282,15 +3819,26 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       wasConfigured: savedGateConfig?.configured === true,
       draftGateEnabled: approvalGateEnabled
     });
-    if (requiresSettingsSaveProof(proofKind)) {
+    if (requiresSettingsSaveProof(proofKind) && !isPresentationOnlyChange(draft, savedSettingsRef.current)) {
       openProofModal(proofKind, { kind: "save" });
       return;
     }
     void executeSave();
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
-  const handleOpenPasswordChangeModal = reactExports.useCallback(() => {
-    openProofModal("change-password", { kind: "save" });
-  }, [openProofModal]);
+  const handleOpenPasswordChangeModal = reactExports.useCallback((mode = "change-password") => {
+    if (mode === "setup-gate") {
+      setupGateRevertRef.current = approvalGateEnabled;
+      setApprovalGateEnabled(true);
+      setDraft(
+        (value) => value === null ? value : applyApprovalGateDraft(value, {
+          enabled: true,
+          cooldown_seconds: approvalGateCooldown,
+          strict_all_decisions: approvalGateStrictAllDecisions
+        })
+      );
+    }
+    openProofModal(mode, { kind: "save", scope: mode === "setup-gate" ? "approval-gate" : "all" });
+  }, [openProofModal, approvalGateEnabled, approvalGateCooldown, approvalGateStrictAllDecisions]);
   const handleRequestRevokeCooldown = reactExports.useCallback(() => {
     openProofModal("maintenance", { kind: "maintenance", action: "revoke-cooldown" });
   }, [openProofModal]);
@@ -3371,8 +3919,13 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const handleDisableTotp = reactExports.useCallback(async () => {
     handleRequestDisableTotp();
   }, [handleRequestDisableTotp]);
-  const handleClearApprovals = reactExports.useCallback(() => {
-    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) {
+  const handleClearApprovals = reactExports.useCallback(async () => {
+    if (!await requestConfirmation({
+      title: "Clear all saved approvals?",
+      description: "Guard will ask again for every action it previously approved. Pending reviews and evidence are kept.",
+      confirmLabel: "Clear approvals",
+      tone: "destructive"
+    })) {
       return;
     }
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
@@ -3391,9 +3944,14 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }).finally(() => {
       setClearingApprovals(false);
     });
-  }, [openProofModal]);
-  const handleClearReviewQueue = reactExports.useCallback(() => {
-    if (!window.confirm("Clear the pending review queue? Guard will remove waiting items without creating allow or block decisions.")) {
+  }, [openProofModal, requestConfirmation]);
+  const handleClearReviewQueue = reactExports.useCallback(async () => {
+    if (!await requestConfirmation({
+      title: "Clear the pending review queue?",
+      description: "Waiting items are removed without recording an allow or block decision.",
+      confirmLabel: "Clear review queue",
+      tone: "destructive"
+    })) {
       return;
     }
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
@@ -3412,9 +3970,14 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }).finally(() => {
       setClearingReviewQueue(false);
     });
-  }, [openProofModal]);
+  }, [openProofModal, requestConfirmation]);
   const handleClearEvidence = reactExports.useCallback(async () => {
-    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
+    if (!await requestConfirmation({
+      title: "Clear the evidence log permanently?",
+      description: "Local audit history on this machine is deleted. This cannot be undone.",
+      confirmLabel: "Clear evidence",
+      tone: "destructive"
+    })) return;
     setClearingEvidence(true);
     setActionMessage(null);
     try {
@@ -3427,7 +3990,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     } finally {
       setClearingEvidence(false);
     }
-  }, []);
+  }, [requestConfirmation]);
   const handleExportDiagnostics = reactExports.useCallback(async () => {
     setExporting(true);
     setActionMessage(null);
@@ -3451,12 +4014,17 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }
   }, []);
   const handleRepairApprovalCenter = reactExports.useCallback(async () => {
-    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) return;
+    if (!await requestConfirmation({
+      title: "Repair the approval center?",
+      description: "Guard clears stale approval-center discovery state so approval links resolve again. A healthy background service and pending approvals are preserved.",
+      confirmLabel: "Repair"
+    })) return;
     setRepairing(true);
     setActionMessage(null);
     try {
-      await repairApprovalCenter();
-      setActionMessage("Approval center repaired. Restart Guard to reconnect.");
+      const result = await repairApprovalCenter();
+      const cleared = Array.isArray(result?.cleared) ? result.cleared.filter((code) => typeof code === "string") : [];
+      setActionMessage(resolveRepairApprovalCenterMessage(cleared));
       setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
@@ -3464,7 +4032,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     } finally {
       setRepairing(false);
     }
-  }, []);
+  }, [requestConfirmation]);
   const handleExportSettings = reactExports.useCallback(async () => {
     setExportingSettings(true);
     setActionMessage(null);
@@ -3515,7 +4083,12 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }
   }, [executeImportSettings, openProofModal]);
   const handleResetSettings = reactExports.useCallback(async () => {
-    if (!window.confirm("Reset all local Guard settings to defaults? This cannot be undone.")) return;
+    if (!await requestConfirmation({
+      title: "Reset all local Guard settings to defaults?",
+      description: "Protection rules, notifications, and approval-gate preferences return to factory values on this machine. This cannot be undone.",
+      confirmLabel: "Reset settings",
+      tone: "destructive"
+    })) return;
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
     if (savedGateEnabled) {
       openProofModal("maintenance", { kind: "maintenance", action: "reset-settings" });
@@ -3525,7 +4098,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       await executeResetSettings();
     } catch {
     }
-  }, [executeResetSettings, openProofModal]);
+  }, [executeResetSettings, openProofModal, requestConfirmation]);
   const handleSetupNotifications = reactExports.useCallback(async () => {
     setSettingUpNotifications(true);
     setActionMessage(null);
@@ -3562,6 +4135,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   }
   const consequenceSummary = buildConsequenceSummary(draft);
   const selectedPosture = currentProtectionPosture(draft);
+  const resolvedPresentation = resolveSettingsPresentation(draft);
   const protectionCapabilities = state.kind === "ready" ? state.payload.protection_capabilities ?? [] : [];
   const searchMatches = filterSettingsBySearch(searchQuery);
   const hasSearch = searchQuery.trim().length > 0;
@@ -3573,7 +4147,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       {
         eyebrow: "This machine",
         title: "Protection",
-        description: "Guard stops dangerous actions automatically and asks once about new or unknown work."
+        description: "Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       }
     ),
     selectedPosture === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { onTurnProtectionOn: handleTurnProtectionOn }) : null,
@@ -3648,6 +4222,18 @@ function SettingsWorkspace({ onApprovalGateChange }) {
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "Timing and features", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 py-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                SettingsSelectRow,
+                {
+                  label: "Presentation mode",
+                  description: "Choose whether Guard leads with clear everyday explanations or opens with technical detail. This never changes protection or enforcement.",
+                  value: resolvedPresentation.value,
+                  onChange: handlePresentationModeChange,
+                  options: presentationModeOptions,
+                  disabled: !resolvedPresentation.writable
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption -mt-2 text-slate-500", children: presentationModeStatus(resolvedPresentation) }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "approval-wait", className: "guard-settings-body font-medium text-brand-dark", children: "How long to wait for your answer" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-settings-caption text-slate-500", children: "Seconds before Guard returns control to your AI app" }),
@@ -3682,6 +4268,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   onChange: handleSyncToggle
                 }
               ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(CloudReviewSettings, {}),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 SettingsSelectRow,
                 {
@@ -3709,8 +4296,38 @@ function SettingsWorkspace({ onApprovalGateChange }) {
             ] }) })
           ] }),
           activeTab === "approval" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-4", children: [
-            !approvalGateEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: "Add a password or phone app code before allow or trust changes stick." }) }) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsx(
+              SettingsFormSection,
+              {
+                title: "When Guard blocks a request",
+                description: "Applies to every harness. Blocked actions stay blocked in either mode.",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "space-y-3 py-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: "Blocked request behavior" }),
+                  [
+                    { value: "safe-alternative", label: "Find a safe alternative (default)", description: "The agent receives the block reason and continues with a permitted approach. No approval prompt opens. Guard still saves the block in the inbox." },
+                    { value: "ask", label: "Ask me for approval", description: "Pause for an approval questionnaire in the harness or Guard. Decisions that require review can be approved; hard blocks stay blocked." }
+                  ].map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-blue", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "radio",
+                        name: "blocked-request-mode",
+                        value: option.value,
+                        checked: (draft.blocked_request_mode ?? "safe-alternative") === option.value,
+                        onChange: handleStringChange("blocked_request_mode"),
+                        className: "mt-1 h-4 w-4 shrink-0 accent-brand-blue"
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-medium text-brand-dark", children: option.label }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-sm text-slate-600", children: option.description })
+                    ] })
+                  ] }, option.value))
+                ] })
+              }
+            ),
+            !approvalGateEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: draft?.approval_gate?.configured === true ? "Ask for proof is off. Your saved password and authenticator stay on this device." : "Add a password or phone app code before allow or trust changes stick." }) }) : null,
+            draft.blocked_request_mode === "ask" && /* @__PURE__ */ jsxRuntimeExports.jsx(
               SettingsFormSection,
               {
                 title: "Where Guard asks",
@@ -3726,7 +4343,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                       options: surfacePolicyOptions
                     }
                   ),
-                  draft.approval_surface_policy === "attention-aware" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-3 sm:grid-cols-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                  draft.approval_surface_policy === "attention-aware" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-3 sm:grid-cols-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Browser delay (seconds)" }),
                     /* @__PURE__ */ jsxRuntimeExports.jsx(
                       "input",
@@ -3739,7 +4356,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                         className: "mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                       }
                     )
-                  ] }) }) : null
+                  ] }) })
                 ] })
               }
             ),
@@ -3969,6 +4586,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         onConfirm: handleProofModalConfirm
       }
     ) : null,
+    confirmDialog,
     (pendingMode === "observe" || pendingPosture === "watch") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-sm rounded-2xl border border-brand-attention/15 bg-white p-6 shadow-xl", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-attention/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-5 w-5 text-brand-attention", "aria-hidden": "true" }) }),
@@ -4118,18 +4736,13 @@ const cooldownOptions = [
 ];
 function ApprovalGateCard(props) {
   const wasConfigured = props.savedGateConfig?.configured === true;
-  const gateSettingsChanged = hasApprovalGateSettingsChanged(
-    props.savedGateConfig,
-    props.enabled,
-    props.cooldownSeconds,
-    props.strictAllDecisions
-  );
-  const showGateDetails = props.enabled || gateSettingsChanged;
+  const gateActiveOnDevice = props.savedGateConfig?.enabled === true;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
   const totpPending = props.gateConfig?.totp_pending === true;
   const failClosed = props.gateConfig?.fail_closed === true;
+  const effectiveCooldownSeconds = effectiveApprovalGateCooldownSeconds(props.cooldownSeconds, totpEnabled);
   const cooldownLabel = cooldownExpiresAt ? new Date(cooldownExpiresAt).toLocaleTimeString() : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 rounded-xl border border-slate-100 bg-slate-50/40 p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-start justify-between gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -4145,20 +4758,16 @@ function ApprovalGateCard(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Use a password before allow or trust changes stick. Turn on strict mode to require proof for block decisions too." })
     ] }) }),
     failClosed && props.enabled && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", children: "Guard needs your approval setup fixed before trust or policy changes can continue." }) }),
-    showGateDetails ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval password" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: resolveApprovalPasswordSectionCopy(wasConfigured) }),
-        wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: props.onOpenPasswordChangeModal,
-            className: "text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80",
-            children: "Change password"
-          }
-        ) }) : null
-      ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ApprovalPasswordSection,
+        {
+          wasConfigured,
+          enabled: props.enabled,
+          gateActive: gateActiveOnDevice,
+          onOpenPasswordChangeModal: props.onOpenPasswordChangeModal
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Extra checks" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [
@@ -4176,12 +4785,16 @@ function ApprovalGateCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "select",
               {
-                value: String(props.cooldownSeconds),
+                id: "settings-approval-gate-cooldown",
+                value: String(effectiveCooldownSeconds),
                 onChange: props.onCooldownChange,
-                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+                disabled: totpEnabled,
+                "aria-describedby": totpEnabled ? "settings-approval-gate-cooldown-help" : void 0,
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500",
                 children: cooldownOptions.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
               }
-            )
+            ),
+            totpEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "settings-approval-gate-cooldown-help", className: "mt-1 block text-xs leading-5 text-slate-500", children: "Authenticator approvals do not use the password cooldown. Your saved password cooldown applies when Authenticator is off." }) : null
           ] })
         ] })
       ] }),
@@ -4194,7 +4807,8 @@ function ApprovalGateCard(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: totpEnabled ? "green" : totpPending ? "blue" : "slate", children: totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected" }) })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 bg-slate-50/50 px-4 py-3", children: [
-          !totpEnabled && !totpPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
+          !gateActiveOnDevice && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-xs leading-5 text-slate-500", children: wasConfigured ? "Turn on Ask for proof to manage your authenticator." : "Set an approval password first, then connect an authenticator app for high-risk approvals." }),
+          gateActiveOnDevice && !totpEnabled && !totpPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-xl space-y-1", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Add a second factor for high-risk approvals." }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Setup opens a guided flow for password confirmation, then QR scan." })
@@ -4209,7 +4823,7 @@ function ApprovalGateCard(props) {
               }
             )
           ] }),
-          totpPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
+          gateActiveOnDevice && totpPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-xl space-y-1", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Finish connecting your authenticator app." }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Open setup to scan the QR code and enter a live six-digit code." })
@@ -4224,7 +4838,7 @@ function ApprovalGateCard(props) {
               }
             )
           ] }),
-          totpEnabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
+          gateActiveOnDevice && totpEnabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-xs text-slate-500", children: "Disconnecting removes the app code requirement from future high-risk approvals." }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               ActionButton,
@@ -4265,7 +4879,7 @@ function ApprovalGateCard(props) {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRevokeCooldown, variant: "outline", children: "Revoke cooldown" }) })
       ] })
-    ] }) : null
+    ] })
   ] });
 }
 function TotpSetupConfirmStep(props) {
@@ -4419,17 +5033,23 @@ export {
   buildApprovalGateWriteProof,
   buildClearPolicyPayload,
   buildClearReviewQueuePayload,
+  buildSettingsUpdatePayload,
   buildTotpQrImageOptions,
+  effectiveApprovalGateCooldownSeconds,
   formatTotpEnrollmentExpiry,
   formatTotpManualKey,
   hasApprovalGateSettingsChanged,
   hasUnsavedChanges,
   isFineTuningEditable,
+  isPresentationOnlyChange,
+  presentationOnlySavePayload,
   resolveApprovalPasswordSectionCopy,
   resolveFineTuningSectionDescription,
   resolveInitialSettingsTab,
+  resolveRepairApprovalCenterMessage,
   resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription,
+  resolveSettingsPresentation,
   resolveTotpSetupModalDescription,
   resolveTotpSetupModalTitle,
   resolveTotpSetupStep

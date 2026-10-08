@@ -123,6 +123,29 @@ def test_recent_totp_proof_reuses_factor_without_replaying_code(
     assert same_code.totp_verified is True
 
 
+def test_fresh_totp_requirement_rejects_missing_code_despite_recent_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(approval_gate_module, "_current_totp_session_binding", lambda: "session-a")
+    _enable_gate(guard_home)
+    secret = _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
+    _satisfy_totp(guard_home, secret=secret, now="2026-04-11T00:00:31+00:00")
+
+    assert recent_totp_satisfied(guard_home, now="2026-04-11T00:00:45+00:00") is True
+    with pytest.raises(ApprovalGateError) as error:
+        require_approval_decision(
+            guard_home,
+            action="allow",
+            scope="artifact",
+            subject="fresh-required-without-code",
+            approval_gate_input=ApprovalGateInput(totp_code=None, require_fresh_totp=True),
+            now="2026-04-11T00:00:45+00:00",
+        )
+    assert error.value.code == "approval_gate_totp_required"
+
+
 def test_recent_totp_proof_is_bound_to_local_session(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -231,3 +254,17 @@ def test_cli_prompt_skips_interaction_when_recent_totp_is_satisfied(
     monkeypatch.setattr(approval_gate_prompt_module.sys.stdin, "isatty", lambda: False)
 
     assert approval_gate_prompt_module.prompt_for_approval_gate(guard_home) is None
+
+
+def test_cli_prompt_collects_totp_when_fresh_code_is_required(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    _enable_gate(guard_home)
+    _enable_totp(guard_home, now="2026-04-11T00:00:00+00:00")
+    monkeypatch.setattr(approval_gate_prompt_module, "recent_totp_satisfied", lambda _guard_home: True)
+    monkeypatch.setattr(approval_gate_prompt_module.sys.stdin, "isatty", lambda: False)
+
+    with pytest.raises(ApprovalGateError, match="interactive terminal"):
+        approval_gate_prompt_module.prompt_for_approval_gate(guard_home, require_fresh_totp=True)

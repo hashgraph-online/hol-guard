@@ -1,327 +1,193 @@
 #![forbid(unsafe_code)]
 
-use std::fs::{File, OpenOptions};
 #[cfg(not(windows))]
 use std::io::Write;
 use std::path::Path;
 #[cfg(not(windows))]
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[path = "managed_resident_client_stream.rs"]
+mod client_stream;
+#[path = "managed_resident_containment.rs"]
+mod containment;
+#[path = "managed_resident_handoff.rs"]
+mod handoff;
+#[path = "managed_resident_lease.rs"]
+mod lease;
+pub(crate) use lease::client_request;
+use lease::client_request_with_lease;
+#[path = "managed_resident_client_request.rs"]
+mod client_request_flow;
 #[path = "managed_resident_transport.rs"]
 mod managed_resident_transport;
 #[cfg(windows)]
 #[path = "managed_resident_windows.rs"]
 mod managed_resident_windows;
+#[path = "managed_resident_owner_lock.rs"]
+mod owner_lock;
+pub(crate) use owner_lock::ManagedOwnerLock;
+#[path = "resident_state_retirement.rs"]
+mod resident_state_retirement;
 #[path = "resident_restart_budget.rs"]
 mod restart_budget;
 
-#[cfg(not(windows))]
-use crate::resident_state::validate_package_process_identity;
+#[cfg(all(test, unix))]
+const MANAGED_OWNER_LOCK_FILE_NAME: &str = owner_lock::MANAGED_OWNER_LOCK_FILE_NAME;
+
 use crate::resident_state::{
-    acquire_startup_lock, clear_stale_startup_lock, discover_states, next_generation,
-    runtime_digest, state_scope, token_from_state,
+    discover_home_states_prefer, process_start_marker, runtime_digest, state_scope,
+    token_from_state,
 };
 
-const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
-const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
-const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
-const MANAGED_OWNER_LOCK_FILE_NAME: &str = "managed-resident-owner.v1.lock";
-static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
-
-/// Lifetime owner lock for the resident scope.
-///
-/// Unix keeps an open, verified directory descriptor and locks both the
-/// directory and its named marker. This prevents an ordinary second process
-/// from starting a second resident even if the marker pathname is replaced.
-/// A same-UID actor that can deliberately mutate the private directory while
-/// this process runs remains an OS-account trust limitation; callers must
-/// still validate published state and process identity on every connection.
-struct ManagedOwnerLock {
-    _file: File,
-    #[cfg(unix)]
-    _directory: File,
+pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
+    client_stream::run(state_base)
 }
 
-fn acquire_managed_owner_lock(scope: &Path) -> Result<ManagedOwnerLock, String> {
-    #[cfg(unix)]
-    let directory = {
-        use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
-        let mut directory_options = OpenOptions::new();
-        directory_options
-            .read(true)
-            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC);
-        let directory = directory_options
-            .open(scope)
-            .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
-        let metadata = directory
-            .metadata()
-            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
-        let path_metadata = std::fs::symlink_metadata(scope)
-            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
-        if !metadata.is_dir()
-            || path_metadata.file_type().is_symlink()
-            || !path_metadata.is_dir()
-            || metadata.dev() != path_metadata.dev()
-            || metadata.ino() != path_metadata.ino()
-            || metadata.permissions().mode() & 0o077 != 0
-        {
-            return Err("native_resident_owner_lock_not_private".to_owned());
-        }
-        fs2::FileExt::try_lock_exclusive(&directory).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::WouldBlock {
-                "native_resident_owner_busy".to_owned()
-            } else {
-                "native_resident_owner_lock_failed".to_owned()
-            }
-        })?;
-        directory
-    };
-    let path = scope.join(MANAGED_OWNER_LOCK_FILE_NAME);
-    let mut options = OpenOptions::new();
-    options.read(true).write(true).create(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        const FILE_SHARE_READ: u32 = 0x0000_0001;
-        const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-        options
-            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-    }
-    let file = options
-        .open(&path)
-        .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
-    let metadata = file
-        .metadata()
-        .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
-    if !metadata.is_file() {
-        return Err("native_resident_owner_lock_invalid".to_owned());
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        let path_metadata = std::fs::symlink_metadata(&path)
-            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
-        let parent_uid = path
-            .parent()
-            .and_then(|parent| std::fs::symlink_metadata(parent).ok())
-            .map(|parent| parent.uid());
-        if path_metadata.file_type().is_symlink()
-            || !path_metadata.is_file()
-            || path_metadata.dev() != metadata.dev()
-            || path_metadata.ino() != metadata.ino()
-            || metadata.nlink() != 1
-            || parent_uid != Some(metadata.uid())
-            || metadata.permissions().mode() & 0o077 != 0
-        {
-            return Err("native_resident_owner_lock_not_private".to_owned());
-        }
-    }
-    #[cfg(windows)]
-    crate::resident_state::verify_windows_private_path(&path, false)?;
-    fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::WouldBlock {
-            "native_resident_owner_busy".to_owned()
-        } else {
-            "native_resident_owner_lock_failed".to_owned()
-        }
-    })?;
-    Ok(ManagedOwnerLock {
-        _file: file,
-        #[cfg(unix)]
-        _directory: directory,
-    })
+const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const MANAGED_STOP_TIMEOUT: Duration = Duration::from_secs(2);
+const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
+static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+fn client_request_with_deadline(
+    state_base: &Path,
+    payload: &[u8],
+    overall_deadline: Instant,
+    client_lease: &lease::ClientLease,
+) -> Result<Vec<u8>, String> {
+    client_request_flow::client_request_with_deadline(
+        state_base,
+        payload,
+        overall_deadline,
+        client_lease,
+    )
+}
+
+pub(crate) fn acquire_managed_owner_lock(
+    scope: &Path,
+) -> Result<owner_lock::ManagedOwnerLock, String> {
+    owner_lock::acquire(scope)
 }
 
 pub(crate) fn request_shutdown() {
     MANAGED_SHUTDOWN_REQUESTED.store(true, Ordering::Release);
 }
 
+pub(crate) fn shutdown_response_sent() {}
+
 fn shutdown_requested() -> bool {
     MANAGED_SHUTDOWN_REQUESTED.load(Ordering::Acquire)
 }
 
-fn is_stale_process_identity_error(error: &str) -> bool {
-    #[cfg(windows)]
-    {
-        matches!(
-            error,
-            "native_resident_process_identity_unavailable"
-                | "native_resident_process_identity_mismatch"
-        )
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = error;
-        false
-    }
-}
-
-fn try_states(
-    scope: &Path,
-    digest: &str,
-    payload: &[u8],
-    deadline: Instant,
-) -> Result<Option<Vec<u8>>, String> {
-    for state in discover_states(scope, digest)?.into_iter().take(4) {
-        let timeout = deadline.saturating_duration_since(Instant::now());
-        if timeout.is_zero() {
-            return Ok(None);
-        }
-        if state.transport == "loopback" {
-            #[cfg(not(windows))]
-            if validate_package_process_identity(state.process_id).is_err() {
-                continue;
-            }
-        }
-        let token = token_from_state(&state)?;
-        match crate::resident_client::send_request(
-            &state.transport,
-            &state.endpoint,
-            &token,
-            payload,
-            timeout,
-            state.process_id,
-        ) {
-            Ok(response) => return Ok(Some(response)),
-            Err(error)
-                if error == "native_client_connect_failed"
-                    || is_stale_process_identity_error(&error) => {}
-            Err(_) => return Err("native_resident_live_request_failed".to_owned()),
-        }
-    }
-    Ok(None)
-}
-
-fn spawn_managed(
+fn managed_owner_liveness(
     state_base: &Path,
-    generation: u64,
-    digest: &str,
-    token: &[u8],
-) -> Result<(), String> {
-    #[cfg(windows)]
-    return managed_resident_windows::spawn_managed(state_base, generation, digest, token);
-    #[cfg(not(windows))]
-    {
-        let executable = std::env::current_exe()
-            .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
-        let mut command = Command::new(executable);
-        command
-            .arg("supervise-managed")
-            .arg("--state-dir")
-            .arg(state_base)
-            .arg("--generation")
-            .arg(generation.to_string())
-            .arg("--runtime-sha256")
-            .arg(digest)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        let mut child = command
-            .spawn()
-            .map_err(|_| "native_resident_spawn_failed".to_owned())?;
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| "native_resident_spawn_stdin_failed".to_owned())?;
-        stdin
-            .write_all(hex_token(token).as_bytes())
-            .and_then(|()| stdin.write_all(b"\n"))
-            .and_then(|()| stdin.flush())
-            .map_err(|_| "native_resident_spawn_auth_failed".to_owned())?;
-        Ok(())
-    }
-}
-
-fn hex_token(token: &[u8]) -> String {
-    let mut output = String::with_capacity(token.len() * 2);
-    for byte in token {
-        use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
-    }
-    output
-}
-
-pub(crate) fn client_request(
-    state_base: &Path,
-    payload: &[u8],
-    timeout: Duration,
-) -> Result<Vec<u8>, String> {
-    if timeout.is_zero() {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    let overall_deadline = Instant::now() + timeout;
-    let digest = runtime_digest()?;
-    let scope = state_scope(state_base, &digest)?;
-    if let Some(response) = try_states(&scope, &digest, payload, overall_deadline)? {
-        return Ok(response);
-    }
-    if Instant::now() >= overall_deadline {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    let mut lock = acquire_startup_lock(&scope)?;
-    if lock.is_none() && clear_stale_startup_lock(&scope, &digest)? {
-        lock = acquire_startup_lock(&scope)?;
-    }
-    if lock.is_none() {
-        let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
-        while Instant::now() < deadline {
-            if let Some(response) = try_states(&scope, &digest, payload, overall_deadline)? {
-                return Ok(response);
+    owner_process_id: u32,
+    owner_start_marker: String,
+    runtime_digest: &str,
+) -> Arc<AtomicBool> {
+    let alive = Arc::new(AtomicBool::new(true));
+    let watcher_alive = Arc::clone(&alive);
+    let base = state_base.to_owned();
+    let digest = runtime_digest.to_owned();
+    thread::spawn(move || {
+        let mut no_lease_since = None;
+        loop {
+            if shutdown_requested() {
+                watcher_alive.store(false, Ordering::Release);
+                break;
             }
-            thread::sleep(CLIENT_RETRY_DELAY);
+            let owner_alive = process_start_marker(owner_process_id)
+                .is_ok_and(|actual| actual == owner_start_marker);
+            // Only clients of this runtime keep an ownerless resident alive.
+            // A newer runtime's clients must not pin an older resident that
+            // holds the home-wide owner lock and blocks their own resident.
+            if owner_alive || lease::any_live(&base, &digest) {
+                no_lease_since = None;
+            } else {
+                let started = no_lease_since.get_or_insert_with(Instant::now);
+                if started.elapsed() >= lease::LEASE_EXPIRY {
+                    watcher_alive.store(false, Ordering::Release);
+                    break;
+                }
+            }
+            thread::sleep(Duration::from_millis(50));
         }
-        if clear_stale_startup_lock(&scope, &digest)? {
-            lock = acquire_startup_lock(&scope)?;
-        }
-    }
-    let _startup_lock = lock.ok_or_else(|| "native_resident_start_in_progress".to_owned())?;
-    if Instant::now() >= overall_deadline {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    if let Some(response) = try_states(&scope, &digest, payload, overall_deadline)? {
-        return Ok(response);
-    }
-    restart_budget::consume(&scope)?;
-    let generation = next_generation(&scope, &digest)?;
-    let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
-    getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;
-    spawn_managed(state_base, generation, &digest, &token)?;
-    let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
-    while Instant::now() < deadline {
-        if let Some(response) = try_states(&scope, &digest, payload, overall_deadline)? {
-            return Ok(response);
-        }
-        thread::sleep(CLIENT_RETRY_DELAY);
-    }
-    Err("native_resident_start_timeout".to_owned())
+    });
+    alive
 }
 
-pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
+fn combine_liveness(
+    state_base: &Path,
+    owner_process_id: u32,
+    owner_start_marker: String,
+    runtime_digest: &str,
+) -> Arc<AtomicBool> {
+    let owner_alive = managed_owner_liveness(
+        state_base,
+        owner_process_id,
+        owner_start_marker,
+        runtime_digest,
+    );
+    let supervisor_alive = crate::resident_stdin_liveness();
+    let combined = Arc::new(AtomicBool::new(true));
+    let combined_watcher = Arc::clone(&combined);
+    thread::spawn(move || {
+        while owner_alive.load(Ordering::Acquire) && supervisor_alive.load(Ordering::Acquire) {
+            thread::sleep(Duration::from_millis(25));
+        }
+        combined_watcher.store(false, Ordering::Release);
+    });
+    combined
+}
+
+pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<(), String> {
+    // Materialize the current runtime scope even when no resident state is
+    // present.  This keeps the stop command's authenticated, private-home
+    // contract deterministic for callers that use it to initialize a fresh
+    // scope before publishing test or recovery state.
     let digest = runtime_digest()?;
-    let scope = state_scope(state_base, &digest)?;
+    let _ = state_scope(state_base, &digest)?;
     let request = br#"{"operation":"shutdown","request":{}}"#;
-    if try_states(
-        &scope,
-        &digest,
+    let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
+    let Some((scope, digest, state)) = discover_home_states_prefer(state_base, Some(&digest))?
+        .into_iter()
+        .next()
+    else {
+        if retire_clients {
+            lease::retire_clients_for_update(state_base, &digest, deadline)?;
+        }
+        return Err("native_resident_stop_unavailable".to_owned());
+    };
+    if retire_clients {
+        lease::retire_clients_for_update(state_base, &digest, deadline)?;
+    }
+    let process_ids = containment::state_process_identities(std::slice::from_ref(&state));
+    let token = token_from_state(&state)?;
+    let identity = crate::resident_client::ExpectedProcessIdentity {
+        process_id: state.process_id,
+        start_marker: &state.process_start_marker,
+        digest: Some(&state.runtime_sha256),
+    };
+    if crate::resident_client::send_request_for_digest(
+        &state.transport,
+        &state.endpoint,
+        &token,
         request,
-        Instant::now() + Duration::from_millis(250),
-    )?
-    .is_some()
+        deadline.saturating_duration_since(Instant::now()),
+        &identity,
+    )
+    .is_ok()
     {
+        containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
+        let _ = restart_budget::clear(&scope);
         return Ok(());
     }
+    // Clean up after a resident that died without a shutdown request, so
+    // the next stop reports an empty scope instead of a stale generation.
+    containment::retire_exited_states(&scope, &digest)?;
     Err("native_resident_stop_unavailable".to_owned())
 }
 
@@ -335,17 +201,26 @@ pub(crate) fn serve_managed(
     if generation == 0 || owner_process_id == 0 || runtime_digest()? != expected_digest {
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }
+    let owner_start_marker = process_start_marker(owner_process_id)?;
     let scope = state_scope(state_base, expected_digest)?;
-    let _owner_lock = acquire_managed_owner_lock(&scope)?;
-    let policy_store = std::sync::Arc::new(crate::policy_store::PolicySnapshotStore::new(
-        state_base,
-        expected_digest,
-    )?);
+    let _owner_lock = acquire_managed_owner_lock(state_base)?;
+    let policy_store = std::sync::Arc::new(
+        crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+            state_base,
+            expected_digest,
+            generation,
+        )?,
+    );
     let token = crate::read_resident_auth_token()?;
-    let owner_alive = crate::resident_stdin_liveness();
+    let owner_alive = combine_liveness(
+        state_base,
+        owner_process_id,
+        owner_start_marker,
+        expected_digest,
+    );
     if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
-            &scope,
+            (&scope, &_owner_lock),
             policy_store,
             generation,
             owner_process_id,
@@ -371,6 +246,17 @@ pub(crate) fn supervise_managed(
     generation: u64,
     expected_digest: &str,
 ) -> Result<(), String> {
+    let owner_process_id =
+        crate::resident_state::parent_process_id().unwrap_or_else(std::process::id);
+    supervise_managed_for_owner(state_base, generation, expected_digest, owner_process_id)
+}
+
+pub(crate) fn supervise_managed_for_owner(
+    state_base: &Path,
+    generation: u64,
+    expected_digest: &str,
+    owner_process_id: u32,
+) -> Result<(), String> {
     if generation == 0 || runtime_digest()? != expected_digest {
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }
@@ -380,13 +266,15 @@ pub(crate) fn supervise_managed(
         state_base,
         generation,
         expected_digest,
+        owner_process_id,
         &token,
     );
     #[cfg(not(windows))]
     {
         let executable = std::env::current_exe()
             .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
-        let mut child = Command::new(executable)
+        let mut child = Command::new(&executable);
+        child
             .arg("serve-managed")
             .arg("--state-dir")
             .arg(state_base)
@@ -398,7 +286,9 @@ pub(crate) fn supervise_managed(
             .arg(expected_digest)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        // Keep the serving child in the supervisor's group for joint containment.
+        let mut child = child
             .spawn()
             .map_err(|_| "native_resident_spawn_failed".to_owned())?;
         let mut liveness_writer = child
@@ -406,14 +296,44 @@ pub(crate) fn supervise_managed(
             .take()
             .ok_or_else(|| "native_resident_spawn_stdin_failed".to_owned())?;
         liveness_writer
-            .write_all(hex_token(&token).as_bytes())
+            .write_all(containment::hex_token(&token).as_bytes())
             .and_then(|()| liveness_writer.write_all(b"\n"))
             .and_then(|()| liveness_writer.flush())
             .map_err(|_| "native_resident_spawn_auth_failed".to_owned())?;
+        let owner_start_marker = process_start_marker(owner_process_id).ok();
+        let child_done = Arc::new(AtomicBool::new(false));
+        let watcher_done = Arc::clone(&child_done);
+        let watcher_base = state_base.to_owned();
+        let watcher_digest = expected_digest.to_owned();
+        let watcher = thread::spawn(move || {
+            let mut no_lease_since = None;
+            loop {
+                if watcher_done.load(Ordering::Acquire) {
+                    break;
+                }
+                if crate::resident_process_identity::executable_missing(&executable) {
+                    break;
+                }
+                let owner_alive = owner_start_marker.as_deref().is_some_and(|expected| {
+                    process_start_marker(owner_process_id).is_ok_and(|actual| actual == expected)
+                });
+                if owner_alive || lease::any_live(&watcher_base, &watcher_digest) {
+                    no_lease_since = None;
+                } else {
+                    let started = no_lease_since.get_or_insert_with(Instant::now);
+                    if started.elapsed() >= lease::LEASE_EXPIRY {
+                        drop(liveness_writer);
+                        break;
+                    }
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+        });
         let status = child
             .wait()
             .map_err(|_| "native_resident_supervisor_wait_failed".to_owned())?;
-        drop(liveness_writer);
+        child_done.store(true, Ordering::Release);
+        let _ = watcher.join();
         if status.success() {
             Ok(())
         } else {
@@ -441,16 +361,16 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
     let budget = crate::strict_json_value(payload)
         .ok()
-        .and_then(|value| {
-            value
-                .get("deadline_budget_ms")
-                .and_then(serde_json::Value::as_u64)
-        })
+        .and_then(|value| value.get("deadline_budget_ms")?.as_u64())
         .unwrap_or(750)
         .clamp(1, 9_000);
     Duration::from_millis(budget)
 }
 
+#[cfg(test)]
+use client_stream::{
+    read_frame as read_client_stream_frame, write_frame as write_client_stream_frame,
+};
 #[cfg(test)]
 #[path = "managed_resident_tests.rs"]
 mod tests;

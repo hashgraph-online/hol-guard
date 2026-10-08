@@ -13,7 +13,8 @@ from typing import Any
 from packaging.version import InvalidVersion, Version
 
 PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
-PYPI_PROJECT_LIMIT_BYTES = 10_000_000_000
+PYPI_PROJECT_LIMIT_GIB = 10
+PYPI_PROJECT_LIMIT_BYTES = PYPI_PROJECT_LIMIT_GIB * 1024**3
 
 
 def release_size_bytes(files: object) -> int:
@@ -130,8 +131,17 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     if args.fail_if_over_limit and over_limit:
-        print("PyPI hol-guard is over the 10 GB project limit.", file=sys.stderr)
-        print("Remove old 3.0.0a native wheels and sdists, then rerun publish.", file=sys.stderr)
+        print(
+            f"PyPI hol-guard is at or over the {PYPI_PROJECT_LIMIT_GIB} GiB project limit.",
+            file=sys.stderr,
+        )
+        if reclaimable:
+            print("Remove old 3.0.0a native wheels and sdists, then rerun publish.", file=sys.stderr)
+        else:
+            print(
+                "No reclaimable 3.0.0a native wheels or sdists were found; review PyPI storage before retrying.",
+                file=sys.stderr,
+            )
         return 1
     return 0
 

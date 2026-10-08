@@ -25,10 +25,12 @@ from . import native_policy_snapshot_generation as _generation
 from . import native_policy_snapshot_policy as _policy
 from . import native_policy_snapshot_storage as _storage
 from . import native_policy_snapshot_windows_acl as _windows_acl
+from . import native_policy_snapshot_windows_atomic as _windows_atomic
 from . import native_policy_snapshot_windows_io as _windows_io
 from . import native_policy_snapshot_windows_key as _windows_key
 from . import native_policy_snapshot_windows_state as _windows_state
 from . import native_policy_snapshot_windows_support as _windows_support
+from .fork_safety import forget_in_child
 from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
 globals().update({name: getattr(_constants, name) for name in _constants.__all__})
@@ -78,8 +80,17 @@ _windows_path_has_reparse_component = _windows_support._windows_path_has_reparse
 _windows_close_handle = _windows_io._windows_close_handle
 _windows_open_handle = _windows_io._windows_open_handle
 _windows_apply_private_dacl = _windows_io._windows_apply_private_dacl
+_windows_open_private_fd = _windows_io._windows_open_private_fd
+_windows_repair_private_file = _windows_io._windows_repair_private_file
+_windows_verify_private_file = _windows_io._windows_verify_private_file
+_windows_write_private_bytes = _windows_io._windows_write_private_bytes
+_windows_delete_private_child = _windows_atomic._windows_delete_private_child
+_windows_write_private_file_atomic = _windows_atomic._windows_write_private_file_atomic
+_windows_verify_private_owner = _windows_acl._windows_verify_private_owner
 _windows_verify_private_dacl = _windows_acl._windows_verify_private_dacl
 _windows_ensure_private_directory = _windows_state._windows_ensure_private_directory
+_windows_private_directory_binding = _windows_state._windows_private_directory_binding
+_windows_private_state_binding = _windows_state._windows_private_state_binding
 _v3_generation_for_policy = _generation._v3_generation_for_policy
 _merge_effective_native_policies = _policy._merge_effective_native_policies
 _normalize_scope_text_v3 = _policy._normalize_scope_text_v3
@@ -124,8 +135,9 @@ def _policy_digest(*, config_digest: str, rule_digest: str) -> str:
 
 
 def _private_guard_home(guard_home: Path) -> None:
-    if os.name == "nt" and _windows_path_has_reparse_component(guard_home):
-        raise NativePolicySnapshotError("native_policy_generation_home_invalid")
+    if os.name == "nt":
+        _windows_ensure_private_directory(guard_home)
+        return
     try:
         metadata = guard_home.lstat()
     except FileNotFoundError:
@@ -357,6 +369,7 @@ def native_policy_snapshot(
 
 _PUBLISHER_LOCK = threading.RLock()
 _PUBLISHERS: dict[str, set[NativePolicySnapshotPublisher]] = {}
+forget_in_child(_PUBLISHERS)
 
 
 def _publisher_key(guard_home: Path) -> str:
@@ -373,6 +386,22 @@ def notify_native_policy_mutation(guard_home: Path) -> None:
         publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
     for publisher in publishers:
         publisher.request_publish()
+
+
+def local_cli_publication_status(guard_home: Path, revision: int) -> dict[str, object]:
+    """Inspect existing publishers without starting a runtime or claiming readiness."""
+    with _PUBLISHER_LOCK:
+        publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
+    for publisher in publishers:
+        receipt = publisher.local_cli_publication_receipt(revision)
+        if receipt is not None:
+            return {"state": "acknowledged", **receipt}
+    errors = [publisher.last_error for publisher in publishers if not publisher.closed and publisher.last_error]
+    return {
+        "state": "failed" if errors else "pending" if publishers else "unavailable",
+        "revision": revision,
+        **({"reason": errors[0]} if errors else {}),
+    }
 
 
 def get_native_policy_snapshot_publisher(store: GuardStore) -> NativePolicySnapshotPublisher:

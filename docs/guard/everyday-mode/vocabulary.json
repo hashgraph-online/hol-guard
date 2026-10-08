@@ -1,0 +1,108 @@
+{
+  "actions": {
+    "allow": {
+      "everyday": "Allow",
+      "technical": "allow"
+    },
+    "block": {
+      "everyday": "Stop",
+      "technical": "block"
+    },
+    "require-reapproval": {
+      "everyday": "Ask me first",
+      "technical": "require reapproval"
+    },
+    "review": {
+      "everyday": "Ask me first",
+      "technical": "review"
+    },
+    "sandbox-required": {
+      "everyday": "Run with extra isolation",
+      "technical": "sandbox required"
+    },
+    "warn": {
+      "everyday": "Allow with a warning",
+      "technical": "warn"
+    }
+  },
+  "concepts": {
+    "evidence": {
+      "everyday": "what Guard saw",
+      "technical": "evidence"
+    },
+    "extension": {
+      "everyday": "protection module",
+      "technical": "extension"
+    },
+    "harness": {
+      "everyday": "app",
+      "technical": "harness"
+    },
+    "policy": {
+      "everyday": "protection rules",
+      "technical": "policy"
+    },
+    "provenance": {
+      "everyday": "managed by",
+      "technical": "provenance"
+    },
+    "receipt": {
+      "everyday": "activity record",
+      "technical": "receipt"
+    },
+    "rule": {
+      "everyday": "detection",
+      "technical": "rule"
+    }
+  },
+  "initiative_name": "Everyday Mode",
+  "navigation": {
+    "about": "About",
+    "extensions": "Protections",
+    "home": "Home",
+    "policy": "Rules and saved choices",
+    "receipts": "Activity",
+    "requests": "Decisions",
+    "settings": "Settings"
+  },
+  "prohibited_everyday_terms": [
+    "argv",
+    "AST",
+    "canonical identity",
+    "digest",
+    "hook",
+    "matcher",
+    "provenance",
+    "receipt",
+    "rule id",
+    "shell command"
+  ],
+  "schema_version": "guard.everyday-vocabulary.v1",
+  "scopes": {
+    "artifact": {
+      "everyday": "Just this action",
+      "technical": "artifact"
+    },
+    "global": {
+      "everyday": "Everywhere",
+      "technical": "global"
+    },
+    "harness": {
+      "everyday": "This app",
+      "technical": "harness"
+    },
+    "publisher": {
+      "everyday": "This verified publisher",
+      "technical": "publisher"
+    },
+    "workspace": {
+      "everyday": "This project",
+      "technical": "workspace"
+    }
+  },
+  "technical_switch": {
+    "helper": "Show exact commands, paths, rule evidence, policy sources, and diagnostics when Guard retained them.",
+    "label": "Technical Mode",
+    "migration_notice": "Advanced and Developer views are now available through Technical Mode. Your security settings did not change."
+  }
+}

@@ -18,6 +18,8 @@ from codex_plugin_scanner.guard.runtime.network_status import (
     validate_network_status,
 )
 
+_NETWORK_STATUS_DAEMON_IDENTITY_TIMEOUT_S = 0.25
+
 
 def load_network_status_payload(
     *,
@@ -33,7 +35,10 @@ def load_network_status_payload(
         if guard_home is None:
             raise GuardDaemonTransportError("Guard daemon authority is unavailable")
         payload = validate_network_status(
-            load_running_guard_surface_daemon_client(guard_home, identity_timeout=0.05).network_status()
+            load_running_guard_surface_daemon_client(
+                guard_home,
+                identity_timeout=_NETWORK_STATUS_DAEMON_IDENTITY_TIMEOUT_S,
+            ).network_status()
         )
         payload["status_source"] = "daemon"
     except GuardDaemonTimeoutError:

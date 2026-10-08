@@ -41,7 +41,6 @@ export function PolicyCloudExceptionsTab({
 
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
-  const connectUrl = snapshot.connect_url?.trim() || null;
 
   const reloadData = useCallback(async () => {
     if (!cloudConnected) {

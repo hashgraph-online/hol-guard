@@ -2,33 +2,29 @@
 
 ## Overview
 
-HOL Guard's fast hook review engine is **harness-agnostic by design**. All
-harnesses share the same daemon endpoint, review engine, and payload
-normalization. All harnesses get the fast path for PostToolUse file reads.
+HOL Guard's native hook boundary is **harness-agnostic by design**. All
+harnesses share the same daemon endpoint, bounded raw-envelope transport, and
+mechanical response projection. Supported hook decisions belong to Rust.
 
 ## Shared Architecture (All Harnesses)
 
 Every harness follows the same flow:
 
 ```
-Harness Hook Script → /v1/hooks/{harness} → HookWorker → HookReviewEngine
-                                                      ↓
-                                            normalize_harness_payload()
-                                            (handles codex, claude-code,
-                                             pi, cursor, grok, zcode, etc.)
+Harness Hook Script → /v1/hooks/{harness} → HookWorker → Rust edge
+                                                        ↓
+                                              mechanical harness response
 ```
 
 ### What's Shared
 
 - **Daemon route**: `/v1/hooks/{harness}` — generic, works for any harness
-- **HookWorker**: `review_http_payload()` — harness-agnostic, uses `default_harness` from URL
-- **HookReviewEngine**: `review()` → `_review_inner()` — uses `normalize_harness_payload()`
-- **normalize_harness_payload()**: dispatches to per-harness normalizers
-  (codex, claude-code, opencode, copilot, gemini, cursor, grok, pi, zcode)
-- **ContentScanner**: same streaming secret scanner for all harnesses
-- **HookDecisionCache**: same cache, keyed by content hash + stat + config
-- **hook_output_text.extract_payload_output()**: extracts tool output text
-  from any harness payload (checks `tool_response`, `stdout`, `output`, etc.)
+- **HookWorker**: `review_http_payload()` — launches native review and projects
+  the already-decided result without semantic re-evaluation
+- **Rust edge**: normalizes supported events, extracts bounded output, performs
+  source I/O/scanning/policy decisions, and returns a typed result
+- **Mechanical response projection**: renders native decisions for codex,
+  claude-code, pi, cursor, grok, zcode, and other registered harnesses
 
 ### What's Harness-Specific
 
@@ -40,18 +36,18 @@ Harness Hook Script → /v1/hooks/{harness} → HookWorker → HookReviewEngine
 
 ## Fast Paths
 
-All PostToolUse events go through the engine. The engine has two fast paths
-depending on whether the harness provides `guard_source_ref`:
+All supported PostToolUse events go through the Rust edge. The edge preserves
+the same two input shapes without delegating semantic ownership to Python:
 
 ### Source-Ref Fast Path (Pi/OMP)
 
 When a harness generates `guard_source_ref` client-side:
 1. Hook script computes SHA256 of text-bearing output fields
 2. Hook script sends `guard_source_ref` with the payload
-3. Engine calls `evaluate_source_file_ref()`
-4. Engine re-reads file, re-stats, re-hashes → exact match → `allow_original`
-5. Results are cached by file stat + content hash
-6. Model receives full reviewed content (no excerpt)
+3. Rust validates the reference, securely re-reads/re-stats/re-hashes, and
+   decides `allow_original` only on exact equivalence
+4. Rust owns the source-read cache and decision
+5. Model receives full reviewed content (no excerpt)
 
 **Advantage**: File-system caching by stat identity — repeated reads of
 the same file skip scanning entirely on cache hit.
@@ -60,24 +56,27 @@ the same file skip scanning entirely on cache hit.
 
 When a harness does NOT generate `guard_source_ref` (claude-code, codex,
 grok, zcode, etc.):
-1. Worker passes PostToolUse to the engine (no `HookWorkerUnsupported`)
-2. Engine calls `_review_output_scan()`
-3. `extract_payload_output()` extracts full tool output text from the payload
+1. Worker passes PostToolUse to the Rust edge (no Python semantic fallback)
+2. Rust extracts full tool output text from the bounded payload
    (checks `tool_response`, `tool_output`, `stdout`, etc.)
-4. `collect_output_text()` traverses the output value, extracting all
+3. Rust traverses the output value, extracting all
    text-bearing content — the same text the model would see
-5. Full output is scanned by `ContentScanner` for secrets
-6. If clean: `allow_original` (model sees full output)
-7. If secrets found: `block` (model sees nothing)
-8. If too large: `replace_with_reviewed_excerpt` (model sees safe excerpt)
+4. Full output is scanned by the Rust scanner for secrets
+5. If clean: `allow_original` (model sees full output)
+6. If secrets found: `block` (model sees nothing)
+7. If too large: `replace_with_reviewed_excerpt` (model sees safe excerpt)
 
 **Security**: This is **more thorough** than the legacy CLI path because
 it scans the complete output, not just a bounded excerpt. The scanner
 sees exactly what the model would see.
 
-**Gating**: Only `file_read` action types get the output scanning fast
-path. Shell commands, MCP tools, and other action types still fall
-through to `_review_standard` (which may block or return an excerpt).
+**Gating**: Rust classifies action types and applies the conservative floor.
+Unknown, malformed, or unsupported input never selects a Python evaluator.
+
+The Python reference evaluator, content scanner, and decision cache remain
+available only to explicitly marked differential tests. Production `off` is a
+fail-safe disablement; `shadow` comparison requires an explicit
+non-production diagnostic surface.
 
 ## Rust Authority Boundary
 
@@ -120,16 +119,15 @@ in favor of direct output scanning:
 
 ### Unit Tests
 
-- `test_guard_hook_worker.py::TestHookWorkerAllHarnessFallback` — proves
-  all harnesses (claude-code, codex, grok, zcode) get `allow_original`
-  for safe PostToolUse file reads via the rollback Python engine when
-  `HOL_GUARD_NATIVE=off`
+- `test_python_hook_semantic_callgraph_gate.py` — proves production hook roots
+  cannot reach the Python semantic evaluator and that `off` fails safe without
+  an explicit oracle
 - `tests/test_native_pretool_generic.py` — proves generic PreToolUse results
   stay typed and native across Claude, Codex, Cline, Cursor, Copilot, Grok, and
-  ZCode; explicit off mode remains covered by
-  `test_guard_hook_worker.py::TestHookWorkerNonPostTool`
-- `test_guard_hook_worker.py::TestHookWorkerReviewSafeSourceRef` — proves
-  Pi's client-side `guard_source_ref` fast path still works
+  ZCode; explicit off fail-safe is covered by
+  `test_python_hook_semantic_callgraph_gate.py`
+- native differential fixtures — compare Rust results with the explicit Python
+  reference oracle without making Python authoritative
 - `test_rust_pretool_authority.py` / `test_rust_posttool_authority.py` —
   prove `auto` and `force` fail closed when native is unavailable
 

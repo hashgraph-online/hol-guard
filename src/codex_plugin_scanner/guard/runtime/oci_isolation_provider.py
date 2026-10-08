@@ -47,6 +47,8 @@ from codex_plugin_scanner.guard.runtime.oci_mount_security import (
     resolve_oci_bundle_root,
 )
 
+from .payload_coercion import object_list, object_map, string_tuple
+
 _PROVIDE_KIND: Final = "oci-isolation"
 _SIGNING_IDENTITY: Final = "guard-oci-builtin"
 _TRUST_DOMAIN: Final = "guard.oci"
@@ -422,28 +424,6 @@ def _map_guarantees(
 # ---------------------------------------------------------------------------
 
 
-def _object_map(value: object) -> dict[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    raw = cast(dict[object, object], value)
-    if not all(isinstance(key, str) for key in raw):
-        return None
-    return {cast(str, key): item for key, item in raw.items()}
-
-
-def _object_list(value: object) -> list[object] | None:
-    if not isinstance(value, list):
-        return None
-    return cast(list[object], value)
-
-
-def _string_tuple(value: object) -> tuple[str, ...]:
-    items = _object_list(value)
-    if items is None:
-        return ()
-    return tuple(item for item in items if isinstance(item, str))
-
-
 def _compute_bundle_digest(spec: dict[str, object]) -> str:
     """Compute a deterministic SHA-256 digest over an OCI spec dict.
 
@@ -471,7 +451,7 @@ def _compute_bundle_digest(spec: dict[str, object]) -> str:
         elif isinstance(raw, (list, tuple)):
             values = cast(list[object] | tuple[object, ...], raw)
             filtered[key] = [_frame_scalar(item) for item in values]
-        elif (mapping := _object_map(raw)) is not None:
+        elif (mapping := object_map(raw)) is not None:
             filtered[key] = {nested_key: _frame_scalar(value) for nested_key, value in mapping.items()}
         elif isinstance(raw, (int, float, bool)):
             filtered[key] = raw
@@ -489,7 +469,7 @@ def _frame_scalar(value: object) -> object:
     if isinstance(value, (list, tuple)):
         values = cast(list[object] | tuple[object, ...], value)
         return [_frame_scalar(item) for item in values]
-    mapping = _object_map(value)
+    mapping = object_map(value)
     if mapping is not None:
         return {key: _frame_scalar(mapping[key]) for key in sorted(mapping)}
     raise ValueError(f"unsupported OCI spec field type: {type(value).__name__}")
@@ -515,13 +495,13 @@ def _build_evidence(
     raw_version = bundle.get("ociVersion")
     version = raw_version if isinstance(raw_version, str) and raw_version else "0.0.0"
     bundle_valid = version != "0.0.0"
-    rootfs_spec = _object_map(rootfs if rootfs is not None else bundle.get("root")) or {}
+    rootfs_spec = object_map(rootfs if rootfs is not None else bundle.get("root")) or {}
     rootfs_ev = _read_rootfs(rootfs_spec, bundle_root=bundle_root)
-    process_spec = _object_map(process if process is not None else bundle.get("process")) or {}
+    process_spec = object_map(process if process is not None else bundle.get("process")) or {}
     user_ev = _read_process(process_spec, rootfs_ev)
     raw_linux = linux if linux is not None else bundle.get("linux")
-    linux_ev = _read_linux(_object_map(raw_linux) or {})
-    mounts_ev = _read_mounts(_object_list(bundle.get("mounts")) or [], bundle_root=bundle_root)
+    linux_ev = _read_linux(object_map(raw_linux) or {})
+    mounts_ev = _read_mounts(object_list(bundle.get("mounts")) or [], bundle_root=bundle_root)
     network_ev = _read_network(linux_ev)
     raw_binary_digest = bundle.get("_binary_digest")
 
@@ -576,7 +556,7 @@ def _read_process(spec: dict[str, object], rootfs: OCIRootFSEvidence) -> OCIUser
     """Extract user evidence after validating process paths."""
     uid = 0
     gid = 0
-    user = _object_map(spec.get("user"))
+    user = object_map(spec.get("user"))
     if user is not None:
         uid_val = user.get("uid")
         gid_val = user.get("gid")
@@ -595,7 +575,7 @@ def _read_process(spec: dict[str, object], rootfs: OCIRootFSEvidence) -> OCIUser
 def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
     """Extract linux isolation evidence from spec."""
     # Seccomp
-    seccomp_spec = _object_map(spec.get("seccomp"))
+    seccomp_spec = object_map(spec.get("seccomp"))
     seccomp_profile = OCISeccompProfile.UNSET
     seccomp_digest = "0" * 64
     if seccomp_spec is not None:
@@ -627,7 +607,7 @@ def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
     if isinstance(apparmor, str) and apparmor:
         lsm_enabled = True
         lsm_profile = apparmor
-    selinux_map = _object_map(selinux)
+    selinux_map = object_map(selinux)
     if selinux_map:
         lsm_enabled = True
         raw_label = selinux_map.get("label")
@@ -648,7 +628,7 @@ def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
     )
 
     # Namespaces
-    ns_list = _object_list(spec.get("namespaces")) or []
+    ns_list = object_list(spec.get("namespaces")) or []
     pid_isolated = False
     net_isolated = False
     ipc_isolated = False
@@ -657,7 +637,7 @@ def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
 
     namespace_maps: list[dict[str, object]] = []
     for ns_entry in ns_list:
-        namespace_map = _object_map(ns_entry)
+        namespace_map = object_map(ns_entry)
         if namespace_map is None:
             continue
         namespace_maps.append(namespace_map)
@@ -697,11 +677,11 @@ def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
     )
 
     # Capabilities
-    caps_spec = _object_map(spec.get("capabilities")) or {}
-    effective = _string_tuple(caps_spec.get("effective"))
-    permitted = _string_tuple(caps_spec.get("permitted"))
-    ambient = _string_tuple(caps_spec.get("ambient"))
-    bounding = _string_tuple(caps_spec.get("bounding"))
+    caps_spec = object_map(spec.get("capabilities")) or {}
+    effective = string_tuple(caps_spec.get("effective"))
+    permitted = string_tuple(caps_spec.get("permitted"))
+    ambient = string_tuple(caps_spec.get("ambient"))
+    bounding = string_tuple(caps_spec.get("bounding"))
     all_caps = set(effective) | set(permitted) | set(ambient) | set(bounding)
     dangerous = tuple(capability for capability in sorted(all_caps) if capability.upper() in _DANGEROUS_CAPABILITIES)
 
@@ -740,7 +720,7 @@ def _read_mounts(
     readonly_rootfs = False
 
     for raw_mount in spec_list:
-        mount = _object_map(raw_mount)
+        mount = object_map(raw_mount)
         if mount is None:
             continue
 
@@ -751,7 +731,7 @@ def _read_mounts(
         dst = raw_destination if isinstance(raw_destination, str) else ""
         typ = raw_type if isinstance(raw_type, str) else ""
         raw_options = mount.get("options")
-        options = (raw_options,) if isinstance(raw_options, str) else _string_tuple(raw_options)
+        options = (raw_options,) if isinstance(raw_options, str) else string_tuple(raw_options)
         is_bind = is_oci_host_path_mount(typ, options, src)
 
         if is_bind and not src:
@@ -817,11 +797,11 @@ def _read_network(linux_ev: _OCILinuxEvidence) -> OCINetworkEvidence:
     mode = "default"
     port_mappings: tuple[str, ...] = ()
     loopback_only = linux_ev.namespaces.net_isolated
-    network_spec = _object_map(linux_ev.network_spec)
+    network_spec = object_map(linux_ev.network_spec)
     if network_spec is not None:
         raw_mode = network_spec.get("mode")
         mode = raw_mode if isinstance(raw_mode, str) else "default"
-        raw_ports = _object_list(network_spec.get("ports"))
+        raw_ports = object_list(network_spec.get("ports"))
         if raw_ports is not None:
             port_mappings = tuple(str(port) for port in raw_ports)
         if mode in _HOST_NETWORK_MODES:
@@ -944,7 +924,7 @@ class OCIIsolationProvider:
         hooks = bundle.get("hooks")
         if hooks not in (None, {}):
             raise ProviderPlanError("OCI lifecycle hooks are unsupported")
-        selected_rootfs = rootfs_spec if rootfs_spec is not None else _object_map(bundle.get("root")) or {}
+        selected_rootfs = rootfs_spec if rootfs_spec is not None else object_map(bundle.get("root")) or {}
         if selected_rootfs:
             rootfs_path = selected_rootfs.get("path")
             try:

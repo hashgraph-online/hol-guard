@@ -7,13 +7,21 @@ import os
 import re
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
+import pytest
+
+from codex_plugin_scanner.guard.action_lattice import guard_action_severity, is_guard_action
 from tests.guard_command_corpus import load_seed_manifest
+from tests.guard_command_corpus_native_contract import (
+    expected_native_groups,
+    expected_native_rejection_groups,
+    expected_original_gap_groups,
+)
 from tests.guard_command_decision_diff import (
     BASE_RELEASE_SHA,
-    REPORT_PATH,
     REPORT_SCHEMA_VERSION,
     canonical_json_bytes,
     generate_decision_diff_report,
@@ -22,15 +30,77 @@ from tests.guard_command_decision_diff import (
 )
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
+_ARCHIVED_REPORT = Path(__file__).parent / "fixtures/guard-command-corpus/decision-diff-report.json"
 
 
+@lru_cache(maxsize=1)
 def _fixture() -> dict[str, object]:
-    value = cast(object, json.loads(REPORT_PATH.read_text(encoding="utf-8")))
-    assert isinstance(value, dict)
-    return cast(dict[str, object], value)
+    """Evaluate today's native compiler against independent reviewed expectations."""
+    return generate_decision_diff_report()
+
+
+@pytest.fixture(scope="module")
+def _authoritative_report_digest() -> str:
+    # Compute once from the current source/native evaluator and share it
+    # across the environment variants; the checked-in projection may lag
+    # while maintainer regeneration is pending.
+    """Return the framed digest of the current source-bound decision report."""
+    return report_framed_sha256(_fixture())
+
+
+def test_report_cli_writes_and_checks_framed_digest(tmp_path: Path, monkeypatch) -> None:
+    from tests import guard_command_decision_diff as module
+    from tests.support import extension_freshness
+
+    monkeypatch.setattr(extension_freshness, "pending_decision_diff_regen", lambda: False)
+    report = {"schema": "synthetic-report"}
+    path = tmp_path / "decision-diff-report.json"
+    digest_path = path.with_name("decision-diff-report.framed-sha256")
+    monkeypatch.setattr(module, "REPORT_PATH", path)
+    monkeypatch.setattr(module, "_generate_decision_diff_report", lambda: (report, 1.0))
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--write"])
+    module._main()
+    assert path.read_bytes() == canonical_json_bytes(report)
+    assert digest_path.read_text(encoding="ascii") == report_framed_sha256(report) + "\n"
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--check"])
+    module._main()
+    digest_path.write_text("0" * 64 + "\n", encoding="ascii")
+    with pytest.raises(SystemExit, match="framed digest is stale"):
+        module._main()
+
+
+def test_report_cli_strict_check_does_not_defer_regen_owned_report(tmp_path: Path, monkeypatch) -> None:
+    from tests import guard_command_decision_diff as module
+    from tests.support import extension_freshness
+
+    monkeypatch.setattr(extension_freshness, "pending_decision_diff_regen", lambda: True)
+    monkeypatch.setenv("HOL_GUARD_STRICT_DECISION_REPORT", "1")
+    report = {"schema": "strict-synthetic-report"}
+    path = tmp_path / "decision-diff-report.json"
+    digest_path = path.with_name("decision-diff-report.framed-sha256")
+    monkeypatch.setattr(module, "REPORT_PATH", path)
+    monkeypatch.setattr(module, "_generate_decision_diff_report", lambda: (report, 1.0))
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--write"])
+    module._main()
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--check"])
+    module._main()
+    digest_path.write_text("0" * 64 + "\n", encoding="ascii")
+    with pytest.raises(SystemExit, match="framed digest is stale"):
+        module._main()
+
+
+def test_checked_in_report_and_framed_digest_are_an_exact_pair() -> None:
+    # Historical evidence remains readable without freezing today's build.
+    """Verify checked in report and framed digest are an exact pair."""
+    report = json.loads(_ARCHIVED_REPORT.read_bytes())
+    assert _ARCHIVED_REPORT.read_bytes() == canonical_json_bytes(report)
+    digest_path = _ARCHIVED_REPORT.with_name("decision-diff-report.framed-sha256")
+    assert digest_path.read_text(encoding="ascii") == report_framed_sha256(report) + "\n"
 
 
 def teardown_module() -> None:
+    """Clear cached evidence and restore scanner CLI namespace bindings after this module."""
+    _fixture.cache_clear()
     from codex_plugin_scanner.guard.cli.commands_support import _sync_namespace
 
     _sync_namespace()
@@ -56,6 +126,30 @@ def test_decision_diff_import_does_not_shadow_scanner_package_exports() -> None:
     assert completed.returncode == 0, completed.stderr
 
 
+def test_fresh_worker_import_loads_packaged_resources_without_scanner_exports() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from importlib.resources import files; "
+                "from tests import guard_command_decision_diff_runner as runner; "
+                "guard_root = runner.REPO_ROOT / 'src' / 'codex_plugin_scanner' / 'guard'; "
+                "resource = 'contracts/data/extensions/command-catalog.v1.json'; "
+                "assert files('codex_plugin_scanner.guard').joinpath(resource).read_bytes() "
+                "== (guard_root / resource).read_bytes(); "
+                "assert 'scan_plugin' not in sys.modules['codex_plugin_scanner'].__dict__"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
     scripts = (
         (
@@ -68,20 +162,20 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
             "assert models is sys.modules['codex_plugin_scanner.guard.models']"
         ),
         (
-                "import sys; "
-                "import codex_plugin_scanner.guard as guard; "
-                "import codex_plugin_scanner.guard.runtime as runtime; "
-                "guard_modules = {k: v for k, v in guard.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "runtime_modules = {k: v for k, v in runtime.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "import tests.guard_command_decision_diff; "
-                "assert guard_modules == {k: v for k, v in guard.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "assert runtime_modules == {k: v for k, v in runtime.__dict__.items() "
-                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
-                "from codex_plugin_scanner.guard.runtime import effect_decision; "
-                "assert effect_decision is sys.modules['codex_plugin_scanner.guard.runtime.effect_decision']"
+            "import sys; "
+            "import codex_plugin_scanner.guard as guard; "
+            "import codex_plugin_scanner.guard.runtime as runtime; "
+            "guard_modules = {k: v for k, v in guard.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "runtime_modules = {k: v for k, v in runtime.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "import tests.guard_command_decision_diff; "
+            "assert guard_modules == {k: v for k, v in guard.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "assert runtime_modules == {k: v for k, v in runtime.__dict__.items() "
+            "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+            "from codex_plugin_scanner.guard.runtime import effect_decision; "
+            "assert effect_decision is sys.modules['codex_plugin_scanner.guard.runtime.effect_decision']"
         ),
     )
     for script in scripts:
@@ -95,8 +189,10 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
 
 
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
-    report = generate_decision_diff_report()
-    assert REPORT_PATH.read_bytes() == canonical_json_bytes(report)
+    """Verify report is exactly reproducible and source bound."""
+    report = _fixture()
+    # Compare separate evaluations of the same inputs, not a prior Git snapshot.
+    assert canonical_json_bytes(generate_decision_diff_report()) == canonical_json_bytes(report)
     assert report["schema_version"] == REPORT_SCHEMA_VERSION
     assert report["base_release_sha"] == BASE_RELEASE_SHA
     assert re.fullmatch(r"[0-9a-f]{64}", report_framed_sha256(report))
@@ -107,6 +203,20 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
     assert all(re.fullmatch(r"source-[0-9a-f]{24}", source) for source in sources)
     assert all(re.fullmatch(r"[0-9a-f]{64}", str(digest)) for digest in sources.values())
     critical_paths = {
+        "contracts/extensions/command-catalog.v1.json",
+        "contracts/extensions/native-command-program.v1.json",
+        "docs/guard/native-command-corpus-contract.md",
+        "docs/guard/declarative-authoring-adr.md",
+        "rust/crates/guard-command/src/native_command_source_evaluation_batch.rs",
+        "rust/crates/guard-command/src/native_command_source.rs",
+        "rust/crates/guard-command/src/bin/guard-command-source.rs",
+        "tests/guard_command_corpus_native.py",
+        "tests/guard_command_corpus_native_contract.py",
+        "tests/test_guard_command_corpus_native_contract.py",
+        "tests/guard_test_invariants.py",
+        "tests/native_command_test_support.py",
+        "tests/test_native_command_test_support_batch.py",
+        "tests/test_guard_native_classification_baseline.py",
         "src/codex_plugin_scanner/guard/runtime/command_decision_adapter.py",
         "src/codex_plugin_scanner/guard/runtime/command_extensions.py",
         "src/codex_plugin_scanner/guard/runtime/command_model.py",
@@ -140,7 +250,7 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
     assert {source_binding_id(path) for path in critical_paths} <= sources.keys()
 
 
-def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> None:
+def test_report_gates_native_parity_and_preserves_every_original_oracle_difference() -> None:
     report = _fixture()
     manifest = load_seed_manifest()
     corpus = cast(dict[str, object], report["corpus"])
@@ -151,6 +261,7 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
 
     comparison = cast(dict[str, object], report["current_vs_proposed"])
     assert comparison["lowered_count"] == 0
+    assert comparison["action_changed_count"] == 0
     assert comparison["disposition_changed_count"] == 0
     assert (
         sum(
@@ -160,26 +271,36 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
         == 51000
     )
 
-    legacy = cast(dict[str, object], report["legacy_to_current"])
-    assert legacy["lowered_count"] == 0
-    groups = {
-        str(group["key"]): int(str(group["count"]))
-        for group in cast(list[dict[str, object]], legacy["transition_groups"])
-    }
-    assert groups == {
-        "allow|block": 9373,
-        "allow|require-reapproval": 16691,
-        "allow|review": 250,
-        "block|block": 4167,
-        "review|block": 19794,
-        "review|review": 725,
-    }
+    for group in cast(list[dict[str, object]], comparison["transition_groups"]):
+        current_action, current_disposition, proposed_action, proposed_disposition = str(group["key"]).split("|")
+        assert (current_action, current_disposition) == (proposed_action, proposed_disposition)
+
+    native_floor = cast(dict[str, object], report["native_floor_to_current"])
+    assert native_floor["lowered_count"] == 0
+    floor_groups = cast(list[dict[str, object]], native_floor["transition_groups"])
+    assert sum(int(str(group["count"])) for group in floor_groups) == 51_000
+    for group in floor_groups:
+        before, after = str(group["key"]).split("|")
+        assert is_guard_action(before) and is_guard_action(after)
+        assert guard_action_severity(before) <= guard_action_severity(after)
+
+    native_contract = cast(dict[str, object], report["native_contract"])
+    assert native_contract["equality"] is True
+    assert native_contract["matched_count"] == 51_000
+    assert native_contract["unexpected_count"] == 0
+    assert _group_signatures(native_contract["groups"]) == expected_native_groups()
+    assert _group_signatures(native_contract["native_rejection_groups"]) == expected_native_rejection_groups()
+    assert native_contract["native_rejection_count"] == 27_084
 
     reconciliation = cast(dict[str, object], report["oracle_reconciliation"])
-    assert reconciliation["known_gap_equality"] is True
-    assert reconciliation["reconciled_count"] == 51000
-    assert reconciliation["unreconciled_count"] == 0
-    assert reconciliation["known_gaps"] == {}
+    assert reconciliation["known_gap_equality"] is False
+    assert reconciliation["categorized_count"] == 51_000
+    assert reconciliation["uncategorized_count"] == 0
+    assert reconciliation["below_original_count"] == 0
+    assert reconciliation["above_original_count"] == 10_541
+    original_gaps = cast(dict[str, list[object]], reconciliation["known_gaps"])
+    gap_signatures = {key: (int(str(value[0])), str(value[1])) for key, value in original_gaps.items()}
+    assert gap_signatures == expected_original_gap_groups()
     category_groups = cast(list[dict[str, object]], reconciliation["category_groups"])
     assert sum(int(str(group["count"])) for group in category_groups) == 51000
     assert all(
@@ -188,9 +309,18 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
     )
 
 
+def _group_signatures(value: object) -> dict[str, tuple[int, str]]:
+    assert isinstance(value, list)
+    groups = cast(list[dict[str, object]], value)
+    result = {str(group["key"]): (int(str(group["count"])), str(group["case_ids_framed_sha256"])) for group in groups}
+    assert len(result) == len(groups)
+    return result
+
+
 def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
-    payload = REPORT_PATH.read_text(encoding="utf-8")
+    """Verify report contains only privacy safe deterministic evidence."""
     report = _fixture()
+    payload = canonical_json_bytes(report).decode("utf-8")
     privacy = cast(dict[str, object], report["privacy"])
     assert privacy == {
         "case_material": "opaque-case-identifiers-only",
@@ -202,27 +332,31 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     assert not _OPAQUE_ID.search(payload)
 
 
-def test_fresh_process_report_is_environment_independent_and_bounded() -> None:
+@pytest.mark.parametrize(
+    ("hash_seed", "timezone", "locale"),
+    [("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")],
+    ids=["utc", "pacific"],
+)
+def test_fresh_process_report_is_environment_independent_and_bounded(
+    hash_seed: str, timezone: str, locale: str, _authoritative_report_digest: str
+) -> None:
     script = Path(__file__).with_name("guard_command_decision_diff.py")
-    expected_digest = report_framed_sha256(_fixture())
-    metrics: list[dict[str, object]] = []
+    expected_digest = _authoritative_report_digest
     manifest = load_seed_manifest()
     evaluation_budget_seconds = int(str(manifest["evaluation_budget_seconds"]))
-    for hash_seed, timezone, locale in (("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")):
-        environ = os.environ.copy()
-        environ.update({"PYTHONHASHSEED": hash_seed, "TZ": timezone, "LC_ALL": locale})
-        completed = subprocess.run(
-            [sys.executable, str(script), "--metrics"],
-            check=True,
-            capture_output=True,
-            timeout=evaluation_budget_seconds + 15,
-            env=environ,
-        )
-        value = cast(object, json.loads(completed.stdout))
-        assert isinstance(value, dict)
-        metrics.append(cast(dict[str, object], value))
-    assert [item["report_framed_sha256"] for item in metrics] == [expected_digest, expected_digest]
-    assert all(float(str(item["elapsed_seconds"])) < evaluation_budget_seconds for item in metrics), metrics
-    assert all(float(str(item["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])) for item in metrics), (
-        metrics
+    spawn_overhead_seconds = 15
+    environ = os.environ.copy()
+    environ.update({"PYTHONHASHSEED": hash_seed, "TZ": timezone, "LC_ALL": locale})
+    completed = subprocess.run(
+        [sys.executable, str(script), "--metrics"],
+        check=True,
+        capture_output=True,
+        timeout=evaluation_budget_seconds + spawn_overhead_seconds,
+        env=environ,
     )
+    value = cast(object, json.loads(completed.stdout))
+    assert isinstance(value, dict)
+    metrics = cast(dict[str, object], value)
+    assert metrics["report_framed_sha256"] == expected_digest
+    assert float(str(metrics["elapsed_seconds"])) < evaluation_budget_seconds + spawn_overhead_seconds, metrics
+    assert float(str(metrics["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])), metrics

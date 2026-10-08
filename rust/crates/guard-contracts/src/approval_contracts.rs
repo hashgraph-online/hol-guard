@@ -12,6 +12,30 @@ pub const NATIVE_APPROVAL_CONSUME_REQUEST_V3_SCHEMA: &str =
     "guard-native-approval-consume-request.v3";
 pub const NATIVE_APPROVAL_RESULT_V3_SCHEMA: &str = "guard-native-approval-result.v3";
 pub const NATIVE_APPROVAL_RECEIPT_V3_SCHEMA: &str = "guard-native-approval-receipt.v3";
+pub const NATIVE_APPROVAL_AUTHORITY_V4_SCHEMA: &str = "guard-native-approval-authority.v4";
+pub const NATIVE_APPROVAL_ENROLLMENT_REQUEST_V4_SCHEMA: &str =
+    "guard-native-approval-enrollment-request.v4";
+pub const NATIVE_APPROVAL_ARTIFACT_V4_SCHEMA: &str = "guard-native-approval-artifact.v4";
+pub const NATIVE_APPROVAL_CHALLENGE_REQUEST_V4_SCHEMA: &str =
+    "guard-native-approval-challenge-request.v4";
+pub const NATIVE_APPROVAL_CHALLENGE_V4_SCHEMA: &str = "guard-native-approval-challenge.v4";
+pub const NATIVE_APPROVAL_VALIDATE_REQUEST_V4_SCHEMA: &str =
+    "guard-native-approval-validate-request.v4";
+pub const NATIVE_APPROVAL_CONSUME_REQUEST_V4_SCHEMA: &str =
+    "guard-native-approval-consume-request.v4";
+pub const NATIVE_APPROVAL_RESULT_V4_SCHEMA: &str = "guard-native-approval-result.v4";
+pub const NATIVE_APPROVAL_RECEIPT_V4_SCHEMA: &str = "guard-native-approval-receipt.v4";
+pub const NATIVE_APPROVAL_V4_ENROLLMENT_DOMAIN: &[u8] =
+    b"guard-native-approval-webauthn-enrollment-v4\0";
+pub const NATIVE_APPROVAL_V4_ARTIFACT_DOMAIN: &[u8] =
+    b"guard-native-approval-webauthn-artifact-v4\0";
+pub const NATIVE_APPROVAL_V4_ALGORITHM_ES256: i32 = -7;
+pub const NATIVE_APPROVAL_V4_ALGORITHM_ED25519: i32 = -8;
+pub const NATIVE_APPROVAL_V4_MAX_AUTHENTICATOR_DATA_BYTES: usize = 4 * 1024;
+pub const NATIVE_APPROVAL_V4_MAX_CLIENT_DATA_BYTES: usize = 16 * 1024;
+pub const NATIVE_APPROVAL_V4_MAX_SIGNATURE_BYTES: usize = 256;
+pub const NATIVE_APPROVAL_V4_MAX_CREDENTIAL_ID_BYTES: usize = 1024;
+pub const NATIVE_APPROVAL_V4_MAX_COSE_KEY_BYTES: usize = 2048;
 pub const NATIVE_ACTION_IDENTITY_V3_SCHEMA: &str = "guard-native-action-identity.v3";
 /// Approval artifacts are signed by a user-facing authority whose private
 /// key never enters the Python control plane or the Guard state directory.
@@ -131,6 +155,35 @@ pub const NATIVE_APPROVAL_ERROR_CODES: &[&str] = &[
     "native_approval_time_invalid",
     "native_approval_validate_request_invalid",
     "native_approval_validated",
+    "native_approval_v4_authority_invalid",
+    "native_approval_v4_authority_missing",
+    "native_approval_v4_authority_revoked",
+    "native_approval_v4_authority_generation_rollback",
+    "native_approval_v4_authority_provenance_mismatch",
+    "native_approval_v4_authority_unavailable",
+    "native_approval_v4_authority_key_id_mismatch",
+    "native_approval_v4_algorithm_invalid",
+    "native_approval_v4_artifact_invalid",
+    "native_approval_v4_artifact_schema_mismatch",
+    "native_approval_v4_challenge_request_invalid",
+    "native_approval_v4_authenticator_data_invalid",
+    "native_approval_v4_authenticator_flags_invalid",
+    "native_approval_v4_cbor_invalid",
+    "native_approval_v4_cbor_bounds_exceeded",
+    "native_approval_v4_client_data_invalid",
+    "native_approval_v4_client_data_type_invalid",
+    "native_approval_v4_counter_replay",
+    "native_approval_v4_credential_mismatch",
+    "native_approval_v4_enrollment_invalid",
+    "native_approval_v4_origin_mismatch",
+    "native_approval_v4_rp_id_mismatch",
+    "native_approval_v4_signature_invalid",
+    "native_approval_v4_secure_state_invalid",
+    "native_approval_v4_secure_state_unavailable",
+    "native_approval_v4_validate_request_invalid",
+    "native_approval_v4_consume_request_invalid",
+    "native_approval_v4_validated",
+    "native_approval_v4_consumed",
     "native_overloaded",
     "native_policy_snapshot_authority_persistence_failed",
     "native_policy_snapshot_context_mismatch",
@@ -146,6 +199,57 @@ pub const NATIVE_APPROVAL_ERROR_CODES: &[&str] = &[
     "native_policy_snapshot_rule_mismatch",
     "native_policy_snapshot_scope_mismatch",
     "native_policy_snapshot_state_unavailable",
+    "native_policy_snapshot_ack_encode_failed",
+    "native_policy_snapshot_authority_encode_failed",
+    "native_policy_snapshot_authority_invalid",
+    "native_policy_snapshot_authority_parent_missing",
+    "native_policy_snapshot_authority_not_private",
+    "native_policy_snapshot_authority_read_failed",
+    "native_policy_snapshot_authority_replace_failed",
+    "native_policy_snapshot_authority_stat_failed",
+    "native_policy_snapshot_authority_sync_failed",
+    "native_policy_snapshot_authority_too_large",
+    "native_policy_snapshot_authority_write_failed",
+    "native_policy_snapshot_authority_recovery_failed",
+    "native_policy_snapshot_floor_invalid",
+    "native_business_policy_floor_invalid",
+    "native_business_policy_removal_requires_authority",
+    "native_business_source_authority_missing",
+    "native_business_source_authority_invalid",
+    "native_business_source_authority_not_current",
+    "native_business_source_mutation_in_progress",
+    "native_business_source_enforce_required",
+    "native_policy_snapshot_floor_parent_missing",
+    "native_policy_snapshot_floor_not_private",
+    "native_policy_snapshot_floor_read_failed",
+    "native_policy_snapshot_floor_stat_failed",
+    "native_policy_snapshot_parent_invalid",
+    "native_policy_snapshot_parent_not_private",
+    "native_policy_snapshot_state_invalid",
+    "native_policy_snapshot_state_noncanonical",
+    "native_policy_verifier_key_invalid",
+    "native_policy_verifier_key_missing",
+    "native_policy_verifier_key_not_private",
+    "native_policy_verifier_key_read_failed",
+    "native_policy_verifier_key_stat_failed",
+    "snapshot_digest_invalid",
+    "snapshot_digest_mismatch",
+    "snapshot_expiry_invalid",
+    "snapshot_generation_invalid",
+    "snapshot_generation_downgrade",
+    "snapshot_generation_reused",
+    "snapshot_integrity_invalid",
+    "snapshot_integrity_mismatch",
+    "snapshot_mode_invalid",
+    "snapshot_policy_invalid",
+    "snapshot_protocol_mismatch",
+    "snapshot_rule_digest_mismatch",
+    "snapshot_runtime_identity_mismatch",
+    "snapshot_schema_mismatch",
+    "snapshot_scope_invalid",
+    "snapshot_serialization_failed",
+    "snapshot_too_large",
+    "snapshot_version_mismatch",
     "native_policy_snapshot_unavailable",
     "native_request_invalid_json",
     "native_resident_clock_invalid",
@@ -155,6 +259,10 @@ pub const NATIVE_APPROVAL_ERROR_CODES: &[&str] = &[
     "native_runtime_panicked",
     "snapshot_expired",
 ];
+
+#[path = "approval_contracts_lifecycle_errors.rs"]
+mod lifecycle_error_codes;
+pub use lifecycle_error_codes::NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES;
 
 /// Typed native floor classification. A non-overridable floor is an
 /// intrinsic safety boundary and cannot be changed by a presentation-layer

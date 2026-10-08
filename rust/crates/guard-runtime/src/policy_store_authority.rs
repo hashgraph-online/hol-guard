@@ -1,7 +1,7 @@
 use super::policy_store_migration::load_legacy_authority;
 use super::policy_store_persistence::{read_generation_floor, read_private_json};
 use super::*;
-use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac, SnapshotError};
+use guard_policy_snapshot::{canonical_json_bytes, SnapshotError};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::fs::OpenOptions;
@@ -14,13 +14,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const AUTHORITY_WATCH_INTERVAL: Duration = Duration::from_millis(5);
 
-/// Return a cryptographic identity for the complete authority object.
-///
-/// Metadata alone is insufficient: a same-size in-place rewrite can restore
-/// its mtime. Include the bounded bytes in a SHA-256 digest, together with
-/// the opened object's identity, so both semantic replacement and object
-/// replacement invalidate the resident fence. The digest is only a change
-/// detector; the authenticated record parser remains the source of truth.
 pub(super) fn authority_fingerprint(path: &Path) -> Option<String> {
     let metadata = fs::symlink_metadata(path).ok()?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -73,41 +66,61 @@ pub(super) fn authority_fingerprint(path: &Path) -> Option<String> {
     Some(hex::encode(hasher.finalize()))
 }
 
-/// Watch durable authority identities without reparsing policy on requests.
 pub(super) fn start_authority_watcher(
     path: PathBuf,
     observed: Arc<Mutex<Option<String>>>,
     changed: Weak<AtomicBool>,
 ) {
+    start_authority_watcher_with_sample_hook(path, observed, changed, || {});
+}
+
+fn start_authority_watcher_with_sample_hook<F>(
+    path: PathBuf,
+    observed: Arc<Mutex<Option<String>>>,
+    changed: Weak<AtomicBool>,
+    after_sample: F,
+) where
+    F: Fn() + Send + 'static,
+{
     let _ = thread::Builder::new()
         .name("hol-guard-policy-authority-watch".to_owned())
         .spawn(move || loop {
             let Some(changed) = changed.upgrade() else {
                 break;
             };
-            let current = authority_fingerprint(&path);
-            let different = observed
-                .lock()
-                .map(|expected| *expected != current)
-                .unwrap_or(true);
-            if different {
-                changed.store(true, Ordering::SeqCst);
+            match observed.lock() {
+                Ok(expected) => {
+                    let current = authority_fingerprint(&path);
+                    after_sample();
+                    if *expected != current {
+                        changed.store(true, Ordering::SeqCst);
+                    }
+                }
+                Err(_) => changed.store(true, Ordering::SeqCst),
             }
             thread::sleep(AUTHORITY_WATCH_INTERVAL);
         });
 }
 
-pub(super) fn encode_ack(snapshot: &PolicySnapshotV3, idempotent: bool) -> Result<Vec<u8>, String> {
+pub(super) fn encode_ack(
+    snapshot: &PolicySnapshotV3,
+    idempotent: bool,
+    resident_generation: u64,
+) -> Result<Vec<u8>, String> {
     serde_json::to_vec(&PolicySnapshotAckV1 {
         status: "accepted".to_owned(),
         generation: snapshot.generation,
         policy_digest: snapshot.policy_digest.clone(),
         idempotent,
+        resident_generation,
     })
     .map_err(|_| "native_policy_snapshot_ack_encode_failed".to_owned())
 }
 
-pub(super) fn encode_requires_new_generation(state: &PolicyState) -> Result<Vec<u8>, String> {
+pub(super) fn encode_requires_new_generation(
+    state: &PolicyState,
+    resident_generation: u64,
+) -> Result<Vec<u8>, String> {
     let Some(policy_digest) = state.policy_digest.as_ref() else {
         return Err("native_policy_snapshot_invalid".to_owned());
     };
@@ -119,6 +132,7 @@ pub(super) fn encode_requires_new_generation(state: &PolicyState) -> Result<Vec<
         generation: state.generation_floor,
         policy_digest: policy_digest.clone(),
         idempotent: false,
+        resident_generation,
     })
     .map_err(|_| "native_policy_snapshot_ack_encode_failed".to_owned())
 }
@@ -158,7 +172,23 @@ pub(super) fn authorities_unchanged(store: &PolicySnapshotStore) -> bool {
         .lock()
         .map(|observed| *observed == approval_current)
         .unwrap_or(false);
-    policy_matches && approval_matches
+    let approval_v4_current = store
+        .approval_v4_authority
+        .as_ref()
+        .and_then(|authority| authority_fingerprint(&authority.path));
+    let approval_v4_current = approval_v4_current.or_else(|| {
+        authority_fingerprint(
+            &store
+                .authority_path
+                .with_file_name(approval_v4_authority::AUTHORITY_FILE_NAME),
+        )
+    });
+    let approval_v4_matches = store
+        .approval_v4_authority_observed
+        .lock()
+        .map(|observed| *observed == approval_v4_current)
+        .unwrap_or(false);
+    policy_matches && approval_matches && approval_v4_matches
 }
 
 pub(super) fn authority_unchanged_fenced(store: &PolicySnapshotStore) -> bool {
@@ -226,87 +256,6 @@ pub(super) fn scope_binding_for_state_base(state_base: &Path) -> (String, String
     (canonical, digest)
 }
 
-pub(super) fn validate_private_directory(path: &Path) -> Result<(), String> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| "native_policy_snapshot_parent_invalid".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err("native_policy_snapshot_parent_invalid".to_owned());
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o077 != 0 {
-            return Err("native_policy_snapshot_parent_not_private".to_owned());
-        }
-    }
-    #[cfg(windows)]
-    crate::resident_state::verify_windows_private_path(path, true)?;
-    Ok(())
-}
-
-pub(super) fn read_verifier_key(state_base: &Path) -> Result<[u8; VERIFIER_KEY_BYTES], String> {
-    let path = state_base.join(VERIFIER_KEY_FILE_NAME);
-    #[cfg(windows)]
-    let mut file =
-        crate::resident_state::open_private_read(&path, MAX_KEY_FILE_BYTES, "policy_verifier_key")
-            .map_err(map_verifier_read_error)?
-            .ok_or_else(|| "native_policy_verifier_key_missing".to_owned())?;
-    #[cfg(not(windows))]
-    let mut file = {
-        let path_metadata = fs::symlink_metadata(&path).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
-                "native_policy_verifier_key_missing".to_owned()
-            } else {
-                "native_policy_verifier_key_stat_failed".to_owned()
-            }
-        })?;
-        if path_metadata.file_type().is_symlink()
-            || !path_metadata.is_file()
-            || path_metadata.len() != MAX_KEY_FILE_BYTES
-        {
-            return Err("native_policy_verifier_key_invalid".to_owned());
-        }
-        let mut options = OpenOptions::new();
-        options.read(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-        }
-        options
-            .open(&path)
-            .map_err(|_| "native_policy_verifier_key_read_failed".to_owned())?
-    };
-    let metadata = file
-        .metadata()
-        .map_err(|_| "native_policy_verifier_key_invalid".to_owned())?;
-    if !metadata.is_file() || metadata.len() != MAX_KEY_FILE_BYTES {
-        return Err("native_policy_verifier_key_invalid".to_owned());
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        let owner = fs::symlink_metadata(state_base)
-            .map_err(|_| "native_policy_verifier_key_not_private".to_owned())?
-            .uid();
-        if metadata.uid() != owner || metadata.permissions().mode() & 0o077 != 0 {
-            return Err("native_policy_verifier_key_not_private".to_owned());
-        }
-    }
-    let mut key = [0u8; VERIFIER_KEY_BYTES];
-    file.read_exact(&mut key)
-        .map_err(|_| "native_policy_verifier_key_read_failed".to_owned())?;
-    let mut trailing = [0u8; 1];
-    if file
-        .read(&mut trailing)
-        .map_err(|_| "native_policy_verifier_key_read_failed".to_owned())?
-        != 0
-    {
-        return Err("native_policy_verifier_key_invalid".to_owned());
-    }
-    Ok(key)
-}
-
 pub(super) fn load_authority(
     authority_path: &Path,
     legacy_floor_path: &Path,
@@ -315,21 +264,29 @@ pub(super) fn load_authority(
     expected_scope_digest: &str,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
 ) -> Result<LoadedAuthority, String> {
-    let authority = match read_private_json(authority_path, AUTHORITY_RECORD_MAX_BYTES, "state") {
+    let private_root = authority_path
+        .parent()
+        .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())
+        .and_then(crate::resident_state::private_root_for_state_base)?;
+    let authority = match read_private_json(
+        authority_path,
+        AUTHORITY_RECORD_MAX_BYTES,
+        "state",
+        &private_root,
+    ) {
         Ok(value) => value,
         Err(error) => {
-            // A pre-transactional snapshot can be left truncated or
-            // otherwise unreadable. A valid authenticated legacy floor still
-            // preserves the monotonic boundary, so migrate a floor-only
-            // record and let the publisher install a strictly newer snapshot.
             if let Some(floor) = read_generation_floor(legacy_floor_path, verifier_key)? {
                 return Ok(LoadedAuthority {
                     snapshot: None,
+                    recovered_snapshot: None,
                     canonical_bytes: Vec::new(),
                     generation_floor: floor.generation,
                     policy_digest: Some(floor.policy_digest),
                     invalid_on_startup: true,
                     migrate: true,
+                    command_control_floor: None,
+                    business_policy_floor: None,
                 });
             }
             return Err(error);
@@ -354,9 +311,6 @@ pub(super) fn load_authority(
             expected_scope_digest,
             verifier_key,
         ),
-        // A v3 snapshot at the historical path is the pre-transactional
-        // layout. Reconcile it with the old floor before replacing it with a
-        // combined authority record.
         Some(guard_policy_snapshot::POLICY_SNAPSHOT_SCHEMA) => load_legacy_authority(
             Some((value, bytes)),
             legacy_floor_path,
@@ -366,16 +320,17 @@ pub(super) fn load_authority(
             verifier_key,
         ),
         _ => {
-            // Preserve a trusted floor even if an interrupted/legacy state
-            // file has no parseable snapshot schema.
             if let Some(floor) = read_generation_floor(legacy_floor_path, verifier_key)? {
                 Ok(LoadedAuthority {
                     snapshot: None,
+                    recovered_snapshot: None,
                     canonical_bytes: Vec::new(),
                     generation_floor: floor.generation,
                     policy_digest: Some(floor.policy_digest),
                     invalid_on_startup: true,
                     migrate: true,
+                    command_control_floor: None,
+                    business_policy_floor: None,
                 })
             } else {
                 Err("native_policy_snapshot_state_invalid".to_owned())
@@ -384,9 +339,6 @@ pub(super) fn load_authority(
     }
 }
 
-/// Load only the transactional authority record used by the resident.
-/// Legacy files are intentionally excluded from this path; upgrades invoke
-/// `PolicySnapshotStore::migrate_legacy_state` explicitly before startup.
 pub(super) fn load_current_authority(
     authority_path: &Path,
     expected_runtime_identity: &str,
@@ -394,16 +346,27 @@ pub(super) fn load_current_authority(
     expected_scope_digest: &str,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
 ) -> Result<LoadedAuthority, String> {
-    let Some((value, bytes)) =
-        read_private_json(authority_path, AUTHORITY_RECORD_MAX_BYTES, "state")?
+    let private_root = authority_path
+        .parent()
+        .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())
+        .and_then(crate::resident_state::private_root_for_state_base)?;
+    let Some((value, bytes)) = read_private_json(
+        authority_path,
+        AUTHORITY_RECORD_MAX_BYTES,
+        "state",
+        &private_root,
+    )?
     else {
         return Ok(LoadedAuthority {
             snapshot: None,
+            recovered_snapshot: None,
             canonical_bytes: Vec::new(),
             generation_floor: 0,
             policy_digest: None,
             invalid_on_startup: false,
             migrate: false,
+            command_control_floor: None,
+            business_policy_floor: None,
         });
     };
     if value.get("schema").and_then(Value::as_str) != Some(AUTHORITY_RECORD_SCHEMA) {
@@ -436,8 +399,14 @@ pub(super) fn load_combined_authority(
         || !is_lower_hex(&record.policy_digest, 64)
         || !is_lower_hex(&record.floor_mac, 64)
         || !crate::constant_time_eq(
-            generation_floor_mac(record.generation_floor, &record.policy_digest, verifier_key)
-                .as_bytes(),
+            super::policy_store_business_floor::authority_floor_mac(
+                record.generation_floor,
+                &record.policy_digest,
+                record.command_control_floor.as_ref(),
+                record.business_policy_floor.as_deref(),
+                verifier_key,
+            )?
+            .as_bytes(),
             record.floor_mac.as_bytes(),
         )
     {
@@ -446,12 +415,43 @@ pub(super) fn load_combined_authority(
     let mut snapshot = None;
     let mut canonical_snapshot = Vec::new();
     let mut invalid_on_startup = false;
+    let mut business_floor = record.business_policy_floor;
+    let mut migrate = false;
+    let mut recovered_snapshot = None;
     if let Some(candidate) = record.snapshot {
+        // Recover an old record's floor only from authenticated whole content,
+        // including expired snapshots. This grants no current admission.
+        if business_floor.is_none()
+            && candidate.business_policy.is_some()
+            && candidate.generation == record.generation_floor
+            && candidate.policy_digest == record.policy_digest
+            && candidate.scope_contract.scope_digest == expected_scope_digest
+            && validate_v3(
+                &candidate,
+                record.generation_floor,
+                &candidate.runtime_identity,
+                &candidate.rule_digest,
+                verifier_key,
+                candidate.issued_at_ms,
+            )
+            .is_ok()
+        {
+            business_floor = super::policy_store_business_floor::snapshot_floor(Some(&candidate))?;
+            migrate = true;
+            recovered_snapshot = Some(candidate.clone());
+        }
         if candidate.generation != record.generation_floor
             || candidate.policy_digest != record.policy_digest
+            || super::policy_store_command_floor::next_floor(
+                record.command_control_floor.as_ref(),
+                &candidate,
+            )
+            .ok()
+                != Some(record.command_control_floor.clone())
+            || super::policy_store_business_floor::next_floor(business_floor.as_deref(), &candidate)
+                .ok()
+                != Some(business_floor.clone())
         {
-            // The authenticated floor remains usable for a strictly newer
-            // push, but this incoherent candidate must never authorize a hook.
             invalid_on_startup = true;
         } else if validate_v3(
             &candidate,
@@ -468,14 +468,19 @@ pub(super) fn load_combined_authority(
             snapshot = Some(candidate);
         }
     }
-    // A combined record is already authoritative; the old files are ignored
-    // even when they contain an older generation or malformed data.
     Ok(LoadedAuthority {
         snapshot,
+        recovered_snapshot,
         canonical_bytes: canonical_snapshot,
         generation_floor: record.generation_floor,
         policy_digest: Some(record.policy_digest),
         invalid_on_startup,
-        migrate: false,
+        migrate,
+        command_control_floor: record.command_control_floor,
+        business_policy_floor: business_floor,
     })
 }
+
+#[cfg(test)]
+#[path = "policy_store_authority_tests.rs"]
+mod tests;

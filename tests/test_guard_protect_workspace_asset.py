@@ -6,12 +6,12 @@ from pathlib import Path
 
 _ASSET = Path(__file__).parents[1] / "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace.js"
 _DETECTION_ASSET = (
-    Path(__file__).parents[1]
-    / "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-detection.js"
+    Path(__file__).parents[1] / "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-detection.js"
 )
 _AUTHORITATIVE_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-workspace.tsx"
 _DETECTION_SOURCE = Path(__file__).parents[1] / "dashboard/src/harness-detection.ts"
 _RECOVERY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery.tsx"
+_RECOVERY_PARTS_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-parts.tsx"
 _COPY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-copy.ts"
 
 
@@ -22,17 +22,21 @@ def _source() -> str:
 def _authoritative_source() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (_AUTHORITATIVE_SOURCE, _DETECTION_SOURCE, _RECOVERY_SOURCE, _COPY_SOURCE)
+        for path in (
+            _AUTHORITATIVE_SOURCE,
+            _DETECTION_SOURCE,
+            _RECOVERY_SOURCE,
+            _RECOVERY_PARTS_SOURCE,
+            _COPY_SOURCE,
+        )
     )
 
 
 def test_repair_message_does_not_blame_apps_for_shared_evidence_failure() -> None:
     app_source = Path(__file__).parents[1].joinpath("dashboard/src/app.tsx").read_text(encoding="utf-8")
-    health_source = Path(__file__).parents[1].joinpath("dashboard/src/protection-health.ts").read_text(
-        encoding="utf-8"
-    )
-    flow_source = Path(__file__).parents[1].joinpath("dashboard/src/protection-repair-flow.ts").read_text(
-        encoding="utf-8"
+    health_source = Path(__file__).parents[1].joinpath("dashboard/src/protection-health.ts").read_text(encoding="utf-8")
+    flow_source = (
+        Path(__file__).parents[1].joinpath("dashboard/src/protection-repair-flow.ts").read_text(encoding="utf-8")
     )
     assert "remainingProtectionRepairParts" in health_source
     assert "remainingProtectionRepairMessage(remainingHealth, input.displayName)" in flow_source
@@ -54,8 +58,8 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
     assert "Repair failed checks" not in source
     assert "Open diagnostics" not in source
     assert "Guard could not confirm integrity protection yet." not in source
-    assert 'hookCheck?.status === "fail"' in source
-    assert 'check.check_id === "harness_hooks" && check.status === "fail"' in source
+    assert 'hookCheck?.status !== "pass"' in source
+    assert 'check.check_id === "harness_hooks")?.status !== "pass"' in source
     assert "Restore local protection" in authoritative_source
 
 

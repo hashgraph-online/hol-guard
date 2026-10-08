@@ -128,6 +128,35 @@ def test_verify_deepseek_harness_rejects_missing_apply_export(tmp_path: Path) ->
     assert rc == 1
 
 
+def test_verify_deepseek_harness_patch_mode_without_runtime_passes(tmp_path: Path, capsys) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
+    manifest_path = tmp_path / "plugin" / "package.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["main"]
+    manifest["dsh"]["bundle"]["mode"] = "patch"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "plugin" / "index.js").unlink()
+    rc = main(["verify", str(tmp_path / "plugin"), "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["verify_pass"] is True
+    runtime_case = next(case for case in payload["cases"] if case["name"] == "Cordis apply(ctx) export")
+    assert runtime_case["passed"] is True
+    assert "Patch-only" in runtime_case["message"]
+
+
+def test_scan_deepseek_harness_patch_mode_without_runtime_does_not_require_apply(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
+    manifest_path = tmp_path / "plugin" / "package.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["main"]
+    manifest["dsh"]["bundle"]["mode"] = "patch"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "plugin" / "index.js").unlink()
+    result = scan_plugin(tmp_path / "plugin", ScanOptions(ecosystem="deepseek-harness", cisco_skill_scan="off"))
+    assert all(finding.rule_id != "DSH_RUNTIME_APPLY_MISSING" for finding in result.findings)
+
+
 def test_verify_deepseek_harness_ignores_apply_in_comments_and_strings(tmp_path: Path) -> None:
     shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
     (tmp_path / "plugin" / "index.js").write_text(

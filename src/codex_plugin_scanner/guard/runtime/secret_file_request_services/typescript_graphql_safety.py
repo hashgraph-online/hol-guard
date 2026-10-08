@@ -91,10 +91,17 @@ def _graphql_query_file_argument_values(target_path: str) -> set[str]:
     return _graphql_query_file_substitution_refs(target_path) | {f"@{target_path}"}
 
 
-def _contains_destructive_node_inline_script(script: str) -> bool:
+def script_references_destructive_file_call(script: str, *, allowed_write_calls: frozenset[str] = frozenset()) -> bool:
+    """Return true when the script invokes any destructive file call outside the allow-list.
+
+    Scans both direct invocations and member accesses (dot, quoted subscript,
+    .call/.apply) against two redaction views so string-literal member names
+    cannot smuggle a call through.
+    """
+
     redacted_script = _redacted_node_inline_string_literals(script)
     member_scan_script = _redacted_node_inline_string_literals(script, preserve_bracket_member_strings=True)
-    for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS:
+    for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS - allowed_write_calls:
         escaped_call_name = re.escape(call_name)
         if re.search(rf"(?<![A-Za-z0-9_$'\"]){escaped_call_name}\s*(?:\?\.\s*)?\(", redacted_script):
             return True
@@ -111,8 +118,12 @@ def _contains_destructive_node_inline_script(script: str) -> bool:
     return False
 
 
+def _contains_destructive_node_inline_script(script: str) -> bool:
+    return script_references_destructive_file_call(script)
+
+
 def _node_script_contains_sensitive_runtime_behavior(script_text: str) -> bool:
-    return _contains_destructive_node_inline_script(script_text) or _node_script_contains_non_file_generation_risk(
+    return script_references_destructive_file_call(script_text) or _node_script_contains_non_file_generation_risk(
         script_text
     )
 
@@ -333,4 +344,5 @@ __all__ = [
     "_node_script_contains_sensitive_runtime_behavior",
     "_redacted_node_inline_string_literals",
     "_strip_shell_quotes",
+    "script_references_destructive_file_call",
 ]

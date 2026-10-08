@@ -23,6 +23,21 @@ def test_repository_privileged_workflows_pass_policy() -> None:
     assert validate_privileged_workflows(ROOT) == ()
 
 
+def test_authority_stability_build_cannot_inherit_push_credentials() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/finish-extension-authority-stability.yml").read_text())
+    steps = workflow["jobs"]["finish"]["steps"]
+    checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"]["persist-credentials"] is False
+    push = next(index for index, step in enumerate(steps) if "git push" in step.get("run", ""))
+    stage = next(
+        index for index, step in enumerate(steps) if step.get("uses") == "./.github/actions/stage-command-projections"
+    )
+    assert stage < push
+    assert all("GH_TOKEN" not in step.get("env", {}) for step in steps[:push])
+    assert steps[push]["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert 'GIT_CONFIG_VALUE_0="$auth_header"' in steps[push]["run"]
+
+
 def test_privileged_job_rejects_mutable_action_revision(tmp_path: Path) -> None:
     _write_workflow(
         tmp_path,
@@ -83,6 +98,8 @@ jobs:
 
 
 def test_job_level_read_permissions_remove_inherited_write_capability(tmp_path: Path) -> None:
+    """A read-only job avoids pin checks but does not excuse an unsafe workflow default."""
+
     _write_workflow(
         tmp_path,
         """
@@ -97,13 +114,18 @@ jobs:
 """,
     )
 
-    assert validate_privileged_workflows(tmp_path) == ()
+    violations = validate_privileged_workflows(tmp_path)
+    assert [violation.code for violation in violations] == ["workflow-write-permission"]
+    assert violations[0].job == "<workflow>"
 
 
 def test_privileged_job_accepts_commit_pins_and_exact_uv_version(tmp_path: Path) -> None:
+    """Job-scoped writes remain usable with immutable action and tool versions."""
+
     _write_workflow(
         tmp_path,
         f"""
+permissions: {{}}
 jobs:
   release:
     permissions:

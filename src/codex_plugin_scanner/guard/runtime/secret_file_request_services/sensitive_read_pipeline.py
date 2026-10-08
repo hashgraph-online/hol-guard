@@ -6,6 +6,7 @@ import os
 import stat
 from pathlib import Path
 
+from ..home_path_text import expand_home, normalize_path
 from .constants_core import _FIND_EXEC_ACTION_FLAGS, _FIND_EXEC_TERMINATOR_TOKENS
 from .constants_patterns import (
     _CURL_AT_FILE_FLAGS_WITH_VALUE,
@@ -15,7 +16,6 @@ from .constants_patterns import (
     _WGET_UPLOAD_FLAGS_WITH_VALUE,
 )
 from .github_pr_body_safety import _shell_segment_reads_sensitive_path
-from .request_models import _expand_home, _normalize_path
 from .shell_static_safety import _path_text_is_within_root_text
 from .shell_tokenization import _shell_segment_primary_command
 
@@ -299,8 +299,8 @@ def _resolved_runtime_path(
     stripped_value = _strip_cli_value(value)
     if not stripped_value:
         return None
-    expanded_value = _expand_home(stripped_value, home_dir)
-    normalized_path = Path(_normalize_path(expanded_value, cwd))
+    expanded_value = expand_home(stripped_value, home_dir)
+    normalized_path = Path(normalize_path(expanded_value, cwd))
     read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     if not read_roots:
         return None

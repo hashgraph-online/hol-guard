@@ -138,6 +138,8 @@ class TestGuardApprovals:
             approval_url="http://127.0.0.1:5474/requests/req-first",
         )
         store.add_approval_request(base, "2026-08-11T00:00:00+00:00")
+        first = store.get_approval_request("req-first")
+        assert first is not None
         second = replace(
             base,
             request_id="req-second",
@@ -160,6 +162,7 @@ class TestGuardApprovals:
         pending = store.list_approval_requests(limit=10)
         assert len(pending) == 1
         assert pending[0]["dedupe_count"] == 2
+        assert pending[0]["scope_contract_digest"] == first["scope_contract_digest"]
 
     def test_guard_queue_keeps_permission_modes_separate(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -1269,6 +1272,15 @@ class TestGuardApprovals:
         with store._connect() as connection:
             policy_count = connection.execute("select count(*) from policy_decisions").fetchone()[0]
         assert policy_count == 1
+        # Persist the resident verifier key before stripping the keyring. The
+        # verifier is provisioned lazily on first lookup; a store that wrote a
+        # signed policy already owns this file, and it must survive keyring loss
+        # so the resident can serve the lookup and degrade the unsigned row.
+        from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+            provision_native_verifier_key_for_store,
+        )
+
+        provision_native_verifier_key_for_store(store)
         store._policy_integrity_secret_store = None
         store._clear_policy_integrity_cache()
         first_retry = store.resolve_policy_decision(
@@ -1602,6 +1614,7 @@ class TestGuardApprovals:
             "_reap_stale_ephemeral_guard_daemons",
             lambda *_args, **_kwargs: None,
         )
+        monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
         monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
         monkeypatch.setattr(
             daemon_manager_module,
@@ -1790,24 +1803,6 @@ class TestGuardApprovals:
         )
 
         assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
-
-    def test_load_guard_daemon_url_rejects_different_runtime_fingerprint(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_current_guard_daemon_runtime_fingerprint",
-            lambda: "stale-runtime-fingerprint",
-        )
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-
-        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 
     def test_guard_daemon_server_reuses_existing_auth_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -3161,7 +3156,7 @@ class TestGuardApprovals:
         assert approvals[0]["decision_v2_json"]["action"] == "ask"
         assert (
             approvals[0]["decision_v2_json"]["harness_message"]
-            == "HOL Guard needs a fresh approval because this action changed."
+            == "HOL Guard needs a fresh approval before this action can run."
         )
 
     def test_guard_approvals_cli_lists_and_resolves_requests(self, tmp_path, capsys, monkeypatch):

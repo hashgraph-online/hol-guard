@@ -1,22 +1,66 @@
 #![forbid(unsafe_code)]
 
 //! OS-protected enrollment state for the external approval authority.
-//!
-//! This module stores only enrollment provenance and per-install/device
-//! bindings. It deliberately contains no replay secret: request replay state
-//! lives in the resident process and is invalidated by its random epoch.
+//! This module stores enrollment provenance and per-install/device bindings only; it contains no replay secret.
+//! Request replay state lives in the resident process and is invalidated by its random epoch.
 
-use guard_policy_snapshot::canonical_json_bytes;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::path::Path;
 
 #[path = "approval_enrollment_platform.rs"]
 mod platform;
-use platform::{read_platform_secret, write_platform_secret};
+#[path = "approval_enrollment_state.rs"]
+mod state;
+#[cfg(not(test))]
+use platform::read_platform_secret_for_state;
+use platform::{read_platform_secret, write_platform_secret, write_platform_secret_for_state};
+use state::encode_state;
+pub(super) use state::load_unlocked;
+#[cfg(test)]
+pub(super) use state::write_test_enrollment_bindings;
+pub(crate) use state::SecureApprovalState;
+
+#[cfg(not(test))]
+pub(super) fn read_platform_secret_for_v4_state(
+    state_base: &Path,
+    account: &str,
+    max_bytes: usize,
+) -> Result<Option<String>, String> {
+    read_platform_secret_for_state(state_base, account, max_bytes)
+}
+
+#[cfg(not(test))]
+pub(super) fn write_platform_secret_for_v4_state(
+    state_base: &Path,
+    account: &str,
+    value: &str,
+    max_bytes: usize,
+) -> Result<(), String> {
+    write_platform_secret_for_state(state_base, account, value, max_bytes)
+}
+
+#[cfg(not(test))]
+pub(super) fn read_platform_secret_for_workspace_review(
+    state_base: &Path,
+    account: &str,
+    max_bytes: usize,
+) -> Result<Option<String>, String> {
+    read_platform_secret_for_state(state_base, account, max_bytes)
+}
+
+#[cfg(not(test))]
+pub(super) fn write_platform_secret_for_workspace_review(
+    state_base: &Path,
+    account: &str,
+    value: &str,
+    max_bytes: usize,
+) -> Result<(), String> {
+    write_platform_secret_for_state(state_base, account, value, max_bytes)
+}
 
 const STATE_VERSION: u16 = 4;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const SERVICE_NAME: &str = "org.hashgraphonline.hol-guard.native-approval-enrollment.v1";
 const ACCOUNT_DOMAIN: &[u8] = b"hol-guard-native-approval-enrollment-account-v1\0";
 const DEVICE_ACCOUNT_DOMAIN: &[u8] = b"hol-guard-native-approval-device-v1\0";
@@ -26,10 +70,19 @@ const MAX_SECRET_TEXT_BYTES: usize = 16 * 1024;
 const TRANSITION_LOCK_FILE_NAME: &str = "approval-authority-transition.v1.lock";
 
 /// Owner-private inter-process fence for enrollment and authority changes.
-/// The inode is retained permanently; ownership is provided by the OS lock,
-/// not by a writable PID or a same-UID marker.
+/// The inode is retained; the OS lock, not a writable PID/same-UID marker, supplies ownership.
 pub(crate) struct TransitionLock {
     _file: File,
+    #[cfg(unix)]
+    _directory: crate::state_directory_lock::DirectoryLock,
+    #[cfg(windows)]
+    _directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
+}
+
+struct OpenedTransitionLock {
+    file: File,
+    #[cfg(windows)]
+    directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
 }
 
 fn transition_lock_path(state_base: &Path) -> Result<std::path::PathBuf, String> {
@@ -71,57 +124,55 @@ fn validate_transition_lock(path: &Path, file: &File) -> Result<(), String> {
         if opened.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
             return Err("native_approval_authority_lock_invalid".to_owned());
         }
-        crate::resident_state::verify_windows_private_path(path, false)?;
+        let private_root = path
+            .parent()
+            .ok_or_else(|| "native_approval_authority_lock_invalid".to_owned())
+            .and_then(crate::resident_state::private_root_for_state_base)?;
+        crate::resident_state::verify_windows_private_path(path, false, &private_root)?;
     }
     Ok(())
 }
 
-fn open_transition_lock(path: &Path) -> Result<File, String> {
-    let mut create = OpenOptions::new();
-    create.read(true).write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        create
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    }
+#[cfg(unix)]
+fn open_transition_lock(
+    path: &Path,
+    directory: &crate::state_directory_lock::DirectoryLock,
+) -> Result<OpenedTransitionLock, String> {
+    let _ = path;
+    let file = directory
+        .open_child_file(TRANSITION_LOCK_FILE_NAME)
+        .map_err(|error| match error {
+            crate::state_directory_lock::DirectoryLockError::Busy => {
+                "native_approval_authority_busy".to_owned()
+            }
+            crate::state_directory_lock::DirectoryLockError::Invalid
+            | crate::state_directory_lock::DirectoryLockError::NotPrivate
+            | crate::state_directory_lock::DirectoryLockError::PathReplaced => {
+                "native_approval_authority_directory_lock_invalid".to_owned()
+            }
+            crate::state_directory_lock::DirectoryLockError::Open
+            | crate::state_directory_lock::DirectoryLockError::Failed => {
+                "native_approval_authority_directory_lock_failed".to_owned()
+            }
+        })?;
+    Ok(OpenedTransitionLock { file })
+}
+
+#[cfg(not(unix))]
+fn open_transition_lock(path: &Path) -> Result<OpenedTransitionLock, String> {
+    let private_root = path
+        .parent()
+        .ok_or_else(|| "native_approval_authority_lock_invalid".to_owned())
+        .and_then(crate::resident_state::private_root_for_state_base)?;
     #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        const FILE_SHARE_READ: u32 = 0x0000_0001;
-        const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-        create
-            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-    }
-    match create.open(path) {
-        Ok(file) => Ok(file),
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let mut existing = OpenOptions::new();
-            existing.read(true).write(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                existing.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-            }
-            #[cfg(windows)]
-            {
-                use std::os::windows::fs::OpenOptionsExt;
-                const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-                const FILE_SHARE_READ: u32 = 0x0000_0001;
-                const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-                existing
-                    .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
-                    .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-            }
-            existing
-                .open(path)
-                .map_err(|_| "native_approval_authority_lock_failed".to_owned())
-        }
-        Err(_) => Err("native_approval_authority_lock_failed".to_owned()),
-    }
+    let (file, directory_binding) = crate::resident_state::private_lock_file(path, &private_root)?;
+    #[cfg(not(windows))]
+    let file = crate::resident_state::private_lock_file(path, &private_root)?;
+    Ok(OpenedTransitionLock {
+        file,
+        #[cfg(windows)]
+        directory_binding,
+    })
 }
 
 pub(crate) fn with_transition_lock<T, F>(state_base: &Path, operation: F) -> Result<T, String>
@@ -129,47 +180,75 @@ where
     F: FnOnce() -> Result<T, String>,
 {
     let path = transition_lock_path(state_base)?;
-    let file = open_transition_lock(&path)?;
-    validate_transition_lock(&path, &file)?;
-    fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::WouldBlock {
+    #[cfg(unix)]
+    let directory =
+        crate::state_directory_lock::acquire(state_base).map_err(|error| match error {
+            crate::state_directory_lock::DirectoryLockError::Busy => {
+                "native_approval_authority_busy".to_owned()
+            }
+            crate::state_directory_lock::DirectoryLockError::Open
+            | crate::state_directory_lock::DirectoryLockError::Failed => {
+                "native_approval_authority_directory_lock_failed".to_owned()
+            }
+            crate::state_directory_lock::DirectoryLockError::Invalid
+            | crate::state_directory_lock::DirectoryLockError::NotPrivate
+            | crate::state_directory_lock::DirectoryLockError::PathReplaced => {
+                "native_approval_authority_directory_lock_invalid".to_owned()
+            }
+        })?;
+    #[cfg(unix)]
+    let _directory_transition = directory.try_transition().map_err(|error| match error {
+        crate::state_directory_lock::DirectoryLockError::Busy => {
+            "native_approval_authority_busy".to_owned()
+        }
+        crate::state_directory_lock::DirectoryLockError::PathReplaced
+        | crate::state_directory_lock::DirectoryLockError::Invalid
+        | crate::state_directory_lock::DirectoryLockError::NotPrivate => {
+            "native_approval_authority_directory_lock_invalid".to_owned()
+        }
+        crate::state_directory_lock::DirectoryLockError::Open
+        | crate::state_directory_lock::DirectoryLockError::Failed => {
+            "native_approval_authority_directory_lock_failed".to_owned()
+        }
+    })?;
+    #[cfg(unix)]
+    let opened = open_transition_lock(&path, &directory)?;
+    #[cfg(not(unix))]
+    let opened = open_transition_lock(&path)?;
+    validate_transition_lock(&path, &opened.file)?;
+    fs2::FileExt::try_lock_exclusive(&opened.file).map_err(|error| {
+        if crate::resident_state::is_lock_contention(&error) {
             "native_approval_authority_busy".to_owned()
         } else {
             "native_approval_authority_lock_failed".to_owned()
         }
     })?;
-    let _lock = TransitionLock { _file: file };
+    #[cfg(unix)]
+    directory.revalidate().map_err(|error| match error {
+        crate::state_directory_lock::DirectoryLockError::PathReplaced
+        | crate::state_directory_lock::DirectoryLockError::Invalid
+        | crate::state_directory_lock::DirectoryLockError::NotPrivate => {
+            "native_approval_authority_directory_lock_invalid".to_owned()
+        }
+        crate::state_directory_lock::DirectoryLockError::Open
+        | crate::state_directory_lock::DirectoryLockError::Failed => {
+            "native_approval_authority_directory_lock_failed".to_owned()
+        }
+        crate::state_directory_lock::DirectoryLockError::Busy => {
+            "native_approval_authority_busy".to_owned()
+        }
+    })?;
+    let _lock = TransitionLock {
+        _file: opened.file,
+        #[cfg(unix)]
+        _directory: directory.clone(),
+        #[cfg(windows)]
+        _directory_binding: opened.directory_binding,
+    };
     operation()
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct SecureApprovalState {
-    pub(crate) generation: u64,
-    pub(crate) device_binding: String,
-    pub(crate) installation_binding: String,
-    pub(crate) key_id: String,
-    pub(crate) status: String,
-    pub(crate) pending: bool,
-    /// Digest of the exact canonical, root-signed authority record awaiting
-    /// installation. It makes an interrupted transition retryable only for
-    /// the same authenticated candidate.
-    pub(crate) pending_record_digest: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SecureApprovalStateRecord {
-    version: u16,
-    generation: u64,
-    device_binding: String,
-    installation_binding: String,
-    key_id: String,
-    status: String,
-    pending: bool,
-    pending_record_digest: String,
-}
-
-fn account_for_state_base(state_base: &Path) -> Result<String, String> {
+pub(super) fn account_for_state_base(state_base: &Path) -> Result<String, String> {
     super::validate_private_directory(state_base)?;
     let canonical = std::fs::canonicalize(state_base)
         .map_err(|_| "native_approval_secure_state_unavailable".to_owned())?;
@@ -191,78 +270,6 @@ fn valid_digest(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-fn encode_state(state: &SecureApprovalState) -> Result<String, String> {
-    let record = SecureApprovalStateRecord {
-        version: STATE_VERSION,
-        generation: state.generation,
-        device_binding: state.device_binding.clone(),
-        installation_binding: state.installation_binding.clone(),
-        key_id: state.key_id.clone(),
-        status: state.status.clone(),
-        pending: state.pending,
-        pending_record_digest: state.pending_record_digest.clone(),
-    };
-    let value = serde_json::to_value(record)
-        .map_err(|_| "native_approval_secure_state_invalid".to_owned())?;
-    let bytes = canonical_json_bytes(&value)
-        .map_err(|_| "native_approval_secure_state_invalid".to_owned())?;
-    Ok(hex::encode(bytes))
-}
-
-fn decode_state(value: &str) -> Result<SecureApprovalState, String> {
-    if value.is_empty() || value.len() > MAX_SECRET_TEXT_BYTES || value.len() % 2 != 0 {
-        return Err("native_approval_secure_state_invalid".to_owned());
-    }
-    let bytes =
-        hex::decode(value).map_err(|_| "native_approval_secure_state_invalid".to_owned())?;
-    let record: SecureApprovalStateRecord = serde_json::from_slice(&bytes)
-        .map_err(|_| "native_approval_secure_state_invalid".to_owned())?;
-    if record.version != STATE_VERSION
-        || (record.generation == 0 && !record.pending)
-        || (record.generation > 0 && record.pending && record.key_id.is_empty())
-        || !valid_digest(&record.device_binding)
-        || !valid_digest(&record.installation_binding)
-        || record.device_binding == record.installation_binding
-    {
-        return Err("native_approval_secure_state_invalid".to_owned());
-    }
-    if record.generation == 0 {
-        if !record.key_id.is_empty() || record.status != "pending" {
-            return Err("native_approval_secure_state_invalid".to_owned());
-        }
-        if !record.pending_record_digest.is_empty() {
-            return Err("native_approval_secure_state_invalid".to_owned());
-        }
-    } else if !valid_digest(&record.key_id)
-        || !matches!(record.status.as_str(), "active" | "revoked")
-    {
-        return Err("native_approval_secure_state_invalid".to_owned());
-    }
-    if record.pending && !valid_digest(&record.pending_record_digest) {
-        return Err("native_approval_secure_state_invalid".to_owned());
-    }
-    if !record.pending && !record.pending_record_digest.is_empty() {
-        return Err("native_approval_secure_state_invalid".to_owned());
-    }
-    Ok(SecureApprovalState {
-        generation: record.generation,
-        device_binding: record.device_binding,
-        installation_binding: record.installation_binding,
-        key_id: record.key_id,
-        status: record.status,
-        pending: record.pending,
-        pending_record_digest: record.pending_record_digest,
-    })
-}
-
-pub(super) fn load_unlocked(state_base: &Path) -> Result<Option<SecureApprovalState>, String> {
-    let account = account_for_state_base(state_base)?;
-    let Some(value) = read_platform_secret(&account)? else {
-        return Ok(None);
-    };
-    Ok(Some(decode_state(&value)?))
 }
 
 fn binding_for_secret(domain: &[u8], secret: &[u8; 32]) -> String {
@@ -300,14 +307,12 @@ fn load_or_create_device_binding() -> Result<String, String> {
     Ok(binding_for_secret(DEVICE_BINDING_DOMAIN, &secret))
 }
 
-/// Begin an enrollment ceremony. The returned bindings are public ceremony
-/// inputs; the underlying random identities never enter Python or the state
-/// directory.
+/// Begin an enrollment ceremony; public bindings leave the random identities outside Python and the state directory.
 pub(crate) fn prepare_enrollment(state_base: &Path) -> Result<(String, String), String> {
     with_transition_lock(state_base, || prepare_enrollment_unlocked(state_base))
 }
 
-fn prepare_enrollment_unlocked(state_base: &Path) -> Result<(String, String), String> {
+pub(super) fn prepare_enrollment_unlocked(state_base: &Path) -> Result<(String, String), String> {
     if let Some(existing) = load_unlocked(state_base)? {
         if existing.pending {
             return Ok((existing.device_binding, existing.installation_binding));
@@ -328,7 +333,12 @@ fn prepare_enrollment_unlocked(state_base: &Path) -> Result<(String, String), St
         pending_record_digest: String::new(),
     };
     let encoded = encode_state(&state)?;
-    write_platform_secret(&account_for_state_base(state_base)?, &encoded)?;
+    write_platform_secret_for_state(
+        state_base,
+        &account_for_state_base(state_base)?,
+        &encoded,
+        MAX_SECRET_TEXT_BYTES,
+    )?;
     Ok((device_binding, installation_binding))
 }
 
@@ -382,7 +392,12 @@ pub(super) fn begin_transition_unlocked(
     if encoded.len() > MAX_SECRET_TEXT_BYTES {
         return Err("native_approval_secure_state_invalid".to_owned());
     }
-    write_platform_secret(&account_for_state_base(state_base)?, &encoded)?;
+    write_platform_secret_for_state(
+        state_base,
+        &account_for_state_base(state_base)?,
+        &encoded,
+        MAX_SECRET_TEXT_BYTES,
+    )?;
     Ok(state)
 }
 
@@ -425,7 +440,12 @@ pub(super) fn complete_transition_unlocked(
         ..existing
     };
     let encoded = encode_state(&state)?;
-    write_platform_secret(&account_for_state_base(state_base)?, &encoded)?;
+    write_platform_secret_for_state(
+        state_base,
+        &account_for_state_base(state_base)?,
+        &encoded,
+        MAX_SECRET_TEXT_BYTES,
+    )?;
     Ok(state)
 }
 
@@ -447,42 +467,5 @@ pub(crate) fn matches_authority(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn test_root() -> std::path::PathBuf {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "hol-guard-approval-enrollment-{}-{suffix}",
-            std::process::id()
-        ));
-        fs::create_dir(&root).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-        }
-        root
-    }
-
-    #[test]
-    fn transition_lock_rejects_concurrent_owner_and_recovers_on_release() {
-        let root = test_root();
-        let path = transition_lock_path(&root).unwrap();
-        let file = open_transition_lock(&path).unwrap();
-        validate_transition_lock(&path, &file).unwrap();
-        fs2::FileExt::try_lock_exclusive(&file).unwrap();
-
-        assert_eq!(
-            with_transition_lock(&root, || Ok::<(), String>(())).unwrap_err(),
-            "native_approval_authority_busy"
-        );
-        drop(file);
-        with_transition_lock(&root, || Ok::<(), String>(())).unwrap();
-    }
-}
+#[path = "approval_enrollment_tests.rs"]
+mod tests;

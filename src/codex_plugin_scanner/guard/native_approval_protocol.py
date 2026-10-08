@@ -304,11 +304,11 @@ def _artifact_is_valid(payload: dict[str, object]) -> bool:
     )
 
 
-def _receipt_fields_are_valid(payload: Mapping[str, object], *, phase: NativeApprovalPhase) -> bool:
+def _receipt_fields_are_valid(payload: Mapping[str, object], *, phase: NativeApprovalPhase, v4: bool = False) -> bool:
     return all(
         (
-            payload.get("schema") == _RECEIPT_SCHEMA,
-            payload.get("version") == 3,
+            payload.get("schema") == ("guard-native-approval-receipt.v4" if v4 else _RECEIPT_SCHEMA),
+            payload.get("version") == (4 if v4 else 3),
             payload.get("phase") == phase,
             _output_request_id(payload.get("request_id")),
             _lower_hex(payload.get("request_digest"), 64),
@@ -336,7 +336,7 @@ def _receipt_fields_are_valid(payload: Mapping[str, object], *, phase: NativeApp
             payload.get("decision") == "allow",
             _allowed_text(payload.get("requested_action"), _APPROVAL_ACTIONS),
             payload.get("approved_action") == "allow",
-            payload.get("reason_code") == f"native_approval_{phase}",
+            payload.get("reason_code") == (f"native_approval_v4_{phase}" if v4 else f"native_approval_{phase}"),
             _bounded_text(payload.get("reason_code"), maximum=_NATIVE_APPROVAL_MAX_REASON_BYTES),
             _lower_hex(payload.get("nonce_digest"), 64),
             payload.get("replay_claimed") is True,
@@ -407,3 +407,39 @@ def decode_native_approval_result(
     ):
         return None
     return dict(decoded)
+
+
+def decode_native_approval_v4_challenge(payload: object) -> dict[str, object] | None:
+    """Bound a Rust V4 challenge; WebAuthn semantics remain in Rust."""
+
+    from .native_approval_v4_protocol import decode_native_approval_v4_challenge as decode
+
+    return decode(payload)
+
+
+def decode_native_approval_v4_artifact(payload: object) -> dict[str, object] | None:
+    """Carry a browser assertion without signing or cryptographic verification."""
+
+    from .native_approval_v4_protocol import decode_native_approval_v4_artifact as decode
+
+    return decode(payload)
+
+
+def decode_native_approval_v4_proof(payload: object) -> dict[str, object] | None:
+    """Bound the Portal proof envelope without interpreting the assertion."""
+
+    from .native_approval_v4_protocol import decode_native_approval_v4_proof as decode
+
+    return decode(payload)
+
+
+def decode_native_approval_v4_result(
+    payload: object,
+    *,
+    phase: NativeApprovalPhase,
+) -> dict[str, object] | None:
+    """Bound a Rust V4 receipt and its exact lifecycle phase."""
+
+    from .native_approval_v4_protocol import decode_native_approval_v4_result as decode
+
+    return decode(payload, phase=phase)

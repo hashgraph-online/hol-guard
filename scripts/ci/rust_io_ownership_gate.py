@@ -5,9 +5,7 @@ The hook transport is Python, but source bytes, path classification, file
 identity, and content equivalence are Rust responsibilities.  This gate keeps
 the boundary executable: it inventories synchronous Python I/O and hashes,
 walks the supported hook call graph, and rejects a new Python operation on a
-native decision branch.  The compatibility oracle remains observable in the
-inventory, but is explicitly limited to ``off``/``shadow`` and differential
-tests.
+native decision branch.
 """
 
 from __future__ import annotations
@@ -17,88 +15,41 @@ import ast
 import json
 import sys
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.ci.rust_io_ownership_resolver import resolve_call
-
-SCHEMA: Final = "hol-guard.decision-critical-io.v1"
-NATIVE_MODES: Final = frozenset({"auto", "force"})
-COMPATIBILITY_MODES: Final = frozenset({"off", "shadow"})
-
-_FS_METHODS: Final = frozenset(
-    {
-        "open",
-        "read",
-        "read_bytes",
-        "read_text",
-        "stat",
-        "lstat",
-        "readlink",
-        "iterdir",
-        "glob",
-        "rglob",
-        "resolve",
-        "exists",
-        "is_file",
-        "is_dir",
-        "is_symlink",
-        "realpath",
-    }
+from scripts.ci.rust_io_ownership_cache import analysis_cache
+from scripts.ci.rust_io_ownership_cache import parsed_module as _parsed_module
+from scripts.ci.rust_io_ownership_contract import capability_contract
+from scripts.ci.rust_io_ownership_policy import (
+    _ARCHIVE_MODULES,
+    _ASYNC_POLICY_PATHS,
+    _COMPATIBILITY_PATHS,
+    _DECODE_FUNCTIONS,
+    _EQUIVALENCE_FUNCTIONS,
+    _FS_FUNCTIONS,
+    _FS_METHODS,
+    _HASH_FUNCTIONS,
+    _PENDING_AUTHORITY_PATHS,
+    _PERSISTENCE_ONLY_PATHS,
+    _PERSISTENCE_PATH_PREFIXES,
+    _PRESENTATION_PATHS,
+    _SERVICE_PATHS,
+    _STRUCTURED_OUTPUT_MEDIATION_PATHS,
+    _TRANSPORT_AUTHORITY_PATHS,
+    _TRANSPORT_DECODE_PATHS,
+    _TRANSPORT_IDENTITY_PATHS,
+    _TRANSPORT_INTEGRITY_PATHS,
+    COMPATIBILITY_MODES,
+    NATIVE_MODES,
+    SCHEMA,
 )
-_FS_FUNCTIONS: Final = frozenset({"open", "readlink", "stat", "lstat", "listdir", "scandir"})
-_HASH_FUNCTIONS: Final = frozenset({"md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "blake2s"})
-_ARCHIVE_MODULES: Final = frozenset({"tarfile", "zipfile", "gzip", "bz2", "lzma", "shutil"})
-_DECODE_FUNCTIONS: Final = frozenset({"b64decode", "loads", "decode", "unpack", "decompress"})
-_EQUIVALENCE_FUNCTIONS: Final = frozenset({"output_equivalent", "parity_signature", "sha256_text"})
-
-_COMPATIBILITY_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/runtime/hook_source_read.py",
-        "src/codex_plugin_scanner/guard/runtime/hook_content_scanner.py",
-        "src/codex_plugin_scanner/guard/runtime/hook_decision_cache.py",
-        "src/codex_plugin_scanner/guard/runtime/hook_review_engine.py",
-        "src/codex_plugin_scanner/guard/runtime/source_paths.py",
-        "src/codex_plugin_scanner/guard/native_command_model.py",
-    }
-)
-_TRANSPORT_IDENTITY_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/native_runtime.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resident.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
-        "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
-    }
-)
-_TRANSPORT_DECODE_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/native_hook_edge.py",
-        "src/codex_plugin_scanner/guard/native_pretool.py",
-        "src/codex_plugin_scanner/guard/native_resident_client.py",
-        "src/codex_plugin_scanner/guard/native_runtime.py",
-    }
-)
-_ASYNC_POLICY_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/mdm/policy.py",
-        "src/codex_plugin_scanner/guard/mdm/contracts.py",
-        "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
-        "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
-        "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py",
-        "src/codex_plugin_scanner/guard/config.py",
-        "src/codex_plugin_scanner/guard/runtime/command_activity_correlation.py",
-    }
-)
-_PERSISTENCE_PATH_PREFIXES: Final = (
-    "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
-    "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
-)
+from scripts.ci.rust_io_ownership_resolver import FunctionIndex, FunctionRecordLike, resolve_call
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,16 +97,9 @@ ROOTS: Final = (
     ),
     RootSpec(
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
-        "try_native_or_source_ref_hook",
+        "route_native_hook",
     ),
 )
-
-
-def _read(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise RuntimeError(f"could not inspect {path}") from exc
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -198,7 +142,7 @@ def _function_map(root: Path) -> dict[tuple[str, str], list[FunctionRecord]]:
     source_root = root / "src/codex_plugin_scanner/guard"
     for path in sorted(source_root.rglob("*.py")):
         relative = _relative(path, root)
-        tree = ast.parse(_read(path), filename=relative)
+        tree = _parsed_module(path)
         for record in _functions(tree, relative):
             result.setdefault((relative, record.name), []).append(record)
     return result
@@ -234,16 +178,35 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
 
 
 def _category(path: str, kind: str) -> str:
+    # These two decision-time evidence hashes moved from command_evaluation.
+    # Keep their original migration category; they are not asynchronous policy
+    # work and this exception must not admit file reads or decoders.
+    if path == "src/codex_plugin_scanner/guard/runtime/command_native_factors.py" and kind == "hash":
+        return "pending_authority_migration"
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
+    if path in _STRUCTURED_OUTPUT_MEDIATION_PATHS and kind in {"hash", "decode"}:
+        return "adapter_output_mediation"
+    if path in _PERSISTENCE_ONLY_PATHS:
+        return "persistence_only"
     if path in _TRANSPORT_IDENTITY_PATHS:
         return "transport_identity"
     if path in _TRANSPORT_DECODE_PATHS and kind == "decode":
         return "transport_decode"
+    if path in _TRANSPORT_INTEGRITY_PATHS and kind == "hash":
+        return "transport_integrity"
+    if path in _TRANSPORT_AUTHORITY_PATHS and kind == "filesystem":
+        return "transport_authority"
     if path in _ASYNC_POLICY_PATHS:
         return "asynchronous_policy"
     if path.startswith(_PERSISTENCE_PATH_PREFIXES):
         return "persistence_only"
+    if path in _PRESENTATION_PATHS:
+        return "approval_presentation"
+    if path in _SERVICE_PATHS:
+        return "python_service"
+    if path in _PENDING_AUTHORITY_PATHS:
+        return "pending_authority_migration"
     if kind in {"archive", "decode"}:
         return "unclassified_python_content_io"
     return "unclassified_python_io"
@@ -291,6 +254,7 @@ def _reachable_records(
     records: dict[tuple[str, str], list[FunctionRecord]],
 ) -> tuple[FunctionRecord, ...]:
     pending = [_root_record(root, spec, records) for spec in ROOTS]
+    records_view = FunctionIndex(cast(Mapping[tuple[str, str], list[FunctionRecordLike]], records))
     seen: set[tuple[str, str]] = set()
     result: list[FunctionRecord] = []
     while pending:
@@ -301,9 +265,9 @@ def _reachable_records(
         seen.add(identity)
         result.append(record)
         for name in _calls(record):
-            resolved = resolve_call(root, record, name, records)
+            resolved = resolve_call(root, cast(FunctionRecordLike, cast(object, record)), name, records_view)
             if resolved is not None:
-                pending.append(resolved)
+                pending.append(cast(FunctionRecord, cast(object, resolved)))
     return tuple(result)
 
 
@@ -370,7 +334,7 @@ def _inventory(root: Path, reachable: tuple[FunctionRecord, ...]) -> list[IoObse
     source_root = root / "src/codex_plugin_scanner/guard"
     for path in sorted(source_root.rglob("*.py")):
         relative = _relative(path, root)
-        tree = ast.parse(_read(path), filename=relative)
+        tree = _parsed_module(path)
         module_records = tuple(_functions(tree, relative))
         for record in module_records:
             for observation in _observations(record):
@@ -391,58 +355,16 @@ def _inventory(root: Path, reachable: tuple[FunctionRecord, ...]) -> list[IoObse
 
 
 def _capability_contract() -> list[dict[str, object]]:
-    return [
-        {
-            "id": "post_tool_source_read",
-            "authority": "rust",
-            "rust_symbols": ["guard_secure_fs::read_bounded", "guard_hook_core::review_post_tool"],
-            "python_semantic_fallback": False,
-            "compatibility_modes": sorted(COMPATIBILITY_MODES),
-            "failure": "fail_closed",
-        },
-        {
-            "id": "sensitive_path_and_symlink_classification",
-            "authority": "rust",
-            "rust_symbols": ["guard_secure_fs::classify_source_path", "guard_secure_fs::contains_symlink_component"],
-            "python_semantic_fallback": False,
-            "compatibility_modes": sorted(COMPATIBILITY_MODES),
-            "failure": "fail_closed",
-        },
-        {
-            "id": "pre_post_identity_and_equivalence",
-            "authority": "rust",
-            "rust_symbols": ["guard_secure_fs::FileIdentity", "guard_hook_core::review_post_tool"],
-            "python_semantic_fallback": False,
-            "compatibility_modes": sorted(COMPATIBILITY_MODES),
-            "failure": "fail_closed",
-        },
-        {
-            "id": "archive_decode_package_inspection",
-            "authority": "rust_when_hook_reachable",
-            "rust_symbols": [
-                "guard_command::pretool::evaluate_pre_tool_envelope",
-                "guard_runtime::strict_json::parse",
-                "guard_hook_core::extract_payload_output",
-            ],
-            "python_semantic_fallback": False,
-            "compatibility_modes": sorted(COMPATIBILITY_MODES),
-            "failure": "fail_closed",
-        },
-        {
-            "id": "policy_snapshot_admission",
-            "authority": "rust",
-            "rust_symbols": [
-                "guard_runtime::policy_store::PolicySnapshotStore",
-                "guard_runtime::edge::evaluate_envelope_with_store",
-            ],
-            "python_semantic_fallback": False,
-            "python_decision_time_disk_io": False,
-            "failure": "fail_closed",
-        },
-    ]
+    return capability_contract(COMPATIBILITY_MODES)
 
 
 def validate(root: Path) -> dict[str, object]:
+    """Validate current source in a fresh, bounded-lifetime analysis scope."""
+    with analysis_cache():
+        return _validate(root)
+
+
+def _validate(root: Path) -> dict[str, object]:
     root = root.resolve()
     records = _function_map(root)
     reachable = _reachable_records(root, records)

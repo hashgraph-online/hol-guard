@@ -189,17 +189,9 @@ def test_cursor_attestation_unavailable_is_unproven_not_inactive(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     installs = [{"harness": "cursor", "active": True, "manifest": {}}]
-
-    def unavailable(_context: object) -> dict[str, object]:
-        return {
-            "protection_active": False,
-            "integrity_status": "attestation-unavailable",
-            "reason": "guard_cursor_cli_attestation_unavailable",
-        }
-
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hooks.cursor_native_hook_state",
-        unavailable,
+        "codex_plugin_scanner.guard.cursor_hook_health.cursor_runtime_hooks_verified",
+        lambda _context: None,
     )
     assert approvals_module._live_hook_verification(installs, store) == {}
 
@@ -363,3 +355,39 @@ def test_app_reports_are_bounded_and_privacy_safe() -> None:
     assert all(
         set(app) == {"harness", "state", "label", "detail", "evidence_gap", "checks", "reason_codes"} for app in apps
     )
+
+
+def test_unsupported_platform_containment_does_not_degrade_supported_layers() -> None:
+    unsupported = ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform")
+    payload = evaluate_protection_health(
+        {
+            "harness_hooks": ProtectionSignal(ProtectionCheckStatus.PASS, "hooks_verified"),
+            "daemon": ProtectionSignal(ProtectionCheckStatus.PASS, "daemon_healthy"),
+            "policy_engine": unsupported,
+            "rule_packs": ProtectionSignal(ProtectionCheckStatus.PASS, "rule_packs_enforced"),
+            "decision_plane_compatibility": unsupported,
+            "containment_compatibility": unsupported,
+            "sandbox": unsupported,
+            "decision_stream": ProtectionSignal(ProtectionCheckStatus.PASS, "decision_stream_healthy"),
+            "tamper_checks": ProtectionSignal(ProtectionCheckStatus.PASS, "runtime_protection_trusted"),
+        }
+    )
+    assert payload["state"] == "protected"
+    assert payload["label"] == "Protected"
+
+
+def test_unsupported_platform_reason_does_not_mask_hook_failures() -> None:
+    payload = evaluate_protection_health(
+        {
+            "harness_hooks": ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform"),
+            "daemon": ProtectionSignal(ProtectionCheckStatus.PASS, "daemon_healthy"),
+            "policy_engine": ProtectionSignal(ProtectionCheckStatus.PASS, "policy_engine_compatible"),
+            "rule_packs": ProtectionSignal(ProtectionCheckStatus.PASS, "rule_packs_enforced"),
+            "decision_plane_compatibility": ProtectionSignal(ProtectionCheckStatus.PASS, "decision_plane_compatible"),
+            "containment_compatibility": ProtectionSignal(ProtectionCheckStatus.PASS, "containment_compatible"),
+            "sandbox": ProtectionSignal(ProtectionCheckStatus.PASS, "containment_backend_enforced"),
+            "decision_stream": ProtectionSignal(ProtectionCheckStatus.PASS, "decision_stream_healthy"),
+            "tamper_checks": ProtectionSignal(ProtectionCheckStatus.PASS, "runtime_protection_trusted"),
+        }
+    )
+    assert payload["state"] == "degraded"

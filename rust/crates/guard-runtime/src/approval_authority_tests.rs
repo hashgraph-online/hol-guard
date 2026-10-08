@@ -29,6 +29,9 @@ fn fresh_private_state_without_public_authority_is_unenrolled() {
         "hol-guard-approval-authority-fresh-{}-{suffix}",
         std::process::id()
     ));
+    #[cfg(windows)]
+    let root = crate::resident_state::ensure_private_directory(&root, true).unwrap();
+    #[cfg(not(windows))]
     fs::create_dir(&root).unwrap();
     #[cfg(unix)]
     {

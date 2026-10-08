@@ -1,39 +1,414 @@
-use std::path::Path;
+use std::ffi::OsString;
+use std::fs::File;
+use std::io;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::os::windows::io::AsRawHandle;
+use std::path::{Path, PathBuf};
 use windows_permissions::constants::{
     AccessRights, AceFlags, AceType, SeObjectType, SecurityInformation,
 };
 use windows_permissions::utilities::current_process_sid;
-use windows_permissions::wrappers::{GetNamedSecurityInfo, GetSecurityInfo, SetNamedSecurityInfo};
+use windows_permissions::wrappers::{
+    GetNamedSecurityInfo, GetSecurityInfo, SetNamedSecurityInfo, SetSecurityInfo,
+};
 use windows_permissions::{LocalBox, SecurityDescriptor, Sid};
 
-pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), String> {
+fn private_descriptor(directory: bool) -> Result<LocalBox<SecurityDescriptor>, String> {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
     let owner_sddl = owner.to_string();
     let inheritance = if directory { "OICI" } else { "" };
     let descriptor_sddl =
-        format!("D:P(A;{inheritance};FA;;;{owner_sddl})(A;{inheritance};FA;;;SY)");
-    let descriptor = descriptor_sddl
+        format!("O:{owner_sddl}D:P(A;{inheritance};FA;;;{owner_sddl})(A;{inheritance};FA;;;SY)");
+    descriptor_sddl
         .parse::<LocalBox<SecurityDescriptor>>()
-        .map_err(|_| "native_resident_windows_acl_build_failed".to_owned())?;
+        .map_err(|_| "native_resident_windows_acl_build_failed".to_owned())
+}
+
+pub(super) fn private_file_descriptor() -> Result<LocalBox<SecurityDescriptor>, String> {
+    private_descriptor(false)
+}
+
+fn with_directory_binding<T, F>(
+    path: &Path,
+    private_root: &Path,
+    private: bool,
+    action: F,
+) -> Result<T, String>
+where
+    F: FnOnce(&mut guard_runtime_windows_process::PrivateDirectoryBinding) -> io::Result<T>,
+{
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    let result = if private {
+        let descriptor = private_descriptor(true)?;
+        guard_runtime_windows_process::bind_private_directory(
+            path,
+            private_root,
+            private_root,
+            &descriptor,
+            |handle, _is_target, _created, is_private| {
+                if is_private {
+                    ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
+                } else {
+                    Ok(())
+                }
+            },
+        )
+    } else {
+        guard_runtime_windows_process::bind_directory(
+            path,
+            private_root,
+            private_root,
+            |handle, _is_target, _created, is_private| {
+                if is_private {
+                    ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
+                } else {
+                    Ok(())
+                }
+            },
+        )
+    };
+    result
+        .and_then(|mut binding| action(&mut binding))
+        .map_err(surfaced_windows_bind_error)
+}
+
+#[cfg(test)]
+pub(super) fn bind_windows_private_directory(
+    path: &Path,
+    private_root: &Path,
+) -> Result<guard_runtime_windows_process::PrivateDirectoryBinding, String> {
+    bind_windows_private_directory_under(path, private_root)
+}
+
+#[cfg(test)]
+pub(super) fn bind_windows_private_directory_under(
+    path: &Path,
+    private_root: &Path,
+) -> Result<guard_runtime_windows_process::PrivateDirectoryBinding, String> {
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    let descriptor = private_descriptor(true)?;
+    guard_runtime_windows_process::bind_private_directory(
+        path,
+        private_root,
+        private_root,
+        &descriptor,
+        |handle, _is_target, _created, is_private| {
+            if is_private {
+                ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .map_err(surfaced_windows_bind_error)
+}
+
+pub(super) fn bind_windows_existing_directory(
+    path: &Path,
+    private_root: &Path,
+) -> Result<guard_runtime_windows_process::PrivateDirectoryBinding, String> {
+    bind_windows_existing_directory_under(path, private_root)
+}
+
+pub(super) fn bind_windows_existing_directory_under(
+    path: &Path,
+    private_root: &Path,
+) -> Result<guard_runtime_windows_process::PrivateDirectoryBinding, String> {
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    guard_runtime_windows_process::bind_directory(
+        path,
+        private_root,
+        private_root,
+        |handle, _is_target, _created, is_private| {
+            if is_private {
+                ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .map_err(surfaced_windows_bind_error)
+}
+
+fn with_existing_directory<T, F>(path: &Path, private_root: &Path, action: F) -> io::Result<T>
+where
+    F: FnOnce(&mut guard_runtime_windows_process::PrivateDirectoryBinding) -> io::Result<T>,
+{
+    let owner = current_process_sid()
+        .map_err(|_| io::Error::other("native_resident_windows_owner_sid_failed"))?;
+    guard_runtime_windows_process::bind_directory(
+        path,
+        private_root,
+        private_root,
+        |handle, _is_target, _created, is_private| {
+            if is_private {
+                ensure_private_directory_acl(handle, owner.as_ref()).map_err(io::Error::other)
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .and_then(|mut binding| action(&mut binding))
+}
+
+pub(super) fn ensure_private_directory_path_under(
+    path: &Path,
+    private_root: &Path,
+    private: bool,
+) -> Result<PathBuf, String> {
+    with_directory_binding(path, private_root, private, |binding| {
+        Ok(binding.path().to_owned())
+    })
+}
+
+pub(super) fn ensure_private_directory_path(
+    path: &Path,
+    private_root: &Path,
+    private: bool,
+) -> Result<PathBuf, String> {
+    ensure_private_directory_path_under(path, private_root, private)
+}
+
+pub(super) fn create_private_file(path: &Path, private_root: &Path) -> io::Result<File> {
+    let descriptor = private_descriptor(false).map_err(io::Error::other)?;
+    let owner = current_process_sid()
+        .map_err(|_| io::Error::other("native_resident_windows_owner_sid_failed"))?;
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "private file parent missing")
+    })?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private file name missing"))?;
+    with_existing_directory(parent, private_root, |binding| {
+        let file = binding.create_private_file(name, &descriptor)?;
+        if let Err(error) = verify_windows_handle(&file, owner.as_ref()) {
+            let _ = guard_runtime_windows_process::delete_private_file_handle(&file);
+            return Err(io::Error::other(error));
+        }
+        Ok(file)
+    })
+}
+
+#[allow(dead_code)]
+pub(super) fn create_private_directory(path: &Path) -> io::Result<bool> {
+    let binding = with_directory_binding(path, path, true, |binding| Ok(binding.created_final()))
+        .map_err(io::Error::other)?;
+    Ok(binding)
+}
+
+pub(super) fn open_private_file(path: &Path, private_root: &Path) -> io::Result<File> {
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "private file parent missing")
+    })?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "private file name missing"))?;
+    with_existing_directory(parent, private_root, |binding| {
+        binding.open_private_file(name)
+    })
+}
+
+#[allow(dead_code)]
+pub(super) fn open_private_directory(path: &Path, private_root: &Path) -> io::Result<File> {
+    with_existing_directory(path, private_root, |binding| {
+        let handle = binding.handle();
+        handle.try_clone()
+    })
+}
+fn windows_path_key(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    let stripped = text.strip_prefix(r"\\?\").unwrap_or(text.as_ref());
+    stripped
+        .replace('/', "\\")
+        .trim_end_matches('\\')
+        .to_ascii_lowercase()
+}
+
+fn same_windows_parent(left: &Path, right: &Path) -> bool {
+    left == right || windows_path_key(left) == windows_path_key(right)
+}
+
+fn surfaced_windows_io_error(error: io::Error) -> String {
+    let message = error.to_string();
+    if !message.is_empty()
+        && message.len() <= 80
+        && message
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        && message.starts_with("native_")
+    {
+        return message;
+    }
+    "native_resident_windows_acl_apply_failed".to_owned()
+}
+
+pub(super) fn replace_private_file(
+    temporary: &Path,
+    path: &Path,
+    private_root: &Path,
+) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "native_resident_windows_replace_parent_missing".to_owned())?;
+    if temporary
+        .parent()
+        .is_none_or(|candidate| !same_windows_parent(candidate, parent))
+    {
+        return Err("native_resident_windows_replace_parent_mismatch".to_owned());
+    }
+    let temporary_name = temporary
+        .file_name()
+        .ok_or_else(|| "native_resident_windows_replace_name_missing".to_owned())?;
+    let destination_name = path
+        .file_name()
+        .ok_or_else(|| "native_resident_windows_replace_name_missing".to_owned())?;
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    with_existing_directory(parent, private_root, |binding| {
+        let source = binding.open_private_file(temporary_name)?;
+        verify_windows_handle(&source, owner.as_ref()).map_err(io::Error::other)?;
+        binding.replace_private_file(&source, destination_name)
+    })
+    .map_err(surfaced_windows_io_error)
+}
+
+pub(super) fn remove_private_file(path: &Path, private_root: &Path) -> Result<bool, String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "native_resident_windows_remove_parent_missing".to_owned())?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| "native_resident_windows_remove_name_missing".to_owned())?;
+    with_existing_directory(parent, private_root, |binding| {
+        let file = match binding.open_private_file(name) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        guard_runtime_windows_process::delete_private_file_handle(&file).map(|()| true)
+    })
+    .map_err(surfaced_windows_io_error)
+}
+
+pub(super) fn verify_private_file(file: &File) -> Result<(), String> {
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    verify_windows_handle(file, owner.as_ref())
+}
+
+pub(super) fn repair_private_file(file: &mut File) -> Result<(), String> {
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    repair_windows_handle(file, false, owner.as_ref())
+}
+
+fn ensure_private_directory_acl(handle: &mut File, owner: &Sid) -> Result<(), String> {
+    // Shared binds must not rewrite a DACL that is already owner-private.
+    if verify_windows_handle(handle, owner).is_ok() {
+        return Ok(());
+    }
+    repair_windows_handle(handle, true, owner)
+}
+
+pub(super) fn repair_windows_handle<H: AsRawHandle>(
+    handle: &mut H,
+    directory: bool,
+    owner: &Sid,
+) -> Result<(), String> {
+    verify_windows_handle_owner(handle, owner)?;
+    let descriptor = private_descriptor(directory)?;
+    let dacl = descriptor
+        .dacl()
+        .ok_or_else(|| "native_resident_windows_acl_build_failed".to_owned())?;
+    SetSecurityInfo(
+        handle,
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
+        None,
+        None,
+        Some(dacl),
+        None,
+    )
+    .map_err(|_| "native_resident_windows_acl_apply_failed".to_owned())?;
+    verify_windows_handle(handle, owner)
+}
+
+fn windows_acl_path(path: &Path) -> PathBuf {
+    const EXTENDED_PREFIX: &[u16] = &[92, 92, 63, 92];
+    const DEVICE_PREFIX: &[u16] = &[92, 92, 46, 92];
+    let wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    if wide.starts_with(EXTENDED_PREFIX) || wide.starts_with(DEVICE_PREFIX) || !path.is_absolute() {
+        return path.to_path_buf();
+    }
+
+    // Adding the verbatim prefix disables Win32's slash conversion. Preserve
+    // UTF-16 code units while normalizing ordinary absolute-path separators.
+    let wide = wide
+        .into_iter()
+        .map(|unit| if unit == 47 { 92 } else { unit })
+        .collect::<Vec<_>>();
+
+    let mut extended = Vec::with_capacity(wide.len() + EXTENDED_PREFIX.len() + 4);
+    if wide.starts_with(&[92, 92]) {
+        extended.extend_from_slice(&[92, 92, 63, 92, 85, 78, 67, 92]);
+        extended.extend_from_slice(&wide[2..]);
+    } else {
+        extended.extend_from_slice(EXTENDED_PREFIX);
+        extended.extend_from_slice(&wide);
+    }
+    PathBuf::from(OsString::from_wide(&extended))
+}
+
+pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), String> {
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    let path = windows_acl_path(path);
+    verify_windows_path_owner(&path, &owner)?;
+    let descriptor = private_descriptor(directory)?;
     let dacl = descriptor
         .dacl()
         .ok_or_else(|| "native_resident_windows_acl_build_failed".to_owned())?;
     SetNamedSecurityInfo(
         path.as_os_str(),
         SeObjectType::SE_FILE_OBJECT,
-        SecurityInformation::Dacl | SecurityInformation::Owner | SecurityInformation::ProtectedDacl,
-        Some(owner.as_ref()),
+        SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
+        None,
         None,
         Some(dacl),
         None,
     )
     .map_err(|_| "native_resident_windows_acl_apply_failed".to_owned())?;
 
-    verify_windows_path(path, &owner)
+    verify_windows_path(&path, &owner)
+}
+
+fn verify_windows_path_owner(path: &Path, owner: &Sid) -> Result<(), String> {
+    let path = windows_acl_path(path);
+    let applied = GetNamedSecurityInfo(
+        path.as_os_str(),
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Owner,
+    )
+    .map_err(|_| "native_resident_windows_acl_verify_failed".to_owned())?;
+    verify_windows_owner(&applied, owner)
+}
+
+fn verify_windows_handle_owner<H: AsRawHandle>(handle: &H, owner: &Sid) -> Result<(), String> {
+    let applied = GetSecurityInfo(
+        handle,
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Owner,
+    )
+    .map_err(|_| "native_resident_windows_acl_verify_failed".to_owned())?;
+    verify_windows_owner(&applied, owner)
 }
 
 pub(super) fn verify_windows_path(path: &Path, owner: &Sid) -> Result<(), String> {
+    let path = windows_acl_path(path);
     let applied = GetNamedSecurityInfo(
         path.as_os_str(),
         SeObjectType::SE_FILE_OBJECT,
@@ -56,11 +431,32 @@ pub(super) fn verify_windows_handle<H: std::os::windows::io::AsRawHandle>(
     verify_windows_descriptor(&applied, owner)
 }
 
+fn windows_owner_is_trusted(
+    applied_owner: &Sid,
+    owner: &Sid,
+    system: &Sid,
+    administrators: &Sid,
+) -> bool {
+    applied_owner == owner || applied_owner == system || applied_owner == administrators
+}
+
 fn verify_windows_descriptor(applied: &SecurityDescriptor, owner: &Sid) -> Result<(), String> {
+    verify_windows_owner(applied, owner)?;
     let system = "S-1-5-18"
         .parse::<LocalBox<Sid>>()
         .map_err(|_| "native_resident_windows_system_sid_failed".to_owned())?;
-    if applied.owner() != Some(owner) {
+    let administrators = "S-1-5-32-544"
+        .parse::<LocalBox<Sid>>()
+        .map_err(|_| "native_resident_windows_administrators_sid_failed".to_owned())?;
+    let applied_owner = applied
+        .owner()
+        .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
+    if !windows_owner_is_trusted(
+        applied_owner,
+        owner,
+        system.as_ref(),
+        administrators.as_ref(),
+    ) {
         return Err("native_resident_windows_acl_not_private".to_owned());
     }
     let sddl = applied
@@ -99,4 +495,125 @@ fn verify_windows_descriptor(applied: &SecurityDescriptor, owner: &Sid) -> Resul
         return Err("native_resident_windows_acl_not_private".to_owned());
     }
     Ok(())
+}
+
+fn verify_windows_owner(applied: &SecurityDescriptor, owner: &Sid) -> Result<(), String> {
+    let system = "S-1-5-18"
+        .parse::<LocalBox<Sid>>()
+        .map_err(|_| "native_resident_windows_system_sid_failed".to_owned())?;
+    let administrators = "S-1-5-32-544"
+        .parse::<LocalBox<Sid>>()
+        .map_err(|_| "native_resident_windows_administrators_sid_failed".to_owned())?;
+    let applied_owner = applied
+        .owner()
+        .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
+    if !windows_owner_is_trusted(
+        applied_owner,
+        owner,
+        system.as_ref(),
+        administrators.as_ref(),
+    ) {
+        return Err("native_resident_windows_acl_not_private".to_owned());
+    }
+    Ok(())
+}
+
+fn is_stable_native_code(message: &str) -> bool {
+    (1..=128).contains(&message.len())
+        && message.starts_with("native_")
+        && message
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+fn surfaced_windows_bind_error(error: io::Error) -> String {
+    surfaced_windows_bind_message(&error.to_string())
+}
+
+fn surfaced_windows_bind_message(message: &str) -> String {
+    if is_stable_native_code(message) {
+        return message.to_owned();
+    }
+    if message.contains("outside its trusted private boundary") {
+        return "native_resident_windows_boundary_mismatch".to_owned();
+    }
+    if message.contains("trusted directory ancestry is missing") {
+        return "native_resident_windows_trusted_ancestry_missing".to_owned();
+    }
+    if message.contains("private directory ancestry is missing") {
+        return "native_resident_windows_private_ancestry_missing".to_owned();
+    }
+    if message.contains("os error 32") || message.contains("being used by another process") {
+        return "native_resident_windows_sharing_violation".to_owned();
+    }
+    if message.contains("os error 5") || message.contains("Access is denied") {
+        return "native_resident_windows_access_denied".to_owned();
+    }
+    "native_resident_windows_bind_failed".to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_owner_allowlist_rejects_unrelated_principals() {
+        let owner = "S-1-5-21-1-2-3-1001".parse::<LocalBox<Sid>>().unwrap();
+        let system = "S-1-5-18".parse::<LocalBox<Sid>>().unwrap();
+        let administrators = "S-1-5-32-544".parse::<LocalBox<Sid>>().unwrap();
+        let unrelated = "S-1-5-21-4-5-6-1002".parse::<LocalBox<Sid>>().unwrap();
+
+        for applied_owner in [owner.as_ref(), system.as_ref(), administrators.as_ref()] {
+            assert!(windows_owner_is_trusted(
+                applied_owner,
+                owner.as_ref(),
+                system.as_ref(),
+                administrators.as_ref(),
+            ));
+        }
+        assert!(!windows_owner_is_trusted(
+            unrelated.as_ref(),
+            owner.as_ref(),
+            system.as_ref(),
+            administrators.as_ref(),
+        ));
+    }
+
+    #[test]
+    fn windows_bind_errors_keep_stable_codes() {
+        assert_eq!(
+            super::surfaced_windows_bind_message(
+                "directory binding path is outside its trusted private boundary"
+            ),
+            "native_resident_windows_boundary_mismatch"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message("private directory ancestry is missing"),
+            "native_resident_windows_private_ancestry_missing"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message("trusted directory ancestry is missing"),
+            "native_resident_windows_trusted_ancestry_missing"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message(
+                "The process cannot access the file because it is being used by another process. (os error 32)"
+            ),
+            "native_resident_windows_sharing_violation"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message("Access is denied. (os error 5)"),
+            "native_resident_windows_access_denied"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message("native_resident_windows_acl_not_private"),
+            "native_resident_windows_acl_not_private"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message(
+                "The system cannot find the path specified. (os error 3)"
+            ),
+            "native_resident_windows_bind_failed"
+        );
+    }
 }

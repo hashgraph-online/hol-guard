@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import hmac
 import os
+import secrets
 import stat
+from contextlib import suppress
 from pathlib import Path
+from typing import Any
 
 from .native_policy_snapshot_codec import derive_native_policy_verifier_key
 from .native_policy_snapshot_constants import (
@@ -14,15 +17,16 @@ from .native_policy_snapshot_constants import (
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_windows_acl import _windows_verify_private_dacl
+from .native_policy_snapshot_windows_atomic import _windows_write_private_file_atomic
 from .native_policy_snapshot_windows_io import (
-    _windows_apply_private_dacl,
     _windows_close_handle,
     _windows_open_handle,
+    _windows_repair_private_file,
 )
+from .native_policy_snapshot_windows_state import _windows_private_state_binding
 from .native_policy_snapshot_windows_support import (
     _runtime_state_directory,
     _windows_owner_sid,
-    _windows_private_descriptor,
 )
 
 
@@ -65,53 +69,34 @@ def _windows_read_key(path: Path, expected: bytes) -> None:
         _windows_close_handle(kernel32, handle)
 
 
-def _windows_provision_verifier_key(path: Path, derived: bytes) -> Path:
-    import ctypes
-    from ctypes import wintypes
-
+def _windows_provision_verifier_key(
+    path: Path,
+    derived: bytes,
+    *,
+    parent_path: Path,
+    parent_handle: Any,
+    directory_handles: list[tuple[Any, Any]] | None = None,
+) -> Path:
+    with suppress(FileNotFoundError):
+        _windows_repair_private_file(path)
     try:
         _windows_read_key(path, derived)
         return path
     except FileNotFoundError:
         pass
-    owner_sid = _windows_owner_sid()
+    temporary_name = f".{NATIVE_POLICY_VERIFIER_KEY_NAME}.{secrets.token_hex(16)}.tmp"
     try:
-        with _windows_private_descriptor(False) as (_advapi32, descriptor, dacl, _descriptor_owner_sid):
-            kernel32, handle, _information = _windows_open_handle(
-                path,
-                directory=False,
-                create_new=True,
-                descriptor=descriptor,
-            )
-            try:
-                write_file = kernel32.WriteFile
-                write_file.argtypes = [
-                    wintypes.HANDLE,
-                    ctypes.c_void_p,
-                    wintypes.DWORD,
-                    ctypes.POINTER(wintypes.DWORD),
-                    ctypes.c_void_p,
-                ]
-                write_file.restype = wintypes.BOOL
-                buffer = (ctypes.c_ubyte * len(derived)).from_buffer_copy(derived)
-                count = wintypes.DWORD()
-                if not write_file(
-                    handle,
-                    buffer,
-                    len(derived),
-                    ctypes.byref(count),
-                    None,
-                ) or count.value != len(derived):
-                    raise NativePolicySnapshotError("native_policy_verifier_key_write_failed")
-                flush = kernel32.FlushFileBuffers
-                flush.argtypes = [wintypes.HANDLE]
-                flush.restype = wintypes.BOOL
-                if not flush(handle):
-                    raise NativePolicySnapshotError("native_policy_verifier_key_sync_failed")
-                _windows_apply_private_dacl(kernel32, handle, descriptor, dacl, False)
-                _windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-            finally:
-                _windows_close_handle(kernel32, handle)
+        _windows_write_private_file_atomic(
+            parent_path=parent_path,
+            parent_handle=parent_handle,
+            directory_handles=directory_handles,
+            temporary_name=temporary_name,
+            destination_name=path.name,
+            payload=derived,
+            maximum_bytes=_VERIFIER_KEY_BYTES,
+            kind="verifier_key",
+            replace_existing=False,
+        )
     except FileExistsError:
         _windows_read_key(path, derived)
         return path
@@ -134,10 +119,21 @@ def provision_native_policy_verifier_key(
     """
 
     derived = derive_native_policy_verifier_key(policy_integrity_key)
+    if os.name == "nt":
+        # Keep the verified guard-home/runtime ancestry open while the key is
+        # read, repaired, or created. This prevents a path swap from redirecting
+        # the Windows key operation after validation.
+        with _windows_private_state_binding(guard_home) as binding:
+            path = binding.path / NATIVE_POLICY_VERIFIER_KEY_NAME
+            return _windows_provision_verifier_key(
+                path,
+                derived,
+                parent_path=binding.path,
+                parent_handle=binding.handle,
+                directory_handles=binding.handles,
+            )
     state_dir = _runtime_state_directory(guard_home)
     path = state_dir / NATIVE_POLICY_VERIFIER_KEY_NAME
-    if os.name == "nt":
-        return _windows_provision_verifier_key(path, derived)
     try:
         metadata = path.lstat()
     except FileNotFoundError:

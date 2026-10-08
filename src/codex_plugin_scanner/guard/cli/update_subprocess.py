@@ -29,6 +29,7 @@ from typing import BinaryIO
 from ..mdm.network import platform_system_proxies
 from ..redaction import redact_sensitive_text
 from ..shims import _trusted_python_flags
+from ..update_staging import note_update_activity, reject_linked_path_components
 from ..windows_paths import (
     trusted_windows_roaming_appdata,
     trusted_windows_system_directories,
@@ -772,9 +773,9 @@ def _prepare_neutral_directories(guard_home: Path) -> tuple[Path, Path, Path]:
         if not expanded_home.is_absolute():
             raise UpdateSubprocessError("update_neutral_cwd_unavailable")
         lexical_home = Path(os.path.normpath(str(expanded_home)))
-        _reject_linked_path_components(lexical_home)
+        reject_linked_path_components(lexical_home)
         lexical_home.mkdir(parents=True, exist_ok=True)
-        _reject_linked_path_components(lexical_home)
+        reject_linked_path_components(lexical_home)
         home_metadata = lexical_home.lstat()
         if (
             not stat.S_ISDIR(home_metadata.st_mode)
@@ -798,23 +799,12 @@ def _prepare_neutral_directories(guard_home: Path) -> tuple[Path, Path, Path]:
                 metadata = directory.stat()
                 if metadata.st_mode & 0o077 or metadata.st_uid != os.geteuid():
                     raise UpdateSubprocessError("update_neutral_cwd_unavailable")
+        note_update_activity(guard_home)
         return runtime, neutral_home, neutral_tmp
     except UpdateSubprocessError:
         raise
     except (OSError, RuntimeError) as error:
         raise UpdateSubprocessError("update_neutral_cwd_unavailable") from error
-
-
-def _reject_linked_path_components(path: Path) -> None:
-    current = Path(path.anchor)
-    for part in path.parts[1:]:
-        current /= part
-        try:
-            metadata = current.lstat()
-        except FileNotFoundError:
-            return
-        if stat.S_ISLNK(metadata.st_mode) or _metadata_is_reparse(metadata):
-            raise UpdateSubprocessError("update_neutral_cwd_unavailable")
 
 
 def _metadata_is_reparse(metadata: os.stat_result) -> bool:

@@ -22,8 +22,7 @@ def test_hook_data_plane_ownership_v2_maps_every_supported_route() -> None:
     assert isinstance(harness_routes, dict)
     assert set(harnesses) == set(harness_routes)
     assert all(
-        isinstance(route, dict) and set(route) == {"pre_tool_use", "post_tool_use"}
-        for route in harness_routes.values()
+        isinstance(route, dict) and set(route) == {"pre_tool_use", "post_tool_use"} for route in harness_routes.values()
     )
 
     routes = payload["routes"]
@@ -77,6 +76,7 @@ def test_fail_safe_matrix_never_allows_unreviewed_output() -> None:
             "python_reference_withhold_until_complete",
             "python_reference_within_deadline",
             "withhold_or_block",
+            "observe_continue",
             "not_valid_for_allow",
             "more_restrictive_output_action",
             "python_reference_or_block",
@@ -122,7 +122,7 @@ def test_dead_python_cleanup_is_an_explicit_release_gate() -> None:
     nodes = ownership["nodes"]
     assert isinstance(nodes, list)
     oracle = next(item for item in nodes if isinstance(item, dict) and item.get("id") == "python_reference_oracle")
-    assert oracle["target"] == "differential tests only"
+    assert oracle["target"] == "retired"
 
     prd = (ROOT / "docs" / "guard" / "rust-runtime-hardening-prd.md").read_text(encoding="utf-8")
     todo = (ROOT / "docs" / "guard" / "rust-runtime-hardening-todo.md").read_text(encoding="utf-8")

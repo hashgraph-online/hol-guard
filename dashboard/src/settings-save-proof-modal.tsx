@@ -40,11 +40,10 @@ export function resolveSettingsSaveProofKind(input: {
   if (input.changingPassword && input.wasConfigured) {
     return "change-password";
   }
-  if (!input.wasConfigured && input.draftGateEnabled) {
+  if (input.draftGateEnabled && !input.savedGateEnabled) {
+    // Enabling a disabled gate requires new_password and confirmation, even
+    // when a password verifier and authenticator were retained while off.
     return "setup-gate";
-  }
-  if (input.wasConfigured && input.draftGateEnabled && !input.savedGateEnabled) {
-    return "verify-save";
   }
   if (input.savedGateEnabled) {
     return "verify-save";
@@ -170,7 +169,7 @@ export function isSettingsSaveProofSubmitDisabled(
 }
 
 export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const totpRef = useRef<HTMLInputElement>(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -247,14 +246,25 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
     [props.onCancel, props.pending],
   );
 
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (
+      props.pending
+      || isSettingsSaveProofSubmitDisabled(
+        props.mode,
+        { currentPassword, newPassword, confirmPassword, totpCode },
+        totpRequired,
+      )
+    ) {
+      return;
+    }
     props.onConfirm({
       ...(currentPassword.trim().length > 0 ? { currentPassword } : {}),
       ...(newPassword.trim().length > 0 ? { newPassword } : {}),
       ...(confirmPassword.trim().length > 0 ? { confirmPassword } : {}),
       ...(totpCode.trim().length > 0 ? { totpCode } : {}),
     });
-  }, [confirmPassword, currentPassword, newPassword, props, totpCode]);
+  }, [confirmPassword, currentPassword, newPassword, props, totpCode, totpRequired]);
 
   const credentials: SettingsSaveProofCredentials = {
     currentPassword,
@@ -276,9 +286,10 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
       aria-modal="true"
       aria-labelledby="settings-save-proof-title"
     >
-      <div
+      <form
         ref={dialogRef}
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+        onSubmit={handleConfirm}
       >
         <div className="flex items-center gap-3">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10">
@@ -368,11 +379,11 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
           >
             Go back
           </button>
-          <ActionButton onClick={handleConfirm} disabled={props.pending || confirmDisabled}>
+          <ActionButton type="submit" disabled={props.pending || confirmDisabled}>
             {props.pending ? "Working…" : props.confirmLabel}
           </ActionButton>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
