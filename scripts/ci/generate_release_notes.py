@@ -492,6 +492,12 @@ def render_notes(
             f"Guard {version} is a stable release cut from "
             f"[`{short_sha}`](https://github.com/{repo}/commit/{source_sha})."
         )
+        lines.append(
+            "Package publication and Desktop update availability are separate. "
+            "Desktop updates are ready when the signed Core assets and update manifests appear below; "
+            f"[macOS feed status](https://github.com/{repo}/actions/workflows/desktop-core-alpha-feed.yml) "
+            "shows signing and verification progress."
+        )
     published_release = previous_release is None or previous_release.status == "published"
     if previous_tag:
         previous_version = previous_tag.removeprefix("alpha/").lstrip("v")

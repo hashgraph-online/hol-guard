@@ -126,6 +126,7 @@ def test_release_branch_pushes_publish_alpha_while_stable_publish_is_manual() ->
         "build",
         "assemble-native-guard-distributions",
         "publish-main-pypi",
+        "publish-main-assets",
     ]
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")

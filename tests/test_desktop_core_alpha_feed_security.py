@@ -55,6 +55,7 @@ def test_feed_preserves_trusted_push_without_publication_completion_overlap() ->
     branches: [main]
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
+      - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py"""
     assert trusted_push in text
     assert "branches: [main]" in text

@@ -9,6 +9,7 @@ on:
       - tests/test_stage_native_runtime_for_desktop_core.py
       - tests/test_verify_*.py
       - tests/test_seal_pyinstaller_native_manifest.py
+      - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
@@ -17,6 +18,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/desktop-core-linux-feed.yml
+      - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
@@ -103,7 +105,10 @@ jobs:
         run: |
           set -euo pipefail
           gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+            --jq '.[] | select(.draft == false and .prerelease == false) | {tag: .tag_name, assets: [.assets[] | select(.state == "uploaded") | .name]}' \
+            > "$RUNNER_TEMP/release-inventory.jsonl"
+          python3 -I scripts/release/ready_core_releases.py \
+            --inventory "$RUNNER_TEMP/release-inventory.jsonl" --platform 'manylinux_.*_x86_64' \
             > "$RUNNER_TEMP/release-tags.txt"
           ARGS=(--tags "$RUNNER_TEMP/release-tags.txt")
           if [[ -n "$REQUESTED_CORE_VERSION" ]]; then
