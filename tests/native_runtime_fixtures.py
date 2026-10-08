@@ -48,6 +48,12 @@ def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     return runtime
 
 
+@pytest.fixture
+def native_approval_reuse_runtime(native_hook_force: Path) -> Path:
+    """Run approval reuse assertions with the caller-pinned native authority."""
+    return native_hook_force
+
+
 @pytest.fixture(scope="session")
 def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     """Session-shared guard home so the resident is spawned once per run."""
@@ -310,6 +316,25 @@ def package_intent_native(
     authoritative-parser suite rather than silently skipping its coverage.
     """
 
+    from codex_plugin_scanner.guard import config
+
+    binary = _resolve_native_hook_runtime()
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary.resolve()))
+    monkeypatch.setattr(
+        config,
+        "resolve_guard_home",
+        lambda override=None: Path(override).expanduser() if override else _native_context_home,
+    )
+    return _native_context_home
+
+
+@pytest.fixture
+def native_approval_reuse_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    _native_context_home: Path,
+) -> Path:
+    """Use the compiled approval authority with an enrolled isolated home."""
     from codex_plugin_scanner.guard import config
 
     binary = _resolve_native_hook_runtime()

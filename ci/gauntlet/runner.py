@@ -206,7 +206,7 @@ def run_case(
                 {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
             )
             prompt = _scenario_prompt(rendered)
-            authorization = fixture_authorization(fixture, collector.url) + "\n" + FIXTURE_SYSTEM_CONTEXT
+            authorization = fixture_authorization(fixture, collector.url, rendered) + "\n" + FIXTURE_SYSTEM_CONTEXT
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             case["agent_context_sha256"] = sha256_bytes(authorization.encode())
             agent_dir = private / "agent"

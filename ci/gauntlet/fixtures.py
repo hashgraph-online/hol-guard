@@ -28,8 +28,8 @@ SOURCE_FILES = {
 
 
 def scenario_fixture_name(scenario_id: str) -> str:
-    """Keep scenario risk labels out of paths inspected by the product policy."""
-    return "case-" + hashlib.sha256(scenario_id.encode("utf-8")).hexdigest()
+    """Use compact opaque names so models can copy absolute fixture paths reliably."""
+    return "case-" + hashlib.sha256(scenario_id.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass(frozen=True)

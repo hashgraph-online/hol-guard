@@ -35,6 +35,12 @@ runs:
   - run: uv sync --frozen --no-dev --group ci-test --python ${{ env.CI_PYTHON_VERSION }}
     if: inputs.has-token == 'true'
     shell: bash
+  - name: Bind Sonar scan to the exact source and verified analysis context
+    if: inputs.has-token == 'true'
+    shell: bash
+    run: uv run --no-sync python -m scripts.ci.sonar_scan_context
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
   - name: Cache Sonar analyzer downloads
     uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
     with:
@@ -101,17 +107,17 @@ runs:
   - name: Analyze with SonarQube Cloud
     uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
     with:
-      args: -Dsonar.python.analysis.threads=4
+      projectBaseDir: ""
+      args: -Dproject.settings=sonar-scan.properties -Dsonar.python.analysis.threads=4
     env:
       SONAR_USER_HOME: ${{ runner.temp }}/sonar
       SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
       SONAR_SCANNER_JAVA_OPTS: -Xmx6g
     if: inputs.has-token == 'true'
-  - name: Check standard Sonar gate for PRs and qualification
+  - name: Verify qualification scan identity and standard quality gate
     if: inputs.has-token == 'true' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
-    uses: sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa
-    with:
-      pollingTimeoutSec: 280
+    shell: bash
+    run: timeout --signal=TERM --kill-after=5s 300s python -m scripts.ci.sonar_scan_context --verify
     env:
       SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
   - name: SonarQube Quality Gate check
@@ -122,7 +128,7 @@ runs:
     env:
       SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
   - name: Preserve analysis-specific quality evidence
-    if: always() && inputs.has-token == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && inputs.has-token == 'true'
     uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     with:
       name: sonar-quality-evidence-${{ github.run_attempt }}

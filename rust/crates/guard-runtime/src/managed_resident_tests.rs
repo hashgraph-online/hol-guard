@@ -415,7 +415,8 @@ fn owner_liveness_expires_after_launcher_and_all_clients_disappear() {
     ));
     fs::create_dir(&root).unwrap();
     let lease = lease::acquire(&root).unwrap();
-    let alive = managed_owner_liveness(&root, 1, "never-matches".to_owned());
+    let digest = runtime_digest().unwrap();
+    let alive = managed_owner_liveness(&root, 1, "never-matches".to_owned(), &digest);
     std::thread::sleep(Duration::from_millis(150));
     assert!(alive.load(Ordering::Acquire));
     drop(lease);

@@ -136,6 +136,7 @@ def runtime_session_success_summary(
         "extensionCatalogDigest",
         "extensionControlSchemaVersions",
         "extensionAuthorityRevision",
+        "managedExtensionAuthorityRevision",
         "effectiveProjectionDigest",
         "managedControlsCapabilities",
     ):

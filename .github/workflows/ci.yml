@@ -454,6 +454,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     steps:
       - name: Check for SonarQube Cloud token
         id: token-presence
@@ -673,6 +674,8 @@ jobs:
         with:
           python-version: "3.12"
       - uses: ./.github/actions/setup-rust
+        with:
+          save-main-cache: "true"
       - name: Build Windows native command evaluators once for both updater Python versions
         shell: pwsh
         env:

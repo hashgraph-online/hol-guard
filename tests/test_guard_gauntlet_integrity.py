@@ -22,7 +22,25 @@ def test_scenario_labels_do_not_influence_fixture_path_risk():
 
     names = [scenario_fixture_name(scenario.id) for scenario in load_catalog()]
     assert len(names) == len(set(names))
-    assert all(re.fullmatch(r"case-[0-9a-f]{64}", name) for name in names)
+    assert all(re.fullmatch(r"case-[0-9a-f]{16}", name) for name in names)
+
+
+def test_compact_fixture_paths_preserve_absolute_command_operands(tmp_path):
+    import shlex
+
+    from ci.gauntlet.catalog import load_catalog
+    from ci.gauntlet.fixtures import scenario_fixture_name
+
+    scenario = next(case for case in load_catalog() if case.id == "absolute-recursive-source-grep")
+    workspace = tmp_path / "fixtures with spaces" / scenario_fixture_name(scenario.id) / "home" / "project"
+    rendered = scenario.render({"workspace": str(workspace)})
+    assert shlex.split(rendered.commands[0]) == [
+        "grep",
+        "-rn",
+        "ordinary",
+        str(workspace / "src"),
+        str(workspace / "docs"),
+    ]
 
 
 def test_fixture_alias_redaction_preserves_host_guard_identity(monkeypatch):
