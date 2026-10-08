@@ -9,6 +9,8 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 ## Unreleased
 
 ### Fixed
+* **approval:** native authenticated SQLite and inline lookup qualify exact artifact-context grants for reapproval reuse. Generic hooks and harness-start consumers preserve qualification across atomic claims and revalidation; final native decision contracts accept qualified reapproval claims. Changed artifacts, invalid integrity, and terminal restrictions remain enforced.
+* **launch:** compute launch argv and canonical authority digests in Rust instead of emitting unbound sentinels; bind previews and execution to the selected store Guard home, including explicit prompt transport. Qualified installed-wheel OMP launches and managed-extension reads retain native content and context verification.
 * **contracts:** complete canonical external trust bindings for CodeSage, VaultSync, Omairc, FetchSandbox MCP, and Setup Doctor MCP after retiring the derived repository trust cache; retain full-catalog ownership validation and opt-in review boundaries.
 * **ci:** create the managed-resident integration fixture's Guard home with private permissions before publishing signed snapshots, so real handoff and retained-client checks reach their intended lifecycle paths without weakening native directory ownership checks.
 * **ci:** bind manual Sonar analysis to the exact checkout and its unique open same-repository pull request instead of overwriting main; reject stale or mismatched server analysis and enforce the complete standard quality gate within the existing shared polling budget.

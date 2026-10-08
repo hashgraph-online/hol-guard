@@ -25,14 +25,12 @@ use std::time::{Duration, Instant};
 
 use guard_contracts::write_canonical_json;
 use serde_json::{json, Map, Value};
-#[cfg(test)]
-use sha2::{Digest, Sha256};
 
 use crate::command_tokens::executable_name;
 use crate::env_wrapper::parse_env_wrapper;
 use crate::launch_identity_common::{
     canonical_material_bytes, context_opaque_digest_strict, expand_user, launch_argv_digest,
-    normalized_launch_cwd, runtime_launch_argv, sha256_hex, RuntimeLaunchArgv, UNBOUND_PREFIX,
+    normalized_launch_cwd, runtime_launch_argv, sha256_hex, RuntimeLaunchArgv,
 };
 use crate::shell_tokens;
 
@@ -83,17 +81,9 @@ fn token_hex(bytes: usize) -> String {
         "0".repeat(bytes * 2)
     }
 }
-
-// `context_sha256_digest(material, unbound_label=<label>, strict=True)` — same
-// degrade over structured material.
-fn context_sha256_digest_strict(material: &Value, unbound_label: &str) -> String {
-    let material_bytes = canonical_material_bytes(material);
-    format!(
-        "{}{}:{}",
-        UNBOUND_PREFIX,
-        unbound_label,
-        sha256_hex(&material_bytes)
-    )
+// Native authority hashes canonical structured material.
+fn context_sha256_digest_strict(material: &Value, _unbound_label: &str) -> String {
+    sha256_hex(&canonical_material_bytes(material))
 }
 
 // `_opaque_identity_digest` (:883-889) — `context_opaque_digest(material,
@@ -2231,63 +2221,53 @@ mod tests {
     }
 
     #[test]
-    fn launch_argv_digest_matches_python_oracle() {
-        // Oracle:
-        //   python3 -c "import json,hashlib;
-        //   print(hashlib.sha256(json.dumps({'label':'launch-argv','material':
-        //   json.dumps(['git','status'],separators=(',',':'),ensure_ascii=True)},
-        //   separators=(',',':'),sort_keys=True,ensure_ascii=True).encode()).hexdigest())"
-        //
-        // The Python digest is
-        //   context_opaque_digest(json.dumps(['git','status']), unbound_label='launch-argv')
-        // whose strict degrade is
-        //   'guard-context-unbound:launch-argv:' +
-        //   sha256(json.dumps({'label':'launch-argv','material':'["git","status"]'},
-        //                    separators=(',',':'),sort_keys=True,ensure_ascii=True))
-        let expected = concat!(
-            "guard-context-unbound:launch-argv:",
-            "PLACEHOLDER" // replaced by oracle below
+    fn verified_launch_projects_but_rejects_mutated_content_and_arguments() {
+        let (dir, path) = temp_script("#!/bin/sh\necho original\n");
+        let command = Value::String(path.to_string_lossy().into_owned());
+        let args = vec![Value::String("safe".to_string())];
+        let env = json!({"PATH": "/bin:/usr/bin"});
+        let identity = build_runtime_launch_identity(
+            &command,
+            &args,
+            true,
+            true,
+            None,
+            Some(dir.path()),
+            None,
+            Some(&env),
         );
-        let _ = expected;
-        // Compute oracle inline to keep the test self-contained.
-        // Python oracle (verified): canonical_material_bytes('["git","status"]')
-        // = b'"[\\"git\\",\\"status\\"]"' — the argv JSON is itself a
-        // JSON string, so the outer canonical encoding escapes it.
-        let inner = "[\"git\",\"status\"]";
-        let mut canonical = Vec::new();
-        write_canonical_json(&Value::String(inner.to_string()), &mut canonical).unwrap();
-        let oracle = format!(
-            "guard-context-unbound:launch-argv:{}",
-            hex::encode(Sha256::digest(&canonical))
-        );
-        assert_eq!(
-            launch_argv_digest(&["git".to_string(), "status".to_string()]),
-            oracle
-        );
-    }
-
-    #[test]
-    fn deterministic_digests_match_python_oracles() {
-        // Oracle 1 (python3, verified): _launch_argv_digest(("git","status"))
-        // strict degrade = guard-context-unbound:launch-argv:<sha256>.
-        assert_eq!(
-            launch_argv_digest(&["git".to_string(), "status".to_string()]),
-            "guard-context-unbound:launch-argv:8731c2300a49f227285b1c5d205ce9232d4438adafb38cfbb1676b6ca8043c5d"
-        );
-        // Oracle 2: opaque_identity_digest("/bin/sh").
-        assert_eq!(
-            opaque_identity_digest("/bin/sh"),
-            "guard-context-unbound:opaque-identity:ea0135d2021a123a116e4bc76993e130aa037cc0ada7a86924ed9e6037f462ab"
-        );
-        // Oracle 3: context_sha256_digest({"kind":"x","status":"verified"},
-        // unbound_label="launch-verification") strict degrade.
-        assert_eq!(
-            context_sha256_digest_strict(
-                &json!({"kind": "x", "status": "verified"}),
-                "launch-verification"
-            ),
-            "guard-context-unbound:launch-verification:33f54a528b020a160461134ec8cf256d36536c821bd5a3e2538b160f9212a030"
-        );
+        assert!(resolved_runtime_launch_argv(&identity, &["safe".to_string()]).is_some());
+        assert!(runtime_launch_identity_matches(
+            &identity,
+            &command,
+            &args,
+            true,
+            true,
+            None,
+            Some(dir.path()),
+            Some(&env),
+        ));
+        assert!(!runtime_launch_identity_matches(
+            &identity,
+            &command,
+            &[Value::String("changed".to_string())],
+            true,
+            true,
+            None,
+            Some(dir.path()),
+            Some(&env),
+        ));
+        fs::write(&path, "#!/bin/sh\necho changed-content\n").unwrap();
+        assert!(!runtime_launch_identity_matches(
+            &identity,
+            &command,
+            &args,
+            true,
+            true,
+            None,
+            Some(dir.path()),
+            Some(&env),
+        ));
     }
 
     // --- Package launch/advisory material (local_supply_chain.py) ------------
