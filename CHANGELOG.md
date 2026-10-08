@@ -61,6 +61,13 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.34.1](https://github.com/hashgraph-online/hol-guard/compare/v3.34.0...v3.34.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **guard:** bind approval scope sweeps to the decided action ([#3758](https://github.com/hashgraph-online/hol-guard/issues/3758)) ([f4de331](https://github.com/hashgraph-online/hol-guard/commit/f4de331ce6ed5df4f85e421d146364a4700a6406))
+
 ## [3.34.0](https://github.com/hashgraph-online/hol-guard/compare/v3.33.0...v3.34.0) (2026-10-08)
 
 
