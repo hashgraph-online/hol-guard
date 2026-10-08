@@ -22,6 +22,21 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 _STATE_KEY = "guard_native_cloud_review_observation_recovery"
+_RECORD_FAILURE_REASONS = frozenset(
+    {
+        "native_application_immutable_binding_conflict",
+        "native_application_pending_request_missing",
+        "native_application_pending_request_changed",
+        "native_application_delivery_cohort_changed",
+    }
+)
+
+
+def _recovery_reason(error: Exception) -> str:
+    if isinstance(error, NativeCloudReviewV4Error):
+        return error.code
+    reason = str(error)
+    return reason if reason in _RECORD_FAILURE_REASONS else "native_application_observation_recovery_unavailable"
 
 
 def recover_native_applications_once(store: GuardStore) -> dict[str, object]:
@@ -31,12 +46,12 @@ def recover_native_applications_once(store: GuardStore) -> dict[str, object]:
         cursor = None
     try:
         observations, next_cursor = discover_native_applications(
-            store.guard_home, after_request_id=cursor, limit=8,
+            store.guard_home,
+            after_request_id=cursor,
+            limit=8,
         )
-    except NativeCloudReviewV4Error as error:
-        if error.code == "native_cloud_review_v4_capability_unavailable":
-            return {"state": "unavailable", "reason": error.code, "confirmed": 0}
-        raise
+    except (OSError, RuntimeError, ValueError) as error:
+        return {"state": "unavailable", "reason": _recovery_reason(error), "afterRequestId": cursor, "confirmed": 0}
     confirmed = 0
     failures: list[str] = []
     for candidate in observations:
@@ -57,11 +72,11 @@ def recover_native_applications_once(store: GuardStore) -> dict[str, object]:
                 raise NativeCloudReviewV4Error("native_cloud_review_v4_recovery_observation_mismatch")
             record_native_application_observation(store, observed)
             confirmed += 1
-        except NativeCloudReviewV4Error as error:
-            failures.append(error.code)
+        except (OSError, RuntimeError, ValueError) as error:
+            failures.append(_recovery_reason(error))
     state: dict[str, object] = {
         "state": "recovery_required" if failures else "confirmed",
-        "afterRequestId": next_cursor,
+        "afterRequestId": cursor if failures else next_cursor,
         "confirmed": confirmed,
         "failureCount": len(failures),
         "reasons": sorted(set(failures)),

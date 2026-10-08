@@ -11,6 +11,8 @@ from .native_command_control_authority_io import hold_command_control_authority_
 from .native_policy_snapshot_codec import _strict_json_loads_v3
 from .native_policy_snapshot_constants import (
     _PUBLISH_RETRY_MAX_SECONDS,
+    _RENEWAL_JITTER_MAX_SECONDS,
+    _RENEWAL_LEAD_SECONDS,
     _REQUIRED_PUBLISH_FEATURES,
     NativePolicySnapshotError,
 )
@@ -26,6 +28,31 @@ def _publisher_api():
 
 
 class NativePolicySnapshotPublicationMixin:
+    @staticmethod
+    def _renewal_jitter_seconds(snapshot: Mapping[str, object], remaining_seconds: float) -> float:
+        digest = snapshot.get("policy_digest")
+        generation = snapshot.get("generation")
+        if not isinstance(digest, str) or not isinstance(generation, int) or remaining_seconds <= 0:
+            return 0.0
+        seed = hashlib.sha256(f"{generation}:{digest}".encode("ascii")).digest()
+        fraction = int.from_bytes(seed[:4], "big") / float(1 << 32)
+        return min(_RENEWAL_JITTER_MAX_SECONDS, remaining_seconds * 0.05) * fraction
+
+    def _schedule_renewal_locked(self, snapshot: Mapping[str, object]) -> None:
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        expires_at_ms = snapshot.get("expires_at_ms")
+        if not isinstance(expires_at_ms, int):
+            publisher._renewal_due_monotonic = publisher._monotonic_clock()
+            return
+        remaining_seconds = expires_at_ms / 1_000 - publisher._wall_clock()
+        if remaining_seconds <= 0:
+            publisher._renewal_due_monotonic = publisher._monotonic_clock()
+            return
+        lead_seconds = min(_RENEWAL_LEAD_SECONDS, max(1.0, remaining_seconds * 0.1))
+        jitter_seconds = publisher._renewal_jitter_seconds(snapshot, remaining_seconds)
+        due_in = max(0.0, remaining_seconds - lead_seconds - jitter_seconds)
+        publisher._renewal_due_monotonic = publisher._monotonic_clock() + due_in
+
     def _run(self) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)
         # ContextVar bindings from the starting thread do not propagate here;

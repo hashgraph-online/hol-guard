@@ -225,7 +225,6 @@ def native_renewal_matches_original(renewal: Mapping[str, object], original: obj
         return False
     if (
         challenge["nonce"] == frozen["nonce"]
-        or challenge["request_digest"] == frozen["request_digest"]
         or fresh_webauthn["challenge"] == original_webauthn["challenge"]
         or cast(int, challenge["policy_generation"]) < cast(int, frozen["policy_generation"])
         or cast(int, challenge["issued_at_ms"]) < cast(int, frozen["expires_at_ms"])

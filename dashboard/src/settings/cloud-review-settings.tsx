@@ -125,9 +125,11 @@ export function CloudReviewSettings({ onOpenDataAndRepair }: { onOpenDataAndRepa
     if (!status || !action || pending) return;
     const requireFreshTotp = status.approval_gate.totp_enabled === true;
     if (action === "enable" && cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp)) return;
-    const proof = action === "enable"
-      ? { approval_password: password, ...(requireFreshTotp ? { approval_totp_code: totp } : {}) }
-      : {};
+    const proof: { approval_password?: string; approval_totp_code?: string } = {};
+    if (action === "enable") {
+      proof.approval_password = password;
+      if (requireFreshTotp) proof.approval_totp_code = totp;
+    }
     revision.current += 1;
     setPending(true);
     setError(null);
@@ -164,6 +166,9 @@ export function CloudReviewSettings({ onOpenDataAndRepair }: { onOpenDataAndRepa
     && status.cloud_review_recovery_repair.status !== "completed";
   const connectionRepairNeeded = cloudRecoveryIncomplete
     && status?.cloud_review_recovery_repair.status === "authentication_required";
+  let connectionLabel = status?.connected ? "Connected" : "Not connected";
+  if (cloudRecoveryIncomplete) connectionLabel = "Recovery incomplete";
+  if (connectionRepairNeeded) connectionLabel = "Device sign-in needed";
   const localDataRecoveryIncomplete = status?.cloud_review_recovery?.localCli === false;
   return (
     <section aria-labelledby="cloud-review-heading" className="border-t border-slate-200 pt-4">
@@ -188,7 +193,7 @@ export function CloudReviewSettings({ onOpenDataAndRepair }: { onOpenDataAndRepa
         <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud connection</dt>
-            <dd className="mt-1 font-medium text-brand-dark">{connectionRepairNeeded ? "Device sign-in needed" : cloudRecoveryIncomplete ? "Recovery incomplete" : status.connected ? "Connected" : "Not connected"}</dd>
+            <dd className="mt-1 font-medium text-brand-dark">{connectionLabel}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud decisions</dt>

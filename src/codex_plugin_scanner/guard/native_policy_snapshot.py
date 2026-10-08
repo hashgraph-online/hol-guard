@@ -399,7 +399,7 @@ def await_registered_native_policy_publication(guard_home: Path, *, timeout_seco
         return False
     with _PUBLISHER_LOCK:
         publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
-    awaiting = [publisher for publisher in publishers if not publisher.closed and publisher.is_ready()]
+    awaiting = [publisher for publisher in publishers if publisher.has_served_snapshot()]
     if not awaiting:
         return True
     for publisher in awaiting:

@@ -42,11 +42,14 @@ def test_artifact_allow_waits_for_native_publication_before_resolution(tmp_path:
     class _Publisher:
         closed = False
 
-        def is_ready(self) -> bool:
+        def has_served_snapshot(self) -> bool:
             return True
 
+        def is_ready(self) -> bool:
+            return False
+
         def request_publish(self) -> None:
-            observed["requested"] = True
+            return None
 
         def wait_until_ready(self, deadline_monotonic: float) -> bool:
             del deadline_monotonic
@@ -78,7 +81,6 @@ def test_artifact_allow_waits_for_native_publication_before_resolution(tmp_path:
                     _PUBLISHERS.pop(key, None)
 
     assert result["resolved"] is True
-    assert observed["requested"] is True
     assert observed["status_while_waiting"] == "pending"
     stored = store.get_approval_request(request.request_id)
     assert stored is not None and stored["status"] == "resolved"
@@ -111,8 +113,11 @@ def test_unacknowledged_native_publication_keeps_the_approval_pending(tmp_path: 
     class _Publisher:
         closed = False
 
-        def is_ready(self) -> bool:
+        def has_served_snapshot(self) -> bool:
             return True
+
+        def is_ready(self) -> bool:
+            return False
 
         def request_publish(self) -> None:
             return None
@@ -160,13 +165,12 @@ def test_one_publisher_cannot_hide_another_publication_failure(tmp_path: Path) -
         def __init__(self, ready: bool) -> None:
             self.closed = False
             self.ready = ready
-            self.requested = False
 
-        def is_ready(self) -> bool:
+        def has_served_snapshot(self) -> bool:
             return True
 
         def request_publish(self) -> None:
-            self.requested = True
+            return None
 
         def wait_until_ready(self, deadline_monotonic: float) -> bool:
             del deadline_monotonic
@@ -183,5 +187,3 @@ def test_one_publisher_cannot_hide_another_publication_failure(tmp_path: Path) -
     finally:
         with _PUBLISHER_LOCK:
             _PUBLISHERS.pop(key, None)
-    assert ready.requested is True
-    assert late.requested is True

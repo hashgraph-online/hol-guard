@@ -519,7 +519,7 @@ class TestWorkerLiveness:
     def test_cli_names_a_dead_worker_without_replacing_partial_recovery(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from codex_plugin_scanner.guard.cli.product import _build_cloud_context
+        from codex_plugin_scanner.guard.cli.product_cloud import _build_cloud_context
         from codex_plugin_scanner.guard.runtime.cloud_review_sync import record_cloud_review_worker_heartbeat
         from codex_plugin_scanner.guard.runtime.cloud_review_sync_worker import DEFAULT_SAFETY_POLL_SECONDS
         from codex_plugin_scanner.guard.sqlite_cloud_review_recovery import (

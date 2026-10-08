@@ -23,7 +23,8 @@ from .codex_hook_launch_runtime import (
     run_isolated_hook_process as _legacy_run_isolated_hook_process,
 )
 from .fork_safety import forget_in_child
-from .native_approval_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
+from .native_resident_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
+from .native_resident_pool import _PersistentNativeClientPool
 from .native_resident_stream import _LAST_CALL_CONTEXT, _PersistentNativeClient, _StreamFailure
 
 # Retain the old runner name as a test seam. Production always leaves this
@@ -87,113 +88,6 @@ def _classify_failure(result: BoundedHookProcessResult) -> str:
 
 def _record_failure_code(result: BoundedHookProcessResult) -> None:
     _LAST_FAILURE_CODE.set(_allowlisted_failure_code(result.stderr) or _classify_failure(result))
-
-
-class _PersistentNativeClientPool:
-    """Bounded lazy pool of streams for one executable and Guard state root.
-
-    A stream carries one request at a time because its response frames have no
-    request identifier. Multiple persistent streams therefore provide bounded
-    parallel dispatch without changing the authenticated wire protocol.
-    """
-
-    def __init__(self, *, executable: Path, state_dir: Path, environment: Mapping[str, str]) -> None:
-        self._executable = executable
-        self._state_dir = state_dir
-        self._environment = environment
-        self._clients: set[_PersistentNativeClient] = set()
-        self._retiring: set[_PersistentNativeClient] = set()
-        self._idle: list[_PersistentNativeClient] = []
-        self._condition = threading.Condition()
-        self._closed = False
-
-    def has_idle_client(self) -> bool:
-        """True when a live client is parked and can serve without a spawn."""
-
-        with self._condition:
-            if self._closed:
-                return False
-            return any(client._process is not None and client._process.poll() is None for client in self._idle)
-
-    def _lease(self, *, deadline_monotonic: float) -> _PersistentNativeClient | None:
-        with self._condition:
-            while not self._closed:
-                # Timed-out requests may have no teardown budget left. Retain
-                # ownership until close confirms containment, but reclaim
-                # completed retirees instead of permanently exhausting slots.
-                for retiring in tuple(self._retiring):
-                    if retiring.close(deadline_monotonic=time.monotonic()):
-                        self._retiring.discard(retiring)
-                        self._clients.discard(retiring)
-                if self._idle:
-                    return self._idle.pop()
-                if len(self._clients) < _MAX_PERSISTENT_CLIENTS:
-                    client = _PersistentNativeClient(
-                        executable=self._executable,
-                        state_dir=self._state_dir,
-                        environment=self._environment,
-                        failure_recorder=_LAST_FAILURE_CODE.set,
-                    )
-                    self._clients.add(client)
-                    return client
-                remaining = deadline_monotonic - time.monotonic()
-                if remaining <= 0:
-                    break
-                self._condition.wait(timeout=min(remaining, 0.05) if self._retiring else remaining)
-        _LAST_FAILURE_CODE.set("native_client_pool_exhausted")
-        return None
-
-    def request(self, payload: bytes, *, deadline_monotonic: float) -> bytes | None:
-        client = self._lease(deadline_monotonic=deadline_monotonic)
-        if client is None:
-            return None
-        response: bytes | None = None
-        try:
-            response = client.request(payload, deadline_monotonic=deadline_monotonic)
-            return response
-        finally:
-            close_client = False
-            with self._condition:
-                if client not in self._clients:
-                    close_client = True
-                elif self._closed or response is None:
-                    self._retiring.add(client)
-                    close_client = True
-                else:
-                    self._idle.append(client)
-                self._condition.notify()
-            if close_client:
-                try:
-                    contained = client.close(deadline_monotonic=deadline_monotonic)
-                except BaseException:
-                    with self._condition:
-                        if client in self._clients:
-                            self._retiring.add(client)
-                    raise
-                if contained is not False:
-                    with self._condition:
-                        self._clients.discard(client)
-                        self._retiring.discard(client)
-                        self._condition.notify_all()
-
-    def close(self, *, deadline_monotonic: float | None = None) -> bool:
-        with self._condition:
-            self._closed = True
-            clients = tuple(self._clients)
-            self._idle.clear()
-            self._condition.notify_all()
-        for client in clients:
-            contained = (
-                client.close() if deadline_monotonic is None else client.close(deadline_monotonic=deadline_monotonic)
-            )
-            if contained is not False:
-                with self._condition:
-                    self._clients.discard(client)
-                    self._retiring.discard(client)
-        for client in clients:
-            _contain_persistent_resident(client)
-        with self._condition:
-            return not self._clients
 
 
 _CLIENTS_LOCK = threading.Lock()

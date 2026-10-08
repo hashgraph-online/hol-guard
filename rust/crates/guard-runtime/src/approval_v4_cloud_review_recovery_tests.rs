@@ -115,3 +115,29 @@ fn pending_renewal_restart_requires_new_assertion_and_unknown_outcome_never_rene
     );
     fs::remove_dir_all(fixture.root).unwrap();
 }
+
+#[test]
+fn full_origin_journal_preserves_native_denial_and_all_protected_records() {
+    let fixture = CloudFixture::new("cloud-review-origin-journal-full");
+    let mut journal = fixture.journal();
+    let original = journal["records"][&fixture.request_id].clone();
+    let mut records = serde_json::Map::new();
+    for index in 0..64 {
+        let request_id = format!("sha256:{index:064x}");
+        let mut record = original.clone();
+        record["challenge"]["request_id"] = json!(request_id);
+        records.insert(request_id, record);
+    }
+    journal["records"] = Value::Object(records);
+    fixture.write_journal(&journal);
+    let mut envelope = fixture.envelope.clone();
+    envelope.request_id = Some("new-request-with-full-journal".into());
+    let observed: Value = serde_json::from_slice(
+        &crate::edge::evaluate_envelope_with_store(envelope, &fixture.store).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(observed["result"]["decision"], "deny");
+    assert!(observed.get("native_application_v4").is_none());
+    assert_eq!(fixture.journal(), journal);
+    fs::remove_dir_all(fixture.root).unwrap();
+}

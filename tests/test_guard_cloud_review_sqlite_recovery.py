@@ -453,7 +453,7 @@ def _request_sequence(store: GuardStore, request_id: str) -> int:
 
 
 def test_cli_status_names_partial_cloud_recovery_instead_of_local_only(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli.product import _build_cloud_context
+    from codex_plugin_scanner.guard.cli.product_cloud import _build_cloud_context
 
     untouched = GuardStore(tmp_path / "local")
     local = _build_cloud_context(untouched)
@@ -494,7 +494,7 @@ def test_cli_status_names_partial_cloud_recovery_instead_of_local_only(tmp_path:
 
 
 def test_cli_status_does_not_record_a_matching_binding_repair(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.cli.product import _build_cloud_context
+    from codex_plugin_scanner.guard.cli.product_cloud import _build_cloud_context
 
     store = GuardStore(tmp_path / "status")
     store.set_sync_payload(

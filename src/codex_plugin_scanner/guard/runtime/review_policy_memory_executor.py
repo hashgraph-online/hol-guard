@@ -101,8 +101,9 @@ def execute_review_policy_memory(
         }
 
     registry = _stored_registry(store)
-    for entry in registry.values():
-        _decision_from_registry_entry(entry, store=store)
+    # Apply the newly authenticated bundle before revalidating retained entries:
+    # an expired or revoked stale signer must not veto the signed removal or
+    # replacement of its own registry entry.
     revocations = bundle.get("revocations")
     for revoked_rule_id in revocations if isinstance(revocations, list) else []:
         revoked_key = _text(revoked_rule_id)
@@ -114,6 +115,10 @@ def execute_review_policy_memory(
             "ruleId": rule_id,
             "sourceBundle": bundle,
         }
+    # Survivors that the fresh bundle did not touch must still verify under the
+    # anchored keyring; an unrelated invalid retained entry is never dropped.
+    for entry in registry.values():
+        _decision_from_registry_entry(entry, store=store)
     ack = build_decision_memory_ack(
         bundle=bundle,
         oauth=oauth,

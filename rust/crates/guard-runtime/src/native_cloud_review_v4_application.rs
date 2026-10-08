@@ -94,7 +94,9 @@ pub(crate) fn apply_hook(
     }
     if !journal.records.contains_key(&request_id) {
         if journal.records.len() >= MAX_RECORDS {
-            return Err("native_cloud_review_v4_state_full".into());
+            // Keep the computed native denial visible without dropping protected
+            // consumption/replay evidence or manufacturing a new executable origin.
+            return Ok(baseline);
         }
         let challenge =
             crate::approval::approval_v4::create_cloud_review_challenge(&envelope, store, None)?;

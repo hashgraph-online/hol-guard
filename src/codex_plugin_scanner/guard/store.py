@@ -16,6 +16,7 @@ from .store_base import (
 )
 from .store_approval_facade import StoreApprovalsMixin
 from .store_approval_queries import StoreApprovalQueriesMixin
+from .store_cloud_cache import StoreCloudCacheMixin
 from .store_cloud_events import StoreCloudEventsMixin
 from .store_command_activity import StoreCommandActivityMixin
 from .store_command_activity_api import StoreCommandActivityApiMixin
@@ -30,6 +31,7 @@ from .store_event_receipts import StoreEventReceiptsMixin
 from .store_exact_cloud_local_once import StoreExactCloudLocalOnceMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
 from .store_managed_controls_status import StoreManagedControlsStatusMixin
+from .store_managed_installs import StoreManagedInstallsMixin
 from .store_local_cli import StoreLocalCliMixin
 from .store_local_mcp import StoreLocalMcpMixin
 from .store_evidence_facade import StoreEvidenceMixin
@@ -86,6 +88,8 @@ class GuardStore(
     StorePolicyMixin,
     StoreReviewPolicyMemoryMixin,
     StorePolicyIntegrityAdminMixin,
+    StoreManagedInstallsMixin,
+    StoreCloudCacheMixin,
     StoreCloudEventsMixin,
     StoreReceiptsRuntimeMixin,
     StoreApprovalQueriesMixin,

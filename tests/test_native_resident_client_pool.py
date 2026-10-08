@@ -14,10 +14,8 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_resident_client as client_module
-from codex_plugin_scanner.guard.native_resident_client import (
-    _PersistentNativeClient,
-    _PersistentNativeClientPool,
-)
+from codex_plugin_scanner.guard.native_resident_client import _PersistentNativeClient
+from codex_plugin_scanner.guard.native_resident_pool import _PersistentNativeClientPool
 
 
 def _pool(tmp_path: Path) -> _PersistentNativeClientPool:
@@ -574,9 +572,7 @@ def test_pool_reports_readiness_only_for_live_idle_clients(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize("delivered", [False, True])
-def test_failed_stream_distinguishes_unsent_request_from_lost_response(
-    tmp_path: Path, delivered: bool
-) -> None:
+def test_failed_stream_distinguishes_unsent_request_from_lost_response(tmp_path: Path, delivered: bool) -> None:
     runtime = tmp_path / "transport-fixture"
     received = tmp_path / "received.bin"
     if delivered:
@@ -589,9 +585,7 @@ def test_failed_stream_distinguishes_unsent_request_from_lost_response(
             # Exit without returning a response after receiving the request.
         )
         runtime.chmod(0o700)
-    client = _PersistentNativeClient(
-        executable=runtime, state_dir=tmp_path / "native-runtime", environment={}
-    )
+    client = _PersistentNativeClient(executable=runtime, state_dir=tmp_path / "native-runtime", environment={})
     try:
         assert client.request(b'{"operation":"decision"}', deadline_monotonic=time.monotonic() + 5) is None
         if delivered:
