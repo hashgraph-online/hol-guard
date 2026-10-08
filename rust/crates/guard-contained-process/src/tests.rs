@@ -390,7 +390,7 @@ fn inherited_resource_limits() -> ResourceLimits {
             rlim_max: 0,
         };
         assert_eq!(unsafe { libc::getrlimit(kind, &mut limit) }, 0);
-        *value = limit.rlim_cur as u64;
+        *value = limit.rlim_cur;
     }
     ResourceLimits {
         cpu_seconds: values[0],

@@ -267,7 +267,7 @@ impl Capture<'_> {
     fn tree(&mut self, requested: &Path, destination: &Path, omit_sites: bool) -> io::Result<()> {
         check(self.deadline, self.cancel)?;
         let (root, links) = resolve(requested)?;
-        if root.starts_with(&self.excluded)
+        if root.starts_with(self.excluded)
             || !self
                 .approved
                 .iter()
@@ -330,7 +330,7 @@ impl Capture<'_> {
                                     .unwrap_or_default()
                                     .to_string_lossy()
                             ));
-                    if resolved.starts_with(&self.excluded)
+                    if resolved.starts_with(self.excluded)
                         || protected(&resolved)
                         || (!sitecustomize
                             && !self
@@ -376,7 +376,7 @@ impl Capture<'_> {
         destination: PathBuf,
         source: PathBuf,
     ) -> io::Result<()> {
-        if source.starts_with(&self.excluded) || protected(&source) {
+        if source.starts_with(self.excluded) || protected(&source) {
             return Err(bound_fs::changed());
         }
         if self.files.contains_key(&destination) {

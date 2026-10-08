@@ -215,25 +215,6 @@ impl PinnedCommand {
     }
 }
 
-pub fn capture(
-    executable: &Path,
-    args: &[&OsStr],
-    cwd: &Path,
-    env: &[(OsString, OsString)],
-    input: &[u8],
-    cap: usize,
-    deadline: Instant,
-    cancel: &AtomicBool,
-) -> io::Result<CapturedOutput> {
-    PinnedCommand::new(executable, args, cwd, env)?.capture(
-        input,
-        cap,
-        deadline,
-        cancel,
-        Isolation::default(),
-    )
-}
-
 /// Linux data mounts consume these sealed descriptors, never live source paths.
 #[cfg(target_os = "linux")]
 pub fn sealed_file(source: File, expected: &str) -> io::Result<File> {
