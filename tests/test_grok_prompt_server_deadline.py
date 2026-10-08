@@ -14,7 +14,10 @@ from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookD
         ("grok", "UserPromptSubmit", 10),
         ("grok", "user_prompt_submit", 10),
         ("grok", "PreToolUse", 3),
-        ("omp", "UserPromptSubmit", 3),
+        ("omp", "UserPromptSubmit", 10),
+        ("zcode", "UserPromptSubmit", 10),
+        ("codex", "user_prompt_submit", 10),
+        ("zcode", "PreToolUse", 3),
         ("grok", "SessionStart", 3),
     ],
 )

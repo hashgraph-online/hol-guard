@@ -398,8 +398,9 @@ def try_daemon_hook(
     if token is None or time.monotonic() >= deadline:
         return None
     event_name = _event_name(input_text)
-    grok_prompt = harness.strip().lower().replace("_", "-") == "grok" and event_name == "UserPromptSubmit"
-    timeout = min(float(timeout_seconds) * 0.5, 10.0 if grok_prompt else _DAEMON_TIMEOUT_BUDGET_SECONDS)
+    prompt_event = event_name == "UserPromptSubmit"
+    grok_prompt = prompt_event and harness.strip().lower().replace("_", "-") == "grok"
+    timeout = min(float(timeout_seconds) * 0.5, 10.0 if prompt_event else _DAEMON_TIMEOUT_BUDGET_SECONDS)
     if grok_observe_event(harness, _event_name(input_text)):
         timeout = min(timeout, 1.0)
     transport_deadline = min(deadline, time.monotonic() + timeout)
