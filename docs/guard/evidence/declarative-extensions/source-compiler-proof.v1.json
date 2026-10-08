@@ -1,0 +1,37 @@
+{
+  "schema": "guard.declarative-source-compiler-proof.v1",
+  "stage": "declarative-catalog-migration-offline-authoring",
+  "status": "passed",
+  "rust_toolchain": "1.88.0",
+  "compiler_target": "aarch64-unknown-linux-musl",
+  "compiler_sha256": "a966cbcdecb25dee870dc2194f1f6138527758471e4a01158de78b69724a4e82",
+  "implementation_digest": "ece9682ab7bba363ccd4297801e99d97d1e9eac9f0e432129b3d4aa3b32f9489",
+  "example_source_digest": "7e8b4e8a090657c2e4f4b573f8878d6ae7f58ac8e694942cd2ebbef186c0a09a",
+  "example_program_digest": "cf0f70d7cb9b7a5993c6e619d6f972d5addc91fde4ca5df3ae4103fb1fbd86d3",
+  "environment": {
+    "base": "scratch",
+    "copied_files": [
+      "/guard-command-source"
+    ],
+    "user": "65534:65534",
+    "network": "none",
+    "read_only": true,
+    "capabilities": "all-dropped",
+    "no_new_privileges": true
+  },
+  "checks": {
+    "compile_without_python": "passed",
+    "portable_fixture_cases": 7,
+    "failed_fixture_cases": 0,
+    "target_commands_executed": 0,
+    "linux_macos_output_byte_identical": true,
+    "linux_macos_fixtures_byte_identical": true,
+    "guard_command_tests_passed": 92,
+    "existing_diagnostics_ignored": 2,
+    "clippy_warnings_denied": "passed"
+  },
+  "scope": "Offline compiler and synthetic policy simulation only; not installed receipts or release qualification.",
+  "candidate_installed_proof": "not-evaluated",
+  "four_platform_installed_qualification": "not-evaluated",
+  "cleanup": "Both proof containers used --rm; no resident or test service started."
+}

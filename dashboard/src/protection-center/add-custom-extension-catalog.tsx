@@ -57,11 +57,15 @@ export function BulkPolicyPicker(props: {
   onChange: (state: LocalCliCommandState) => void;
   groupLabel?: string;
   mixedCopy?: string;
+  allowLabel?: string;
+  blockLabel?: string;
+  mcpPolicy?: boolean;
 }) {
   const choices: Array<{ value: LocalCliCommandState; label: string }> = [
-    { value: "inherit", label: "Recommended" },
-    { value: "allow", label: "Allow all" },
-    { value: "block", label: "Block all" },
+    { value: "inherit", label: props.mcpPolicy ? "Use policy" : "Recommended" },
+    { value: "allow", label: props.allowLabel ?? "Allow all" },
+    ...(props.mcpPolicy ? [{ value: "review" as const, label: "Ask listed" }] : []),
+    { value: "block", label: props.blockLabel ?? "Block all" },
   ];
   const mixed = props.value === "mixed";
   const selected = mixed ? "inherit" : props.value;
@@ -80,7 +84,9 @@ export function BulkPolicyPicker(props: {
         role="radiogroup"
         aria-label={mixed ? `${groupLabel}. Custom mix` : groupLabel}
         aria-describedby={mixed ? "bulk-policy-mixed" : undefined}
-        className="guard-segmented w-fit"
+        className={props.mcpPolicy
+          ? "guard-segmented w-fit !grid grid-cols-2 sm:!flex [&_[role=radio]]:!min-h-11"
+          : "guard-segmented w-fit"}
       >
         {choices.map((choice, index) => (
           <BulkPolicyChoice
@@ -97,7 +103,7 @@ export function BulkPolicyPicker(props: {
       </div>
       {props.value === "mixed" ? (
         <p id="bulk-policy-mixed" className="mt-2 text-xs leading-5 text-brand-dark/70">
-          {props.mixedCopy ?? "Custom mix. Pick Recommended, Allow all, or Block all to reset every tool."}
+          {props.mixedCopy ?? `Custom mix. Pick Recommended, ${props.allowLabel ?? "Allow all"}, or Block all to reset every tool.`}
         </p>
       ) : null}
     </div>

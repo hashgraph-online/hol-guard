@@ -3,30 +3,129 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from ..codex_hook_launch_runtime import (
     isolated_guard_cli_command,
     isolated_hook_environment,
     run_isolated_hook_process,
 )
+from ..hook_execution_environment import stamp_hook_input_text
 from ..stable_guard_cli import prune_safe_cli_executable
+from .adapter_safe_output import write_text_at_authorized_path
+from .bounded_cli_hook_envelope import (
+    _canonical_event_token as _canonical_event_token,
+)
+from .bounded_cli_hook_envelope import (
+    _event_name as _event_name,
+)
+from .bounded_cli_hook_envelope import (
+    _grok_pretool_event_conflict as _grok_pretool_event_conflict,
+)
+from .bounded_cli_hook_envelope import (
+    _has_json_object_line as _has_json_object_line,
+)
+from .bounded_cli_hook_envelope import (
+    _json_object as _json_object,
+)
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
+from .bounded_cli_hook_script_template import BOUNDED_HOOK_SCRIPT_TEMPLATE
+from .cursor_hook_config import isolated_cursor_hook_python
 from .desktop_hook_proxy import (
     _DESKTOP_PROXY_LAUNCH_SCRIPT as _DESKTOP_PROXY_LAUNCH_SCRIPT,
 )
 from .desktop_hook_proxy import (
     _trusted_desktop_hook_proxy_command,
 )
+from .grok_hook_invocation_template import configured_grok_payload
+from .hook_input_reader import read_hook_input
 
-_MAX_HOOK_INPUT_BYTES = 1_000_000
-_FAILURE_REASON = "HOL Guard could not complete this review before the hook deadline. Retry the action."
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionFile
+
+_FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
 _FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
+_BOUNDED_HOOK_SCRIPT_DIR = ("managed", "bounded-hooks")
+
+
+def _bounded_hook_script_stem(harness: str) -> str | None:
+    stem = harness.strip().lower().replace("_", "-")
+    if not stem or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in stem):
+        return None
+    return stem
+
+
+def bounded_hook_script_path(guard_home: Path, harness: str) -> Path | None:
+    """Return the managed stdlib hook client path for one harness."""
+
+    stem = _bounded_hook_script_stem(harness)
+    if stem is None:
+        return None
+    return guard_home.joinpath(*_BOUNDED_HOOK_SCRIPT_DIR, f"{stem}.py")
+
+
+def _render_bounded_hook_script(*, guard_home: Path, harness: str, timeout_seconds: float) -> str:
+    timeout_token = str(int(timeout_seconds)) if timeout_seconds == int(timeout_seconds) else str(timeout_seconds)
+    return (
+        BOUNDED_HOOK_SCRIPT_TEMPLATE.replace(
+            "__GUARD_HOME__",
+            json.dumps(str(guard_home.resolve(strict=False))),
+        )
+        .replace("__HARNESS__", json.dumps(harness.strip().lower().replace("_", "-")))
+        .replace("__TIMEOUT_SECONDS__", timeout_token)
+    )
+
+
+def _isolated_bounded_hook_command(
+    *,
+    guard_home: Path,
+    harness: str,
+    timeout_seconds: float,
+    prepared_files: list[TransitionFile] | None = None,
+) -> tuple[str, ...] | None:
+    interpreter = isolated_cursor_hook_python()
+    script_path = bounded_hook_script_path(guard_home, harness)
+    if interpreter is None or script_path is None:
+        return None
+    if prepared_files is not None:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        target = script_path.parent.resolve(strict=False) / script_path.name
+        before = _snapshot(target)
+        mode = target.stat().st_mode & 0o777 if before is not None else 0o600
+        change = TransitionFile(
+            target,
+            before,
+            _render_bounded_hook_script(guard_home=guard_home, harness=harness, timeout_seconds=timeout_seconds).encode(
+                "utf-8"
+            ),
+            before_mode=mode,
+            after_mode=0o600,
+            no_follow=True,
+        )
+        change.payload()
+        prepared_files.append(change)
+        return (interpreter, "-I", str(target))
+    try:
+        script_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        write_text_at_authorized_path(
+            script_path,
+            _render_bounded_hook_script(
+                guard_home=guard_home,
+                harness=harness,
+                timeout_seconds=timeout_seconds,
+            ),
+        )
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return (interpreter, "-I", str(script_path.resolve(strict=False)))
 
 
 def bounded_cli_hook_command(
@@ -37,6 +136,8 @@ def bounded_cli_hook_command(
     cli_args: Sequence[str],
     harness: str,
     timeout_seconds: float,
+    prepared_files: list[TransitionFile] | None = None,
+    require_desktop_proxy: bool = False,
 ) -> tuple[str, ...]:
     """Build a shell-free hook command backed by a process-tree deadline."""
 
@@ -58,16 +159,37 @@ def bounded_cli_hook_command(
         "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv;"
         "raise SystemExit(main_from_argv(sys.argv[1:]))"
     )
+    config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
     if frozen_launcher:
-        config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
-        desktop_proxy = _trusted_desktop_hook_proxy_command(python_executable, config_json)
+        if require_desktop_proxy:
+            desktop_proxy = _trusted_desktop_hook_proxy_command(
+                python_executable,
+                config_json,
+                require_proxy=True,
+            )
+        else:
+            desktop_proxy = _trusted_desktop_hook_proxy_command(python_executable, config_json)
         if desktop_proxy is not None:
             return desktop_proxy
-        return (
-            python_executable,
-            _FROZEN_BRIDGE_COMMAND,
-            config_json,
+        if require_desktop_proxy:
+            raise RuntimeError("trusted Desktop hook proxy is unavailable")
+    elif require_desktop_proxy:
+        raise RuntimeError("trusted Desktop hook proxy requires a frozen launcher")
+    if frozen_launcher or harness.strip().lower() == "grok":
+        isolated_command = _isolated_bounded_hook_command(
+            guard_home=guard_home,
+            harness=harness,
+            timeout_seconds=timeout_seconds,
+            prepared_files=prepared_files,
         )
+        if isolated_command is not None:
+            return (*isolated_command, config_json) if harness.strip().lower() == "grok" else isolated_command
+        if frozen_launcher:
+            return (
+                python_executable,
+                _FROZEN_BRIDGE_COMMAND,
+                config_json,
+            )
     return (
         python_executable,
         "-I",
@@ -77,30 +199,19 @@ def bounded_cli_hook_command(
     )
 
 
-_EVENT_ALIASES = {
-    "permissionrequest": "PermissionRequest",
-    "permissionrequestv2": "PermissionRequest",
-    "pretooluse": "PreToolUse",
-    "pretoolcall": "PreToolUse",
-    "userpromptsubmit": "UserPromptSubmit",
-    "posttooluse": "PostToolUse",
-    "sessionstart": "SessionStart",
-    "notification": "Notification",
-    "stop": "Stop",
-}
-_EVENT_NAME_KEYS = ("hook_event_name", "hookEventName", "event", "eventName", "hook_name", "hookName")
+def _read_bounded_stdin(deadline_monotonic: float) -> tuple[str | None, str]:
+    try:
+        text = read_hook_input(deadline_monotonic)
+    except ValueError as error:
+        prefix = getattr(error, "prefix", None)
+        if isinstance(prefix, str):
+            return None, prefix
+        raise
+    return text, text
 
 
-def _read_bounded_stdin() -> tuple[str | None, str]:
-    raw = sys.stdin.buffer.read(_MAX_HOOK_INPUT_BYTES + 1)
-    prefix = raw[:_MAX_HOOK_INPUT_BYTES].decode("utf-8", errors="replace")
-    if len(raw) > _MAX_HOOK_INPUT_BYTES:
-        return None, prefix
-    return prefix, prefix
-
-
-def _bounded_stdin() -> str | None:
-    text, _prefix = _read_bounded_stdin()
+def _bounded_stdin(deadline_monotonic: float) -> str | None:
+    text, _prefix = _read_bounded_stdin(deadline_monotonic)
     return text
 
 
@@ -148,76 +259,10 @@ def _validated_frozen_cli_args(
     )
 
 
-def _json_object(text: str) -> dict[str, object] | None:
-    try:
-        raw = cast(object, json.loads(text))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(raw, dict):
-        return None
-    payload: dict[str, object] = {}
-    for key, value in cast(dict[object, object], raw).items():
-        if isinstance(key, str):
-            payload[key] = value
-    return payload
-
-
-def _canonical_event_token(value: str) -> str | None:
-    stripped = value.strip()
-    if not stripped:
-        return None
-    normalized = stripped.replace("_", "").replace("-", "").lower()
-    return _EVENT_ALIASES.get(normalized, stripped)
-
-
-def _event_name(input_text: str) -> str:
-    payload = _json_object(input_text or "{}")
-    if payload is not None:
-        for key in _EVENT_NAME_KEYS:
-            value = payload.get(key)
-            if isinstance(value, str):
-                named = _canonical_event_token(value)
-                if named is not None:
-                    return named
-    for key in _EVENT_NAME_KEYS:
-        token = f'"{key}"'
-        start = input_text.find(token)
-        colon = input_text.find(":", start + len(token)) if start >= 0 else -1
-        quote = input_text.find('"', colon + 1) if colon >= 0 else -1
-        end = input_text.find('"', quote + 1) if quote >= 0 else -1
-        if 0 <= quote < end:
-            named = _canonical_event_token(input_text[quote + 1 : end])
-            if named is not None:
-                return named
-    return "PreToolUse"
-
-
-def _has_json_object_line(output: str) -> bool:
-    stripped = output.strip()
-    if stripped and _json_object(stripped) is not None:
-        return True
-    for line in reversed(output.splitlines()):
-        if not line.strip():
-            continue
-        return _json_object(line.strip()) is not None
-    return False
-
-
 def _cli_args_with_json(cli_args: Sequence[str]) -> list[str]:
     if cli_args and cli_args[-1] == "--json":
         return list(cli_args)
     return [*cli_args, "--json"]
-
-
-def _guard_home_is_recording_only(guard_home: Path) -> bool:
-    try:
-        from ..config import maybe_auto_revert_watch
-        from ..protection_posture import protection_is_off
-
-        config = maybe_auto_revert_watch(guard_home)
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
 
 
 def _emit_failure(
@@ -227,14 +272,17 @@ def _emit_failure(
     reason: str = _FAILURE_REASON,
     guard_home: Path | None = None,
     continue_session: bool = False,
+    deadline_monotonic: float | None = None,
 ) -> int:
+    # Retain the legacy caller argument; a state-home path supplies no mode authority.
     payload, returncode = _failure_payload(
         harness=harness,
-        event_name=_event_name(input_text),
+        event_name="PreToolUse"
+        if harness == "grok" and _grok_pretool_event_conflict(input_text)
+        else _event_name(input_text),
         reason=reason,
-        payload=_json_object(input_text or "{}"),
-        recording_only=guard_home is not None and _guard_home_is_recording_only(guard_home),
-        continue_session=continue_session,
+        # Failed evaluation supplies no authenticated recording-only authority.
+        recording_only=False,
     )
     _ = sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     return returncode
@@ -290,9 +338,15 @@ def _daemon_response_to_native(
     return implementation(daemon_response, harness=harness, event_name=event_name)
 
 
-def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> int:
+def run_bounded_cli_hook(
+    config: Mapping[str, object],
+    *,
+    input_text: str,
+    deadline_monotonic: float | None = None,
+) -> int:
     """Run one isolated CLI hook and preserve its native stdout contract."""
 
+    started_monotonic = time.monotonic()
     from .bounded_cli_hook_daemon import _apply_grok_bridge_approval_wait, try_daemon_hook
 
     python_executable = config.get("python_executable")
@@ -309,16 +363,34 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
         or not isinstance(cli_args_value, list)
         or not isinstance(harness, str)
         or not isinstance(timeout_seconds, (int, float))
+        or isinstance(timeout_seconds, bool)
+        or not math.isfinite(timeout_seconds)
         or not isinstance(frozen_launcher, bool)
         or timeout_seconds <= 0
     ):
         return _emit_failure(harness=str(harness or "unknown"), input_text=input_text)
     raw_cli_args = cast(list[object], cli_args_value)
+    if harness == "grok" and _grok_pretool_event_conflict(input_text):
+        return _emit_failure(
+            harness=harness,
+            input_text=input_text,
+            reason="HOL Guard blocked this action because hook event labels conflict.",
+        )
     cli_args = [item for item in raw_cli_args if isinstance(item, str)]
     if len(cli_args) != len(raw_cli_args):
         return _emit_failure(harness=harness, input_text=input_text)
+    input_text = configured_grok_payload(input_text, cli_args) if harness == "grok" else input_text
+    deadline = started_monotonic + float(timeout_seconds) if deadline_monotonic is None else deadline_monotonic
+    if time.monotonic() >= deadline:
+        return _emit_failure(harness=harness, input_text=input_text)
     package_root = Path(package_root_value)
     guard_home = Path(guard_home_value)
+
+    def fail(reason: str = _FAILURE_REASON) -> int:
+        return _emit_failure(
+            harness=harness, input_text=input_text, guard_home=guard_home, reason=reason, deadline_monotonic=deadline
+        )
+
     runtime_frozen = bool(getattr(sys, "frozen", False))
     if runtime_frozen:
         direct_cli_args = _validated_frozen_cli_args(
@@ -327,23 +399,28 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             harness=harness,
         )
         if direct_cli_args is None:
-            return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+            return fail()
         command = (sys.executable, *direct_cli_args)
     elif frozen_launcher:
-        return _emit_failure(harness=harness, input_text=input_text, guard_home=guard_home)
+        return fail()
     else:
         command = isolated_guard_cli_command(
             python_executable,
             package_root,
             _cli_args_with_json(cli_args),
         )
-    deadline = time.monotonic() + float(timeout_seconds)
+    remaining = max(0.0, deadline - time.monotonic())
+    if remaining <= 0:
+        return fail()
     daemon_result = try_daemon_hook(
         guard_home=guard_home,
         harness=harness,
         input_text=input_text,
-        timeout_seconds=float(timeout_seconds),
+        timeout_seconds=remaining,
+        deadline_monotonic=deadline,
     )
+    if time.monotonic() >= deadline:
+        return fail()
     if daemon_result is not None:
         remaining = max(0.0, deadline - time.monotonic())
         daemon_stdout, daemon_stderr, daemon_exit = _apply_grok_bridge_approval_wait(
@@ -355,47 +432,39 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             exit_code=daemon_result[2],
             timeout_seconds=remaining,
         )
+        if time.monotonic() >= deadline:
+            return fail()
         if daemon_stdout:
             _ = sys.stdout.write(daemon_stdout)
         if daemon_stderr:
             print(daemon_stderr, file=sys.stderr)
         return daemon_exit
+    if harness == "grok" and _event_name(input_text).lower().replace("_", "").replace("-", "") in {
+        "userpromptsubmit",
+        "userpromptsubmitted",
+    }:
+        # A cold evaluator fallback can outlive Grok's prompt deadline and fail open.
+        # Return a native block while the trusted daemon is unavailable instead.
+        return fail()
+    if time.monotonic() >= deadline:
+        return fail()
     result = run_isolated_hook_process(
         command,
         input_text=input_text,
         cwd=guard_home,
         environment=isolated_hook_environment(),
         timeout_seconds=float(timeout_seconds),
+        deadline_monotonic=deadline,
     )
-    if result.timed_out:
-        return _emit_failure(
-            harness=harness,
-            input_text=input_text,
-            guard_home=guard_home,
-            continue_session=True,
-        )
+    if result.timed_out or time.monotonic() >= deadline:
+        return fail()
     if result.output_limit_exceeded:
-        return _emit_failure(
-            harness=harness,
-            input_text=input_text,
-            reason="HOL Guard blocked this action because hook output exceeded the safe size limit.",
-            guard_home=guard_home,
-        )
+        return fail("HOL Guard blocked this action because hook output exceeded the safe size limit.")
     if result.returncode is None:
-        return _emit_failure(
-            harness=harness,
-            input_text=input_text,
-            guard_home=guard_home,
-            continue_session=True,
-        )
+        return fail()
     compact_payload = _json_object(result.stdout.strip())
     if compact_payload is None and not _has_json_object_line(result.stdout):
-        return _emit_failure(
-            harness=harness,
-            input_text=input_text,
-            guard_home=guard_home,
-            continue_session=True,
-        )
+        return fail()
     if compact_payload is not None:
         _ = sys.stdout.write(json.dumps(compact_payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     elif result.stdout:
@@ -406,10 +475,18 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
 def main_from_argv(argv: Sequence[str]) -> int:
     """Parse the authenticated install-time hook config and run it."""
 
+    started_monotonic = time.monotonic()
     config = _json_object(argv[0]) if len(argv) == 1 else None
     configured_harness = config.get("harness") if config is not None else None
     harness = configured_harness if isinstance(configured_harness, str) else "unknown"
-    input_text, stdin_prefix = _read_bounded_stdin()
+    timeout = config.get("timeout_seconds") if config is not None else None
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
+        return _emit_failure(harness=harness, input_text="{}")
+    deadline = started_monotonic + float(timeout)
+    try:
+        input_text, stdin_prefix = _read_bounded_stdin(deadline)
+    except (TimeoutError, OSError, ValueError):
+        return _emit_failure(harness=harness, input_text="{}")
     if input_text is None:
         guard_home_value = config.get("guard_home") if config is not None else None
         guard_home = Path(guard_home_value) if isinstance(guard_home_value, str) else None
@@ -418,15 +495,18 @@ def main_from_argv(argv: Sequence[str]) -> int:
             input_text=stdin_prefix or "{}",
             reason="HOL Guard blocked this action because hook input exceeded the safe size limit.",
             guard_home=guard_home,
+            deadline_monotonic=deadline,
         )
+    input_text = stamp_hook_input_text(input_text)
     if config is None:
         return _emit_failure(harness=harness, input_text=input_text)
-    return run_bounded_cli_hook(config, input_text=input_text)
+    return run_bounded_cli_hook(config, input_text=input_text, deadline_monotonic=deadline)
 
 
 __all__ = [
     "_FROZEN_BRIDGE_COMMAND",
     "bounded_cli_hook_command",
+    "bounded_hook_script_path",
     "main_from_argv",
     "run_bounded_cli_hook",
 ]

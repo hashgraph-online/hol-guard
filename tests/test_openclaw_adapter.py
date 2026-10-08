@@ -382,6 +382,10 @@ def test_install_exports_guard_managed_openclaw_overlay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: None,
+    )
     context = _ctx(tmp_path)
     _write(
         context.home_dir / ".openclaw" / "openclaw.json",

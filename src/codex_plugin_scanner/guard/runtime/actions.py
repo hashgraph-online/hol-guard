@@ -134,6 +134,20 @@ _PROMPT_PATH_PATTERN = re.compile(
     r"(?![A-Za-z0-9_.-])"
 )
 _NETWORK_HOST_PATTERN = re.compile(r"(?:https?|wss?|grpcs?)://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:[/?#]|$)")
+_CURSOR_NETWORK_TOOL_NAMES = frozenset(
+    {
+        "webfetch",
+        "websearch",
+        "fetch_web_content",
+        "web_fetch",
+        "web_search",
+        "browser",
+        "browser_action",
+        "open_url",
+        "visit_url",
+    }
+)
+_CURSOR_NETWORK_URL_KEYS = ("url", "urls", "link", "links")
 _GENERIC_POSIX_ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![:A-Za-z0-9_./-])(?P<path>/(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+)(?![A-Za-z0-9_.-])"
 )
@@ -316,6 +330,8 @@ def normalize_codex_hook_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Codex hook payload into a typed action envelope."""
 
@@ -325,6 +341,8 @@ def normalize_codex_hook_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -333,6 +351,8 @@ def normalize_claude_hook_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Claude Code hook payload into a typed action envelope."""
 
@@ -342,6 +362,8 @@ def normalize_claude_hook_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -350,6 +372,8 @@ def normalize_opencode_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize an OpenCode runtime payload into a typed action envelope."""
 
@@ -359,6 +383,8 @@ def normalize_opencode_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -367,6 +393,8 @@ def normalize_copilot_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Copilot runtime payload into a typed action envelope."""
 
@@ -376,6 +404,8 @@ def normalize_copilot_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -384,6 +414,8 @@ def normalize_gemini_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Gemini runtime payload into a typed action envelope."""
 
@@ -393,6 +425,8 @@ def normalize_gemini_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -401,6 +435,8 @@ def normalize_hermes_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Hermes runtime payload into a typed action envelope."""
     return _normalize_action_payload(
@@ -409,6 +445,8 @@ def normalize_hermes_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -417,6 +455,8 @@ def normalize_openclaw_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize an OpenClaw runtime payload into a typed action envelope."""
 
@@ -426,6 +466,8 @@ def normalize_openclaw_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -434,18 +476,31 @@ def normalize_cursor_hook_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Cursor IDE hook payload into a typed action envelope."""
 
     from ..adapters.cursor_hooks import prepare_cursor_hook_payload
 
-    return _normalize_action_payload(
-        prepare_cursor_hook_payload(payload),
+    prepared = prepare_cursor_hook_payload(payload)
+    envelope = _normalize_action_payload(
+        prepared,
         harness="cursor",
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
+    if envelope.event_name != "PreToolUse":
+        return envelope
+    tool_name = (envelope.tool_name or "").strip().lower()
+    if tool_name not in _CURSOR_NETWORK_TOOL_NAMES:
+        return envelope
+    urls = _cursor_tool_input_urls(prepared.get("tool_input"))
+    hosts = tuple(dict.fromkeys(match.group("host") for url in urls for match in _NETWORK_HOST_PATTERN.finditer(url)))
+    return replace(envelope, action_id="", action_type="network_request", network_hosts=hosts)
 
 
 def normalize_grok_hook_payload(
@@ -453,6 +508,8 @@ def normalize_grok_hook_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Grok Build CLI hook payload into a typed action envelope."""
 
@@ -464,6 +521,8 @@ def normalize_grok_hook_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
     if envelope.event_name in _GROK_LIFECYCLE_ENVELOPE_EVENTS:
         return replace(envelope, action_type="config_change")
@@ -482,6 +541,8 @@ def normalize_zcode_hook_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a z.ai ZCode hook payload into a typed action envelope.
 
@@ -497,6 +558,35 @@ def normalize_zcode_hook_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+
+
+def normalize_devin_hook_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Devin CLI hook payload into a typed action envelope.
+
+    Devin speaks the Claude Code wire protocol, so payloads normalize onto the
+    shared Guard shape through the Devin hook helpers.
+    """
+
+    from ..adapters.devin_hooks import prepare_devin_hook_payload
+
+    return _normalize_action_payload(
+        prepare_devin_hook_payload(payload),
+        harness="devin",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -506,6 +596,8 @@ def _normalize_pi_family_payload(
     harness: str,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Pi-family extension event payload into a typed action envelope."""
 
@@ -515,6 +607,8 @@ def _normalize_pi_family_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -523,8 +617,17 @@ def normalize_pi_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
-    return _normalize_pi_family_payload(payload, harness="pi", workspace=workspace, home_dir=home_dir)
+    return _normalize_pi_family_payload(
+        payload,
+        harness="pi",
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
 
 
 def normalize_omp_payload(
@@ -532,8 +635,17 @@ def normalize_omp_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
-    return _normalize_pi_family_payload(payload, harness="omp", workspace=workspace, home_dir=home_dir)
+    return _normalize_pi_family_payload(
+        payload,
+        harness="omp",
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
 
 
 def normalize_kimi_payload(
@@ -541,6 +653,8 @@ def normalize_kimi_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Kimi Code native-hook payload into a typed action envelope."""
 
@@ -554,6 +668,8 @@ def normalize_kimi_payload(
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
     )
 
 
@@ -573,6 +689,9 @@ _ACTION_PAYLOAD_NORMALIZERS = {
     "omp": normalize_omp_payload,
     "zcode": normalize_zcode_hook_payload,
     "zai": normalize_zcode_hook_payload,
+    "devin": normalize_devin_hook_payload,
+    "devin-cli": normalize_devin_hook_payload,
+    "cognition-devin": normalize_devin_hook_payload,
 }
 
 
@@ -589,6 +708,8 @@ def normalize_harness_payload(
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     """Normalize any supported Guard harness payload into a typed action envelope."""
 
@@ -597,7 +718,13 @@ def normalize_harness_payload(
     if normalizer is None:
         raise ValueError(f"Unsupported Guard harness for action normalization: {harness}")
     normalized_payload = _payload_with_default_event(payload, event_name)
-    return normalizer(normalized_payload, workspace=workspace, home_dir=home_dir)
+    return normalizer(
+        normalized_payload,
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
 
 
 def _normalize_action_payload(
@@ -607,6 +734,8 @@ def _normalize_action_payload(
     default_event_name: str | None,
     workspace: Path | str | None,
     home_dir: Path | str | None,
+    guard_home: Path | str | None = None,
+    deadline: float | None = None,
 ) -> GuardActionEnvelope:
     normalized_payload = dict(payload)
     if default_event_name is not None:
@@ -657,7 +786,13 @@ def _normalize_action_payload(
     workspace_hash = _workspace_hash(workspace)
     workspace_path = Path(workspace) if workspace is not None else None
     package_intent = (
-        _package_intent_parser_module().parse_package_intent(normalized_command, workspace=workspace_path)
+        _package_intent_parser_module().parse_package_intent(
+            normalized_command,
+            workspace=workspace_path,
+            home_dir=Path(home_dir) if home_dir is not None else None,
+            guard_home=Path(guard_home) if guard_home is not None else None,
+            deadline=deadline,
+        )
         if normalized_command
         else None
     )
@@ -1063,6 +1198,19 @@ def apply_patch_target_paths(tool_input: Mapping[str, object]) -> tuple[str, ...
             continue
         paths.extend(match.group("path").strip() for match in _PATCH_FILE_HEADER_PATTERN.finditer(patch_text))
     return tuple(dict.fromkeys(paths))
+
+
+def _cursor_tool_input_urls(tool_input: object) -> tuple[str, ...]:
+    if not isinstance(tool_input, Mapping):
+        return ()
+    urls: list[str] = []
+    for key in _CURSOR_NETWORK_URL_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            urls.append(value.strip())
+        elif isinstance(value, (list, tuple)):
+            urls.extend(item.strip() for item in value if isinstance(item, str) and item.strip())
+    return tuple(urls)
 
 
 def _network_hosts(command: str | None, prompt_excerpt: str | None) -> tuple[str, ...]:

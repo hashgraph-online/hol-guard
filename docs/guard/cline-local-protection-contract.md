@@ -38,9 +38,9 @@ Cline's `run_commands` tool can contain multiple independent commands. Guard eva
 The managed Cline plugin uses Cline's typed runtime hooks:
 
 - `beforeTool` sends the exact action to Guard and returns a skip result when Guard blocks it or evaluation cannot complete safely.
-- `afterTool` sends the result to Guard. A blocked or unreviewable result is replaced with an error result before it can continue through the plugin-mediated runtime path.
-- Safe reviewed output may replace the original output when Guard returns a reviewed replacement.
-- The original tool metadata is preserved when output is replaced.
+- `afterTool` sends the tool output to Guard. A blocked or unreviewable result is replaced with an error result before it can continue through the plugin-mediated runtime path.
+- The native worker preserves its reviewed-output directive and digest when responding to the Cline plugin. A `replace_with_reviewed_excerpt` directive replaces the original output with the exact reviewed excerpt; a missing excerpt is withheld. An `allow_original` directive preserves string output only when its SHA-256 matches Guard's reviewed-output digest. Block, unknown, or missing output directives withhold the result. In observe mode, an output without a full-output digest may be withheld by the plugin.
+- The plugin returns only `output` and `isError` on an allowed, blocked, or replaced result. Unreviewed tool metadata and other result fields are not forwarded through this plugin result path. This typed projection still needs installed-host proof for each supported Cline version.
 
 The plugin is installed as a normal Cline plugin package under Cline's global plugin directory and contains no separate policy engine.
 

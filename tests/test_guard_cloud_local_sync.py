@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import urllib.error
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -126,7 +128,10 @@ def test_sync_credentials_preserve_installation_id_when_cloud_workspace_changes(
     assert store.get_sync_payload("policy") == {"policy": "team"}
 
 
-def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     artifact = _artifact(tmp_path)
@@ -172,9 +177,15 @@ def test_evaluate_detection_queues_instruction_access_graph_edges(tmp_path: Path
     assert any(edge["edgeType"] == "agent_uses_instruction" for edge in graph_payload["edges"])
 
 
-def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
+    workspace_script = tmp_path / "workspace" / "workspace.js"
+    workspace_script.parent.mkdir(parents=True, exist_ok=True)
+    workspace_script.write_text("console.log('ok');\n", encoding="utf-8")
     artifact = _artifact(tmp_path)
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
@@ -197,10 +208,16 @@ class _FailingAccessGraphEventStore(GuardStore):
         super().add_guard_event_v1(event)
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_path: Path) -> None:
     store = _FailingAccessGraphEventStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
-    artifact = _artifact(tmp_path)
+    # Exercise real native launch identity without depending on a host Node
+    # installation; this test isolates event-queue failure, not launcher speed.
+    launcher = tmp_path / "mcp-launcher"
+    launcher.write_text("#!/bin/sh\nexit 0\n")
+    launcher.chmod(0o700)
+    artifact = replace(_artifact(tmp_path), command=str(launcher), args=())
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
     evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)
@@ -414,6 +431,25 @@ def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypa
     build_runtime_snapshot(store=store, approval_center_url=None)
 
     assert calls == 1
+
+
+def test_runtime_snapshot_reuses_one_store_connection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    opened = 0
+    original = sqlite3.connect
+
+    def counted_connect(*args, **kwargs):
+        nonlocal opened
+        opened += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", counted_connect)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert opened == 1
+    assert snapshot["pending_count"] == 0
+    assert snapshot["device"]["local_registered"] is True
 
 
 def test_runtime_snapshot_exposes_safe_trust_status(tmp_path: Path) -> None:

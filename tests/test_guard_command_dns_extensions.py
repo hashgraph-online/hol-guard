@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 DNS_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("aws route53 delete-hosted-zone --id Z123", "AWS DNS destructive command", "command.dns.aws.zone-deletion"),
@@ -152,8 +152,9 @@ def test_help_redirection_target_does_not_hide_dns_command(command: str, rule_id
     rules = payload["rules"]
     assert isinstance(rules, list)
 
-    assert payload["status"] == "review"
-    assert rule_id in {str(rule["rule_id"]) for rule in rules if isinstance(rule, dict) and "rule_id" in rule}
+    assert payload["minimum_action"] == "block"
+    assert rules == []
+    assert payload["classification"]["action_class"] is None
 
 
 def test_lumped_dns_extension_is_not_registered() -> None:
@@ -161,7 +162,7 @@ def test_lumped_dns_extension_is_not_registered() -> None:
 
 
 def test_legacy_dns_controls_expand_onto_provider_extensions() -> None:
-    from codex_plugin_scanner.guard.runtime.command_dns_extensions import expand_legacy_dns_layers
+    from codex_plugin_scanner.guard.runtime.command_dns_control_migration import expand_legacy_dns_layers
     from codex_plugin_scanner.guard.runtime.extension_control_contract import (
         CONTROL_SCHEMA_VERSION,
         ControlLayerKind,
@@ -192,7 +193,7 @@ def test_legacy_dns_controls_expand_onto_provider_extensions() -> None:
 
 
 def test_legacy_dns_expansion_merges_provider_collision_and_keeps_original_duplicates() -> None:
-    from codex_plugin_scanner.guard.runtime.command_dns_extensions import expand_legacy_dns_layers
+    from codex_plugin_scanner.guard.runtime.command_dns_control_migration import expand_legacy_dns_layers
     from codex_plugin_scanner.guard.runtime.extension_control_contract import (
         CONTROL_SCHEMA_VERSION,
         ControlLayerKind,

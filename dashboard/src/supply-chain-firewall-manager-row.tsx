@@ -53,6 +53,7 @@ type ManagerRowProps = {
   shim: PackageShimEntry | undefined;
   actions: PackageFirewallStatusResponse["actions"];
   anyPending: boolean;
+  repairAwaitingRefresh: boolean;
   isMine: boolean;
   isConfirmingRemove: boolean;
   onInstall: (manager: string) => void;
@@ -70,6 +71,7 @@ export function ManagerRow({
   shim,
   actions,
   anyPending,
+  repairAwaitingRefresh,
   isMine,
   isConfirmingRemove,
   onInstall,
@@ -196,7 +198,7 @@ export function ManagerRow({
                     label="Fix PATH"
                     icon={<HiMiniWrenchScrewdriver className="h-4 w-4" />}
                     onClick={handleRepair}
-                    disabled={anyPending}
+                    disabled={anyPending || repairAwaitingRefresh}
                   />
                 )}
                 {showTest && (

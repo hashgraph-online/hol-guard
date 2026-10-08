@@ -1,0 +1,85 @@
+name: Extension artifact regen
+
+# Contributors own canonical contribution sources. The generated projections
+# derived from them (published descriptors and directory render) are maintainer-owned and
+# published here after merges so contribution PRs never conflict on them.
+#
+# Compatibility copies remain tracked while existing PRs and readers migrate.
+# This workflow never commits generated files or opens regeneration PRs.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Product/catalog inputs only. Per-run reports and independent test
+      # fixtures do not schedule native compilation or publication.
+      - contributions/**
+      - rust/**
+      - contracts/extensions/**
+      - contracts/mcp-servers/**
+      - src/codex_plugin_scanner/guard/**
+      - scripts/refresh_extension_artifacts.py
+      - scripts/build_native_command_program.py
+      - scripts/prepare_extension_contribution.py
+      - scripts/export_extension_directory.py
+      - scripts/render_command_extension_directory.py
+      - scripts/extension_artifact_bundle.py
+      - scripts/publish_extension_snapshot.py
+      - docs/guard/extensions/contributing.md
+      - .github/workflows/extension-artifact-regen.yml
+  workflow_dispatch:
+
+# Serialize publication without cancelling an active upload. Every retained
+# run publishes the exact commit that triggered it.
+concurrency:
+  group: extension-artifact-regen-main
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  regen:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install the locked development environment
+        run: uv sync --frozen --extra dev
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Generate and verify current artifacts
+        run: uv run --no-sync python scripts/refresh_extension_artifacts.py
+      - name: Build the immutable snapshot
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: uv run --no-sync python scripts/extension_artifact_bundle.py --source-sha "$SOURCE_SHA" --output extension-snapshot
+      - name: Retain verified snapshot evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extension-artifacts-${{ github.sha }}
+          path: extension-snapshot/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish immutable public snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: uv run --no-sync python scripts/publish_extension_snapshot.py --source-sha "$SOURCE_SHA" --directory extension-snapshot

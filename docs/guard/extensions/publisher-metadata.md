@@ -41,24 +41,33 @@ A sidecar is optional for public presentation, but an external extension cannot 
 automatically claimed until an accepted sidecar names at least one authorized
 numeric GitHub ID.
 
-Example for `command.blitcp`:
+New sidecars use v2. v1 sidecars remain readable so existing accepted mappings
+keep their exact semantics. Example for `command.blitcp`:
 
 ```json
 {
-  "schemaVersion": "guard.extension-listing.v1",
+  "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "command.blitcp",
   "tagline": "Reviewed file-transfer operation coverage for blitcp.",
+  "summary": "Reviews destructive file-transfer operations through a bounded native command contract.",
   "category": "delivery-remote",
   "limitations": [
     "Coverage is limited to the reviewed operations and the surrounding Guard policy."
   ],
   "documentationUrl": "https://github.com/hashgraph-online/hol-guard",
   "tags": ["file-transfer"],
+  "contributors": [
+    {"githubId": "12345678", "githubLogin": "example-author", "roles": ["author"]}
+  ],
+  "originalContributions": [
+    {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3020"}
+  ],
+  "upstream": {"name": "Blitcp", "url": "https://github.com/example/blitcp"},
   "maintainerGithubIds": ["12345678"]
 }
 ```
 
-The [`JSON Schema`](../../../contracts/extensions/listing.v1.schema.json) checks
+The [`v2 JSON Schema`](../../../contracts/extensions/listing.v2.schema.json) checks
 field shapes, bounds, enumerated values, and duplicate array members. The Python
 listing validator additionally checks plain text, public URL policy, symlinked
 paths, and filename identity. The exporter checks that each sidecar belongs to a
@@ -69,6 +78,17 @@ Use a public HTTPS hostname without credentials. Nonstandard ports and literal I
 addresses are not accepted. Do not include policy, executable code, activation
 state, trust classes, private email addresses, secrets, or commands. Native
 contribution contracts remain the only source of runtime behavior.
+
+### Public credit and upstream references
+
+`contributors` is a bounded public credit list with stable numeric GitHub IDs,
+display logins, and attribution roles. `originalContributions` records public
+pull-request, issue, commit, or discussion URLs. `upstream` is an optional
+public project reference. These fields help a publisher profile prefill public
+attribution, but they are never claim authority, runtime behavior, or a reason
+to infer GitHub access. A credit can be present while `maintainerGithubIds` is
+empty; that extension stays unclaimable until maintainers review an explicit
+mapping.
 
 ### Reviewed claim authority
 
@@ -113,11 +133,15 @@ uv run python scripts/export_extension_directory.py --check
 uv run python scripts/render_command_extension_directory.py --check
 ```
 
-The compact generated [`catalog.v1.json`](catalog.v1.json) follows
-[`directory.v1.schema.json`](../../../contracts/extensions/directory.v1.schema.json).
-It carries contribution IDs and digests, runtime IDs, coverage counts, matcher-derived
-command operations with catalog default floors, MCP inheritance, native trust classes,
-and presentation fields. Catalog default floors describe the shipped rule baseline
+The compact generated [`catalog.v1.json`](catalog.v1.json) retains the existing
+claim-source binding. [`catalog.v2.json`](catalog.v2.json) follows
+[`directory.v2.schema.json`](../../../contracts/extensions/directory.v2.schema.json)
+and adds v2 listing credit, upstream, listing-byte provenance, and command
+authoring source evidence. `sourcePath` and `contributionDigest` in both
+directories remain the exact generated descriptor bytes used by current claim
+verification. The v2 `authoringSource.byteDigest` is the raw canonical source
+file digest; `authoringSource.nativeDigest` is the Rust typed-source digest.
+They are intentionally distinct. Catalog default floors describe the shipped rule baseline
 (`allow`, `warn`, `review`, `require-reapproval`, `sandbox-required`, `block`); they are
 not workspace activation, installation counts, ratings, certification claims, or secrets.
 

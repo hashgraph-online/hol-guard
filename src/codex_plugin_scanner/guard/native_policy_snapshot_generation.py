@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .native_command_control_binding import capture_native_command_control_binding
 from .native_policy_snapshot_codec import _digest_v3, _valid_digest_v3, derive_native_policy_verifier_key
 from .native_policy_snapshot_constants import (
     _MAX_GENERATION,
@@ -110,6 +111,9 @@ def _snapshot_inputs_v3(
     guard_home: Path,
     runtime_identity: str,
     rule_digest: str,
+    command_extensions: Mapping[str, object] | None = None,
+    business_policy: Mapping[str, object] | None = None,
+    deadline_monotonic: float | None = None,
 ) -> tuple[dict[str, object], str, str, str, str]:
     effective_policy = effective_native_policy_v3(config)
     raw_mode = _config_value(config, "mode", "prompt")
@@ -117,6 +121,23 @@ def _snapshot_inputs_v3(
         raise NativePolicySnapshotError("native_policy_snapshot_mode_invalid")
     mode = "observe" if raw_mode == "observe" or effective_policy["protection_posture"] == "watch" else "enforce"
     scope_digest = _scope_digest_v3(guard_home)
+    if business_policy is not None:
+        # A synthetic, non-installed constructor value supplies Rust's semantic
+        # identity. Generation/times/key do not participate in policy identity.
+        semantic = _snapshot_api().build_policy_snapshot_v3(
+            config=config,
+            guard_home=guard_home,
+            runtime_identity=runtime_identity,
+            rule_digest=rule_digest,
+            verifier_key=bytes(32),
+            generation=1,
+            issued_at_ms=0,
+            expires_at_ms=1,
+            command_extensions=command_extensions,
+            business_policy=business_policy,
+            deadline_monotonic=deadline_monotonic,
+        )
+        return effective_policy, mode, str(semantic["config_digest"]), str(semantic["policy_digest"]), scope_digest
     config_digest = _digest_v3(effective_policy)
     policy_digest = _snapshot_policy_digest_v3(
         config_digest=config_digest,
@@ -125,6 +146,7 @@ def _snapshot_inputs_v3(
         rule_digest=rule_digest,
         runtime_identity=runtime_identity,
         scope_digest=scope_digest,
+        command_extensions=command_extensions,
     )
     return effective_policy, mode, config_digest, policy_digest, scope_digest
 
@@ -193,11 +215,16 @@ def _cached_snapshot_v3(
     rule_digest: str,
     scope_digest: str,
     renew_after_generation: int | None,
+    business_binding_present: bool = False,
 ) -> tuple[dict[str, object] | None, int | None]:
     cached = api._read_v3_snapshot_cache(guard_home, verifier_key=verifier_key)
     if cached is None:
         return None, renew_after_generation
     cached_snapshot, _cached_bytes = cached
+    if "business_policy" in cached_snapshot and not business_binding_present:
+        # Omission by an ordinary caller is not authenticated removal authority.
+        # Do not discard a signed business binding to recover compatibility.
+        raise NativePolicySnapshotError("native_business_policy_removal_requires_authority")
     matches = _snapshot_matches_inputs_v3(
         cached_snapshot,
         mode=mode,
@@ -267,6 +294,9 @@ def _materialize_snapshot_v3(
     issued_at_ms: int | None,
     expires_at_ms: int | None,
     policy_digest: str,
+    command_extensions: Mapping[str, object] | None,
+    business_policy: Mapping[str, object] | None = None,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, object]:
     snapshot = api.build_policy_snapshot_v3(
         config={**effective_policy, "mode": mode},
@@ -277,6 +307,9 @@ def _materialize_snapshot_v3(
         generation=generation,
         issued_at_ms=issued_at_ms,
         expires_at_ms=expires_at_ms,
+        command_extensions=command_extensions,
+        business_policy=business_policy,
+        deadline_monotonic=deadline_monotonic,
     )
     api._write_v3_snapshot_file(guard_home, _NATIVE_POLICY_SNAPSHOT_PENDING_NAME, snapshot)
     api._write_v3_snapshot_cache(guard_home, snapshot)
@@ -300,6 +333,8 @@ def native_policy_snapshot_v3(
     expires_at_ms: int | None = None,
     deadline_monotonic: float | None = None,
     renew_after_generation: int | None = None,
+    command_extensions: Mapping[str, object] | None = None,
+    business_policy: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build or reuse one generation-bound snapshot and provision its key.
 
@@ -310,6 +345,9 @@ def native_policy_snapshot_v3(
     allowing retries to reuse a previously materialized renewal candidate.
     """
 
+    from .native_policy_snapshot_business_bridge import begin_business_deadline, end_business_deadline
+
+    deadline_token = begin_business_deadline(deadline_monotonic) if business_policy is not None else None
     verifier_key: bytes | None = None
     try:
         _validate_snapshot_request_v3(
@@ -319,14 +357,25 @@ def native_policy_snapshot_v3(
             expires_at_ms,
             renew_after_generation,
         )
+        if business_policy is not None:
+            from .native_policy_snapshot_business_bridge import capture_business_binding
+
+            business_policy = capture_business_binding(business_policy)
         verifier_key = derive_native_policy_verifier_key(policy_integrity_key)
-        provision_native_policy_verifier_key(guard_home, policy_integrity_key)
+        if business_policy is None:
+            provision_native_policy_verifier_key(guard_home, policy_integrity_key)
+        binding = capture_native_command_control_binding(command_extensions) if command_extensions is not None else None
         effective_policy, mode, config_digest, policy_digest, scope_digest = _snapshot_inputs_v3(
             config,
             guard_home,
             runtime_identity,
             rule_digest,
+            binding,
+            business_policy,
+            deadline_monotonic,
         )
+        if business_policy is not None:
+            provision_native_policy_verifier_key(guard_home, policy_integrity_key)
         api = _snapshot_api()
         with api._v3_generation_lock(guard_home, deadline_monotonic=deadline_monotonic) as lock_descriptor:
             api._recover_v3_snapshot_transaction(guard_home, verifier_key)
@@ -343,6 +392,7 @@ def native_policy_snapshot_v3(
                 rule_digest=rule_digest,
                 scope_digest=scope_digest,
                 renew_after_generation=renew_after_generation,
+                business_binding_present=business_policy is not None,
             )
             if cached_snapshot is not None:
                 return cached_snapshot
@@ -367,6 +417,9 @@ def native_policy_snapshot_v3(
                 policy_digest=policy_digest,
                 issued_at_ms=issued_at_ms,
                 expires_at_ms=expires_at_ms,
+                command_extensions=binding,
+                business_policy=business_policy,
+                deadline_monotonic=deadline_monotonic,
             )
     finally:
         # The caller's master is an ephemeral input. Clear both local
@@ -374,3 +427,5 @@ def native_policy_snapshot_v3(
         # only the purpose-specific verifier-derived key id and MAC.
         verifier_key = None
         policy_integrity_key = b""
+        if deadline_token is not None:
+            end_business_deadline(deadline_token)

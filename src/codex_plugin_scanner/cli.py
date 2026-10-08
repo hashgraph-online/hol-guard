@@ -308,6 +308,7 @@ def _resolve_legacy_args(
         "protect",
         "preflight",
         "pytest-contained",
+        "execute-contained-test",
         "diff",
         "test-eval",
         "command",
@@ -402,10 +403,12 @@ def main(argv: list[str] | None = None) -> int:
         program_mode = "combined"
     if program_mode == "guard" and requested_argv[:1] == ["help"]:
         requested_argv = [*requested_argv[1:], "--help"]
-    if program_mode in {"guard", "hol-guard"} and requested_argv[:1] == ["--version"]:
-        # Fast path: answering a version probe must not build the full Guard
-        # command surface. Update flows spawn `--version` on every check, and
-        # hook wrappers probe it while a tool waits.
+    if requested_argv[:1] == ["--version"] and (
+        program_mode in {"guard", "hol-guard"}
+        or (program_name.startswith("hol-guard-") and program_name.endswith(".partial"))
+    ):
+        # Desktop stages Core as hol-guard-*.partial. Keep other executable
+        # names on their existing parser path, including scanner/combined CLIs.
         print(f"{program_name} {__version__}")
         return 0
     if program_mode != "scanner":

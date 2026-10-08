@@ -141,6 +141,7 @@ class ToolActionRequestMatch:
     pytest_config_sources: tuple[str, ...] = ()
     pytest_config_reason_codes: tuple[str, ...] = ()
     interpreter_executable_identities: tuple[dict[str, object], ...] = ()
+    script_read_identity_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

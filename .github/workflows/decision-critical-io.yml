@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_HTTP_TIMEOUT: "120"
+
 concurrency:
   group: decision-critical-io-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -31,6 +34,10 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt
       - name: Enforce always-selected ownership manifest coverage
         env:
           OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -45,20 +52,27 @@ jobs:
           uv run --no-sync python scripts/ci/rust_io_ownership_gate.py \
             --root . --json rust-io-ownership.json
       - name: Prove route and evidence privacy
+        uses: ./.github/actions/stage-command-projections
+      - name: Prove route and evidence privacy
         run: |
           uv run --no-sync python scripts/ci/rust_io_privacy_gate.py \
             --root . --json rust-io-privacy.json
+      - name: Build the native runtime for evidence-writer tests
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
       - name: Check native I/O formatting and focused tests
+        env:
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: |
           cargo fmt --manifest-path rust/Cargo.toml --all --check
           cargo test --manifest-path rust/Cargo.toml --locked -p guard-secure-fs -p guard-hook-core
           uv run --no-sync pytest -q \
             tests/test_rust_io_ownership_gate.py \
+            tests/test_rust_io_ownership_cache.py \
             tests/test_rust_io_privacy_gate.py \
             tests/test_hook_enrichment_queue.py \
             tests/test_guard_runtime_hook_evidence_writer.py \
             --tb=short
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: decision-critical-io-evidence

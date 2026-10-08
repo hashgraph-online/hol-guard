@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { protectionReasonText } from "./protection-reason-copy";
 import type {
   GuardProtectionAppHealth,
   GuardProtectionCheck,
@@ -291,15 +292,25 @@ export function remainingProtectionRepairMessage(
   const failedHookApps = remainingParts.failedHookHarnesses.map(displayName);
   const remainingMessages: string[] = [];
   const unsupportedCount = health.checks.filter(isUnsupportedPlatformCheck).length;
+  const daemonCheck = health.checks.find((check) => check.check_id === "daemon");
+  const decisionStreamCheck = health.checks.find((check) => check.check_id === "decision_stream");
   if (remainingParts.needsConnectedApp) {
     remainingMessages.push("Connect an AI app to start local protection.");
+  }
+  if (daemonCheck?.status !== "pass" && daemonCheck?.reason_code === "daemon_registration_missing") {
+    remainingMessages.push("The local runtime is re-registering; check again in a moment.");
   }
   if (failedHookApps.length > 0) {
     remainingMessages.push(
       `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`,
     );
   }
-  if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
+  if (remainingParts.evidenceFailed) {
+    const reasonText = decisionStreamCheck?.reason_code
+      ? protectionReasonText(decisionStreamCheck.reason_code)
+      : null;
+    remainingMessages.push(reasonText ?? "Command evidence still needs repair.");
+  }
   if (unsupportedCount > 0) {
     remainingMessages.push(
       "Containment remains unavailable on this platform, so full protection cannot be reached here.",

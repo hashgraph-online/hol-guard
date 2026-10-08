@@ -20,6 +20,10 @@ def _failed_review(**_kwargs: object) -> HookProcessReview:
     return HookProcessReview(None, _DEADLINE_REASON)
 
 
+def _deadline_exceeded_native_review(**_kwargs: object) -> None:
+    raise TimeoutError("native review deadline exceeded")
+
+
 def _review_request(
     daemon: GuardDaemonServer,
     *,
@@ -63,6 +67,7 @@ def _review_request(
 
 
 @pytest.mark.parametrize("endpoint", ("pi", "omp", "claude-code"))
+@pytest.mark.usefixtures("native_hook_force")
 def test_observe_mode_does_not_block_failed_local_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -76,9 +81,9 @@ def test_observe_mode_does_not_block_failed_local_review(
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
     monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "review",
-        _failed_review,
+        daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
+        "_review_native_edge_with_snapshot",
+        _deadline_exceeded_native_review,
     )
 
     try:
@@ -131,6 +136,10 @@ def test_observe_mode_uses_native_nonblocking_claude_responses(
 ) -> None:
     # This contract exercises the isolated compatibility worker. The stable
     # default fast path handles PostToolUse before that worker is consulted.
+    # Under HOL_GUARD_NATIVE=force the daemon routes runtime hooks through the
+    # native fast path regardless of the fast-path flag, so pin native off to
+    # keep the compat lane deterministic.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
     monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
@@ -160,6 +169,7 @@ def test_observe_mode_uses_native_nonblocking_claude_responses(
 
 
 @pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
+@pytest.mark.usefixtures("native_hook_force")
 def test_prompt_mode_still_blocks_failed_local_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -171,9 +181,9 @@ def test_prompt_mode_still_blocks_failed_local_review(
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
     monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "review",
-        _failed_review,
+        daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
+        "_review_native_edge_with_snapshot",
+        _deadline_exceeded_native_review,
     )
 
     try:
@@ -188,16 +198,17 @@ def test_prompt_mode_still_blocks_failed_local_review(
         daemon.stop()
 
     if endpoint == "pi":
-        assert payload["decision"] == "allow"
+        assert payload["decision"] == "deny"
     else:
         hook_output = payload["hookSpecificOutput"]
         assert isinstance(hook_output, dict)
-        assert hook_output["permissionDecision"] == "allow"
-    assert payload["reason_code"] == _DEADLINE_REASON
+        assert hook_output["permissionDecision"] == "deny"
+    assert payload["reason_code"] == "native_review_deadline_exceeded"
 
 
 @pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
-def test_prompt_mode_continues_emergency_safe_inspection_when_review_cannot_complete(
+@pytest.mark.usefixtures("native_hook_force")
+def test_prompt_mode_denies_unverified_inspection_when_review_cannot_complete(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     endpoint: str,
@@ -208,9 +219,9 @@ def test_prompt_mode_continues_emergency_safe_inspection_when_review_cannot_comp
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
     monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "review",
-        _failed_review,
+        daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
+        "_review_native_edge_with_snapshot",
+        _deadline_exceeded_native_review,
     )
 
     try:
@@ -224,15 +235,15 @@ def test_prompt_mode_continues_emergency_safe_inspection_when_review_cannot_comp
         daemon.stop()
 
     if endpoint == "pi":
-        assert payload["decision"] == "allow"
+        assert payload["decision"] == "deny"
     else:
         hook_output = payload["hookSpecificOutput"]
         assert isinstance(hook_output, dict)
-        assert hook_output["permissionDecision"] == "allow"
-    assert payload["reason_code"] == _DEADLINE_REASON
+        assert hook_output["permissionDecision"] == "deny"
+    assert payload["reason_code"] == "native_review_deadline_exceeded"
 
 
-def test_hook_overload_continues_emergency_safe_workspace_read(
+def test_hook_overload_denies_unverified_workspace_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -263,4 +274,4 @@ def test_hook_overload_continues_emergency_safe_workspace_read(
     assert payload["reason_code"] == "daemon_hook_queue_capacity"
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "allow"
+    assert hook_output["permissionDecision"] == "deny"

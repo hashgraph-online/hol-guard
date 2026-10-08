@@ -34,8 +34,21 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 )
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
 
-pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
+pytestmark = [pytest.mark.usefixtures("bundle_first_cloud"), pytest.mark.usefixtures("package_intent_native")]
+
+
+@pytest.fixture(autouse=True)
+def _native_saved_block_context(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = _context
+
+    def enrolled_context(tmp_path: Path) -> HarnessContext:
+        context = original(tmp_path)
+        native_mcp_probe(context.guard_home)
+        return context
+
+    monkeypatch.setattr(sys.modules[__name__], "_context", enrolled_context)
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -46,6 +59,39 @@ def _context(tmp_path: Path) -> HarnessContext:
     workspace_dir.mkdir()
     guard_home.mkdir()
     return HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+
+
+def test_complete_proxy_catalog_binds_advertised_tool_definition(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
+    context = _context(tmp_path)
+    assert context.workspace_dir is not None
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace-tools",
+        command=[sys.executable],
+        context=context,
+        store=GuardStore(context.guard_home),
+        config=GuardConfig(
+            blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe"
+        ),
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex/config.toml"),
+    )
+    definition = {
+        "name": "safe_echo",
+        "description": "Echo a value",
+        "inputSchema": {"type": "object", "properties": {"value": {"type": "string"}}},
+    }
+    proxy._capture_tools_catalog({"result": {"tools": [definition]}})
+
+    authority = proxy._resolve_tool_call_authority(tool_name="safe_echo", arguments={"value": "ok"})
+
+    assert proxy._tool_catalog_state == "complete"
+    assert authority.artifact.metadata.get("mcp_tool_authority_hash") is None
+    assert authority.artifact.runtime_private_metadata["mcp_tool_authority_hash"] == tool_definition_authority_hash(
+        definition
+    )
 
 
 def _child_command(marker_path: Path) -> list[str]:
@@ -362,11 +408,14 @@ def _seed_exact_package_block(
 def test_nonpackage_authenticated_saved_block_is_terminal_without_inline_or_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe")
+    config = GuardConfig(
+        blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe"
+    )
     marker_path = tmp_path / "nonpackage-forwarded.json"
     proxy = CodexMcpGuardProxy(
         server_name="workspace-tools",
@@ -408,7 +457,7 @@ def test_package_preliminary_saved_tool_block_is_terminal_before_approval_surfac
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    config = GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir)
     marker_path = tmp_path / f"package-preliminary-{approval_surface}.json"
     proxy_class = CodexMcpGuardProxy if approval_surface == "inline" else OpenCodeMcpGuardProxy
     proxy = proxy_class(
@@ -473,11 +522,12 @@ def test_authenticated_saved_package_block_is_terminal_before_generic_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     approval_surface: str,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    config = GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir)
     marker_path = tmp_path / f"package-final-{approval_surface}.json"
     harness = "codex" if approval_surface == "inline" else "opencode"
     config_path = str(context.workspace_dir / f".{harness}" / "mcp.json")
@@ -539,11 +589,13 @@ def test_authenticated_saved_package_block_is_terminal_before_generic_approval(
 def test_package_retry_claims_inner_and_outer_exact_one_shot_allows_after_revision_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         security_level="custom",
@@ -744,6 +796,7 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         security_level="custom",
@@ -952,6 +1005,7 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
 def test_package_observe_mode_records_each_authority_without_approval_requests(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
     tool_action: GuardAction,
     package_action: GuardAction,
     expected_tool_queue: list[GuardAction],
@@ -963,6 +1017,7 @@ def test_package_observe_mode_records_each_authority_without_approval_requests(
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         mode="observe",
@@ -1129,7 +1184,7 @@ def test_mcp_executable_identity_uses_launch_cwd_and_stays_pinned_after_spawn(
     decoy_server.chmod(0o755)
     monkeypatch.chdir(process_cwd)
     store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    config = GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir)
     captured: dict[str, object] = {}
 
     def _capture_tool_call(**kwargs: object) -> ToolCallDecision:
@@ -1225,7 +1280,7 @@ def test_interpreted_mcp_server_binds_script_bytes_and_pins_them_for_the_running
     server_script.write_text(server_source, encoding="utf-8")
     monkeypatch.chdir(process_cwd)
     store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    config = GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir)
     captured: dict[str, object] = {}
 
     def _capture_tool_call(**kwargs: object) -> ToolCallDecision:
@@ -1311,11 +1366,13 @@ def test_python_module_entrypoint_is_content_bound_and_unresolved_package_launch
 def test_runtime_mcp_binds_only_configured_server_env_values_without_leaking_them(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         security_level="custom",
@@ -1430,7 +1487,7 @@ def test_runtime_mcp_start_passes_configured_code_loading_env_to_launch_identity
         command=[node_command, "server.js"],
         context=context,
         store=GuardStore(context.guard_home),
-        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir),
+        config=GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir),
         source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
         server_env_keys=("NODE_OPTIONS",),
@@ -1471,7 +1528,7 @@ def test_first_policy_review_never_auto_forwards_and_all_surfaces_preserve_revie
         command=_child_command(marker_path),
         context=context,
         store=store,
-        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir),
+        config=GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir),
         source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
@@ -1516,7 +1573,7 @@ def test_terminal_current_tool_action_is_not_downgraded_to_retryable_review(
         command=_child_command(marker_path),
         context=context,
         store=store,
-        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir),
+        config=GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir),
         source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
@@ -1561,7 +1618,7 @@ def test_runtime_mcp_redacts_secret_argument_fields_from_every_persisted_surface
         command=_child_command(marker_path),
         context=context,
         store=store,
-        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir),
+        config=GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir),
         source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
@@ -1609,11 +1666,13 @@ def test_runtime_mcp_redacts_secret_argument_fields_from_every_persisted_surface
 def test_observe_mode_does_not_consume_exact_saved_tool_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         mode="observe",
@@ -1694,6 +1753,7 @@ def test_observe_mode_records_terminal_tool_policy_immediately_before_forward(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         mode="observe",
@@ -1746,6 +1806,7 @@ def test_observe_mode_preserves_fresh_executable_warn_at_final_tool_boundary(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         mode="observe",
@@ -1795,11 +1856,13 @@ def test_observe_mode_preserves_fresh_executable_warn_at_final_tool_boundary(
 def test_runtime_mcp_rebuilds_tool_authority_after_exact_claim_before_forward(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     review_config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         security_level="custom",
@@ -1891,11 +1954,13 @@ def test_runtime_mcp_retained_tool_policy_requires_same_row_after_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     delete_after_claim: bool,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         security_level="custom",
@@ -1995,6 +2060,7 @@ def _prepare_runtime_mcp_exact_review_retry(
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         security_level="custom",
@@ -2104,11 +2170,13 @@ def test_runtime_mcp_tool_catalog_fingerprint_is_canonical_and_complete() -> Non
 def test_runtime_mcp_saved_allow_is_not_reused_before_complete_catalog(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         security_level="custom",
@@ -2163,11 +2231,13 @@ def test_runtime_mcp_saved_allow_is_not_reused_before_complete_catalog(
 def test_runtime_mcp_drains_idle_list_changed_before_saved_approval_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=context.guard_home,
         workspace=context.workspace_dir,
         security_level="custom",
@@ -2229,7 +2299,7 @@ def test_runtime_mcp_process_boundary_clears_cross_session_response_buffers(tmp_
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    config = GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir)
     proxy = CodexMcpGuardProxy(
         server_name="workspace-tools",
         command=_cross_session_buffer_child_command(tmp_path / "buffer-reset-session.txt"),
@@ -2263,6 +2333,7 @@ def test_runtime_mcp_process_boundary_clears_cross_session_response_buffers(tmp_
 def test_runtime_mcp_final_prewrite_drain_catches_notification_after_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     _context_value, store, proxy, marker_path, messages, _artifact_id, _artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2313,6 +2384,7 @@ def test_runtime_mcp_final_prewrite_drain_catches_notification_after_claim(
 def test_runtime_mcp_exact_claim_binds_unchanged_full_advertised_catalog(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     _context_value, store, proxy, marker_path, messages, _artifact_id, _artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2340,6 +2412,7 @@ def test_runtime_mcp_exact_claim_binds_unchanged_full_advertised_catalog(
 def test_runtime_mcp_exact_claim_fails_closed_when_current_config_refresh_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     _context_value, store, proxy, marker_path, messages, _artifact_id, _artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2378,6 +2451,7 @@ def test_runtime_mcp_exact_claim_fails_closed_when_current_config_refresh_fails(
 def test_runtime_mcp_exact_claim_rejects_different_tool_catalog_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     _context_value, store, proxy, marker_path, messages, _artifact_id, _artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2427,6 +2501,7 @@ def test_runtime_mcp_exact_claim_rejects_different_tool_catalog_change(
 def test_runtime_mcp_same_context_saved_block_after_claim_has_truthful_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     context, store, proxy, marker_path, messages, artifact_id, artifact_hash, approval_id = (
         _prepare_runtime_mcp_exact_review_retry(
@@ -2503,24 +2578,29 @@ def test_runtime_mcp_quarantines_child_when_entrypoint_changes_during_spawn(
         command=[sys.executable, str(server_script)],
         context=context,
         store=GuardStore(context.guard_home),
-        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir),
+        config=GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir),
         source_scope="project",
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
-    real_popen = runtime_mcp_module.subprocess.Popen
-    processes: list[Any] = []
+    real_open_native = runtime_mcp_module.mcp_stdio_session_open_native
+    sessions: list[str] = []
 
     def mutate_after_spawn(*args: Any, **kwargs: Any) -> Any:
-        process = real_popen(*args, **kwargs)
-        processes.append(process)
+        # RTM-023 moved the child spawn into the resident; the launch-identity
+        # re-check happens after `mcp_stdio_session_open_native` returns. Mutate
+        # the entrypoint inside the native-open seam so the post-spawn verify
+        # sees a swapped file, then let the real opener run.
         server_script.write_text("raise SystemExit(93)\n", encoding="utf-8")
-        return process
+        session_id = kwargs.get("session_id")
+        if session_id:
+            sessions.append(str(session_id))
+        return real_open_native(*args, **kwargs)
 
-    monkeypatch.setattr(runtime_mcp_module.subprocess, "Popen", mutate_after_spawn)
+    monkeypatch.setattr(runtime_mcp_module, "mcp_stdio_session_open_native", mutate_after_spawn)
 
     with pytest.raises(RuntimeError, match="launch identity changed"):
         proxy._start_process()
 
-    assert processes and processes[0].poll() is not None
+    assert sessions
     assert proxy._active_runtime_launch_identity is None
     assert proxy._active_executable_identity is None

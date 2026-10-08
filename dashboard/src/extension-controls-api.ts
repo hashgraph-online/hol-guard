@@ -77,13 +77,23 @@ export type ExtensionIcon = {
   background?: string;
 };
 
-export type McpToolDefaultState = "inherit" | "allow" | "block";
+export type McpToolDefaultState = "inherit" | "allow" | "review" | "block";
 
-export type McpLaunch = {
-  kind: "package-launcher";
-  command: string;
-  package: string;
-};
+export type McpLaunch =
+  | {
+      kind: "direct-command";
+      command: string;
+    }
+  | {
+      kind: "package-launcher";
+      command: string;
+      package: string;
+    }
+  | {
+      kind: "remote-http";
+      url: string;
+      serverNames: string[];
+    };
 
 export type McpToolDefault = {
   name: string;

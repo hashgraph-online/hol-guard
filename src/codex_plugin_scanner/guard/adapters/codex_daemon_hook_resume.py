@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import quote
 
+from ..approval_hook_copy import _SIGNED_APPROVAL_LINK_UNAVAILABLE, authenticated_approval_review_url
 from ..browser_opener import open_browser_url
 from .codex_daemon_hook_transport import _daemon_json_get, _daemon_json_post
 
@@ -155,21 +156,11 @@ def _complete_resolution(
 def _open_pending_approval(approval_url: str | None, *, state_path: str | Path) -> None:
     if approval_url is None:
         return
-    print(f"HOL Guard is waiting for approval in your browser: {approval_url}", file=sys.stderr, flush=True)
-    browser_url = approval_url
-    try:
-        from ..approvals import build_approval_browser_url
-        from ..daemon.manager import load_guard_daemon_auth_token
-
-        browser_url = (
-            build_approval_browser_url(
-                approval_url,
-                auth_token=load_guard_daemon_auth_token(Path(state_path).parent),
-            )
-            or approval_url
-        )
-    except (OSError, TypeError, ValueError):
-        browser_url = approval_url
+    browser_url = authenticated_approval_review_url(approval_url, guard_home=Path(state_path).parent)
+    if browser_url is None:
+        print(_SIGNED_APPROVAL_LINK_UNAVAILABLE, file=sys.stderr, flush=True)
+        return
+    print(f"HOL Guard is waiting for approval in your browser: {browser_url}", file=sys.stderr, flush=True)
     try:
         open_browser_url(browser_url)
     except (OSError, ValueError):

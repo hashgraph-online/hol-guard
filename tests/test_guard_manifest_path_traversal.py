@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.manifest_dependency_targets import unsynced_manifest_dependency_targets
 from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
@@ -15,6 +17,8 @@ from codex_plugin_scanner.guard.runtime.workspace_path_guard import (
     resolve_path_within_workspace,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
 
 
 def test_resolve_path_within_workspace_rejects_parent_traversal(tmp_path: Path) -> None:
@@ -40,7 +44,7 @@ def test_resolve_path_within_workspace_rejects_symlink_escape(tmp_path: Path) ->
     assert read_text_within_workspace(workspace, "requirements.txt") is None
 
 
-def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path) -> None:
+def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path, package_intent_native: Path) -> None:
     workspace = tmp_path / "workspace"
     outside = tmp_path / "outside"
     workspace.mkdir()

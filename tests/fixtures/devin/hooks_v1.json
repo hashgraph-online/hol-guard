@@ -1,0 +1,17 @@
+{
+  "PostToolUse": [
+    {
+      "matcher": "edit",
+      "hooks": [
+        {"type": "command", "command": "echo post-edit", "timeout": 15}
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {"type": "command", "command": "echo stop"}
+      ]
+    }
+  ]
+}

@@ -24,6 +24,8 @@ from tests.guard_python_phase12_support import (
 from tests.test_guard_js_supply_chain_phase11 import WORKSPACE_ID, _artifact_from_command, _bundle_response, _write_text
 from tests.test_guard_supply_chain_bundle import _bundle_dict, _generate_key_pair, _sign_bundle_response
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def test_install_lifecycle_script_risk_blocks_local_package(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"

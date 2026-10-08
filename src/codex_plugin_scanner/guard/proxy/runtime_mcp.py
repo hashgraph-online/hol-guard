@@ -7,18 +7,17 @@ import json
 import os
 import queue
 import shlex
-import subprocess
 import sys
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections import deque
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import partial
-from hashlib import sha256
 from pathlib import Path
 from typing import IO, Any, Literal, TextIO, cast
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from uuid import uuid4
 
 from ..action_lattice import (
     GuardActionNormalization,
@@ -29,6 +28,7 @@ from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..approvals import approval_prompt_flow, build_approval_browser_url, first_approval_url, queue_blocked_approvals
+from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
@@ -40,8 +40,10 @@ from ..local_supply_chain import (
     _resolve_stored_package_policy_override,
     _verified_external_archive_replacements,
     compose_current_package_policy_action,
+    evaluate_package_request_artifact,
     package_request_policy_hash,
 )
+from ..mcp_fresh_approval import fresh_claim_allows_reapproval
 from ..mcp_tool_calls import (
     ApprovalReuseClaimDisposition,
     ToolCallDecision,
@@ -56,6 +58,12 @@ from ..mcp_tool_calls import (
     tool_call_risk_summary,
 )
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..native_execution import (
+    mcp_stdio_session_close_native,
+    mcp_stdio_session_open_native,
+    mcp_stdio_session_recv_native,
+    mcp_stdio_session_send_native,
+)
 from ..package_execution_context import build_package_execution_context
 from ..policy.engine import build_decision_v2
 from ..runtime.approval_context import (
@@ -66,12 +74,12 @@ from ..runtime.approval_context import (
 )
 from ..runtime.approval_reuse import APPROVAL_REUSE_CLAIM_FAILED
 from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
+from ..runtime.composio_contract import composio_requires_action_review
 from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_execution_policy import is_execution_permitted
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
-from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _tool_decision_scanner_evidence
@@ -82,7 +90,6 @@ from .stdio import (
     _is_timeout_response,
     _quarantine_process,
     _readline_with_timeout,
-    _redact_json,
     _timeout_response,
 )
 
@@ -326,47 +333,19 @@ def _postclaim_tool_action(decision: ToolCallDecision) -> GuardAction:
     )
 
 
-_SECRET_ARGUMENT_KEY_FRAGMENTS = (
-    "apikey",
-    "authorization",
-    "cookie",
-    "credential",
-    "password",
-    "secret",
-    "token",
-)
-
-
-def _secret_shaped_argument_key(key: object) -> bool:
-    normalized = "".join(character for character in str(key).casefold() if character.isalnum())
-    return any(fragment in normalized for fragment in _SECRET_ARGUMENT_KEY_FRAGMENTS)
-
-
-def _redact_mcp_scalar(value: str) -> str:
-    parsed = urlsplit(value)
-    if parsed.scheme and parsed.netloc and parsed.query:
-        query = [
-            (key, "*****" if _secret_shaped_argument_key(key) else item)
-            for key, item in parse_qsl(parsed.query, keep_blank_values=True)
-        ]
-        value = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment))
-    redacted = _redact_json(value)
-    return redacted if isinstance(redacted, str) else "*****"
-
-
 def _safe_mcp_arguments(value: object) -> object:
-    """Project MCP arguments into a display/persistence-safe representation."""
+    """Project MCP arguments into a display/persistence-safe representation.
 
-    if isinstance(value, Mapping):
-        return {
-            str(key): "*****" if _secret_shaped_argument_key(key) else _safe_mcp_arguments(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, list | tuple):
-        return [_safe_mcp_arguments(item) for item in value]
-    if isinstance(value, str):
-        return _redact_mcp_scalar(value)
-    return value
+    Native authority only: the resident `mcp_arguments_projection` op owns the
+    secret-shaped-key masking, URL query redaction, and scalar fragment tables.
+    `None` means no `arguments` key — preserved so absent and null digest alike.
+    Native failure is terminal; the silent-Python-redaction fallback was an
+    accountability leak (secrets could persist unredacted).
+    """
+    from ..native_context import context_mcp_arguments_projection
+
+    safe_arguments, _launch, _digest = context_mcp_arguments_projection("", value)
+    return safe_arguments
 
 
 def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
@@ -374,11 +353,11 @@ def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
 
 
 def _mcp_arguments_digest(arguments: object) -> str:
-    try:
-        serialized = json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
-    except (TypeError, ValueError):
-        serialized = repr(arguments)
-    return sha256(serialized.encode("utf-8")).hexdigest()
+    """sha256 over the canonical JSON encoding of the RAW arguments."""
+    from ..native_context import context_mcp_arguments_projection
+
+    _safe, _launch, digest = context_mcp_arguments_projection("", arguments)
+    return digest
 
 
 def _browser_intent_payload(
@@ -436,17 +415,148 @@ class _ChildOutputFrame:
     error: BaseException | None = None
 
 
-def _canonical_tool_catalog_entry(name: str, definition: Mapping[str, object]) -> dict[str, object]:
-    """Normalize internal aliases while retaining every advertised field."""
+class _NativeMcpChildIo:
+    """Child-side transport over the native MCP stdio session ops (RTM-022/023).
 
-    canonical = {str(key): deepcopy(value) for key, value in definition.items() if str(key) != "name"}
-    if "input_schema" in canonical:
-        canonical.setdefault("inputSchema", canonical["input_schema"])
-        canonical.pop("input_schema", None)
-    if "output_schema" in canonical:
-        canonical.setdefault("outputSchema", canonical["output_schema"])
-        canonical.pop("output_schema", None)
-    return {"name": name, **canonical}
+    Quacks like the pipe pair ``_forward_message``/``_drain_child_messages``
+    use: ``write``/``flush`` frame a client→child message via ``send``;
+    ``next_frame`` surfaces the next inbound child event via ``recv``. The
+    resident owns the subprocess, newline framing, correlation, and teardown;
+    this adapter only marshals frames. Returned ``line`` values are re-parsed
+    by the relay so the existing catalog-poison/quarantine gate is preserved.
+    """
+
+    def __init__(self, session_id: str, guard_home: Path) -> None:
+        self._session_id = session_id
+        self._guard_home = guard_home
+        self._pending: deque[str] = deque()
+        self.exit_code: int | None = None
+
+    # stdin side ------------------------------------------------------------
+    def write(self, data: str) -> int:
+        """Accept a ``json.dumps(message) + "\\n"`` write like a text pipe."""
+        text = data.rstrip("\n")
+        try:
+            message = json.loads(text)
+        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+            raise RuntimeError("native MCP session received a non-JSON frame") from exc
+        result = mcp_stdio_session_send_native(self._session_id, message, guard_home=self._guard_home)
+        if result is None or result.get("status") != "sent":
+            raise RuntimeError("native MCP session send failed")
+        return len(data)
+
+    def flush(self) -> None:  # resident op is already synchronous/flushed
+        return None
+
+    def writelines(self, lines: Iterable[str]) -> None:
+        for line in lines:
+            self.write(line)
+
+    def close(self) -> None:
+        mcp_stdio_session_close_native(self._session_id, guard_home=self._guard_home)
+
+    # stdout side -----------------------------------------------------------
+    def next_frame(self, timeout_seconds: float, required: bool) -> _ChildOutputFrame | None:
+        # Test/injection seam: locally-queued frames are delivered before the
+        # resident so callers can synthesize inbound child events (e.g.
+        # `tools/list_changed`) without a native inject op.
+        if self._pending:
+            return _ChildOutputFrame(line=self._pending.popleft())
+        result = mcp_stdio_session_recv_native(
+            self._session_id,
+            guard_home=self._guard_home,
+            timeout_seconds=timeout_seconds,
+        )
+        if result is None:
+            return _ChildOutputFrame(error=RuntimeError("native MCP session recv transport failure"))
+        status = str(result.get("status", ""))
+        if status == "event":
+            payload = result.get("payload")
+            return _ChildOutputFrame(line=json.dumps(payload) + "\n")
+        if status in {"exited", "eof"}:
+            code = result.get("exit_code")
+            if isinstance(code, int) and not isinstance(code, bool):
+                self.exit_code = code
+            return _ChildOutputFrame()
+        if status == "timeout":
+            if required:
+                return _ChildOutputFrame(
+                    error=ProxyIoTimeoutError(source="child_response", timeout_seconds=timeout_seconds)
+                )
+            return None
+        # "error" status — surface as a frame error so the relay fails closed.
+        code = result.get("payload")
+        return _ChildOutputFrame(error=RuntimeError(f"native MCP session error: {code}"))
+
+    def readline(self) -> str:  # pragma: no cover - compatibility sink
+        return ""
+
+
+class _NativeChildProcess:
+    """Popen-shaped adapter over a resident-owned MCP stdio session.
+
+    ``serve``/``run_session`` only touch ``stdin``/``stdout``/teardown; the
+    resident owns the real subprocess, so ``stdin``/``stdout`` share one
+    ``_NativeMcpChildIo`` transport and lifecycle calls delegate to ``close``.
+    ``returncode`` is available after the resident reports child exit; clean
+    close returns ``0`` and quarantine/cancel returns ``-9``.
+    """
+
+    def __init__(self, session_id: str, guard_home: Path) -> None:
+        self._session_id = session_id
+        self._guard_home = guard_home
+        io = _NativeMcpChildIo(session_id, guard_home)
+        self.stdin: _NativeMcpChildIo = io
+        self.stdout: _NativeMcpChildIo = io
+        self.stderr = None
+        self._closed = False
+        self._cancelled = False
+        self._returncode: int | None = None
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        mcp_stdio_session_close_native(self._session_id, guard_home=self._guard_home)
+
+    def terminate(self) -> None:
+        self.close()
+
+    def kill(self) -> None:
+        self._cancelled = True
+        self.close()
+
+    def poll(self) -> int | None:
+        if self._returncode is not None:
+            return self._returncode
+        if self.stdin.exit_code is not None:
+            self._returncode = self.stdin.exit_code
+            return self._returncode
+        if self._cancelled:
+            return -9
+        if self._closed:
+            return 0
+        result = mcp_stdio_session_recv_native(
+            self._session_id,
+            guard_home=self._guard_home,
+            timeout_seconds=1.0,
+            poll_only=True,
+        )
+        if result is not None and result.get("status") == "exited":
+            exit_code = result.get("exit_code")
+            self._returncode = exit_code if isinstance(exit_code, int) and not isinstance(exit_code, bool) else -1
+        return self._returncode
+
+    def wait(self, timeout: float | None = None) -> int:
+        self.close()
+        returncode = self.returncode
+        if returncode is None:
+            raise RuntimeError("Native MCP session closed without an exit status.")
+        return returncode
+
+    @property
+    def returncode(self) -> int | None:
+        return self.poll()
 
 
 def _tool_catalog_fingerprint(
@@ -454,21 +564,19 @@ def _tool_catalog_fingerprint(
     *,
     state: _ToolCatalogState = "complete",
 ) -> str:
-    """Hash catalog lifecycle state plus the complete canonical tool surface."""
+    """Hash catalog lifecycle state plus the complete canonical tool surface.
 
-    canonical_tools = [_canonical_tool_catalog_entry(name, catalog[name]) for name in sorted(catalog)]
-    serialized = json.dumps(
-        {
-            "state": state,
-            "tools": canonical_tools,
-            "version": "mcp-advertised-tool-catalog-v2",
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    )
-    return sha256(serialized.encode("utf-8")).hexdigest()
+    Canonicalization and hashing are native authority; this delegates. The
+    native validator returns `None` when the canonical document can't be
+    serialized — Python's `json.dumps(..., allow_nan=False)` raised
+    `ValueError` on the same condition, so this raises too.
+    """
+    from ..native_context import context_mcp_tool_catalog_fingerprint
+
+    fingerprint, _ = context_mcp_tool_catalog_fingerprint(catalog, state=state)
+    if fingerprint is None:
+        raise ValueError("mcp_tool_catalog_fingerprint_unserializable")
+    return fingerprint
 
 
 def _enforcement_action(
@@ -523,6 +631,19 @@ def _configured_server_launch_environment(configured_keys: Sequence[str]) -> dic
     return _build_scrubbed_env(configured_values)
 
 
+def _ensure_native_launch_resident_verifier(store: GuardStore) -> None:
+    """Provision the resident verifier key before any native launch RPC.
+
+    See `native_policy_snapshot_publisher.ensure_native_launch_resident_verifier`
+    — the same prerequisite is shared with the stdio proxy, which opens native
+    resident sessions through a different entrypoint.
+    """
+
+    from ..native_policy_snapshot_publisher import ensure_native_launch_resident_verifier
+
+    ensure_native_launch_resident_verifier(store)
+
+
 @dataclass(frozen=True, slots=True)
 class _PackagePolicyResolution:
     base_evaluation: Any
@@ -572,6 +693,9 @@ class RuntimeMcpGuardProxy:
         self.command = command
         self.context = context
         self.store = store
+        from ..native_context import bind_context_digest_home
+
+        bind_context_digest_home(context.guard_home)
         self.config = config
         self.source_scope = source_scope
         self.config_path = config_path
@@ -579,6 +703,7 @@ class RuntimeMcpGuardProxy:
         self.server_id = server_id
         self._current_config_provider = current_config_provider
         self.server_env_keys = tuple(dict.fromkeys(key.strip() for key in server_env_keys if key.strip()))
+        _ensure_native_launch_resident_verifier(self.store)
         initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
         self.server_identity = server_identity or build_mcp_server_identity(
             config_path=self.config_path,
@@ -593,7 +718,7 @@ class RuntimeMcpGuardProxy:
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
         self._buffered_client_responses: dict[str, list[dict[str, Any]]] = {}
         self._child_output_queue: queue.Queue[_ChildOutputFrame] | None = None
-        self._active_child_stdout: IO[str] | None = None
+        self._active_child_stdout: IO[str] | _NativeMcpChildIo | None = None
         self._tools_call_boundary_lock = threading.RLock()
         self._tool_catalog_state: _ToolCatalogState = "unobserved"
         self._tool_catalog: dict[str, dict[str, object]] = {}
@@ -602,7 +727,7 @@ class RuntimeMcpGuardProxy:
         self._tool_catalog_inflight = False
         self._tool_catalog_inflight_cursor: str | None = None
         self._tool_catalog_generation = 0
-        self._active_process: subprocess.Popen[str] | None = None
+        self._active_process: _NativeChildProcess | None = None
         self._active_runtime_launch_identity: dict[str, object] | None = None
         self._active_executable_identity: dict[str, object] | None = None
         self._active_server_env_values_hash: str | None = None
@@ -755,7 +880,7 @@ class RuntimeMcpGuardProxy:
         self._child_output_queue = None
         self._active_child_stdout = None
 
-    def _activate_child_output_pump(self, child_stdout: IO[str]) -> None:
+    def _activate_child_output_pump(self, child_stdout: IO[str] | _NativeMcpChildIo) -> None:
         output_queue: queue.Queue[_ChildOutputFrame] = queue.Queue()
         self._child_output_queue = output_queue
         self._active_child_stdout = child_stdout
@@ -777,10 +902,12 @@ class RuntimeMcpGuardProxy:
             daemon=True,
         ).start()
 
-    def _start_process(self) -> subprocess.Popen[str]:
-        # A catalog belongs to one concrete server process. A replacement
-        # process must explicitly advertise a complete root-to-terminal list
-        # before any saved allow can be reused against it.
+    def _prepare_launch(self) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+        """Compute launch identity/env shared by the Popen and native paths.
+
+        Populates ``self._active_*`` identity fields; callers clear them on
+        failure. Native resident must be reachable — these calls raise.
+        """
         self._reset_child_process_state()
         launch_env = _configured_server_launch_environment(self.server_env_keys)
         child_env = dict(launch_env)
@@ -812,36 +939,63 @@ class RuntimeMcpGuardProxy:
             env=configured_env,
             env_keys=self.server_env_keys,
         )
-        process: subprocess.Popen[str] | None = None
+        return launch_env, child_env, configured_env
+
+    def _clear_launch_identity(self) -> None:
+        self._active_executable_identity = None
+        self._active_runtime_launch_identity = None
+        self._active_server_env_values_hash = None
+        self._active_server_identity = None
+
+    def _start_process(self) -> _NativeChildProcess:
+        """Launch only through the resident that owns the migrated data plane."""
+        native_session_id: str | None = None
         try:
-            process = subprocess.Popen(
-                self.command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=None,
-                text=True,
-                cwd=self.context.workspace_dir,
-                env=child_env,
-                executable=resolved_runtime_launch_executable(self._active_runtime_launch_identity),
+            launch_env, child_env, _configured_env = self._prepare_launch()
+            identity = self._active_runtime_launch_identity
+            if identity is None:
+                raise RuntimeError("Guard runtime MCP server executable could not be verified.")
+            executable = resolved_runtime_launch_executable(identity)
+            if not isinstance(executable, str) or not executable:
+                raise RuntimeError("Guard runtime MCP server executable could not be verified.")
+            argv = [executable, *self.command[1:]]
+            native_session_id = f"mcp-{self.harness}-{self.server_name}-{os.getpid()}-{uuid4().hex[:8]}"
+            opened = mcp_stdio_session_open_native(
+                argv,
+                session_id=native_session_id,
+                home_dir=Path(child_env["HOME"]) if child_env.get("HOME") else None,
+                cwd=self.context.workspace_dir or Path.cwd(),
+                extra_env=child_env,
+                guard_home=self.context.guard_home,
             )
+            if opened is None:
+                # An ambiguous transport result can follow a successful spawn.
+                # Keep the id for cleanup; never create a second Python child.
+                raise RuntimeError("Native MCP session authority is unavailable.")
+            if opened.get("status") != "opened":
+                raise RuntimeError(f"native MCP session open failed: {opened.get('payload')}")
             if not self._verify_post_spawn_launch_identity(launch_env=launch_env):
                 raise RuntimeError(
                     "Guard runtime MCP server launch identity changed while the child process was starting."
                 )
-            if process.stdout is not None:
-                self._activate_child_output_pump(process.stdout)
-            return process
+            # This queue injects already-decoded notifications into the relay;
+            # it is not a Python child-process transport or output reader.
+            self._child_output_queue = queue.Queue()
+            return _NativeChildProcess(native_session_id, self.context.guard_home)
         except BaseException:
-            if process is not None:
-                _quarantine_process(process)
-            self._active_executable_identity = None
-            self._active_runtime_launch_identity = None
-            self._active_server_env_values_hash = None
-            self._active_server_identity = None
+            try:
+                if native_session_id is not None:
+                    mcp_stdio_session_close_native(native_session_id, guard_home=self.context.guard_home)
+            except Exception:
+                # Preserve the original launch failure even if cleanup's
+                # transport is unavailable. Never retry through Python.
+                pass
+            finally:
+                self._clear_launch_identity()
             raise
 
     def _verify_post_spawn_launch_identity(self, *, launch_env: Mapping[str, str]) -> bool:
-        """Re-hash launch inputs after ``Popen`` and reject a spawn-time swap."""
+        """Re-hash launch inputs after native spawn and reject a spawn-time swap."""
 
         expected = self._active_runtime_launch_identity
         if expected is None:
@@ -1007,6 +1161,13 @@ class RuntimeMcpGuardProxy:
         tool_definition = self._tool_catalog.get(tool_name, {})
         tool_description_value = tool_definition.get("description")
         tool_schema = tool_definition.get("inputSchema", tool_definition.get("input_schema"))
+        # The native canonical catalog page retains `name` inside each entry.
+        # Strip it before building the public artifact so the name-matched
+        # `mcp_tool_authority_hash` is not written into hash-affecting
+        # `metadata`; the full definition is bound via
+        # `runtime_private_metadata` below without changing the exact
+        # saved-block artifact hash.
+        public_tool_definition = {key: value for key, value in tool_definition.items() if key != "name"}
         catalog_generation = self._tool_catalog_generation
         catalog_state = self._tool_catalog_state
         catalog_fingerprint = _tool_catalog_fingerprint(
@@ -1032,7 +1193,24 @@ class RuntimeMcpGuardProxy:
             server_identity=self._session_server_identity(),
             tool_schema=tool_schema,
             tool_description=tool_description_value if isinstance(tool_description_value, str) else None,
+            tool_definition=public_tool_definition,
+            provider_catalog_hash=(
+                self.store.read_mcp_provider_authority_hash() if composio_requires_action_review(tool_name) else None
+            ),
         )
+        if tool_name in self._tool_catalog:
+            from ..store_mcp_catalog import tool_definition_authority_hash
+
+            # Catalog entries omit their name because it is the map key. Bind
+            # the full definition for local grants without changing the
+            # artifact hash used by existing exact saved blocks.
+            artifact = replace(
+                artifact,
+                runtime_private_metadata={
+                    **artifact.runtime_private_metadata,
+                    "mcp_tool_authority_hash": tool_definition_authority_hash({"name": tool_name, **tool_definition}),
+                },
+            )
         artifact_hash = build_tool_call_hash(
             artifact,
             arguments,
@@ -1062,8 +1240,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         approval_callback: Any | None,
@@ -1153,8 +1331,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         approval_callback: Any | None,
@@ -1330,7 +1508,7 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
                 )
                 return response, package_event
-            if self._allow_after_native_prompt(decision):
+            if asks_for_approval(self.config) and self._allow_after_native_prompt(decision):
                 response, package_event = self._handle_package_request(
                     message=message,
                     child_stdin=child_stdin,
@@ -1350,7 +1528,7 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
                 )
                 return response, package_event
-            if self._inline_prompt_available and approval_callback is not None:
+            if asks_for_approval(self.config) and self._inline_prompt_available and approval_callback is not None:
                 approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
                 if _approval_allows(approval_result):
                     try:
@@ -1362,7 +1540,7 @@ class RuntimeMcpGuardProxy:
                             now=_now(),
                             signals=decision.signals,
                             risk_categories=decision.risk_categories,
-                            remember=True,
+                            remember=not composio_requires_action_review(tool_name),
                             arguments=_safe_mcp_arguments(arguments),
                             additional_scanner_evidence=decision_scanner_evidence,
                             emit_runtime_evidence=False,
@@ -1395,7 +1573,7 @@ class RuntimeMcpGuardProxy:
                         expected_catalog_generation=authority.catalog_generation,
                         expected_catalog_state=authority.catalog_state,
                         expected_catalog_fingerprint=authority.catalog_fingerprint,
-                        remember_allow=True,
+                        remember_allow=not composio_requires_action_review(tool_name),
                         remember_decision_source="inline-approved",
                         remember_signals=decision.signals,
                         remember_risk_categories=decision.risk_categories,
@@ -1462,7 +1640,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_state=authority.catalog_state,
                 expected_catalog_fingerprint=authority.catalog_fingerprint,
             )
-        if self._allow_after_native_prompt(decision):
+        if asks_for_approval(self.config) and self._allow_after_native_prompt(decision):
             return self._allow_and_forward(
                 message=message,
                 child_stdin=child_stdin,
@@ -1481,7 +1659,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_state=authority.catalog_state,
                 expected_catalog_fingerprint=authority.catalog_fingerprint,
             )
-        if self._inline_prompt_available and approval_callback is not None:
+        if asks_for_approval(self.config) and self._inline_prompt_available and approval_callback is not None:
             approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
             if _approval_allows(approval_result):
                 return self._allow_and_forward(
@@ -1496,7 +1674,7 @@ class RuntimeMcpGuardProxy:
                     signals=decision.signals,
                     risk_categories=decision.risk_categories,
                     params=params,
-                    remember=True,
+                    remember=not composio_requires_action_review(tool_name),
                     scanner_evidence=decision_scanner_evidence,
                     policy_action="allow",
                     expected_catalog_generation=authority.catalog_generation,
@@ -1600,6 +1778,7 @@ class RuntimeMcpGuardProxy:
             arguments,
             action_envelope_command=_command_argument(arguments),
             workspace=self.context.workspace_dir,
+            guard_home=self.context.guard_home,
         )
         if intent is None:
             return None
@@ -1680,8 +1859,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         tool_name: str,
@@ -2272,8 +2451,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         artifact: Any,
@@ -2408,9 +2587,33 @@ class RuntimeMcpGuardProxy:
         policy_action: GuardAction,
         scanner_evidence: tuple[dict[str, object], ...],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        approval_center_url = ensure_guard_daemon(self.context.guard_home)
         decision_v2_payload = self._package_decision_v2(package_evaluation, policy_action)
         risk_signals = tuple(str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons)
+        if not asks_for_approval(self.config):
+            response, event = self._queue_approval_center_response(
+                message_id=message_id,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                tool_name=tool_name,
+                params=params,
+                signals=(package_evaluation.risk_summary, *risk_signals),
+                scanner_evidence=scanner_evidence,
+                policy_action=policy_action,
+            )
+            evaluation_payload = deepcopy(package_evaluation.to_dict())
+            evaluation_payload["decision"] = "block"
+            evaluation_payload["policy_action"] = "block"
+            user_copy = evaluation_payload.setdefault("user_copy", {})
+            user_copy.update(
+                title="Package request blocked",
+                summary=package_evaluation.risk_summary,
+                dashboard_url=None,
+                next_step=response["error"]["message"],
+                harness_message=response["error"]["message"],
+            )
+            response["error"]["data"]["supplyChainEvaluation"] = evaluation_payload
+            return response, event
+        approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
             redaction_level=self.config.receipt_redaction_level,
             detection=HarnessDetection(
@@ -2719,8 +2922,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         artifact: Any,
@@ -2871,7 +3074,16 @@ class RuntimeMcpGuardProxy:
                 )
             if (
                 not context_matches
-                or fresh_action == "require-reapproval"
+                or (
+                    fresh_action == "require-reapproval"
+                    and not fresh_claim_allows_reapproval(
+                        claim_disposition=claim_disposition,
+                        reason_code=fresh_decision.approval_reuse_reason_code,
+                        decision=pending,
+                        artifact=fresh_authority.artifact,
+                        artifact_hash=fresh_authority.artifact_hash,
+                    )
+                )
                 or (fresh_action == "review" and not claim_authorizes_review)
             ):
                 return self._queue_approval_center_response(
@@ -2964,17 +3176,28 @@ class RuntimeMcpGuardProxy:
         return response, event
 
     @staticmethod
-    def _forward_notification(message: dict[str, Any], child_stdin: IO[str]) -> None:
+    def _forward_notification(message: dict[str, Any], child_stdin: IO[str] | _NativeMcpChildIo) -> None:
         child_stdin.write(json.dumps(message) + "\n")
         child_stdin.flush()
 
     def _next_child_output_frame(
         self,
-        child_stdout: IO[str],
+        child_stdout: IO[str] | _NativeMcpChildIo,
         *,
         timeout_seconds: float,
         required: bool,
     ) -> _ChildOutputFrame | None:
+        if isinstance(child_stdout, _NativeMcpChildIo):
+            # Drain the resident-path injection buffer first so synthesized
+            # frames (post-claim notifications in tests) are observed before
+            # the next real child frame.
+            injected = self._child_output_queue
+            if injected is not None:
+                try:
+                    return injected.get_nowait()
+                except queue.Empty:
+                    pass
+            return child_stdout.next_frame(timeout_seconds, required)
         output_queue = self._child_output_queue if child_stdout is self._active_child_stdout else None
         if output_queue is not None:
             try:
@@ -3020,8 +3243,8 @@ class RuntimeMcpGuardProxy:
         self,
         payload: dict[str, Any],
         *,
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
     ) -> None:
@@ -3047,8 +3270,8 @@ class RuntimeMcpGuardProxy:
     def _drain_child_messages(
         self,
         *,
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         quiet_seconds: float = 0.0,
@@ -3100,8 +3323,8 @@ class RuntimeMcpGuardProxy:
     def _drain_and_validate_catalog_authority(
         self,
         *,
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         generation: int,
@@ -3125,8 +3348,8 @@ class RuntimeMcpGuardProxy:
     def _forward_message(
         self,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         *,
         client_input: TextIO | None,
         server_output: TextIO | None,
@@ -3176,6 +3399,20 @@ class RuntimeMcpGuardProxy:
                     message="Guard runtime MCP proxy timed out waiting for the MCP server.",
                 )
             assert frame is not None
+            # The native stdio session returns a timeout as a frame ``error``
+            # rather than raising. Mirror the ``except ProxyIoTimeoutError``
+            # branch above so both transports yield the same
+            # ``_timeout_response`` and quarantine the child.
+            if isinstance(frame.error, ProxyIoTimeoutError):
+                active_process = self._active_process
+                if active_process is not None:
+                    _quarantine_process(active_process)
+                return _timeout_response(
+                    request_id,
+                    source="child_response",
+                    timeout_seconds=timeout_seconds,
+                    message="Guard runtime MCP proxy timed out waiting for the MCP server.",
+                )
             line = self._child_output_line(frame)
             payload = json.loads(line)
             if not isinstance(payload, dict):
@@ -3230,8 +3467,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         payload: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
     ) -> None:
@@ -3300,8 +3537,8 @@ class RuntimeMcpGuardProxy:
         *,
         input_stream: TextIO,
         output_stream: TextIO,
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
     ) -> dict[str, Any]:
         request_id = request.get("id")
         output_stream.write(json.dumps(request) + "\n")
@@ -3407,6 +3644,61 @@ class RuntimeMcpGuardProxy:
         scanner_evidence: tuple[dict[str, object], ...] = (),
         policy_action: GuardAction = "require-reapproval",
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        if not asks_for_approval(self.config):
+            block_tool_call(
+                store=self.store,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                decision_source="policy-safe-alternative",
+                now=_now(),
+                signals=signals,
+                risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
+                arguments=_safe_mcp_arguments(params.get("arguments")),
+                additional_scanner_evidence=scanner_evidence,
+                policy_action=policy_action,
+            )
+            from ..approvals import record_unprompted_review
+
+            record_unprompted_review(
+                detection=HarnessDetection(
+                    harness=self.harness,
+                    installed=True,
+                    command_available=True,
+                    config_paths=(self.config_path,),
+                    artifacts=(artifact,),
+                ),
+                evaluation={
+                    "artifacts": [
+                        self._build_artifact_payload(
+                            artifact,
+                            artifact_hash,
+                            tool_name,
+                            params,
+                            signals,
+                            policy_action=policy_action,
+                            scanner_evidence=scanner_evidence,
+                        )
+                    ]
+                },
+                store=self.store,
+                redaction_level=self.config.receipt_redaction_level,
+            )
+            return _blocked_tool_response(
+                message_id,
+                tool_name,
+                safe_alternative_reason(
+                    f"HOL Guard blocked tool call {tool_name} from {self.server_name}. " + " ".join(signals)
+                ),
+                {"approvalRequests": [], "guardPolicyAction": "block", "transportOutcome": "not-forwarded"},
+            ), {
+                "method": "tools/call",
+                "tool_name": tool_name,
+                "decision": "safe-alternative",
+                "policy_action": policy_action,
+                "approval_requests": [],
+                "prompted": False,
+                "redacted_params": _safe_mcp_params(params),
+            }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
             redaction_level=self.config.receipt_redaction_level,
@@ -3600,29 +3892,25 @@ class RuntimeMcpGuardProxy:
 
     @staticmethod
     def _normalized_tools_catalog_page(tools: object) -> dict[str, dict[str, object]] | None:
+        """Normalize the raw `tools` list into a name→entry page, or `None`.
+
+        Canonicalization authority is native; this delegates. The `tools` list
+        is reshaped into `(name, definition)` pairs so duplicate names remain
+        distinguishable to the native validator.
+        """
         if not isinstance(tools, list):
             return None
-        page: dict[str, dict[str, object]] = {}
+        entries: list[tuple[str, Mapping[str, object]]] = []
         for item in tools:
             if not isinstance(item, dict) or any(not isinstance(key, str) for key in item):
                 return None
             raw_name = item.get("name")
-            if not isinstance(raw_name, str) or not raw_name or raw_name != raw_name.strip():
+            if not isinstance(raw_name, str):
                 return None
-            if raw_name in page:
-                return None
-            entry = {key: deepcopy(value) for key, value in item.items() if key != "name"}
-            try:
-                json.dumps(
-                    _canonical_tool_catalog_entry(raw_name, entry),
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    ensure_ascii=False,
-                    allow_nan=False,
-                )
-            except (TypeError, ValueError):
-                return None
-            page[raw_name] = entry
+            entries.append((raw_name, item))
+        from ..native_context import context_mcp_tool_catalog_fingerprint
+
+        _, page = context_mcp_tool_catalog_fingerprint(entries, state="complete")
         return page
 
     def _capture_tools_catalog(
@@ -3687,12 +3975,10 @@ class RuntimeMcpGuardProxy:
 
     @staticmethod
     def _launch_target(tool_name: str, arguments: object) -> str:
-        safe_arguments = _safe_mcp_arguments(arguments)
-        serialized_arguments = (
-            json.dumps(safe_arguments, sort_keys=True, separators=(",", ":")) if arguments is not None else ""
-        )
-        digest = _mcp_arguments_digest(arguments)
-        return f"{tool_name} {serialized_arguments} [arguments-sha256:{digest}]".strip()
+        from ..native_context import context_mcp_arguments_projection
+
+        _safe, launch_target, _digest = context_mcp_arguments_projection(tool_name, arguments)
+        return launch_target
 
 
 class ElicitationMcpGuardProxy(RuntimeMcpGuardProxy):

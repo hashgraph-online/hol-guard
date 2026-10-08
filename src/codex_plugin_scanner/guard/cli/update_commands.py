@@ -30,12 +30,6 @@ from ... import version as package_version
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from ..adapters.cursor_hooks import cursor_native_hook_state
-from ..adapters.opencode_pretool import (
-    global_plugin_path,
-    install_pretool_plugin,
-    managed_plugin_path,
-    pretool_plugin_source,
-)
 from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
 from ..adapters.pi_extension_source import managed_extension_source
 from ..adapters.pi_support import json_payload
@@ -49,6 +43,13 @@ from ..daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
+from ..native_resident_client import retire_native_resident_for_update
+from ..native_resident_update_lock import (
+    NativeResidentUpdateLock,
+    NativeResidentUpdateLockError,
+    hold_native_resident_update_lock,
+)
+from ..native_runtime import _bundled_runtime_candidate, _isolated_environment
 from ..redaction import redact_sensitive_text
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import AuthorityHealth
@@ -70,6 +71,7 @@ from .update_desktop_apply import (
 from .update_desktop_core import is_desktop_managed_runtime
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
+from .update_opencode import _refresh_opencode_pretool_plugin
 from .update_release_candidates import newest_pypi_version
 from .update_subprocess import (
     InstalledDistribution,
@@ -79,6 +81,26 @@ from .update_subprocess import (
 )
 
 _TRUSTED_UPDATE_FAILURE_MESSAGES = {
+    "update_native_resident_lock_failed": (
+        "HOL Guard could not establish its native resident update barrier. "
+        "The current installation remains active; retry the update when it is idle."
+    ),
+    "update_native_resident_lock_busy": (
+        "HOL Guard could not establish its native resident update barrier because another "
+        "native request is still active. Retry the update when it is idle."
+    ),
+    "update_native_resident_lock_finalize_failed": (
+        "HOL Guard updated its package but could not verify the new native runtime. "
+        "Retry the update to finish the installation."
+    ),
+    "update_native_resident_lock_release_failed": (
+        "HOL Guard updated its package but could not release its native resident update barrier. "
+        "Restart the updater before retrying."
+    ),
+    "update_native_resident_retirement_failed": (
+        "HOL Guard could not safely stop its native resident before updating. "
+        "The current installation remains active; retry the update when it is idle."
+    ),
     "update_install_inconsistent": (
         "HOL Guard updated its version metadata but not all of its installed files. "
         "Retry the update to finish the installation."
@@ -133,6 +155,7 @@ _PYPI_RESPONSE_LIMIT_BYTES = 8 * 1024 * 1024
 _PYPI_READ_CHUNK_BYTES = 64 * 1024
 _PACKAGE_SHIM_REFRESH_TIMEOUT_SECONDS = 30.0
 _last_pypi_payload: dict[str, object] | None = None
+_last_pypi_stable_version: str | None = None
 _version_network_policy: ContextVar[ManagedNetworkPolicy | None] = ContextVar(
     "guard_update_version_network_policy",
     default=None,
@@ -172,6 +195,22 @@ if before.get("installed_managers"):
 after = package_shim_status(context, path_env=diagnostic_path)
 print(json.dumps({"before": before, "repair": repair, "after": after}))
 """.strip()
+
+
+def _retire_native_resident_before_update(guard_home: Path) -> bool:
+    """Stop shared native state while the installed runtime is still intact."""
+
+    try:
+        return retire_native_resident_for_update(
+            executable=_bundled_runtime_candidate(),
+            guard_home=guard_home,
+            environment=_isolated_environment(),
+        )
+    except Exception:
+        # A failed preflight must leave the current package untouched.
+        return False
+
+
 _DAEMON_REFRESH_TIMEOUT_SECONDS = 75.0
 _DAEMON_REFRESH_CLEANUP_TIMEOUT_SECONDS = 15.0
 _DAEMON_REFRESH_SCRIPT = DAEMON_REFRESH_SCRIPT
@@ -298,6 +337,89 @@ def run_guard_update(
     wheel: str | None = None,
     guard_home: Path | None = None,
     include_alpha: bool = False,
+) -> tuple[dict[str, object], int]:
+    """Run an update while preventing native resident respawn during replacement."""
+
+    if dry_run or _is_desktop_managed_runtime():
+        return _run_guard_update_unlocked(
+            dry_run=dry_run,
+            context=context,
+            store=store,
+            workspace=workspace,
+            now=now,
+            force_pypi_reinstall=force_pypi_reinstall,
+            wheel=wheel,
+            guard_home=guard_home,
+            include_alpha=include_alpha,
+        )
+    if guard_home is not None:
+        resolved_guard_home = guard_home.expanduser().resolve()
+    elif context is not None:
+        resolved_guard_home = context.guard_home.expanduser().resolve()
+    else:
+        resolved_guard_home = resolve_guard_home()
+    try:
+        with hold_native_resident_update_lock(
+            resolved_guard_home,
+            initial_executable=_bundled_runtime_candidate(),
+        ) as resident_update_lock:
+            result = _run_guard_update_unlocked(
+                dry_run=dry_run,
+                context=context,
+                store=store,
+                workspace=workspace,
+                now=now,
+                force_pypi_reinstall=force_pypi_reinstall,
+                wheel=wheel,
+                guard_home=guard_home,
+                include_alpha=include_alpha,
+                resident_update_lock=resident_update_lock,
+            )
+            if resident_update_lock.active:
+                payload, _exit_code = result
+                try:
+                    _ = resident_update_lock.publish_runtime_digest(_bundled_runtime_candidate())
+                except NativeResidentUpdateLockError as error:
+                    if _should_publish_runtime_digest(payload):
+                        payload["status"] = "failed"
+                        payload["changed"] = True
+                        payload["reason_code"] = error.reason_code
+                        payload["message"] = _TRUSTED_UPDATE_FAILURE_MESSAGES.get(
+                            error.reason_code,
+                            "HOL Guard could not safely establish its native resident update barrier.",
+                        )
+                        _exit_code = 1
+                resident_update_lock.release()
+                result = payload, _exit_code
+            return result
+    except NativeResidentUpdateLockError as error:
+        reason_code = error.reason_code
+        payload: dict[str, object] = {
+            "installer": "desktop" if _is_desktop_managed_runtime() else _installer_kind(),
+            "dry_run": dry_run,
+            "status": "failed",
+            "changed": False,
+            "reason_code": reason_code,
+            "message": _TRUSTED_UPDATE_FAILURE_MESSAGES.get(
+                reason_code,
+                "HOL Guard could not safely establish its native resident update barrier.",
+            ),
+        }
+        return payload, 1
+
+
+def _run_guard_update_unlocked(
+    *,
+    dry_run: bool,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    workspace: str | None = None,
+    now: str | None = None,
+    force_pypi_reinstall: bool = False,
+    wheel: str | None = None,
+    guard_home: Path | None = None,
+    include_alpha: bool = False,
+    resident_update_lock: NativeResidentUpdateLock | None = None,
 ) -> tuple[dict[str, object], int]:
     installer = "desktop" if _is_desktop_managed_runtime() else _installer_kind()
     payload: dict[str, object] = {
@@ -623,10 +745,21 @@ def run_guard_update(
     attempted_pipx_recovery = False
     propagation_retries = 0
     installer_execution_started = False
+    native_resident_retirement_attempted = False
     while True:
         try:
             if trusted_wheel is not None:
                 trusted_wheel.revalidate()
+            if not native_resident_retirement_attempted:
+                native_resident_retirement_attempted = True
+                if not _retire_native_resident_before_update(resolved_guard_home):
+                    return finish_update(
+                        _trusted_update_failure(
+                            payload,
+                            UpdateSubprocessError("update_native_resident_retirement_failed"),
+                            trusted_wheel=trusted_wheel,
+                        )
+                    )
             installer_execution_started = True
             result = update_context.run(active_command)
         except UpdateArtifactError as error:
@@ -822,6 +955,29 @@ def run_guard_update(
     notes = _success_notes(payload)
     if notes:
         payload["notes"] = [*_payload_notes(payload), *notes]
+    finalization_exit_code = 0
+    if resident_update_lock is not None and resident_update_lock.active and _should_publish_runtime_digest(payload):
+        # A refreshed daemon may issue native requests immediately. Publish the
+        # installed executable identity before releasing the barrier so a
+        # pre-update client cannot revive the old resident.
+        try:
+            _ = resident_update_lock.publish_runtime_digest(_bundled_runtime_candidate())
+            resident_update_lock.release()
+        except NativeResidentUpdateLockError as error:
+            reason_code = error.reason_code
+            if resident_update_lock.active:
+                try:
+                    resident_update_lock.release()
+                except NativeResidentUpdateLockError as release_error:
+                    reason_code = release_error.reason_code
+            payload["status"] = "failed"
+            payload["reason_code"] = reason_code
+            payload["message"] = _TRUSTED_UPDATE_FAILURE_MESSAGES.get(
+                reason_code,
+                "HOL Guard could not safely establish its native resident update barrier.",
+            )
+            payload["changed"] = True
+            finalization_exit_code = 1
     daemon_refresh: dict[str, object] | None = None
     if context is not None:
         daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
@@ -881,7 +1037,7 @@ def run_guard_update(
                 }
             )
             return finish_update((payload, 1))
-    return finish_update((payload, 0))
+    return finish_update((payload, finalization_exit_code))
 
 
 def _record_verified_local_wheel_receipt(
@@ -1089,6 +1245,12 @@ def _directory_path(path: str | Path) -> Path:
 
 def _output_lines(value: str) -> list[str]:
     return [line.strip() for line in value.splitlines() if line.strip()]
+
+
+def _should_publish_runtime_digest(payload: dict[str, object]) -> bool:
+    """Publish only after a successful installer, including same-version repairs."""
+
+    return payload.get("return_code") == 0 and payload.get("status") in {"current", "stale", "updated"}
 
 
 def _success_status(payload: dict[str, object]) -> str:
@@ -1339,7 +1501,7 @@ def _version_check_payload(
 
 
 def _latest_version_from_pypi() -> str | None:
-    global _last_pypi_payload
+    global _last_pypi_payload, _last_pypi_stable_version
     request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
     deadline = time.monotonic() + _PYPI_TIMEOUT_SECONDS
     try:
@@ -1350,7 +1512,7 @@ def _latest_version_from_pypi() -> str | None:
         ) as response:
             raw_payload = _read_bounded_pypi_response(response, deadline=deadline)
             if len(raw_payload) > _PYPI_RESPONSE_LIMIT_BYTES:
-                return None
+                return _cached_pypi_latest_version()
             payload = json.loads(raw_payload.decode("utf-8"))
     except (
         ManagedNetworkError,
@@ -1361,15 +1523,48 @@ def _latest_version_from_pypi() -> str | None:
         json.JSONDecodeError,
         UnicodeDecodeError,
     ):
-        return None
+        return _cached_pypi_latest_version()
+    version = _stable_version_from_pypi_payload(payload)
+    if newest_pypi_version(payload, include_stable=True, include_alpha=True) is not None:
+        _last_pypi_payload = payload
+    if version is not None:
+        _last_pypi_stable_version = version
+    return version if version is not None else _cached_pypi_latest_version()
+
+
+def _stable_version_from_pypi_payload(payload: object) -> str | None:
+    """Return the newest stable release in a PyPI payload, or ``None``.
+
+    ``info.version`` can name a pre-release when the newest PyPI upload is an
+    alpha, so stable-channel consumers must reject pre-releases there and fall
+    back to scanning the ``releases`` map.
+    """
+
     if not isinstance(payload, dict):
         return None
-    _last_pypi_payload = payload
     info = payload.get("info")
-    if not isinstance(info, dict):
-        return None
-    version = info.get("version")
-    return version if isinstance(version, str) and version.strip() else None
+    if isinstance(info, dict):
+        version = info.get("version")
+        if isinstance(version, str) and version.strip():
+            try:
+                if not Version(version.strip()).is_prerelease:
+                    return version.strip()
+            except InvalidVersion:
+                pass
+    return newest_pypi_version(payload, include_stable=True, include_alpha=False)
+
+
+def _cached_pypi_latest_version() -> str | None:
+    """Return the last observed stable PyPI release when a fresh lookup fails.
+
+    A transient PyPI outage must not flip ``update_available`` back to
+    unavailable between polls; the last good stable version keeps the stable
+    channel as consistent as the alpha channel, which already reads the cached
+    payload. Tracking the version separately means an alpha-only response
+    cannot displace the stable fallback.
+    """
+
+    return _last_pypi_stable_version
 
 
 def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
@@ -2595,41 +2790,6 @@ def _repair_cursor_install(
     if not isinstance(repaired, dict):
         return None, "Could not repair Cursor protection during update: managed install was not recorded"
     return repaired, None
-
-
-def _refresh_opencode_pretool_plugin(
-    *,
-    context: HarnessContext,
-    store: GuardStore,
-) -> str | None:
-    try:
-        managed_install = store.get_managed_install("opencode")
-    except (json.JSONDecodeError, sqlite3.Error):
-        return None
-    if managed_install is None or not bool(managed_install.get("active")):
-        return None
-    try:
-        repair_context, _ = _repair_context_from_managed_install(context, managed_install)
-    except ValueError as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    global_path = global_plugin_path(repair_context)
-    managed_path = managed_plugin_path(repair_context)
-    try:
-        expected_source = pretool_plugin_source(repair_context)
-    except (OSError, RuntimeError) as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    try:
-        global_source = global_path.read_text(encoding="utf-8") if global_path.is_file() else ""
-        managed_source = managed_path.read_text(encoding="utf-8") if managed_path.is_file() else ""
-    except OSError as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    if global_source == expected_source and managed_source == expected_source:
-        return None
-    try:
-        install_pretool_plugin(repair_context)
-    except (OSError, RuntimeError) as error:
-        return f"Could not refresh OpenCode pretool plugin during update: {error}"
-    return "Refreshed the OpenCode pretool plugin during update. Restart OpenCode to load it."
 
 
 def _repair_codex_install(
