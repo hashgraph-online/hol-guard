@@ -1,7 +1,7 @@
-use super::is_orphaned_foreign_resident;
+use super::{retire_orphaned_foreign_resident, shutdown_acknowledged};
 use crate::resident_state::{process_start_marker, runtime_digest, ResidentState};
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 fn test_root(label: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
@@ -16,14 +16,14 @@ fn test_root(label: &str) -> std::path::PathBuf {
     root
 }
 
-fn state(runtime_sha256: &str, owner_process_id: u32, owner_start_marker: &str) -> ResidentState {
+fn state(runtime_sha256: &str) -> ResidentState {
     ResidentState {
         schema: "hol-guard-resident-state.v3".to_owned(),
         generation: 1,
         process_id: u32::MAX,
         process_start_marker: "resident".to_owned(),
-        owner_process_id,
-        owner_process_start_marker: owner_start_marker.to_owned(),
+        owner_process_id: u32::MAX,
+        owner_process_start_marker: "dead".to_owned(),
         runtime_sha256: runtime_sha256.to_owned(),
         transport: "loopback".to_owned(),
         endpoint: "127.0.0.1:9".to_owned(),
@@ -35,7 +35,7 @@ fn state(runtime_sha256: &str, owner_process_id: u32, owner_start_marker: &str) 
 }
 
 #[test]
-fn only_an_ownerless_foreign_resident_without_its_own_clients_is_orphaned() {
+fn only_a_foreign_resident_without_its_own_clients_is_shut_down() {
     let root = test_root("orphaned");
     let digest = runtime_digest().unwrap();
     let foreign_digest = "f".repeat(64);
@@ -43,21 +43,16 @@ fn only_an_ownerless_foreign_resident_without_its_own_clients_is_orphaned() {
     let marker = process_start_marker(pid).unwrap();
     // Newer clients' leases do not make an older resident in use.
     let current_lease = super::lease::acquire(&root).unwrap();
-
-    assert!(is_orphaned_foreign_resident(
+    let probe = || super::lease::unless_live(&root, &foreign_digest, || ()).is_some();
+    assert!(probe());
+    // A resident of this runtime is never handed over.
+    let deadline = Instant::now() + Duration::from_millis(200);
+    assert!(!retire_orphaned_foreign_resident(
         &root,
-        &state(&foreign_digest, u32::MAX, "dead"),
-        &digest
-    ));
-    assert!(!is_orphaned_foreign_resident(
         &root,
-        &state(&digest, u32::MAX, "dead"),
-        &digest
-    ));
-    assert!(!is_orphaned_foreign_resident(
-        &root,
-        &state(&foreign_digest, pid, &marker),
-        &digest
+        &state(&digest),
+        &digest,
+        deadline
     ));
 
     let foreign_lease = root
@@ -75,11 +70,27 @@ fn only_an_ownerless_foreign_resident_without_its_own_clients_is_orphaned() {
     }
     #[cfg(windows)]
     crate::resident_state::protect_windows_private_path(&foreign_lease, false, &root).unwrap();
-    assert!(!is_orphaned_foreign_resident(
+    assert!(!probe());
+    assert!(!retire_orphaned_foreign_resident(
         &root,
-        &state(&foreign_digest, u32::MAX, "dead"),
-        &digest
+        &root,
+        &state(&foreign_digest),
+        &digest,
+        deadline
     ));
     drop(current_lease);
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn only_a_stop_acknowledgement_counts_as_shut_down() {
+    assert!(shutdown_acknowledged(br#"{"status":"stopping"}"#));
+    assert!(shutdown_acknowledged(br#"{"status":"stopped"}"#));
+    assert!(!shutdown_acknowledged(
+        br#"{"status":"stopping","error":"native_request_expired"}"#
+    ));
+    assert!(!shutdown_acknowledged(
+        br#"{"error":"native_resident_overloaded"}"#
+    ));
+    assert!(!shutdown_acknowledged(b"not json"));
 }

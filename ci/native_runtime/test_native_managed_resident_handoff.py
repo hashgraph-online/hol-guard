@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -36,6 +37,12 @@ def _older_runtime(runtime: Path, directory: Path) -> Path:
     return older
 
 
+def _wait_for_exit(process_id: int) -> None:
+    deadline = time.monotonic() + 5
+    while process_is_alive(process_id) and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+
 def test_newer_client_leases_do_not_keep_an_orphaned_older_resident(managed_runtime: tuple[Path, Path]) -> None:
     runtime, guard_home = managed_runtime
     state_dir = guard_home / "native-runtime"
@@ -65,6 +72,64 @@ def test_newer_client_leases_do_not_keep_an_orphaned_older_resident(managed_runt
             capture_output=True,
             timeout=10,
         )
+
+
+def test_a_newer_client_shuts_down_a_pinned_older_resident(managed_runtime: tuple[Path, Path]) -> None:
+    runtime, guard_home = managed_runtime
+    state_dir = guard_home / "native-runtime"
+    older = _older_runtime(runtime, guard_home.parent / "older-runtime")
+    older_digest = hashlib.sha256(older.read_bytes()).hexdigest()
+    newer_digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
+    # The older client provisions the home, and its resident exits with it.
+    _push_snapshot(older, state_dir, _request(older, guard_home))
+    _wait_for_exit(_residents(state_dir)[older_digest])
+    # Older supervisors count every lease in the home, so newer clients pin
+    # their resident. A live owner pins it the same way without a lease of
+    # its own runtime, so only the newer client's handoff can stop it.
+    owner = subprocess.Popen((sys.executable, "-c", "import time; time.sleep(60)"))
+    supervisor = subprocess.Popen(
+        (
+            str(older),
+            "supervise-managed",
+            "--state-dir",
+            str(state_dir),
+            "--generation",
+            "2",
+            "--owner-process-id",
+            str(owner.pid),
+            "--runtime-sha256",
+            older_digest,
+        ),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        assert supervisor.stdin is not None
+        supervisor.stdin.write(b"51" * 32 + b"\n")
+        supervisor.stdin.close()
+        deadline = time.monotonic() + 5
+        while older_digest not in _residents(state_dir) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        older_process = _residents(state_dir)[older_digest]
+        payload = _request(runtime, guard_home, generation=2)
+        _push_snapshot(runtime, state_dir, payload)
+        request(runtime, guard_home, payload)
+        assert not process_is_alive(older_process), "the newer client did not retire the older resident"
+        assert set(_residents(state_dir)) == {newer_digest}
+        assert supervisor.wait(timeout=5) is not None
+    finally:
+        owner.kill()
+        owner.wait(timeout=5)
+        subprocess.run(
+            (str(older), "resident-stop", "--state-dir", str(state_dir)),
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+        if supervisor.poll() is None:
+            supervisor.kill()
+            supervisor.wait(timeout=5)
 
 
 def test_an_older_resident_with_its_own_client_is_not_handed_over(managed_runtime: tuple[Path, Path]) -> None:

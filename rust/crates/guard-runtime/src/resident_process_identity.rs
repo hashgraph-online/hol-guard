@@ -32,7 +32,7 @@ pub(crate) fn parent_process_id() -> Option<u32> {
 }
 
 /// Return the current parent of any process, if it is still running.
-pub(crate) fn process_parent_id(process_id: u32) -> Option<u32> {
+fn process_parent_id(process_id: u32) -> Option<u32> {
     let pid = Pid::from_u32(process_id);
     let mut system = System::new();
     system.refresh_processes_specifics(

@@ -54,9 +54,13 @@ fn try_home_states(
         }
         // Hand the home over from an older resident nothing of its runtime
         // still uses; this client then starts its own resident.
-        if handoff::is_orphaned_foreign_resident(state_base, &state, &runtime_digest)
-            && handoff::retire_orphaned_foreign_resident(&scope, &state, deadline)
-        {
+        if handoff::retire_orphaned_foreign_resident(
+            state_base,
+            &scope,
+            &state,
+            &runtime_digest,
+            deadline,
+        ) {
             continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;

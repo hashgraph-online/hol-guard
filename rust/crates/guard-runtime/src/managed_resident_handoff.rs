@@ -1,62 +1,66 @@
 #![forbid(unsafe_code)]
 
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::{containment, lease, MANAGED_STOP_TIMEOUT};
-use crate::resident_state::{
-    process_parent_id, process_start_marker, token_from_state, ResidentState,
-};
+use crate::resident_state::{token_from_state, ResidentState};
+
+/// Bounds how long the lease directory stays locked for the shutdown, well
+/// under the lease expiry so concurrent clients' heartbeats stay fresh.
+const HANDOFF_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// A side-by-side update leaves the previous runtime's resident running after
-/// its owner exits. Older runtimes count every client lease in the home, so
+/// its clients exit. Older runtimes count every client lease in the home, so
 /// newer clients keep that resident alive while it holds the home-wide owner
-/// lock and can never acknowledge their policy. Such a resident serves no
-/// client of its own runtime.
-pub(super) fn is_orphaned_foreign_resident(
-    state_base: &Path,
-    state: &ResidentState,
-    runtime_digest: &str,
-) -> bool {
-    state.runtime_sha256 != runtime_digest
-        && !owner_is_live(state)
-        && !lease::any_live(state_base, &state.runtime_sha256)
-}
-
-/// The recorded owner of a supervised resident is its own supervisor, which
-/// outlives the client that launched it. That client is gone once the
-/// supervisor has been reparented to init or its parent has exited. Any other
-/// parent, such as a subreaper, counts as a live owner.
-fn owner_is_live(state: &ResidentState) -> bool {
-    if !containment::state_owner_is_live(state) {
-        return false;
-    }
-    if process_parent_id(state.process_id) != Some(state.owner_process_id) {
-        return true;
-    }
-    process_parent_id(state.owner_process_id)
-        .is_some_and(|launcher| launcher != 1 && process_start_marker(launcher).is_ok())
-}
-
-/// Stop an orphaned foreign resident through its authenticated shutdown and
-/// wait for its processes to exit. Returns false when the shutdown was not
-/// delivered, in which case the caller keeps using the resident as before.
+/// lock and can never acknowledge their policy.
+///
+/// Every managed client holds a lease of its runtime while it uses a
+/// resident, so a foreign resident without a live lease of its own digest
+/// serves nobody. Stop it through its authenticated shutdown and wait for its
+/// processes to exit. Returns false when the resident is in use, the shutdown
+/// was not acknowledged or the resident did not exit, in which case the
+/// caller keeps treating it as before and fails closed.
 pub(super) fn retire_orphaned_foreign_resident(
+    state_base: &Path,
     scope: &Path,
     state: &ResidentState,
+    runtime_digest: &str,
     deadline: Instant,
 ) -> bool {
+    if state.runtime_sha256 == runtime_digest {
+        return false;
+    }
     let deadline = deadline.min(Instant::now() + MANAGED_STOP_TIMEOUT);
+    let process_ids = containment::state_process_identities(std::slice::from_ref(state));
+    // Hold the lease directory lock from the final lease check through the
+    // shutdown so no client of the older runtime can start using it between.
+    let acknowledged = lease::unless_live(state_base, &state.runtime_sha256, || {
+        request_shutdown(
+            state,
+            deadline.min(Instant::now() + HANDOFF_SHUTDOWN_TIMEOUT),
+        )
+    });
+    acknowledged == Some(true)
+        && containment::wait_for_stop_containment(
+            scope,
+            &state.runtime_sha256,
+            deadline,
+            &process_ids,
+        )
+        .is_ok()
+}
+
+fn request_shutdown(state: &ResidentState, deadline: Instant) -> bool {
     let Ok(token) = token_from_state(state) else {
         return false;
     };
-    let process_ids = containment::state_process_identities(std::slice::from_ref(state));
     let identity = crate::resident_client::ExpectedProcessIdentity {
         process_id: state.process_id,
         start_marker: &state.process_start_marker,
         digest: Some(&state.runtime_sha256),
     };
-    if crate::resident_client::send_request_for_digest(
+    crate::resident_client::send_request_for_digest(
         &state.transport,
         &state.endpoint,
         &token,
@@ -64,18 +68,17 @@ pub(super) fn retire_orphaned_foreign_resident(
         deadline.saturating_duration_since(Instant::now()),
         &identity,
     )
-    .is_err()
-    {
-        return false;
-    }
-    // The caller's startup path reports an owner still held by a slow exit.
-    let _ = containment::wait_for_stop_containment(
-        scope,
-        &state.runtime_sha256,
-        deadline,
-        &process_ids,
-    );
-    true
+    .is_ok_and(|response| shutdown_acknowledged(&response))
+}
+
+fn shutdown_acknowledged(response: &[u8]) -> bool {
+    crate::strict_json_value(response).is_ok_and(|response| {
+        response.get("error").is_none()
+            && matches!(
+                response.get("status").and_then(serde_json::Value::as_str),
+                Some("stopped" | "stopping")
+            )
+    })
 }
 
 #[cfg(test)]
