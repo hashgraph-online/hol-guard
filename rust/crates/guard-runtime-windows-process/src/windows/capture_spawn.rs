@@ -163,6 +163,6 @@ pub fn capture(
     }
     let process = unsafe { OwnedHandle::from_raw_handle(information.hProcess as RawHandle) };
     let thread = unsafe { OwnedHandle::from_raw_handle(information.hThread as RawHandle) };
-    let child = attach_suspended_process(process, thread, None)?;
+    let child = attach_suspended_process(process, thread, None, deadline, cancellation)?;
     capture_owned_child(child, pipes, input, limit, false, deadline, cancellation)
 }

@@ -361,7 +361,8 @@ impl Directory {
             ))?)
         };
         #[cfg(windows)]
-        let file = guard_runtime_windows_process::open_bound_regular_file(&parent.path.join(name))?;
+        let file =
+            guard_runtime_windows_process::open_bound_executable_file(&parent.path.join(name))?;
         regular(&file, true)?;
         parent.verify()?;
         Ok(file)
@@ -494,10 +495,21 @@ impl Directory {
                 .open(parent.path.join(name))?
         };
         let before = read_file(&mut file, 16 * 1024 * 1024)?;
-        if before.identity != *expected.0
-            || before.digest != expected.1
-            || !identity(&parent.open_file(Path::new(name))?)?.same_object(expected.0)
-        {
+        let path_matches = || -> io::Result<bool> {
+            #[cfg(unix)]
+            {
+                Ok(identity(&parent.open_file(Path::new(name))?)?.same_object(expected.0))
+            }
+            #[cfg(windows)]
+            {
+                // Attribute-only identity queries share the held writer's
+                // access without releasing its write/delete exclusion.
+                let (file_id, _) =
+                    guard_runtime_windows_process::regular_file_id(&parent.path.join(name), false)?;
+                Ok(file_id == expected.0.file_id)
+            }
+        };
+        if before.identity != *expected.0 || before.digest != expected.1 || !path_matches()? {
             return Err(changed());
         }
         parent.verify()?;
@@ -505,9 +517,7 @@ impl Directory {
         file.write_all(bytes)?;
         file.set_len(bytes.len() as u64)?;
         file.sync_all()?;
-        if !identity(&file)?.same_object(expected.0)
-            || !identity(&parent.open_file(Path::new(name))?)?.same_object(expected.0)
-        {
+        if !identity(&file)?.same_object(expected.0) || !path_matches()? {
             return Err(changed());
         }
         parent.verify()

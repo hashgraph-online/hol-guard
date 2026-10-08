@@ -20,144 +20,18 @@ pub(crate) use resources::process_ceiling;
 #[path = "macos_supervisor.rs"]
 mod supervisor;
 
-fn cstring(bytes: &[u8]) -> io::Result<CString> {
-    CString::new(bytes)
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "NUL in process argument"))
-}
-
-fn pipe() -> io::Result<(OwnedFd, OwnedFd)> {
-    let mut fds = [-1; 2];
-    #[cfg(target_os = "linux")]
-    let result = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
-    #[cfg(not(target_os = "linux"))]
-    let result = unsafe { libc::pipe(fds.as_mut_ptr()) };
-    if result != 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let read = unsafe { OwnedFd::from_raw_fd(fds[0]) };
-    let write = unsafe { OwnedFd::from_raw_fd(fds[1]) };
-    #[cfg(not(target_os = "linux"))]
-    for fd in [&read, &write] {
-        if unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) } != 0 {
-            return Err(io::Error::last_os_error());
-        }
-    }
-    Ok((read, write))
-}
-
-fn nonblocking(fd: &OwnedFd) -> io::Result<()> {
-    let flags = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFL) };
-    if flags < 0
-        || unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) } != 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
-}
-
-struct ChildOwner {
-    pid: libc::pid_t,
-    reaped: bool,
-}
-impl ChildOwner {
-    fn wait(&mut self) -> io::Result<Option<i32>> {
-        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
-        let result = unsafe {
-            libc::waitid(
-                libc::P_PID,
-                self.pid as libc::id_t,
-                &mut info,
-                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
-            )
-        };
-        if result != 0 {
-            let error = io::Error::last_os_error();
-            return if error.kind() == io::ErrorKind::Interrupted {
-                Ok(None)
-            } else {
-                Err(io::Error::new(
-                    error.kind(),
-                    format!("waitid for native child: {error}"),
-                ))
-            };
-        }
-        #[cfg(target_os = "linux")]
-        let (pid, status) = unsafe { (info.si_pid(), info.si_status()) };
-        #[cfg(target_os = "macos")]
-        let (pid, status) = (info.si_pid, info.si_status);
-        if pid == 0 {
-            return Ok(None);
-        }
-        Ok(Some(if info.si_code == libc::CLD_EXITED {
-            status << 8
-        } else {
-            status & 0x7f
-        }))
-    }
-    fn kill_tree(&mut self) -> io::Result<()> {
-        if self.reaped {
-            return Ok(());
-        }
-        let result = unsafe { libc::kill(-self.pid, libc::SIGKILL) };
-        if result != 0 && io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH) {
-            let error = io::Error::last_os_error();
-            return Err(io::Error::new(
-                error.kind(),
-                format!("kill native process group: {error}"),
-            ));
-        }
-        if !self.reaped {
-            // Before setsid has completed the leader may not yet own a group.
-            let result = unsafe { libc::kill(self.pid, libc::SIGKILL) };
-            if result != 0 && io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH) {
-                let error = io::Error::last_os_error();
-                return Err(io::Error::new(
-                    error.kind(),
-                    format!("kill native child leader: {error}"),
-                ));
-            }
-        }
-        Ok(())
-    }
-    fn reap(&mut self) -> io::Result<i32> {
-        loop {
-            let mut status = 0;
-            let result = unsafe { libc::waitpid(self.pid, &mut status, 0) };
-            if result == self.pid {
-                self.reaped = true;
-                return Ok(status);
-            }
-            if result < 0 && io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
-                return Err(io::Error::last_os_error());
-            }
-        }
-    }
-}
-impl Drop for ChildOwner {
-    fn drop(&mut self) {
-        if !self.reaped {
-            let _ = self.kill_tree();
-            let _ = self.reap();
-        }
-    }
-}
-
-// Everything in the post-fork branch is prepared beforehand or is an
-// async-signal-safe syscall. No Rust allocation, lock, formatting or Drop runs.
-unsafe fn child_failure(error_fd: i32, code: i32) -> ! {
-    let bytes = code.to_ne_bytes();
-    unsafe {
-        libc::write(error_fd, bytes.as_ptr().cast(), bytes.len());
-        libc::_exit(126);
-    }
-}
-
+mod launch;
+mod owner;
+#[path = "unix/io.rs"]
+mod process_io;
+use launch::{cstring, ChildSetup, LaunchDeadline, RequestWindow};
+use owner::{require_wait_custody, ChildOwner};
 #[cfg(target_os = "macos")]
-#[link(name = "sandbox")]
-unsafe extern "C" {
-    fn sandbox_init(profile: *const libc::c_char, flags: u64, error: *mut *mut libc::c_char)
-        -> i32;
-}
+use process_io::drain_report;
+use process_io::{drain, nonblocking, pipe, write_without_sigpipe};
+#[cfg(test)]
+#[path = "unix/process_regressions.rs"]
+mod process_regressions;
 
 pub(crate) fn capture(
     command: PinnedCommand,
@@ -167,12 +41,8 @@ pub(crate) fn capture(
     cancel: &AtomicBool,
     isolation: Isolation,
 ) -> io::Result<CapturedOutput> {
-    if cancel.load(Ordering::Acquire) || Instant::now() >= deadline {
-        return Err(io::Error::new(
-            io::ErrorKind::TimedOut,
-            "process deadline before launch",
-        ));
-    }
+    let window = RequestWindow { deadline, cancel };
+    window.require_launch()?;
     command.verify_bindings()?;
     let argv: Vec<CString> = std::iter::once(command.executable_path.as_os_str())
         .chain(command.arguments.iter().map(|arg| arg.as_os_str()))
@@ -180,23 +50,7 @@ pub(crate) fn capture(
         .collect::<io::Result<_>>()?;
     let mut argv_ptr: Vec<*const libc::c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();
     argv_ptr.push(std::ptr::null());
-    let env: Vec<CString> = command
-        .environment
-        .iter()
-        .map(|(key, value)| {
-            if key.as_bytes().is_empty() || key.as_bytes().contains(&b'=') {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "invalid environment key",
-                ));
-            }
-            let mut bytes = Vec::with_capacity(key.len() + value.len() + 1);
-            bytes.extend_from_slice(key.as_bytes());
-            bytes.push(b'=');
-            bytes.extend_from_slice(value.as_bytes());
-            cstring(&bytes)
-        })
-        .collect::<io::Result<_>>()?;
+    let env = launch::environment(&command.environment)?;
     #[cfg(target_os = "macos")]
     let image_path = cstring(command.image.path.as_os_str().as_bytes())?;
     let mut env_ptr: Vec<*const libc::c_char> = env.iter().map(|entry| entry.as_ptr()).collect();
@@ -215,6 +69,8 @@ pub(crate) fn capture(
     let (stderr_read, stderr_write) = pipe()?;
     let (error_read, error_write) = pipe()?;
     let (completion_read, completion_write) = pipe()?;
+    let (launch_read, launch_write) = pipe()?;
+    nonblocking(&launch_write)?;
     #[cfg(target_os = "macos")]
     let (foreign_report_read, foreign_report_write) = pipe()?;
     #[cfg(target_os = "macos")]
@@ -249,6 +105,12 @@ pub(crate) fn capture(
         return Err(io::Error::last_os_error());
     }
     let error_fd = unsafe { OwnedFd::from_raw_fd(error_fd) };
+    let launch_fd =
+        unsafe { libc::fcntl(launch_read.as_raw_fd(), libc::F_DUPFD_CLOEXEC, reserved) };
+    if launch_fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let launch_fd = unsafe { OwnedFd::from_raw_fd(launch_fd) };
     #[cfg(target_os = "linux")]
     let inherited = isolation
         .inherited_files
@@ -263,137 +125,48 @@ pub(crate) fn capture(
         })
         .collect::<io::Result<Vec<_>>>()?;
     let parent = unsafe { libc::getpid() };
-    let max_fd = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) }.clamp(1024, i32::MAX as i64) as i32;
+    #[cfg(target_os = "macos")]
+    let mut descriptors = supervisor::DescriptorTable::prepare()?;
+    let launch_deadline = LaunchDeadline::prepare(deadline)?;
+    #[cfg(test)]
+    process_regressions::before_fork();
+    require_wait_custody()?;
+    window.require_launch()?;
     let pid = unsafe { libc::fork() };
     if pid < 0 {
         return Err(io::Error::last_os_error());
     }
     if pid == 0 {
-        let err = error_fd.as_raw_fd();
-        #[cfg(target_os = "macos")]
+        let setup = ChildSetup {
+            parent,
+            cwd: command.cwd.handle().as_raw_fd(),
+            stdin: stdin_read.as_raw_fd(),
+            stdout: stdout_write.as_raw_fd(),
+            stderr: stderr_write.as_raw_fd(),
+            executable: exe_fd.as_raw_fd(),
+            error: error_fd.as_raw_fd(),
+            launch: launch_fd.as_raw_fd(),
+            completion: if isolation.completion_report {
+                Some(completion_write.as_raw_fd())
+            } else {
+                None
+            },
+            resources: resources.as_ref(),
+            profile: profile.as_ref(),
+            argv: &argv_ptr,
+            env: &env_ptr,
+            deadline: &launch_deadline,
+            #[cfg(target_os = "linux")]
+            inherited: &inherited,
+            #[cfg(target_os = "macos")]
+            descriptors: &mut descriptors,
+            #[cfg(target_os = "macos")]
+            report: foreign_report_write.as_raw_fd(),
+            #[cfg(target_os = "macos")]
+            image_path: &image_path,
+        };
         unsafe {
-            supervisor::enter(parent, err, foreign_report_write.as_raw_fd(), max_fd);
-        }
-        #[cfg(not(target_os = "macos"))]
-        if unsafe { libc::setsid() } < 0 {
-            unsafe {
-                child_failure(err, 1);
-            }
-        }
-        if unsafe { libc::fchdir(command.cwd.handle().as_raw_fd()) } != 0 {
-            unsafe {
-                child_failure(err, 1);
-            }
-        }
-        if resources
-            .as_ref()
-            .is_some_and(|limits| !unsafe { resources::apply(limits) })
-        {
-            unsafe {
-                child_failure(err, 8);
-            }
-        }
-        #[cfg(target_os = "linux")]
-        if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) } != 0
-            || unsafe { libc::getppid() } != parent
-        {
-            unsafe {
-                child_failure(err, 2);
-            }
-        }
-        if unsafe { libc::dup2(stdin_read.as_raw_fd(), 0) } < 0
-            || unsafe { libc::dup2(stdout_write.as_raw_fd(), 1) } < 0
-            || unsafe { libc::dup2(stderr_write.as_raw_fd(), 2) } < 0
-        {
-            unsafe {
-                child_failure(err, 3);
-            }
-        }
-        if unsafe { libc::dup2(exe_fd.as_raw_fd(), 3) } < 0 || unsafe { libc::dup2(err, 4) } < 0 {
-            unsafe {
-                child_failure(err, 4);
-            }
-        }
-        unsafe {
-            libc::fcntl(3, libc::F_SETFD, libc::FD_CLOEXEC);
-            libc::fcntl(4, libc::F_SETFD, libc::FD_CLOEXEC);
-        }
-        if isolation.completion_report {
-            if unsafe { libc::dup2(completion_write.as_raw_fd(), 5) } < 0 {
-                unsafe {
-                    child_failure(4, 8);
-                }
-            }
-        } else {
-            unsafe {
-                libc::close(5);
-            }
-        }
-        #[cfg(target_os = "linux")]
-        {
-            for (index, file) in inherited.iter().enumerate() {
-                if unsafe { libc::dup2(file.as_raw_fd(), 6 + index as i32) } < 0 {
-                    unsafe {
-                        child_failure(4, 9);
-                    }
-                }
-            }
-            let first = 6 + inherited.len() as u32;
-            let result = unsafe { libc::syscall(libc::SYS_close_range, first, u32::MAX, 0u32) };
-            if result != 0 {
-                for fd in first as i32..max_fd {
-                    unsafe {
-                        libc::close(fd);
-                    }
-                }
-            }
-        }
-        #[cfg(not(target_os = "linux"))]
-        for fd in 6..max_fd {
-            unsafe {
-                libc::close(fd);
-            }
-        }
-        #[cfg(target_os = "macos")]
-        {
-            if let Some(profile) = &profile {
-                let mut error = std::ptr::null_mut();
-                if unsafe { sandbox_init(profile.as_ptr(), 0, &mut error) } != 0 {
-                    unsafe {
-                        child_failure(4, 6);
-                    }
-                }
-            }
-        }
-        #[cfg(not(target_os = "macos"))]
-        if profile.is_some() {
-            unsafe {
-                child_failure(4, 6);
-            }
-        }
-        // SIGPIPE is restored only in the child. Native daemon cancellation and
-        // concurrent callers never mutate the parent's signal dispositions.
-        unsafe {
-            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-        }
-        let initialized = 0i32.to_ne_bytes();
-        if unsafe { libc::write(4, initialized.as_ptr().cast(), initialized.len()) }
-            != initialized.len() as isize
-        {
-            unsafe {
-                libc::_exit(126);
-            }
-        }
-        #[cfg(target_os = "linux")]
-        unsafe {
-            libc::fexecve(3, argv_ptr.as_ptr(), env_ptr.as_ptr());
-        }
-        #[cfg(target_os = "macos")]
-        unsafe {
-            libc::execve(image_path.as_ptr(), argv_ptr.as_ptr(), env_ptr.as_ptr());
-        }
-        unsafe {
-            child_failure(4, 7);
+            setup.exec();
         }
     }
     drop(stdin_read);
@@ -403,9 +176,12 @@ pub(crate) fn capture(
     drop(error_fd);
     drop(exe_fd);
     drop(completion_write);
+    drop(launch_read);
+    drop(launch_fd);
     #[cfg(target_os = "macos")]
     drop(foreign_report_write);
-    let mut owner = ChildOwner { pid, reaped: false };
+    let mut owner = ChildOwner::new(pid);
+    let mut launch_write = Some(launch_write);
     let mut stdin = Some(stdin_write);
     let mut stdout_fd = Some(stdout_read);
     let mut stderr_fd = Some(stderr_read);
@@ -435,12 +211,14 @@ pub(crate) fn capture(
                 status = Some(owner.reap()?);
             }
             stdin.take();
+            launch_write.take();
         }
         if status.is_none() {
             status = owner.wait()?;
             if status.is_some() {
                 owner.kill_tree()?;
                 stdin.take();
+                launch_write.take();
             }
         }
         #[cfg(target_os = "macos")]
@@ -449,11 +227,17 @@ pub(crate) fn capture(
                 &mut foreign_report_fd,
                 &mut foreign_report,
                 &mut foreign_report_size,
+                if status.is_some() {
+                    None
+                } else {
+                    Some(&window)
+                },
             )?;
             if foreign_report_size == 4 && status.is_none() {
                 owner.kill_tree()?;
                 status = Some(owner.reap()?);
                 stdin.take();
+                launch_write.take();
             }
         }
         if stdout_fd.is_none()
@@ -476,6 +260,7 @@ pub(crate) fn capture(
                     cap.saturating_sub(stderr.len())
                 },
                 &mut output_limited,
+                None,
             )?;
             drain(
                 &mut stderr_fd,
@@ -486,13 +271,21 @@ pub(crate) fn capture(
                     cap.saturating_sub(stdout.len())
                 },
                 &mut output_limited,
+                None,
             )?;
-            drain(&mut error_fd, &mut error_bytes, 16, &mut output_limited)?;
+            drain(
+                &mut error_fd,
+                &mut error_bytes,
+                16,
+                &mut output_limited,
+                None,
+            )?;
             drain(
                 &mut completion_fd,
                 &mut completion,
                 8192,
                 &mut output_limited,
+                None,
             )?;
             break;
         }
@@ -541,50 +334,22 @@ pub(crate) fn capture(
         if result < 0 && io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
             return Err(io::Error::last_os_error());
         }
+        if window.stopped() {
+            continue;
+        }
         if offset == input.len() {
             stdin.take();
         }
         if let Some(fd) = &stdin {
-            // Block SIGPIPE on this thread for the one write; no process-wide
-            // signal changes. EPIPE is an ordinary child-closed-input outcome.
-            let mut mask: libc::sigset_t = unsafe { std::mem::zeroed() };
-            let mut previous: libc::sigset_t = unsafe { std::mem::zeroed() };
-            unsafe {
-                libc::sigemptyset(&mut mask);
-                libc::sigaddset(&mut mask, libc::SIGPIPE);
-                libc::pthread_sigmask(libc::SIG_BLOCK, &mask, &mut previous);
-            }
-            let length = unsafe {
-                libc::write(
-                    fd.as_raw_fd(),
-                    input[offset..].as_ptr().cast(),
-                    input.len() - offset,
-                )
-            };
-            let error = io::Error::last_os_error();
-            if length < 0 && error.raw_os_error() == Some(libc::EPIPE) {
-                let mut pending: libc::sigset_t = unsafe { std::mem::zeroed() };
-                unsafe {
-                    libc::sigpending(&mut pending);
+            match write_without_sigpipe(fd.as_raw_fd(), &input[offset..]) {
+                Ok(length) => offset += length,
+                Err(error) if error.raw_os_error() == Some(libc::EPIPE) => {
+                    stdin.take();
                 }
-                if unsafe { libc::sigismember(&pending, libc::SIGPIPE) } == 1 {
-                    let mut received = 0;
-                    unsafe {
-                        libc::sigwait(&mask, &mut received);
-                    }
-                }
-            }
-            unsafe {
-                libc::pthread_sigmask(libc::SIG_SETMASK, &previous, std::ptr::null_mut());
-            }
-            if length >= 0 {
-                offset += length as usize;
-            } else if error.raw_os_error() == Some(libc::EPIPE) {
-                stdin.take();
-            } else if error.kind() != io::ErrorKind::WouldBlock
-                && error.kind() != io::ErrorKind::Interrupted
-            {
-                return Err(error);
+                Err(error)
+                    if error.kind() == io::ErrorKind::WouldBlock
+                        || error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
             }
         }
         drain(
@@ -596,6 +361,7 @@ pub(crate) fn capture(
                 cap.saturating_sub(stderr.len())
             },
             &mut output_limited,
+            Some(&window),
         )?;
         drain(
             &mut stderr_fd,
@@ -606,20 +372,34 @@ pub(crate) fn capture(
                 cap.saturating_sub(stdout.len())
             },
             &mut output_limited,
+            Some(&window),
         )?;
-        drain(&mut error_fd, &mut error_bytes, 16, &mut output_limited)?;
+        drain(
+            &mut error_fd,
+            &mut error_bytes,
+            16,
+            &mut output_limited,
+            Some(&window),
+        )?;
         drain(
             &mut completion_fd,
             &mut completion,
             8192,
             &mut output_limited,
+            Some(&window),
         )?;
         #[cfg(target_os = "macos")]
         drain_report(
             &mut foreign_report_fd,
             &mut foreign_report,
             &mut foreign_report_size,
+            Some(&window),
         )?;
+        cancelled |= cancel.load(Ordering::Acquire);
+        timed_out |= Instant::now() >= deadline;
+        if cancelled || timed_out {
+            continue;
+        }
         if error_bytes.len() > 4
             || !error_bytes.is_empty()
                 && error_bytes[..error_bytes.len().min(4)]
@@ -627,7 +407,7 @@ pub(crate) fn capture(
                     .any(|byte| *byte != 0)
         {
             owner.kill_tree()?;
-            if !owner.reaped {
+            if owner.has_custody() {
                 owner.reap()?;
             }
             return Err(io::Error::new(
@@ -635,9 +415,33 @@ pub(crate) fn capture(
                 "native child initialization or execution failed",
             ));
         }
+        if error_bytes == [0, 0, 0, 0] && !output_limited && status.is_none() {
+            if let Some(fd) = &launch_write {
+                #[cfg(test)]
+                process_regressions::initialized();
+                // Initialization may have consumed the request window. Never
+                // approve execution using the cancellation snapshot from fork.
+                if window.stopped() {
+                    continue;
+                }
+                match write_without_sigpipe(fd.as_raw_fd(), &[1]) {
+                    Ok(1) => {
+                        launch_write.take();
+                    }
+                    Ok(_) => return Err(io::ErrorKind::WriteZero.into()),
+                    Err(error) if error.raw_os_error() == Some(libc::EPIPE) => {
+                        launch_write.take();
+                    }
+                    Err(error)
+                        if error.kind() == io::ErrorKind::WouldBlock
+                            || error.kind() == io::ErrorKind::Interrupted => {}
+                    Err(error) => return Err(error),
+                }
+            }
+        }
     }
     owner.kill_tree()?;
-    if !owner.reaped {
+    if owner.has_custody() {
         owner.reap()?;
     }
     if error_bytes != [0, 0, 0, 0] && !cancelled && !timed_out {
@@ -674,72 +478,4 @@ pub(crate) fn capture(
         cancelled,
         completion,
     })
-}
-
-#[cfg(target_os = "macos")]
-fn drain_report(fd: &mut Option<OwnedFd>, bytes: &mut [u8; 4], used: &mut usize) -> io::Result<()> {
-    let mut buffer = [0u8; 8];
-    loop {
-        let Some(handle) = fd.as_ref() else {
-            return Ok(());
-        };
-        let count =
-            unsafe { libc::read(handle.as_raw_fd(), buffer.as_mut_ptr().cast(), buffer.len()) };
-        if count == 0 {
-            fd.take();
-            return Ok(());
-        }
-        if count < 0 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::WouldBlock {
-                return Ok(());
-            }
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
-        }
-        if count as usize > bytes.len().saturating_sub(*used) {
-            return Err(io::Error::other("invalid native foreign completion"));
-        }
-        bytes[*used..*used + count as usize].copy_from_slice(&buffer[..count as usize]);
-        *used += count as usize;
-    }
-}
-
-fn drain(
-    fd: &mut Option<OwnedFd>,
-    output: &mut Vec<u8>,
-    cap: usize,
-    limited: &mut bool,
-) -> io::Result<()> {
-    let mut buffer = [0u8; 16 * 1024];
-    loop {
-        let Some(handle) = fd.as_ref() else {
-            break;
-        };
-        let length =
-            unsafe { libc::read(handle.as_raw_fd(), buffer.as_mut_ptr().cast(), buffer.len()) };
-        if length == 0 {
-            fd.take();
-            break;
-        }
-        if length < 0 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::WouldBlock {
-                break;
-            }
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
-        }
-        let keep = (length as usize).min(cap.saturating_sub(output.len()));
-        output.extend_from_slice(&buffer[..keep]);
-        if keep < length as usize {
-            *limited = true;
-            break;
-        }
-    }
-    Ok(())
 }

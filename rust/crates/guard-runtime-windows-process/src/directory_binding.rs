@@ -170,7 +170,7 @@ pub fn bind_readonly_directory(path: &Path) -> io::Result<PrivateDirectoryBindin
     let mut handles = Vec::new();
     for component in path.components() {
         current.push(component.as_os_str());
-        if matches!(component, Component::Normal(_)) {
+        if matches!(component, Component::RootDir | Component::Normal(_)) {
             handles.push(open_directory_bound(&current, false, false)?);
         }
     }

@@ -2,6 +2,93 @@
 //! signal this parent or change its inherited group under the child profile.
 //! The requesting daemon kills the still-live leader before reaping it.
 
+use super::launch::LaunchDeadline;
+use std::io;
+use std::mem::{size_of, MaybeUninit};
+
+/// Allocated and the libproc syscall wrapper resolved before the daemon forks.
+/// The child refreshes its own single-threaded table; concurrent parent opens
+/// therefore cannot silently escape an earlier parent snapshot.
+pub(super) struct DescriptorTable {
+    buffer: Vec<MaybeUninit<libc::proc_fdinfo>>,
+    bytes: i32,
+}
+
+impl DescriptorTable {
+    pub(super) fn prepare() -> io::Result<Self> {
+        let bytes = unsafe {
+            libc::proc_pidinfo(
+                libc::getpid(),
+                libc::PROC_PIDLISTFDS,
+                0,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if bytes <= 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let entry_size = size_of::<libc::proc_fdinfo>();
+        let entries = (bytes as usize)
+            .checked_div(entry_size)
+            .and_then(|count| count.checked_add(16))
+            .ok_or_else(crate::bound_fs::changed)?;
+        let bytes = entries
+            .checked_mul(entry_size)
+            .and_then(|bytes| i32::try_from(bytes).ok())
+            .ok_or_else(crate::bound_fs::changed)?;
+        let mut table = Self {
+            buffer: Vec::with_capacity(entries),
+            bytes,
+        };
+        if unsafe { table.snapshot() }.is_none() {
+            return Err(io::Error::other("incomplete native descriptor enumeration"));
+        }
+        Ok(table)
+    }
+
+    unsafe fn snapshot(&mut self) -> Option<usize> {
+        // proc_pidinfo's warmed wrapper only invokes __proc_info and handles
+        // errno. No allocation, directory iteration or limit lookup after fork.
+        let bytes = unsafe {
+            libc::proc_pidinfo(
+                libc::getpid(),
+                libc::PROC_PIDLISTFDS,
+                0,
+                self.buffer.as_mut_ptr().cast(),
+                self.bytes,
+            )
+        };
+        let entry_size = size_of::<libc::proc_fdinfo>();
+        if bytes <= 0 || bytes >= self.bytes || bytes as usize % entry_size != 0 {
+            return None;
+        }
+        Some(bytes as usize / entry_size)
+    }
+
+    unsafe fn close_snapshot(&self, count: usize, keep: &[i32]) -> bool {
+        let entries = unsafe {
+            std::slice::from_raw_parts(self.buffer.as_ptr().cast::<libc::proc_fdinfo>(), count)
+        };
+        for entry in entries {
+            if entry.proc_fd < 0 {
+                return false;
+            }
+            if !keep.contains(&entry.proc_fd) && unsafe { libc::close(entry.proc_fd) } != 0 {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub(super) unsafe fn close_except(&mut self, keep: &[i32]) -> bool {
+        let Some(count) = (unsafe { self.snapshot() }) else {
+            return false;
+        };
+        unsafe { self.close_snapshot(count, keep) }
+    }
+}
+
 unsafe fn terminate_group() -> ! {
     // The supervisor itself is the live group leader, so no recycled PID or
     // request-supplied process identity selects the group to kill.
@@ -44,7 +131,13 @@ unsafe fn complete(child: libc::pid_t, report: i32) {
 
 /// Called after the daemon's fork, before any foreign code. Returns only in the
 /// foreign child. Uses stack values and syscalls only; never runs Rust Drop.
-pub(super) unsafe fn enter(parent: libc::pid_t, error: i32, report: i32, max_fd: i32) {
+pub(super) unsafe fn enter(
+    parent: libc::pid_t,
+    error: i32,
+    report: i32,
+    descriptors: &mut DescriptorTable,
+    deadline: &LaunchDeadline,
+) {
     if unsafe { libc::setsid() } < 0 {
         unsafe {
             failure(error, 5);
@@ -68,6 +161,16 @@ pub(super) unsafe fn enter(parent: libc::pid_t, error: i32, report: i32, max_fd:
             failure(error, 5);
         }
     }
+    let Some(descriptor_count) = (unsafe { descriptors.snapshot() }) else {
+        unsafe {
+            failure(error, 9);
+        }
+    };
+    if unsafe { deadline.expired() } {
+        unsafe {
+            failure(error, 10);
+        }
+    }
     let child = unsafe { libc::fork() };
     if child < 0 {
         unsafe {
@@ -83,11 +186,9 @@ pub(super) unsafe fn enter(parent: libc::pid_t, error: i32, report: i32, max_fd:
     }
     // The supervisor must not keep foreign stdio/initialization/executable pins
     // alive. Its sole private evidence channel cannot be written by foreign code.
-    for fd in 0..max_fd {
-        if fd != queue && fd != report {
-            unsafe {
-                libc::close(fd);
-            }
+    if !unsafe { descriptors.close_snapshot(descriptor_count, &[queue, report]) } {
+        unsafe {
+            failure(error, 9);
         }
     }
     event.ident = child as libc::uintptr_t;

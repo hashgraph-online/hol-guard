@@ -474,6 +474,12 @@ fn capture_native(
     startup.StartupInfo.hStdError = handles[2];
     startup.lpAttributeList = attributes.storage.as_mut_ptr().cast();
     let mut process: PROCESS_INFORMATION = unsafe { zeroed() };
+    if Instant::now() >= deadline || cancel.load(std::sync::atomic::Ordering::Acquire) {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "AppContainer request expired before process creation",
+        ));
+    }
     let created = unsafe {
         CreateProcessW(
             executable.as_ptr(),
@@ -497,6 +503,8 @@ fn capture_native(
         process_handle,
         thread_handle,
         None,
+        deadline,
+        cancel,
     )?;
     guard_runtime_windows_process::capture_owned_child(
         guard, pipes, input, cap, per_stream, deadline, cancel,

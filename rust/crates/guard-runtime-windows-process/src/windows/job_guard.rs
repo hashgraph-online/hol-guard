@@ -31,6 +31,8 @@ pub fn attach_suspended_process(
     process: OwnedHandle,
     thread: OwnedHandle,
     resources: Option<ResourceLimits>,
+    deadline: Instant,
+    cancellation: &std::sync::atomic::AtomicBool,
 ) -> io::Result<ChildJobGuard> {
     // The guard owns the suspended process before any fallible job setup.
     let mut child = ChildJobGuard {
@@ -101,6 +103,12 @@ pub fn attach_suspended_process(
     }
     process_lifecycle::assign_process_to_job(&job, &child.process)?;
     child.job = Some(job);
+    if cancellation.load(std::sync::atomic::Ordering::Acquire) || Instant::now() >= deadline {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "child request expired before resume",
+        ));
+    }
     match unsafe { ResumeThread(thread.as_raw_handle() as HANDLE) } {
         1 => {}
         value if value == u32::MAX => return Err(io::Error::last_os_error()),

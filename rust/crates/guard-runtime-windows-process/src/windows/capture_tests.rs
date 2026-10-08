@@ -39,6 +39,10 @@ fn child_process() {
             "INPUT_SUM={}",
             input.iter().map(|byte| *byte as u64).sum::<u64>()
         );
+    } else if mode == "reject-input" {
+        println!("INPUT_REJECTED");
+        eprintln!("child declined stdin");
+        std::process::exit(7);
     } else if mode == "hold" {
         println!("READY");
         std::io::stdout().flush().unwrap();
@@ -97,6 +101,21 @@ fn concurrent_stdin_stdout_stderr_does_not_deadlock_or_lose_bytes() {
         64 * 4096
     );
     assert!(String::from_utf8_lossy(&output.stdout).contains("INPUT_SUM=3670016"));
+}
+
+#[test]
+fn early_child_exit_preserves_output_and_status_with_unread_stdin() {
+    let output = run(
+        "reject-input",
+        &vec![7_u8; 512 * 1024],
+        64 * 1024,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(output.exit_code, Some(7));
+    assert!(!output.timed_out && !output.output_limited && !output.cancelled);
+    assert!(String::from_utf8_lossy(&output.stdout).contains("INPUT_REJECTED"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("child declined stdin"));
 }
 
 #[test]

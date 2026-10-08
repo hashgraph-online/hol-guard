@@ -66,17 +66,64 @@ pub(crate) fn seal_bytes(bytes: &[u8], expected: &str) -> io::Result<File> {
     Ok(sealed)
 }
 #[cfg(target_os = "macos")]
+static ROOT_MODE_OWNERS: std::sync::Mutex<std::collections::BTreeSet<(u64, u64)>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+#[cfg(target_os = "macos")]
+struct RootModeLease {
+    identity: (u64, u64),
+    previous_mode: u32,
+}
+#[cfg(target_os = "macos")]
+impl RootModeLease {
+    fn acquire(binding: &crate::bound_fs::Directory) -> io::Result<Self> {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let mut owners = ROOT_MODE_OWNERS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let metadata = binding.handle().metadata()?;
+        let identity = (metadata.dev(), metadata.ino());
+        if owners.contains(&identity) {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "runtime image root already has a mode owner",
+            ));
+        }
+        // Snapshot and chmod under the ownership lock; another adopter must
+        // never capture the temporary read-only mode as its original mode.
+        let previous_mode = metadata.permissions().mode() & 0o7777;
+        if unsafe { libc::fchmod(binding.handle().as_raw_fd(), 0o500) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        owners.insert(identity);
+        Ok(Self {
+            identity,
+            previous_mode,
+        })
+    }
+}
+#[cfg(target_os = "macos")]
+impl Drop for RootModeLease {
+    fn drop(&mut self) {
+        ROOT_MODE_OWNERS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(&self.identity);
+    }
+}
+
+#[cfg(target_os = "macos")]
 pub(crate) struct PinnedImage {
     pub(crate) file: File,
     pub(crate) path: std::path::PathBuf,
     directory: Option<tempfile::TempDir>,
     binding: std::sync::Arc<crate::bound_fs::Directory>,
-    previous_mode: Option<u32>,
+    mode_lease: Option<RootModeLease>,
 }
 #[cfg(target_os = "macos")]
 impl Drop for PinnedImage {
     fn drop(&mut self) {
-        let Some(previous_mode) = self.previous_mode else {
+        let Some(lease) = self.mode_lease.as_ref() else {
             return;
         };
         if self.binding.verify().is_err() {
@@ -89,7 +136,7 @@ impl Drop for PinnedImage {
         if unsafe {
             libc::fchmod(
                 self.binding.handle().as_raw_fd(),
-                previous_mode as libc::mode_t,
+                lease.previous_mode as libc::mode_t,
             )
         } != 0
         {
@@ -166,7 +213,7 @@ pub(crate) fn seal_executable(
             path,
             directory: None,
             binding: source_directory,
-            previous_mode: None,
+            mode_lease: None,
         });
     }
     if let Some(root) = root {
@@ -197,16 +244,13 @@ pub(crate) fn seal_executable(
             return Err(crate::bound_fs::changed());
         }
         source_directory.verify()?;
-        let previous_mode = source_directory.handle().metadata()?.permissions().mode() & 0o7777;
-        if unsafe { libc::fchmod(source_directory.handle().as_raw_fd(), 0o500) } != 0 {
-            return Err(io::Error::last_os_error());
-        }
+        let mode_lease = RootModeLease::acquire(&source_directory)?;
         return Ok(PinnedImage {
             file: source,
             path,
             directory: None,
             binding: source_directory,
-            previous_mode: Some(previous_mode),
+            mode_lease: Some(mode_lease),
         });
     }
     let directory = tempfile::Builder::new()
@@ -230,15 +274,16 @@ pub(crate) fn seal_executable(
         return Err(crate::bound_fs::changed());
     }
     binding.verify()?;
-    let previous_mode = binding.handle().metadata()?.permissions().mode() & 0o7777;
-    if unsafe { libc::fchmod(binding.handle().as_raw_fd(), 0o500) } != 0 {
-        return Err(io::Error::last_os_error());
-    }
+    let mode_lease = RootModeLease::acquire(&binding)?;
     Ok(PinnedImage {
         file,
         path,
         directory: Some(directory),
         binding,
-        previous_mode: Some(previous_mode),
+        mode_lease: Some(mode_lease),
     })
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "unix_image_tests.rs"]
+mod tests;

@@ -162,7 +162,7 @@ impl Operation {
             self.pending = true;
             return Ok(None);
         }
-        if !write && error == winapi::shared::winerror::ERROR_BROKEN_PIPE {
+        if error == winapi::shared::winerror::ERROR_BROKEN_PIPE {
             return Ok(Some(0));
         }
         Err(io::Error::from_raw_os_error(error as i32))

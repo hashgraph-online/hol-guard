@@ -184,16 +184,16 @@ pub fn capture_owned_child(
             let mut progress = false;
             if let Some(active) = writer.as_mut() {
                 if let Some(count) = active.write(&input[input_offset..])? {
-                    if count == 0 {
-                        return Err(io::Error::new(
-                            io::ErrorKind::WriteZero,
-                            "incomplete capture input",
-                        ));
-                    }
-                    input_offset += count;
                     progress = true;
-                    if input_offset == input.len() {
+                    // Closing stdin early is an ordinary child outcome. Keep
+                    // collecting its output and exit status, as on Unix.
+                    if count == 0 {
                         writer = None;
+                    } else {
+                        input_offset += count;
+                        if input_offset == input.len() {
+                            writer = None;
+                        }
                     }
                 }
             }
@@ -244,12 +244,6 @@ pub fn capture_owned_child(
                 }
             }
             if root_exited && reader.is_none() && errors.is_none() {
-                if writer.is_some() || input_offset != input.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "incomplete capture input",
-                    ));
-                }
                 break;
             }
             if !progress {

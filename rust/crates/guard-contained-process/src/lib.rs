@@ -189,6 +189,11 @@ impl PinnedCommand {
         Ok(())
     }
 
+    /// On Unix, the host must retain exclusive child-wait custody throughout
+    /// capture: no wildcard reaper or concurrent SIGCHLD disposition changes.
+    /// Autoreaping is rejected before launch; ECHILD revokes this owner's
+    /// numerical signal authority. Those checks cannot close a concurrent
+    /// foreign reaper's PID-reuse race.
     pub fn capture(
         self,
         input: &[u8],

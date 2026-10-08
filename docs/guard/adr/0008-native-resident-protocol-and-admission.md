@@ -39,6 +39,12 @@ On macOS, original executable images are adopted only when held-file filesystem 
 
 The macOS supervisor reports foreign completion over its private channel, stays live until the daemon kills the group, and is then reaped. Self-termination before cleanup leaves a zombie-only group that Darwin refuses to signal. Windows capture uses owned suspended-process, pipe, and job handles; compilation does not establish live AppContainer or ARM64 enforcement.
 
+Windows directory custody retains checked volume-root handles and allows installation hardlinks only through the read-only installed-image opener. Existing-output writes keep their exclusive writer while querying pathname identity through attribute-only access. Child creation and suspended-thread resume both check the original deadline and cancellation; early stdin closure still permits output and exit-status collection. PE import tables and module names are bounded before materialization. These controls require live Windows qualification; cross-compilation alone is not that proof.
+
+Unix capture requires exclusive host child-wait custody and stable non-autoreaping SIGCHLD handling. Autoreaping is rejected before launch, and ECHILD revokes numerical signal authority; neither check makes a concurrent wildcard reaper safe. Descriptor closure uses complete kernel enumeration on macOS and fail-closed close-range on Linux, independent of lowered descriptor limits. Execution approval and bounded stream drains retain the original deadline and cancellation. Shared mutable image roots reject overlapping mode owners; ELF dependencies honor declared search paths and bounded dynamic strings.
+
+Recovery cleanup remains uncertified against unrestricted same-UID writers: a checked recovery leaf can be replaced before unlink. Another identity check cannot make Unix unlink conditional. Kernel-enforced recovery-namespace writer exclusion is required before claiming replacement-preserving deletion or complete teardown.
+
 
 ## Overload semantics
 
