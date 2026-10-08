@@ -48,6 +48,12 @@ def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     return runtime
 
 
+@pytest.fixture
+def native_approval_reuse_runtime(native_hook_force: Path) -> Path:
+    """Run approval reuse assertions with the caller-pinned native authority."""
+    return native_hook_force
+
+
 @pytest.fixture(scope="session")
 def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     """Session-shared guard home so the resident is spawned once per run."""
