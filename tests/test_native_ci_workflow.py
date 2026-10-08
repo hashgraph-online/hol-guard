@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import os
 import subprocess
 import sys
@@ -18,6 +19,40 @@ ROOT = Path(__file__).resolve().parents[1]
 def _workflow(name: str) -> dict:
     """Load expanded workflow definitions for CI contract assertions."""
     return expand_ci_job_actions(yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")))
+
+
+@pytest.mark.parametrize(
+    ("ref", "event", "platform", "opt_in", "allowed"),
+    [
+        ("refs/heads/main", "push", "Linux", "false", True),
+        ("refs/heads/main", "push", "Windows", "false", True),
+        ("refs/heads/main", "schedule", "Windows", "true", True),
+        ("refs/heads/main", "workflow_dispatch", "Windows", "true", True),
+        ("refs/heads/main", "pull_request", "Windows", "true", False),
+        ("refs/pull/3701/merge", "pull_request", "Windows", "true", False),
+        ("refs/heads/contributor", "push", "Windows", "true", False),
+        ("refs/heads/main-other", "workflow_dispatch", "Windows", "true", False),
+        ("refs/heads/main", "schedule", "Windows", "false", False),
+        ("refs/heads/main", "workflow_dispatch", "macOS", "true", False),
+        ("refs/heads/main", "schedule", "Linux", "true", False),
+    ],
+)
+def test_effective_cache_write_privilege_is_limited_to_trusted_main_builds(ref, event, platform, opt_in, allowed):
+    action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
+    cache = next(step for step in action["runs"]["steps"] if step.get("uses", "").startswith("Swatinem/"))
+    expression = cache["with"]["save-if"].strip()[3:-2]
+    for name, value in {
+        "github.ref": ref,
+        "github.event_name": event,
+        "runner.os": platform,
+        "inputs.save-main-cache": opt_in,
+    }.items():
+        expression = expression.replace(name, repr(value))
+    expression = "(" + expression.replace("&&", " and ").replace("||", " or ") + ")"
+    tree = ast.parse(expression, mode="eval")
+    permitted = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Compare, ast.Eq, ast.Constant)
+    assert all(isinstance(node, permitted) for node in ast.walk(tree)), "Unsupported cache-policy expression"
+    assert bool(eval(compile(tree, "<cache-policy>", "eval"), {"__builtins__": {}})) is allowed
 
 
 def test_parallel_macos_proofs_use_this_runs_matching_platform_wheel() -> None:
