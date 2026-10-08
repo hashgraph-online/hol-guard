@@ -371,11 +371,16 @@ fn state_resident_exited(state: &ResidentState) -> bool {
 /// A resident that is killed without a shutdown request, for example when a
 /// Windows job object closes, cannot remove its own generation file.
 pub(super) fn retire_exited_states(scope: &Path, digest: &str) -> Result<(), String> {
-    for state in discover_states(scope, digest)? {
-        if !state_resident_exited(&state) {
+    retire_exited(scope, digest, &discover_states(scope, digest)?);
+    Ok(())
+}
+
+fn retire_exited(scope: &Path, digest: &str, states: &[ResidentState]) {
+    for state in states {
+        if !state_resident_exited(state) {
             continue;
         }
-        if let Ok(token) = token_from_state(&state) {
+        if let Ok(token) = token_from_state(state) {
             super::resident_state_retirement::retire_state(
                 scope,
                 state.generation,
@@ -386,7 +391,6 @@ pub(super) fn retire_exited_states(scope: &Path, digest: &str) -> Result<(), Str
             );
         }
     }
-    Ok(())
 }
 
 pub(super) fn wait_for_stop_containment(
@@ -395,8 +399,24 @@ pub(super) fn wait_for_stop_containment(
     deadline: Instant,
     known_processes: &[ManagedProcessIdentity],
 ) -> Result<(), String> {
+    wait_for_matching_stop_containment(scope, digest, deadline, known_processes, |_| true)
+}
+
+/// Wait for only the discovered states that `matches` selects to stop.
+pub(super) fn wait_for_matching_stop_containment(
+    scope: &Path,
+    digest: &str,
+    deadline: Instant,
+    known_processes: &[ManagedProcessIdentity],
+    matches: impl Fn(&ResidentState) -> bool,
+) -> Result<(), String> {
+    let discover = || -> Result<Vec<ResidentState>, String> {
+        let mut states = discover_states(scope, digest)?;
+        states.retain(|state| matches(state));
+        Ok(states)
+    };
     loop {
-        let states = discover_states(scope, digest)?;
+        let states = discover()?;
         let process_ids = generation_process_ids(&states, known_processes);
         let processes_remain = any_process_alive(&process_ids)?;
         if states.is_empty() && !processes_remain {
@@ -406,8 +426,8 @@ pub(super) fn wait_for_stop_containment(
             for process_id in &process_ids {
                 terminate_managed_process(process_id, Duration::ZERO)?;
             }
-            retire_exited_states(scope, digest)?;
-            let states_remaining = !discover_states(scope, digest)?.is_empty();
+            retire_exited(scope, digest, &states);
+            let states_remaining = !discover()?.is_empty();
             let processes_remaining = any_process_alive(&process_ids)?;
             if !states_remaining && !processes_remaining {
                 return Ok(());

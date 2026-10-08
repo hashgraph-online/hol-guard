@@ -4,7 +4,7 @@ use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::{containment, lease, restart_budget, CLIENT_RETRY_DELAY};
+use super::{containment, handoff, lease, restart_budget, CLIENT_RETRY_DELAY};
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
     runtime_digest, state_scope, token_from_state, validate_package_process_identity,
@@ -47,10 +47,21 @@ fn try_home_states(
     preferred_digest: &str,
 ) -> Result<Option<Vec<u8>>, String> {
     let runtime_digest = runtime_digest()?;
-    for (_scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
+    for (scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
     {
         if deadline.saturating_duration_since(Instant::now()).is_zero() {
             return Ok(None);
+        }
+        // Hand the home over from an older resident nothing of its runtime
+        // still uses; this client then starts its own resident.
+        if handoff::retire_orphaned_foreign_resident(
+            state_base,
+            &scope,
+            &state,
+            &runtime_digest,
+            deadline,
+        ) {
+            continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
         if (same_runtime

@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 mod client_stream;
 #[path = "managed_resident_containment.rs"]
 mod containment;
+#[path = "managed_resident_handoff.rs"]
+mod handoff;
 #[path = "managed_resident_lease.rs"]
 mod lease;
 pub(crate) use lease::client_request;
@@ -84,10 +86,12 @@ fn managed_owner_liveness(
     state_base: &Path,
     owner_process_id: u32,
     owner_start_marker: String,
+    runtime_digest: &str,
 ) -> Arc<AtomicBool> {
     let alive = Arc::new(AtomicBool::new(true));
     let watcher_alive = Arc::clone(&alive);
     let base = state_base.to_owned();
+    let digest = runtime_digest.to_owned();
     thread::spawn(move || {
         let mut no_lease_since = None;
         loop {
@@ -97,7 +101,10 @@ fn managed_owner_liveness(
             }
             let owner_alive = process_start_marker(owner_process_id)
                 .is_ok_and(|actual| actual == owner_start_marker);
-            if owner_alive || lease::any_live_for_home(&base) {
+            // Only clients of this runtime keep an ownerless resident alive.
+            // A newer runtime's clients must not pin an older resident that
+            // holds the home-wide owner lock and blocks their own resident.
+            if owner_alive || lease::any_live(&base, &digest) {
                 no_lease_since = None;
             } else {
                 let started = no_lease_since.get_or_insert_with(Instant::now);
@@ -116,8 +123,14 @@ fn combine_liveness(
     state_base: &Path,
     owner_process_id: u32,
     owner_start_marker: String,
+    runtime_digest: &str,
 ) -> Arc<AtomicBool> {
-    let owner_alive = managed_owner_liveness(state_base, owner_process_id, owner_start_marker);
+    let owner_alive = managed_owner_liveness(
+        state_base,
+        owner_process_id,
+        owner_start_marker,
+        runtime_digest,
+    );
     let supervisor_alive = crate::resident_stdin_liveness();
     let combined = Arc::new(AtomicBool::new(true));
     let combined_watcher = Arc::clone(&combined);
@@ -199,7 +212,12 @@ pub(crate) fn serve_managed(
         )?,
     );
     let token = crate::read_resident_auth_token()?;
-    let owner_alive = combine_liveness(state_base, owner_process_id, owner_start_marker);
+    let owner_alive = combine_liveness(
+        state_base,
+        owner_process_id,
+        owner_start_marker,
+        expected_digest,
+    );
     if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
             (&scope, &_owner_lock),
@@ -286,6 +304,7 @@ pub(crate) fn supervise_managed_for_owner(
         let child_done = Arc::new(AtomicBool::new(false));
         let watcher_done = Arc::clone(&child_done);
         let watcher_base = state_base.to_owned();
+        let watcher_digest = expected_digest.to_owned();
         let watcher = thread::spawn(move || {
             let mut no_lease_since = None;
             loop {
@@ -298,7 +317,7 @@ pub(crate) fn supervise_managed_for_owner(
                 let owner_alive = owner_start_marker.as_deref().is_some_and(|expected| {
                     process_start_marker(owner_process_id).is_ok_and(|actual| actual == expected)
                 });
-                if owner_alive || lease::any_live_for_home(&watcher_base) {
+                if owner_alive || lease::any_live(&watcher_base, &watcher_digest) {
                     no_lease_since = None;
                 } else {
                     let started = no_lease_since.get_or_insert_with(Instant::now);
