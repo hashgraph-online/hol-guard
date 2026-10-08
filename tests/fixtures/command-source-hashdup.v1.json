@@ -7573,53 +7573,11 @@
               "action_classes": [
                 "git workspace command"
               ],
-              "default_mode": "review",
+              "default_mode": "disabled",
               "description": "Identifies git worktree operations.",
               "family": "git-workspace",
-              "matcher": {
-                "config": {},
-                "matchers": [
-                  {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "git"
-                      ],
-                      "fail_secure_unknown_options": false,
-                      "forbidden_flags": [
-                        "--help",
-                        "--version",
-                        "-h"
-                      ],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config-env",
-                        "--exec-path",
-                        "--git-dir",
-                        "--help",
-                        "--namespace",
-                        "--super-prefix",
-                        "--version",
-                        "--work-tree",
-                        "-c",
-                        "-h"
-                      ],
-                      "options_with_values": [],
-                      "required_flags": [],
-                      "required_flags_in_all_arguments": false,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "worktree"
-                      ]
-                    },
-                    "op": "executable.v1"
-                  }
-                ],
-                "op": "any.v1"
-              },
-              "native_capability": null,
+              "matcher": null,
+              "native_capability": "command.git.worktree.v1",
               "permission_id": "command.git.permission.worktree",
               "risk_classes": [
                 "destructive_shell"
@@ -10097,7 +10055,7 @@
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews HashDup duplicate finder commands, approval-gating permanent --delete operations while keeping read-only scans and --trash staging automatic.",
+          "description": "Reviews HashDup duplicate finder commands, approval-gating permanent --delete operations; read-only scans and --trash staging stay under review.",
           "ecosystem_ids": [],
           "executables": [],
           "extension_id": "command.hashdup",
@@ -10163,7 +10121,7 @@
                 "matchers": [
                   {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
                         "hashdup",
                         "hashdup.cmd",
@@ -10210,7 +10168,7 @@
                   },
                   {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
                         "hashdup",
                         "hashdup.cmd",
@@ -10257,7 +10215,7 @@
                   },
                   {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
                         "xargs",
                         "xargs.cmd",
@@ -10311,7 +10269,7 @@
                   },
                   {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
                         "xargs",
                         "xargs.cmd",
@@ -10365,7 +10323,7 @@
                   },
                   {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
                         "exec",
                         "exec.cmd",
@@ -10419,7 +10377,7 @@
                   },
                   {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
                         "exec",
                         "exec.cmd",

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v1",
   "extensionId": "command.hashdup",
-  "tagline": "Reviews HashDup commands, approval-gating permanent --delete operations while keeping read-only scans and --trash automatic.",
+  "tagline": "Reviews HashDup commands, approval-gating permanent --delete operations with read-only scans and --trash staging staying under review.",
   "category": "specialized-tools",
   "limitations": [
     "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
