@@ -32,6 +32,20 @@ runs:
       enable-cache: true
       cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       save-cache: false
+  - uses: ./.github/actions/setup-rust
+  - name: Build and select this checkout's native command evaluators
+    shell: bash
+    run: |
+      cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+      compiler="$GITHUB_WORKSPACE/rust/target/release/guard-command-source"
+      runtime="$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime"
+      if [[ "$RUNNER_OS" == "Windows" ]]; then
+        compiler="${compiler}.exe"
+        runtime="${runtime}.exe"
+      fi
+      echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
+      echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
+      echo "HOL_GUARD_NATIVE_BINARY=$runtime" >> "$GITHUB_ENV"
   - run: uv sync --frozen --no-dev --group ci-test --python ${{ inputs.python-version }}
     shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
   - name: Run trusted updater and daemon regressions

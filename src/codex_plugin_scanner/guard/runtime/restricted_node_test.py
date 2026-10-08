@@ -26,6 +26,20 @@ _INVALID = "node_test_restricted_invalid_command"
 _MAGIC = {b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xca\xfe\xba\xbe"}
 
 
+def _node_runtime_args(command: Sequence[str]) -> tuple[str, ...]:
+    """Accept only one bounded V8 heap option before a Node entrypoint."""
+    argv = _normalized_command(command)
+    runtime_args: list[str] = []
+    if len(argv) >= 2 and Path(argv[0]).name in {"node", "nodejs"}:
+        option = argv[1]
+        if option.startswith("--max-old-space-size="):
+            value = option.partition("=")[2]
+            if not value.isascii() or not value.isdecimal() or not 16 <= int(value) <= 131072:
+                raise RestrictedPytestError(_INVALID, "Invalid bounded Node memory option.")
+            runtime_args.append(option)
+    return tuple(runtime_args)
+
+
 def _approved_node(executable: Path, workspace: Path) -> bool:
     metadata = executable.stat()
     if metadata.st_uid not in {0, os.getuid()}:
@@ -61,10 +75,12 @@ def prepare_restricted_node_test(
     backend_executable: Path | None = None,
 ) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
+    runtime_args = _node_runtime_args(argv)
+    test_index = 1 + len(runtime_args)
     if (
-        len(argv) < 2
+        len(argv) <= test_index
         or Path(argv[0]).name not in {"node", "nodejs"}
-        or argv[1] != "--test"
+        or argv[test_index] != "--test"
         or any(value in {";", "&&", "||", "|", "|&", "&"} for value in argv)
     ):
         raise RestrictedPytestError(_INVALID, "Protected Node execution requires direct node --test argv.")
@@ -87,7 +103,7 @@ def prepare_restricted_node_test(
         backend_executable=backend_path,
         workspace=root,
         cwd=directory,
-        command=(str(executable), *argv[1:]),
+        command=(str(executable), *runtime_args, *argv[test_index:]),
         executable=executable,
         allowed_executables=tuple(dict.fromkeys((launcher, executable))),
         denied_capabilities=(

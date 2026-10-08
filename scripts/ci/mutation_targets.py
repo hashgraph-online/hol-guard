@@ -40,7 +40,13 @@ TARGETS: Final[dict[str, MutationTarget]] = {
     "package-intent": MutationTarget(
         "package-intent",
         "src/codex_plugin_scanner/guard/runtime/package_intent_parser.py",
-        ("tests/test_guard_package_intent.py", "tests/test_guard_tier2_package_intent_phase13.py"),
+        (
+            "tests/test_guard_package_intent.py",
+            "tests/test_guard_package_intent_local_execution.py",
+            "tests/test_guard_package_intent_typescript.py",
+            "tests/test_guard_package_intent_ecosystems.py",
+            "tests/test_guard_tier2_package_intent_phase13.py",
+        ),
     ),
     "package-policy": MutationTarget(
         "package-policy",

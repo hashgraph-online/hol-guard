@@ -2,6 +2,8 @@
 
 use super::*;
 
+const MAX_SOURCE_CATALOG_BYTES: usize = 8 * 1024 * 1024;
+
 #[path = "native_command_source_capabilities.rs"]
 mod capabilities;
 #[path = "native_command_source_catalog.rs"]
@@ -34,6 +36,8 @@ pub use contract::{descriptor_schema, source_schema};
 pub use evaluation_batch::evaluate_batch;
 pub use fixtures::run_fixtures;
 pub use parity::compare_programs;
+
+pub const MAX_SOURCE_INPUT_BYTES: usize = json::MAX_SOURCE_BYTES;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

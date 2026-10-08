@@ -7,6 +7,7 @@
 
 use guard_contracts::{
     WorkspaceReviewDecisionEnvelopeV1, NATIVE_WORKSPACE_REVIEW_AUTHORITY_PURPOSE,
+    NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_OWNED_DISPATCH,
     NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_RETRY_ONLY, NATIVE_WORKSPACE_REVIEW_DECISION_DOMAIN,
     NATIVE_WORKSPACE_REVIEW_DECISION_V1_SCHEMA, NATIVE_WORKSPACE_REVIEW_DECISION_V1_VERSION,
     NATIVE_WORKSPACE_REVIEW_MAX_DECISION_BYTES, NATIVE_WORKSPACE_REVIEW_MAX_TTL_MS,
@@ -27,6 +28,9 @@ const ED25519_SIGNATURE_HEX_BYTES: usize = 128;
 #[path = "workspace_review_decision_claims.rs"]
 mod claim_semantics;
 use claim_semantics::consume_or_replay_claim;
+#[path = "workspace_review_decision_semantics.rs"]
+mod semantics;
+pub(crate) use semantics::{owned_request_digest, semantic_decision_digest};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkspaceReviewDecisionContext<'a> {
@@ -64,6 +68,7 @@ pub(crate) struct VerifiedWorkspaceReviewDecision {
     pub(crate) retry_scope_binding: String,
     pub(crate) request_snapshot_digest: Option<String>,
     pub(crate) envelope_digest: String,
+    pub(crate) observed_at_ms: u64,
     /// True only when the same durable claim is being resumed after a lost
     /// response. It is never a second acceptance of the envelope.
     pub(crate) replayed: bool,
@@ -133,38 +138,6 @@ pub(crate) fn signing_bytes(
         .map_err(|_| "native_workspace_review_decision_invalid".to_owned())
 }
 
-/// Digest durable semantics independently of transport lifetime and signer
-/// rotation; excluding the claim id keeps a new id from creating a second grant.
-pub(crate) fn semantic_decision_digest(
-    envelope: &WorkspaceReviewDecisionEnvelopeV1,
-) -> Result<String, String> {
-    let value = serde_json::json!({
-        "schema": envelope.schema,
-        "version": envelope.version,
-        "purpose": envelope.purpose,
-        "workspace_binding": envelope.workspace_binding,
-        "device_binding": envelope.device_binding,
-        "installation_binding": envelope.installation_binding,
-        "scope_binding": envelope.scope_binding,
-        "request_binding": envelope.request_binding,
-        "action_binding": envelope.action_binding,
-        "intent_binding": envelope.intent_binding,
-        "revision_binding": envelope.revision_binding,
-        "policy_binding": envelope.policy_binding,
-        "retry_scope_binding": envelope.retry_scope_binding,
-        "delivery_mode": envelope.delivery_mode,
-        "decision": envelope.decision,
-    });
-    let canonical = canonical_json_bytes(&value)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-    let mut preimage = Vec::with_capacity(
-        NATIVE_WORKSPACE_REVIEW_SEMANTIC_DECISION_DOMAIN.len() + canonical.len(),
-    );
-    preimage.extend_from_slice(NATIVE_WORKSPACE_REVIEW_SEMANTIC_DECISION_DOMAIN);
-    preimage.extend_from_slice(&canonical);
-    Ok(digest_bytes(&preimage))
-}
-
 fn canonical_envelope_bytes(
     envelope: &WorkspaceReviewDecisionEnvelopeV1,
 ) -> Result<Vec<u8>, String> {
@@ -205,11 +178,28 @@ fn validate_context(context: &WorkspaceReviewDecisionContext<'_>) -> Result<(), 
     }
 }
 
+#[cfg(test)]
 fn verify_envelope(
     envelope: &WorkspaceReviewDecisionEnvelopeV1,
     authority: &VerifiedWorkspaceReviewAuthority,
     context: &WorkspaceReviewDecisionContext<'_>,
     now_ms: u64,
+) -> Result<(VerifiedWorkspaceReviewDecision, Vec<u8>), String> {
+    verify_envelope_mode(
+        envelope,
+        authority,
+        context,
+        now_ms,
+        NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_RETRY_ONLY,
+    )
+}
+
+fn verify_envelope_mode(
+    envelope: &WorkspaceReviewDecisionEnvelopeV1,
+    authority: &VerifiedWorkspaceReviewAuthority,
+    context: &WorkspaceReviewDecisionContext<'_>,
+    now_ms: u64,
+    delivery_mode: &str,
 ) -> Result<(VerifiedWorkspaceReviewDecision, Vec<u8>), String> {
     validate_context(context)?;
     if envelope.schema != NATIVE_WORKSPACE_REVIEW_DECISION_V1_SCHEMA
@@ -229,7 +219,7 @@ fn verify_envelope(
         || !valid_lower_hex(&envelope.policy_binding)
         || !valid_lower_hex(&envelope.retry_scope_binding)
         || !valid_lower_hex(&envelope.claim_id)
-        || envelope.delivery_mode != NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_RETRY_ONLY
+        || envelope.delivery_mode != delivery_mode
         || !matches!(envelope.decision.as_str(), "allow" | "deny")
         || envelope.issued_at_ms == 0
         || envelope.expires_at_ms <= envelope.issued_at_ms
@@ -303,6 +293,7 @@ fn verify_envelope(
         retry_scope_binding: envelope.retry_scope_binding.clone(),
         request_snapshot_digest: None,
         envelope_digest: digest_bytes(&canonical),
+        observed_at_ms: now_ms,
         replayed: false,
     };
     Ok((verified, canonical))
@@ -313,6 +304,22 @@ fn verify_and_claim_at(
     envelope: &WorkspaceReviewDecisionEnvelopeV1,
     context: &WorkspaceReviewDecisionContext<'_>,
     now_ms: u64,
+) -> Result<VerifiedWorkspaceReviewDecision, String> {
+    verify_and_claim_at_mode(
+        state_base,
+        envelope,
+        context,
+        now_ms,
+        NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_RETRY_ONLY,
+    )
+}
+
+fn verify_and_claim_at_mode(
+    state_base: &Path,
+    envelope: &WorkspaceReviewDecisionEnvelopeV1,
+    context: &WorkspaceReviewDecisionContext<'_>,
+    now_ms: u64,
+    delivery_mode: &str,
 ) -> Result<VerifiedWorkspaceReviewDecision, String> {
     let mut state = super::workspace_review_secure_state::load(state_base)?
         .ok_or_else(|| "native_workspace_review_secure_state_unavailable".to_owned())?;
@@ -365,9 +372,12 @@ fn verify_and_claim_at(
     if !state.matches_authority(&authority) {
         return Err("native_workspace_review_authority_provenance_mismatch".to_owned());
     }
-    let (verified, _) = verify_envelope(envelope, &authority, context, now_ms)?;
+    let (verified, _) = verify_envelope_mode(envelope, &authority, context, now_ms, delivery_mode)?;
     let semantic_digest = semantic_decision_digest(envelope)?;
     if consume_or_replay_claim(state_base, &mut state, &verified, &semantic_digest)? {
+        if delivery_mode == NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_OWNED_DISPATCH {
+            return Err("native_workspace_review_business_dispatch_replay".to_owned());
+        }
         let mut resumed = verified;
         resumed.replayed = true;
         return Ok(resumed);
@@ -415,54 +425,15 @@ pub(crate) fn ensure_current_native_workspace_review_provenance(
     Ok(())
 }
 
-/// Verify one decision against the request snapshot selected by `request_id`.
-/// The selector is not a binding input: all request and action material comes
-/// from the private snapshot loaded by the resident.
-pub(crate) fn verify_and_claim_request(
-    policy_store: &super::PolicySnapshotStore,
-    request_id: &str,
-    decision: &Value,
-) -> Result<VerifiedWorkspaceReviewDecision, String> {
-    let observed_time_ms = now_ms()?;
-    let state_base = policy_store.state_base();
-    super::approval_enrollment::with_transition_lock(state_base, || {
-        // The request snapshot supplies only action material. Workspace and
-        // scope come from the current native policy store and state path, so
-        // Python metadata cannot choose the authority's provenance.
-        let snapshot = policy_store.current_snapshot()?;
-        let (workspace_binding, scope_binding) = current_native_workspace_review_bindings(
-            state_base,
-            &snapshot.scope_contract.scope_digest,
-        )?;
-        let authority =
-            super::workspace_review_authority::read_installed_record_without_time(state_base)?
-                .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
-        ensure_current_native_workspace_review_provenance(
-            &authority,
-            &workspace_binding,
-            &scope_binding,
-        )?;
-        let request = super::workspace_review_request::load(policy_store, request_id)?;
-        let context = WorkspaceReviewDecisionContext {
-            workspace_binding: &workspace_binding,
-            device_binding: &authority.device_binding,
-            installation_binding: &authority.installation_binding,
-            scope_binding: &scope_binding,
-            request_binding: &request.request_binding,
-            action_binding: &request.action_binding,
-            intent_binding: &request.intent_binding,
-            revision_binding: &request.revision_binding,
-            policy_binding: &request.policy_binding,
-            retry_scope_binding: &request.retry_scope_binding,
-        };
-        let bytes = canonical_json_bytes(decision)
-            .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-        let mut verified =
-            verify_and_claim_bytes_at(state_base, &bytes, &context, observed_time_ms)?;
-        verified.request_snapshot_digest = Some(request.request_snapshot_digest);
-        Ok(verified)
-    })
-}
+#[path = "workspace_review_decision_request.rs"]
+mod request_claim;
+#[cfg(test)]
+pub(crate) use request_claim::claim_owned_business_request_at_for_test;
+#[cfg(test)]
+pub(crate) use request_claim::claim_owned_business_request_with_clock;
+pub(crate) use request_claim::verify_and_claim_request;
+#[allow(unused_imports)] // Private worker routing is not enabled yet.
+pub(crate) use request_claim::{claim_owned_business_request, claim_owned_business_request_with};
 
 pub(crate) fn verify_and_claim_bytes_at(
     state_base: &Path,
@@ -470,24 +441,13 @@ pub(crate) fn verify_and_claim_bytes_at(
     context: &WorkspaceReviewDecisionContext<'_>,
     now_ms: u64,
 ) -> Result<VerifiedWorkspaceReviewDecision, String> {
-    if bytes.is_empty() || bytes.len() > NATIVE_WORKSPACE_REVIEW_MAX_DECISION_BYTES {
-        return Err("native_workspace_review_decision_invalid".to_owned());
-    }
-    let value: Value = crate::strict_json_value(bytes)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-    let canonical = canonical_json_bytes(&value)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-    if canonical != bytes {
-        return Err("native_workspace_review_decision_noncanonical".to_owned());
-    }
-    let envelope: WorkspaceReviewDecisionEnvelopeV1 = serde_json::from_value(value)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
+    let envelope = request_claim::decode_canonical_decision(bytes)?;
     verify_and_claim_at(state_base, &envelope, context, now_ms)
 }
 
 #[cfg(test)]
 #[path = "workspace_review_decision_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "workspace_review_decision_renewal_tests.rs"]

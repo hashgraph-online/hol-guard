@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.console import Console
 
 from codex_plugin_scanner.guard.cli import render
-from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.cli.render import _redact_sensitive_assignments, emit_guard_payload
 
 
 def _normalize_render_output(output: str) -> str:
@@ -81,6 +81,18 @@ def test_guard_render_redacts_sensitive_values_before_rich_renderer(monkeypatch)
     assert isinstance(payload, dict)
     assert payload["api_key"] == "*****"
     assert payload["launch_summary"] == "api_key=***** token=*****"
+
+
+def test_linear_sensitive_assignment_redaction_handles_quoted_unquoted_and_invalid_values() -> None:
+    rendered = _redact_sensitive_assignments(
+        "token=plain api_key='quoted value' password=\"double value\" ordinary=value secret='unterminated value"
+    )
+    assert "token=*****" in rendered
+    assert "api_key=*****" in rendered
+    assert "password=*****" in rendered
+    assert "ordinary=value" in rendered
+    assert "secret=***** value" in rendered
+    assert _redact_sensitive_assignments("ordinary=value token=") == "ordinary=value token="
 
 
 def test_guard_render_fallback_redacts_local_paths_when_redaction_module_is_stale() -> None:

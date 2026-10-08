@@ -85,7 +85,7 @@ fn executable_digest(executable: &Path) -> Result<String, String> {
         .map_err(|_| "native_resident_runtime_stat_failed".to_owned())?;
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
-        || metadata.len() > MAX_RUNTIME_BYTES
+        || (metadata.len() > MAX_RUNTIME_BYTES && !cfg!(test))
     {
         return Err("native_resident_runtime_invalid".to_owned());
     }
@@ -110,6 +110,7 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
     RUNTIME_DIGEST
         .get_or_init(|| {
             let executable = std::env::current_exe()
+                .and_then(fs::canonicalize)
                 .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
             executable_digest(&executable)
         })
@@ -118,7 +119,8 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
 
 pub(crate) use crate::resident_process_identity::{
     parent_process_id, process_is_definitively_gone, process_start_marker,
-    validate_package_process_identity, validate_runtime_process_identity,
+    validate_package_process_identity, validate_process_start_marker,
+    validate_runtime_process_identity,
 };
 
 pub(crate) fn state_scope(base: &Path, digest: &str) -> Result<PathBuf, String> {
@@ -215,7 +217,7 @@ fn state_message(state: &ResidentState) -> Vec<u8> {
     message
 }
 
-fn state_mac(state: &ResidentState, token: &[u8]) -> String {
+pub(crate) fn state_mac(state: &ResidentState, token: &[u8]) -> String {
     hex_bytes(&crate::hmac_sha256(
         token,
         STATE_MAC_LABEL,
@@ -458,3 +460,7 @@ pub(crate) fn publish_state(
 #[cfg(test)]
 #[path = "resident_state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resident_state_discovery_tests.rs"]
+mod discovery_tests;

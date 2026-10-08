@@ -121,7 +121,7 @@ def test_invalid_config_is_not_replaced(tmp_path, monkeypatch, invalid):
 def test_signed_cleanup_inverse_restores_bytes_and_mode(
     transition,
     tmp_path,
-    monkeypatch,  # noqa: F811 -- shared pytest fixture
+    monkeypatch,
 ):
     runtime, plan, _bindings, _pointer = transition
     context, path = _source(tmp_path, monkeypatch, {"features": {"hooks": True, "other": True}})

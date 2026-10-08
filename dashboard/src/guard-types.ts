@@ -234,6 +234,8 @@ export type GuardHeadlineState =
   | "connected";
 
 export type GuardApprovalRequest = {
+  /** Local native snapshot projection; never a decision-capable approval row. */
+  native_business_review_display_only?: boolean;
   request_id: string;
   harness: string;
   artifact_id: string;

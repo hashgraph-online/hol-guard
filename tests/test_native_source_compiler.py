@@ -102,7 +102,7 @@ def test_packaged_compiler_manifest_binds_runtime_identity_and_binary(
 
 def test_compiler_request_is_bounded_before_subprocess(tmp_path: Path) -> None:
     executable = _fake_compiler(tmp_path)
-    request = {"schema": "guard.command-extension-build.v1", "sources": ["x" * compiler._MAX_INPUT_BYTES]}
+    request = {"schema": "guard.command-extension-build.v1", "sources": ["x" * compiler._MAX_REQUEST_BYTES]}
     with pytest.raises(compiler.NativeSourceCompilerError, match="input bound"):
         compiler.compile_source(request, compiler=executable)
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.js_semver import (
     highest_js_version_for_selector,
     parse_js_semver,
@@ -306,13 +306,13 @@ def test_npm_registry_resolution_applies_prerelease_admission_at_the_selection_s
         }
 
     monkeypatch.setattr(
-        supply_chain_package_eval_module,
+        package_services,
         "_urlopen_json_with_timeout_retry",
         registry_response,
     )
 
     assert (
-        supply_chain_package_eval_module._npm_registry_resolved_version(  # pyright: ignore[reportPrivateUsage]
+        package_services._npm_registry_resolved_version(  # pyright: ignore[reportPrivateUsage]
             package_name="example-package",
             requested_range=selector,
         )

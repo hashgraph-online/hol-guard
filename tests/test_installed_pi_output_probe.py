@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from ci.native_runtime import probe_daemon_calls as daemon_calls
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.probe_installed_pi_output import (
     ProbeCleanupError,
@@ -655,6 +656,126 @@ def test_installed_daemon_cleanup_rejects_unconfirmed_quarantine() -> None:
         probe._cleanup_installed_daemon(LiveServeThreadDaemon())
 
 
+def test_installed_daemon_cleanup_rechecks_after_stop_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def bounded_call(_daemon: object, method_name: str) -> object:
+        calls.append(method_name)
+        if method_name == "stop":
+            raise probe._DaemonCallTimeoutError("stop timeout")
+        return True
+
+    monkeypatch.setattr(probe, "_bounded_daemon_call", bounded_call)
+
+    probe._cleanup_installed_daemon(object())
+
+    assert calls == ["stop", "_finish_service"]
+
+
+def test_installed_daemon_cleanup_stop_timeout_stays_unsafe_without_finish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def bounded_call(_daemon: object, method_name: str) -> object:
+        if method_name == "stop":
+            raise probe._DaemonCallTimeoutError("stop timeout")
+        return False
+
+    monkeypatch.setattr(probe, "_bounded_daemon_call", bounded_call)
+
+    with pytest.raises(
+        ProbeCleanupUnsafeError,
+        match="cleanup did not complete after stop timeout",
+    ):
+        probe._cleanup_installed_daemon(object())
+
+
+def test_installed_daemon_cleanup_preserves_finish_failure_after_stop_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def bounded_call(_daemon: object, method_name: str) -> object:
+        if method_name == "stop":
+            raise probe._DaemonCallTimeoutError("stop timeout")
+        raise ProbeError("finish failure")
+
+    monkeypatch.setattr(probe, "_bounded_daemon_call", bounded_call)
+
+    with pytest.raises(ProbeCleanupUnsafeError, match="cleanup did not complete after stop timeout") as caught:
+        probe._cleanup_installed_daemon(object())
+
+    assert isinstance(caught.value.__cause__, ProbeError)
+
+
+def test_native_cleanup_retries_transient_resident_close(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard import native_resident_client
+
+    close_results = iter((False, True))
+    calls: list[tuple[Path, float]] = []
+
+    def close_native_residents(guard_home: Path, *, deadline_monotonic: float) -> bool:
+        calls.append((guard_home, deadline_monotonic))
+        return next(close_results)
+
+    monkeypatch.setattr(native_resident_client, "close_native_residents", close_native_residents)
+    monkeypatch.setattr(probe, "_native_state_files", lambda _guard_home: ())
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(probe.time, "sleep", sleep_calls.append)
+
+    class Identity:
+        path = Path("/bin/false")
+
+    guard_home = tmp_path / "guard-home"
+    probe._cleanup_native(Identity(), guard_home)
+
+    assert [home for home, _deadline in calls] == [guard_home, guard_home]
+    assert calls[0][1] == calls[1][1]
+    assert sleep_calls == [probe._native_cleanup_retry_interval_seconds()]
+
+
+def test_native_cleanup_does_not_accept_failed_stop_when_state_disappears(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard import native_resident_client
+
+    stop_calls: list[Path] = []
+    state_file = tmp_path / "generation.json"
+    close_calls = 0
+    state_checks = 0
+    monotonic_values = iter((0.0, 0.0, 0.1, 0.1, 2.0))
+
+    monkeypatch.setattr(probe, "_daemon_cleanup_timeout_seconds", lambda: 1.0)
+    monkeypatch.setattr(probe.time, "monotonic", lambda: next(monotonic_values, 2.0))
+
+    def close_native_residents(*args: object, **kwargs: object) -> bool:
+        nonlocal close_calls
+        close_calls += 1
+        return True
+
+    monkeypatch.setattr(native_resident_client, "close_native_residents", close_native_residents)
+
+    def failed_stop(*, state_dir: Path, **kwargs: object) -> bool:
+        stop_calls.append(state_dir)
+        return False
+
+    monkeypatch.setattr(native_resident_client, "stop_native_resident", failed_stop)
+
+    def state_files(_guard_home: Path) -> tuple[Path, ...]:
+        nonlocal state_checks
+        state_checks += 1
+        return (state_file,) if state_checks == 1 else ()
+
+    monkeypatch.setattr(probe, "_native_state_files", state_files)
+    monkeypatch.setattr(probe.time, "sleep", lambda _seconds: None)
+
+    class Identity:
+        path = Path("/bin/false")
+
+    with pytest.raises(ProbeError, match="authenticated native cleanup failed: RuntimeError"):
+        probe._cleanup_native(Identity(), tmp_path / "guard-home")
+
+    assert stop_calls == [tmp_path / "guard-home" / "native-runtime"]
+    assert close_calls == 2
+
+
 def test_installed_daemon_cleanup_bounds_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     release = threading.Event()
 
@@ -665,10 +786,13 @@ def test_installed_daemon_cleanup_bounds_stop(monkeypatch: pytest.MonkeyPatch) -
             release.wait()
             self.finished = True
 
-    monkeypatch.setattr(probe, "_DAEMON_CLEANUP_TIMEOUT", 0.01)
+    monkeypatch.setattr(probe, "_daemon_cleanup_timeout_seconds", lambda: 0.01)
     daemon = HangingDaemon()
     try:
-        with pytest.raises(ProbeError, match="stop timed out"):
+        with pytest.raises(
+            ProbeCleanupUnsafeError,
+            match="cleanup did not complete after stop timeout",
+        ):
             probe._cleanup_installed_daemon(daemon)
         assert daemon.finished is False
     finally:
@@ -721,33 +845,33 @@ def test_daemon_constructor_failure_closes_public_resources_and_stays_unsafe(
 def test_bounded_daemon_call_redelivers_expired_prior_timer(monkeypatch: pytest.MonkeyPatch) -> None:
     timer_calls: list[tuple[object, ...]] = []
     monotonic_values = iter((0.0, 0.02))
-    monkeypatch.setattr(probe.time, "monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr(probe.signal, "getsignal", lambda _signal: "previous-handler")
-    monkeypatch.setattr(probe.signal, "getitimer", lambda _timer: (0.01, 0.02))
-    monkeypatch.setattr(probe.signal, "signal", lambda *_args: None)
-    monkeypatch.setattr(probe.signal, "setitimer", lambda *args: timer_calls.append(args))
+    monkeypatch.setattr(daemon_calls.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(daemon_calls.signal, "getsignal", lambda _signal: "previous-handler")
+    monkeypatch.setattr(daemon_calls.signal, "getitimer", lambda _timer: (0.01, 0.02))
+    monkeypatch.setattr(daemon_calls.signal, "signal", lambda *_args: None)
+    monkeypatch.setattr(daemon_calls.signal, "setitimer", lambda *args: timer_calls.append(args))
 
     probe._bounded_daemon_call(SimpleNamespace(stop=lambda: None), "stop")
 
-    assert timer_calls[0] == (probe.signal.ITIMER_REAL, probe._DAEMON_CLEANUP_TIMEOUT)
-    assert timer_calls[1] == (probe.signal.ITIMER_REAL, 0)
-    assert timer_calls[2] == (probe.signal.ITIMER_REAL, 0.001, 0.02)
+    assert timer_calls[0] == (daemon_calls.signal.ITIMER_REAL, probe._daemon_cleanup_timeout_seconds())
+    assert timer_calls[1] == (daemon_calls.signal.ITIMER_REAL, 0)
+    assert timer_calls[2] == (daemon_calls.signal.ITIMER_REAL, 0.001, 0.02)
 
 
 def test_bounded_daemon_call_restores_alarm_after_setup_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     timer_calls: list[tuple[object, ...]] = []
     signal_calls: list[object] = []
 
-    monkeypatch.setattr(probe.signal, "getsignal", lambda _signal: "previous-handler")
-    monkeypatch.setattr(probe.signal, "getitimer", lambda _timer: (0.5, 0.25))
+    monkeypatch.setattr(daemon_calls.signal, "getsignal", lambda _signal: "previous-handler")
+    monkeypatch.setattr(daemon_calls.signal, "getitimer", lambda _timer: (0.5, 0.25))
 
     def setitimer(*args: object) -> None:
         timer_calls.append(args)
         if len(timer_calls) == 1:
             raise RuntimeError("timer setup failed")
 
-    monkeypatch.setattr(probe.signal, "setitimer", setitimer)
-    monkeypatch.setattr(probe.signal, "signal", lambda _signal, handler: signal_calls.append(handler))
+    monkeypatch.setattr(daemon_calls.signal, "setitimer", setitimer)
+    monkeypatch.setattr(daemon_calls.signal, "signal", lambda _signal, handler: signal_calls.append(handler))
     invoked = False
 
     def stop() -> None:
@@ -761,10 +885,10 @@ def test_bounded_daemon_call_restores_alarm_after_setup_failure(monkeypatch: pyt
     assert len(signal_calls) == 2
     assert signal_calls[1] == "previous-handler"
     assert timer_calls[:2] == [
-        (probe.signal.ITIMER_REAL, probe._DAEMON_CLEANUP_TIMEOUT),
-        (probe.signal.ITIMER_REAL, 0),
+        (daemon_calls.signal.ITIMER_REAL, probe._daemon_cleanup_timeout_seconds()),
+        (daemon_calls.signal.ITIMER_REAL, 0),
     ]
-    assert timer_calls[2][0:2] == (probe.signal.ITIMER_REAL, pytest.approx(0.5, abs=0.001))
+    assert timer_calls[2][0:2] == (daemon_calls.signal.ITIMER_REAL, pytest.approx(0.5, abs=0.001))
     assert timer_calls[2][2] == 0.25
 
 

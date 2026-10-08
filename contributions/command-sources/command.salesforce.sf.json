@@ -1,0 +1,383 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "action_classes": ["Salesforce data command"],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Opt-in review of pinned Salesforce CLI sf data create, update, delete, export and bulk job resume routes; blocks hard delete. It does not resolve the target org or mediate provider execution.",
+    "ecosystem_ids": [],
+    "executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"],
+    "extension_id": "command.salesforce.sf",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Salesforce sf data command risk rules",
+    "permissions": [
+      {
+        "action_classes": ["Salesforce data command"],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews sf data record and bulk deletes, including legacy force:data aliases.",
+        "example_command": "sf data delete bulk --sobject Account --file ids.csv",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Salesforce record delete",
+        "permission_id": "command.salesforce.sf.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews sf data record updates and bulk update or upsert jobs.",
+        "example_command": "sf data update bulk --sobject Account --file rows.csv",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Salesforce record update",
+        "permission_id": "command.salesforce.sf.permission.update",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews sf data record, file and bulk or tree imports that create records.",
+        "example_command": "sf data import bulk --sobject Account --file rows.csv",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Salesforce record create",
+        "permission_id": "command.salesforce.sf.permission.create",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews sf data bulk and tree exports and bulk result downloads.",
+        "example_command": "sf data export bulk --query 'SELECT Id FROM Contact' --output-file contacts.csv",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Salesforce bulk export",
+        "permission_id": "command.salesforce.sf.permission.export",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews sf data bulk job resumes that name an explicit job ID.",
+        "example_command": "sf data delete resume --job-id 750000000000001",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Salesforce bulk job resume",
+        "permission_id": "command.salesforce.sf.permission.resume",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "baseline_floor": "block",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Blocks sf data bulk hard deletes, and bulk deletes whose flags come from a --flags-dir directory that could add --hard-delete.",
+        "example_command": "sf data delete bulk --sobject Account --file ids.csv --hard-delete",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Salesforce hard delete",
+        "permission_id": "command.salesforce.sf.permission.hard-delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "baseline_floor": "block",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Blocks sf data bulk job resumes without a stable job ID: --use-most-recent, or a --flags-dir directory that could supply it, can attach an earlier decision to a different job.",
+        "example_command": "sf data delete resume --use-most-recent",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Salesforce unbound job resume",
+        "permission_id": "command.salesforce.sf.permission.resume-unbound",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": ["https://www.npmjs.com/package/@salesforce/plugin-data/v/5.1.10", "https://developer.salesforce.com/docs/atlas.en-us.sfdx_cli_reference.meta/sfdx_cli_reference/cli_reference_data_commands_unified.htm"],
+    "required": false,
+    "risk_classes": ["destructive", "network_egress"],
+    "rules": [
+      {
+        "action_classes": ["Salesforce data command"],
+        "default_mode": "review",
+        "description": "Reviews sf data record and bulk deletes, including legacy force:data aliases.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "delete", "record"], ["data:delete:record"], ["delete", "data", "record"], ["delete:data:record"], ["delete", "record", "data"], ["delete:record:data"], ["data", "record", "delete"], ["data:record:delete"], ["record", "data", "delete"], ["record:data:delete"], ["record", "delete", "data"], ["record:delete:data"], ["force", "data", "record", "delete"], ["force:data:record:delete"], ["data", "force", "record", "delete"], ["data:force:record:delete"], ["data", "record", "force", "delete"], ["data:record:force:delete"], ["data", "record", "delete", "force"], ["data:record:delete:force"], ["force", "record", "data", "delete"], ["force:record:data:delete"], ["record", "force", "data", "delete"], ["record:force:data:delete"], ["record", "data", "force", "delete"], ["record:data:force:delete"], ["record", "data", "delete", "force"], ["record:data:delete:force"], ["force", "record", "delete", "data"], ["force:record:delete:data"], ["record", "force", "delete", "data"], ["record:force:delete:data"], ["record", "delete", "force", "data"], ["record:delete:force:data"], ["record", "delete", "data", "force"], ["record:delete:data:force"], ["force", "data", "delete", "record"], ["force:data:delete:record"], ["data", "force", "delete", "record"], ["data:force:delete:record"], ["data", "delete", "force", "record"], ["data:delete:force:record"], ["data", "delete", "record", "force"], ["data:delete:record:force"], ["force", "delete", "data", "record"], ["force:delete:data:record"], ["delete", "force", "data", "record"], ["delete:force:data:record"], ["delete", "data", "force", "record"], ["delete:data:force:record"], ["delete", "data", "record", "force"], ["delete:data:record:force"], ["force", "delete", "record", "data"], ["force:delete:record:data"], ["delete", "force", "record", "data"], ["delete:force:record:data"], ["delete", "record", "force", "data"], ["delete:record:force:data"], ["delete", "record", "data", "force"], ["delete:record:data:force"], ["data:delete", "record"], ["data", "delete:record"], ["force:data:record", "delete"], ["force:data", "record:delete"], ["force:data", "record", "delete"], ["force", "data:record:delete"], ["force", "data:record", "delete"], ["force", "data", "record:delete"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "delete", "bulk"], ["data:delete:bulk"], ["delete", "data", "bulk"], ["delete:data:bulk"], ["delete", "bulk", "data"], ["delete:bulk:data"], ["data", "bulk", "delete"], ["data:bulk:delete"], ["bulk", "data", "delete"], ["bulk:data:delete"], ["bulk", "delete", "data"], ["bulk:delete:data"], ["data:delete", "bulk"], ["data", "delete:bulk"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["force", "data", "bulk", "delete"], ["force:data:bulk:delete"], ["data", "force", "bulk", "delete"], ["data:force:bulk:delete"], ["data", "bulk", "force", "delete"], ["data:bulk:force:delete"], ["data", "bulk", "delete", "force"], ["data:bulk:delete:force"], ["force", "bulk", "data", "delete"], ["force:bulk:data:delete"], ["bulk", "force", "data", "delete"], ["bulk:force:data:delete"], ["bulk", "data", "force", "delete"], ["bulk:data:force:delete"], ["bulk", "data", "delete", "force"], ["bulk:data:delete:force"], ["force", "bulk", "delete", "data"], ["force:bulk:delete:data"], ["bulk", "force", "delete", "data"], ["bulk:force:delete:data"], ["bulk", "delete", "force", "data"], ["bulk:delete:force:data"], ["bulk", "delete", "data", "force"], ["bulk:delete:data:force"], ["force", "data", "delete", "bulk"], ["force:data:delete:bulk"], ["data", "force", "delete", "bulk"], ["data:force:delete:bulk"], ["data", "delete", "force", "bulk"], ["data:delete:force:bulk"], ["data", "delete", "bulk", "force"], ["data:delete:bulk:force"], ["force", "delete", "data", "bulk"], ["force:delete:data:bulk"], ["delete", "force", "data", "bulk"], ["delete:force:data:bulk"], ["delete", "data", "force", "bulk"], ["delete:data:force:bulk"], ["delete", "data", "bulk", "force"], ["delete:data:bulk:force"], ["force", "delete", "bulk", "data"], ["force:delete:bulk:data"], ["delete", "force", "bulk", "data"], ["delete:force:bulk:data"], ["delete", "bulk", "force", "data"], ["delete:bulk:force:data"], ["delete", "bulk", "data", "force"], ["delete:bulk:data:force"], ["force:data:bulk", "delete"], ["force:data", "bulk:delete"], ["force:data", "bulk", "delete"], ["force", "data:bulk:delete"], ["force", "data:bulk", "delete"], ["force", "data", "bulk:delete"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}}
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.salesforce.sf.permission.delete",
+        "risk_classes": ["destructive"],
+        "rule_id": "command.salesforce.sf.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "severity": "high",
+        "title": "Salesforce record delete"
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "default_mode": "review",
+        "description": "Reviews sf data record updates and bulk update or upsert jobs.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "update", "record"], ["data:update:record"], ["update", "data", "record"], ["update:data:record"], ["update", "record", "data"], ["update:record:data"], ["data", "record", "update"], ["data:record:update"], ["record", "data", "update"], ["record:data:update"], ["record", "update", "data"], ["record:update:data"], ["force", "data", "record", "update"], ["force:data:record:update"], ["data", "force", "record", "update"], ["data:force:record:update"], ["data", "record", "force", "update"], ["data:record:force:update"], ["data", "record", "update", "force"], ["data:record:update:force"], ["force", "record", "data", "update"], ["force:record:data:update"], ["record", "force", "data", "update"], ["record:force:data:update"], ["record", "data", "force", "update"], ["record:data:force:update"], ["record", "data", "update", "force"], ["record:data:update:force"], ["force", "record", "update", "data"], ["force:record:update:data"], ["record", "force", "update", "data"], ["record:force:update:data"], ["record", "update", "force", "data"], ["record:update:force:data"], ["record", "update", "data", "force"], ["record:update:data:force"], ["force", "data", "update", "record"], ["force:data:update:record"], ["data", "force", "update", "record"], ["data:force:update:record"], ["data", "update", "force", "record"], ["data:update:force:record"], ["data", "update", "record", "force"], ["data:update:record:force"], ["force", "update", "data", "record"], ["force:update:data:record"], ["update", "force", "data", "record"], ["update:force:data:record"], ["update", "data", "force", "record"], ["update:data:force:record"], ["update", "data", "record", "force"], ["update:data:record:force"], ["force", "update", "record", "data"], ["force:update:record:data"], ["update", "force", "record", "data"], ["update:force:record:data"], ["update", "record", "force", "data"], ["update:record:force:data"], ["update", "record", "data", "force"], ["update:record:data:force"], ["data:update", "record"], ["data", "update:record"], ["force:data:record", "update"], ["force:data", "record:update"], ["force:data", "record", "update"], ["force", "data:record:update"], ["force", "data:record", "update"], ["force", "data", "record:update"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "update", "bulk"], ["data:update:bulk"], ["update", "data", "bulk"], ["update:data:bulk"], ["update", "bulk", "data"], ["update:bulk:data"], ["data", "bulk", "update"], ["data:bulk:update"], ["bulk", "data", "update"], ["bulk:data:update"], ["bulk", "update", "data"], ["bulk:update:data"], ["data:update", "bulk"], ["data", "update:bulk"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "upsert", "bulk"], ["data:upsert:bulk"], ["upsert", "data", "bulk"], ["upsert:data:bulk"], ["upsert", "bulk", "data"], ["upsert:bulk:data"], ["data", "bulk", "upsert"], ["data:bulk:upsert"], ["bulk", "data", "upsert"], ["bulk:data:upsert"], ["bulk", "upsert", "data"], ["bulk:upsert:data"], ["data:upsert", "bulk"], ["data", "upsert:bulk"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["force", "data", "bulk", "upsert"], ["force:data:bulk:upsert"], ["data", "force", "bulk", "upsert"], ["data:force:bulk:upsert"], ["data", "bulk", "force", "upsert"], ["data:bulk:force:upsert"], ["data", "bulk", "upsert", "force"], ["data:bulk:upsert:force"], ["force", "bulk", "data", "upsert"], ["force:bulk:data:upsert"], ["bulk", "force", "data", "upsert"], ["bulk:force:data:upsert"], ["bulk", "data", "force", "upsert"], ["bulk:data:force:upsert"], ["bulk", "data", "upsert", "force"], ["bulk:data:upsert:force"], ["force", "bulk", "upsert", "data"], ["force:bulk:upsert:data"], ["bulk", "force", "upsert", "data"], ["bulk:force:upsert:data"], ["bulk", "upsert", "force", "data"], ["bulk:upsert:force:data"], ["bulk", "upsert", "data", "force"], ["bulk:upsert:data:force"], ["force", "data", "upsert", "bulk"], ["force:data:upsert:bulk"], ["data", "force", "upsert", "bulk"], ["data:force:upsert:bulk"], ["data", "upsert", "force", "bulk"], ["data:upsert:force:bulk"], ["data", "upsert", "bulk", "force"], ["data:upsert:bulk:force"], ["force", "upsert", "data", "bulk"], ["force:upsert:data:bulk"], ["upsert", "force", "data", "bulk"], ["upsert:force:data:bulk"], ["upsert", "data", "force", "bulk"], ["upsert:data:force:bulk"], ["upsert", "data", "bulk", "force"], ["upsert:data:bulk:force"], ["force", "upsert", "bulk", "data"], ["force:upsert:bulk:data"], ["upsert", "force", "bulk", "data"], ["upsert:force:bulk:data"], ["upsert", "bulk", "force", "data"], ["upsert:bulk:force:data"], ["upsert", "bulk", "data", "force"], ["upsert:bulk:data:force"], ["force:data:bulk", "upsert"], ["force:data", "bulk:upsert"], ["force:data", "bulk", "upsert"], ["force", "data:bulk:upsert"], ["force", "data:bulk", "upsert"], ["force", "data", "bulk:upsert"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}}
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.salesforce.sf.permission.update",
+        "risk_classes": ["network_egress"],
+        "rule_id": "command.salesforce.sf.update",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "severity": "high",
+        "title": "Salesforce record update"
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "default_mode": "review",
+        "description": "Reviews sf data record, file and bulk or tree imports that create records.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "create", "record"], ["data:create:record"], ["create", "data", "record"], ["create:data:record"], ["create", "record", "data"], ["create:record:data"], ["data", "record", "create"], ["data:record:create"], ["record", "data", "create"], ["record:data:create"], ["record", "create", "data"], ["record:create:data"], ["force", "data", "record", "create"], ["force:data:record:create"], ["data", "force", "record", "create"], ["data:force:record:create"], ["data", "record", "force", "create"], ["data:record:force:create"], ["data", "record", "create", "force"], ["data:record:create:force"], ["force", "record", "data", "create"], ["force:record:data:create"], ["record", "force", "data", "create"], ["record:force:data:create"], ["record", "data", "force", "create"], ["record:data:force:create"], ["record", "data", "create", "force"], ["record:data:create:force"], ["force", "record", "create", "data"], ["force:record:create:data"], ["record", "force", "create", "data"], ["record:force:create:data"], ["record", "create", "force", "data"], ["record:create:force:data"], ["record", "create", "data", "force"], ["record:create:data:force"], ["force", "data", "create", "record"], ["force:data:create:record"], ["data", "force", "create", "record"], ["data:force:create:record"], ["data", "create", "force", "record"], ["data:create:force:record"], ["data", "create", "record", "force"], ["data:create:record:force"], ["force", "create", "data", "record"], ["force:create:data:record"], ["create", "force", "data", "record"], ["create:force:data:record"], ["create", "data", "force", "record"], ["create:data:force:record"], ["create", "data", "record", "force"], ["create:data:record:force"], ["force", "create", "record", "data"], ["force:create:record:data"], ["create", "force", "record", "data"], ["create:force:record:data"], ["create", "record", "force", "data"], ["create:record:force:data"], ["create", "record", "data", "force"], ["create:record:data:force"], ["data:create", "record"], ["data", "create:record"], ["force:data:record", "create"], ["force:data", "record:create"], ["force:data", "record", "create"], ["force", "data:record:create"], ["force", "data:record", "create"], ["force", "data", "record:create"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "create", "file"], ["data:create:file"], ["create", "data", "file"], ["create:data:file"], ["create", "file", "data"], ["create:file:data"], ["data", "file", "create"], ["data:file:create"], ["file", "data", "create"], ["file:data:create"], ["file", "create", "data"], ["file:create:data"], ["data:create", "file"], ["data", "create:file"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "import", "bulk"], ["data:import:bulk"], ["import", "data", "bulk"], ["import:data:bulk"], ["import", "bulk", "data"], ["import:bulk:data"], ["data", "bulk", "import"], ["data:bulk:import"], ["bulk", "data", "import"], ["bulk:data:import"], ["bulk", "import", "data"], ["bulk:import:data"], ["data:import", "bulk"], ["data", "import:bulk"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "import", "tree"], ["data:import:tree"], ["import", "data", "tree"], ["import:data:tree"], ["import", "tree", "data"], ["import:tree:data"], ["data", "tree", "import"], ["data:tree:import"], ["tree", "data", "import"], ["tree:data:import"], ["tree", "import", "data"], ["tree:import:data"], ["force", "data", "tree", "import"], ["force:data:tree:import"], ["data", "force", "tree", "import"], ["data:force:tree:import"], ["data", "tree", "force", "import"], ["data:tree:force:import"], ["data", "tree", "import", "force"], ["data:tree:import:force"], ["force", "tree", "data", "import"], ["force:tree:data:import"], ["tree", "force", "data", "import"], ["tree:force:data:import"], ["tree", "data", "force", "import"], ["tree:data:force:import"], ["tree", "data", "import", "force"], ["tree:data:import:force"], ["force", "tree", "import", "data"], ["force:tree:import:data"], ["tree", "force", "import", "data"], ["tree:force:import:data"], ["tree", "import", "force", "data"], ["tree:import:force:data"], ["tree", "import", "data", "force"], ["tree:import:data:force"], ["force", "data", "import", "tree"], ["force:data:import:tree"], ["data", "force", "import", "tree"], ["data:force:import:tree"], ["data", "import", "force", "tree"], ["data:import:force:tree"], ["data", "import", "tree", "force"], ["data:import:tree:force"], ["force", "import", "data", "tree"], ["force:import:data:tree"], ["import", "force", "data", "tree"], ["import:force:data:tree"], ["import", "data", "force", "tree"], ["import:data:force:tree"], ["import", "data", "tree", "force"], ["import:data:tree:force"], ["force", "import", "tree", "data"], ["force:import:tree:data"], ["import", "force", "tree", "data"], ["import:force:tree:data"], ["import", "tree", "force", "data"], ["import:tree:force:data"], ["import", "tree", "data", "force"], ["import:tree:data:force"], ["data:import", "tree"], ["data", "import:tree"], ["force:data:tree", "import"], ["force:data", "tree:import"], ["force:data", "tree", "import"], ["force", "data:tree:import"], ["force", "data:tree", "import"], ["force", "data", "tree:import"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}}
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.salesforce.sf.permission.create",
+        "risk_classes": ["network_egress"],
+        "rule_id": "command.salesforce.sf.create",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "severity": "medium",
+        "title": "Salesforce record create"
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "default_mode": "review",
+        "description": "Reviews sf data bulk and tree exports and bulk result downloads.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "export", "bulk"], ["data:export:bulk"], ["export", "data", "bulk"], ["export:data:bulk"], ["export", "bulk", "data"], ["export:bulk:data"], ["data", "bulk", "export"], ["data:bulk:export"], ["bulk", "data", "export"], ["bulk:data:export"], ["bulk", "export", "data"], ["bulk:export:data"], ["data:export", "bulk"], ["data", "export:bulk"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "export", "tree"], ["data:export:tree"], ["export", "data", "tree"], ["export:data:tree"], ["export", "tree", "data"], ["export:tree:data"], ["data", "tree", "export"], ["data:tree:export"], ["tree", "data", "export"], ["tree:data:export"], ["tree", "export", "data"], ["tree:export:data"], ["force", "data", "tree", "export"], ["force:data:tree:export"], ["data", "force", "tree", "export"], ["data:force:tree:export"], ["data", "tree", "force", "export"], ["data:tree:force:export"], ["data", "tree", "export", "force"], ["data:tree:export:force"], ["force", "tree", "data", "export"], ["force:tree:data:export"], ["tree", "force", "data", "export"], ["tree:force:data:export"], ["tree", "data", "force", "export"], ["tree:data:force:export"], ["tree", "data", "export", "force"], ["tree:data:export:force"], ["force", "tree", "export", "data"], ["force:tree:export:data"], ["tree", "force", "export", "data"], ["tree:force:export:data"], ["tree", "export", "force", "data"], ["tree:export:force:data"], ["tree", "export", "data", "force"], ["tree:export:data:force"], ["force", "data", "export", "tree"], ["force:data:export:tree"], ["data", "force", "export", "tree"], ["data:force:export:tree"], ["data", "export", "force", "tree"], ["data:export:force:tree"], ["data", "export", "tree", "force"], ["data:export:tree:force"], ["force", "export", "data", "tree"], ["force:export:data:tree"], ["export", "force", "data", "tree"], ["export:force:data:tree"], ["export", "data", "force", "tree"], ["export:data:force:tree"], ["export", "data", "tree", "force"], ["export:data:tree:force"], ["force", "export", "tree", "data"], ["force:export:tree:data"], ["export", "force", "tree", "data"], ["export:force:tree:data"], ["export", "tree", "force", "data"], ["export:tree:force:data"], ["export", "tree", "data", "force"], ["export:tree:data:force"], ["data:export", "tree"], ["data", "export:tree"], ["force:data:tree", "export"], ["force:data", "tree:export"], ["force:data", "tree", "export"], ["force", "data:tree:export"], ["force", "data:tree", "export"], ["force", "data", "tree:export"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "bulk", "results"], ["data:bulk:results"], ["bulk", "data", "results"], ["bulk:data:results"], ["bulk", "results", "data"], ["bulk:results:data"], ["data", "results", "bulk"], ["data:results:bulk"], ["results", "data", "bulk"], ["results:data:bulk"], ["results", "bulk", "data"], ["results:bulk:data"], ["data:bulk", "results"], ["data", "bulk:results"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}}
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.salesforce.sf.permission.export",
+        "risk_classes": ["network_egress"],
+        "rule_id": "command.salesforce.sf.export",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "severity": "high",
+        "title": "Salesforce bulk export"
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "default_mode": "review",
+        "description": "Reviews sf data bulk job resumes that name an explicit job ID.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "delete", "resume"], ["data:delete:resume"], ["delete", "data", "resume"], ["delete:data:resume"], ["delete", "resume", "data"], ["delete:resume:data"], ["data", "resume", "delete"], ["data:resume:delete"], ["resume", "data", "delete"], ["resume:data:delete"], ["resume", "delete", "data"], ["resume:delete:data"], ["data:delete", "resume"], ["data", "delete:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "import", "resume"], ["data:import:resume"], ["import", "data", "resume"], ["import:data:resume"], ["import", "resume", "data"], ["import:resume:data"], ["data", "resume", "import"], ["data:resume:import"], ["resume", "data", "import"], ["resume:data:import"], ["resume", "import", "data"], ["resume:import:data"], ["data:import", "resume"], ["data", "import:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "update", "resume"], ["data:update:resume"], ["update", "data", "resume"], ["update:data:resume"], ["update", "resume", "data"], ["update:resume:data"], ["data", "resume", "update"], ["data:resume:update"], ["resume", "data", "update"], ["resume:data:update"], ["resume", "update", "data"], ["resume:update:data"], ["data:update", "resume"], ["data", "update:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "upsert", "resume"], ["data:upsert:resume"], ["upsert", "data", "resume"], ["upsert:data:resume"], ["upsert", "resume", "data"], ["upsert:resume:data"], ["data", "resume", "upsert"], ["data:resume:upsert"], ["resume", "data", "upsert"], ["resume:data:upsert"], ["resume", "upsert", "data"], ["resume:upsert:data"], ["data:upsert", "resume"], ["data", "upsert:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}},
+            {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "export", "resume"], ["data:export:resume"], ["export", "data", "resume"], ["export:data:resume"], ["export", "resume", "data"], ["export:resume:data"], ["data", "resume", "export"], ["data:resume:export"], ["resume", "data", "export"], ["resume:data:export"], ["resume", "export", "data"], ["resume:export:data"], ["data:export", "resume"], ["data", "export:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": [], "options_with_values": [], "interspersed_flags": [], "forbidden_flags": [], "required_flags": [], "required_flags_in_all_arguments": false, "required_option_values": [], "inverse_flag_pairs": []}}
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.salesforce.sf.permission.resume",
+        "risk_classes": ["network_egress"],
+        "rule_id": "command.salesforce.sf.resume",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "severity": "high",
+        "title": "Salesforce bulk job resume"
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "default_mode": "enforce",
+        "description": "Blocks sf data bulk hard deletes, and bulk deletes whose flags come from a --flags-dir directory that could add --hard-delete.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {"op": "arguments.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "required_arguments": ["--hard-delete"]}},
+            {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "delete", "bulk"], ["data:delete:bulk"], ["delete", "data", "bulk"], ["delete:data:bulk"], ["delete", "bulk", "data"], ["delete:bulk:data"], ["data", "bulk", "delete"], ["data:bulk:delete"], ["bulk", "data", "delete"], ["bulk:data:delete"], ["bulk", "delete", "data"], ["bulk:delete:data"], ["data:delete", "bulk"], ["data", "delete:bulk"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--api-version", "--file", "--flags-dir", "--line-ending", "--loglevel", "--sobject", "--target-org", "--wait", "-f", "-o", "-s", "-w"], "options_with_values": [], "interspersed_flags": ["--hard-delete", "--help", "--json", "-h"], "forbidden_flags": [], "required_flags": ["--flags-dir"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["force", "data", "bulk", "delete"], ["force:data:bulk:delete"], ["data", "force", "bulk", "delete"], ["data:force:bulk:delete"], ["data", "bulk", "force", "delete"], ["data:bulk:force:delete"], ["data", "bulk", "delete", "force"], ["data:bulk:delete:force"], ["force", "bulk", "data", "delete"], ["force:bulk:data:delete"], ["bulk", "force", "data", "delete"], ["bulk:force:data:delete"], ["bulk", "data", "force", "delete"], ["bulk:data:force:delete"], ["bulk", "data", "delete", "force"], ["bulk:data:delete:force"], ["force", "bulk", "delete", "data"], ["force:bulk:delete:data"], ["bulk", "force", "delete", "data"], ["bulk:force:delete:data"], ["bulk", "delete", "force", "data"], ["bulk:delete:force:data"], ["bulk", "delete", "data", "force"], ["bulk:delete:data:force"], ["force", "data", "delete", "bulk"], ["force:data:delete:bulk"], ["data", "force", "delete", "bulk"], ["data:force:delete:bulk"], ["data", "delete", "force", "bulk"], ["data:delete:force:bulk"], ["data", "delete", "bulk", "force"], ["data:delete:bulk:force"], ["force", "delete", "data", "bulk"], ["force:delete:data:bulk"], ["delete", "force", "data", "bulk"], ["delete:force:data:bulk"], ["delete", "data", "force", "bulk"], ["delete:data:force:bulk"], ["delete", "data", "bulk", "force"], ["delete:data:bulk:force"], ["force", "delete", "bulk", "data"], ["force:delete:bulk:data"], ["delete", "force", "bulk", "data"], ["delete:force:bulk:data"], ["delete", "bulk", "force", "data"], ["delete:bulk:force:data"], ["delete", "bulk", "data", "force"], ["delete:bulk:data:force"], ["force:data:bulk", "delete"], ["force:data", "bulk:delete"], ["force:data", "bulk", "delete"], ["force", "data:bulk:delete"], ["force", "data:bulk", "delete"], ["force", "data", "bulk:delete"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--api-version", "--file", "--flags-dir", "--loglevel", "--sobject", "--target-org", "--wait", "-f", "-o", "-s", "-w"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "-h"], "forbidden_flags": [], "required_flags": ["--flags-dir"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}}
+              ]
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.salesforce.sf.permission.hard-delete",
+        "risk_classes": ["destructive"],
+        "rule_id": "command.salesforce.sf.hard-delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "severity": "critical",
+        "title": "Salesforce hard delete"
+      },
+      {
+        "action_classes": ["Salesforce data command"],
+        "default_mode": "enforce",
+        "description": "Blocks sf data bulk job resumes without a stable job ID: --use-most-recent, or a --flags-dir directory that could supply it, can attach an earlier decision to a different job.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "delete", "resume"], ["data:delete:resume"], ["delete", "data", "resume"], ["delete:data:resume"], ["delete", "resume", "data"], ["delete:resume:data"], ["data", "resume", "delete"], ["data:resume:delete"], ["resume", "data", "delete"], ["resume:data:delete"], ["resume", "delete", "data"], ["resume:delete:data"], ["data:delete", "resume"], ["data", "delete:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--api-version", "--flags-dir", "--job-id", "--loglevel", "--target-org", "--wait", "-i", "-o"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--use-most-recent"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "import", "resume"], ["data:import:resume"], ["import", "data", "resume"], ["import:data:resume"], ["import", "resume", "data"], ["import:resume:data"], ["data", "resume", "import"], ["data:resume:import"], ["resume", "data", "import"], ["resume:data:import"], ["resume", "import", "data"], ["resume:import:data"], ["data:import", "resume"], ["data", "import:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--flags-dir", "--job-id", "--wait", "-i", "-w"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--use-most-recent"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "update", "resume"], ["data:update:resume"], ["update", "data", "resume"], ["update:data:resume"], ["update", "resume", "data"], ["update:resume:data"], ["data", "resume", "update"], ["data:resume:update"], ["resume", "data", "update"], ["resume:data:update"], ["resume", "update", "data"], ["resume:update:data"], ["data:update", "resume"], ["data", "update:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--flags-dir", "--job-id", "--wait", "-i", "-w"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--use-most-recent"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "upsert", "resume"], ["data:upsert:resume"], ["upsert", "data", "resume"], ["upsert:data:resume"], ["upsert", "resume", "data"], ["upsert:resume:data"], ["data", "resume", "upsert"], ["data:resume:upsert"], ["resume", "data", "upsert"], ["resume:data:upsert"], ["resume", "upsert", "data"], ["resume:upsert:data"], ["data:upsert", "resume"], ["data", "upsert:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--api-version", "--flags-dir", "--job-id", "--loglevel", "--target-org", "--wait", "-i", "-o"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--use-most-recent"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "export", "resume"], ["data:export:resume"], ["export", "data", "resume"], ["export:data:resume"], ["export", "resume", "data"], ["export:resume:data"], ["data", "resume", "export"], ["data:resume:export"], ["resume", "data", "export"], ["resume:data:export"], ["resume", "export", "data"], ["resume:export:data"], ["data:export", "resume"], ["data", "export:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--api-version", "--flags-dir", "--job-id", "-i"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--use-most-recent"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}}
+              ]
+            },
+            {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "delete", "resume"], ["data:delete:resume"], ["delete", "data", "resume"], ["delete:data:resume"], ["delete", "resume", "data"], ["delete:resume:data"], ["data", "resume", "delete"], ["data:resume:delete"], ["resume", "data", "delete"], ["resume:data:delete"], ["resume", "delete", "data"], ["resume:delete:data"], ["data:delete", "resume"], ["data", "delete:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--api-version", "--flags-dir", "--job-id", "--loglevel", "--target-org", "--wait", "-i", "-o"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--flags-dir"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "import", "resume"], ["data:import:resume"], ["import", "data", "resume"], ["import:data:resume"], ["import", "resume", "data"], ["import:resume:data"], ["data", "resume", "import"], ["data:resume:import"], ["resume", "data", "import"], ["resume:data:import"], ["resume", "import", "data"], ["resume:import:data"], ["data:import", "resume"], ["data", "import:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--flags-dir", "--job-id", "--wait", "-i", "-w"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--flags-dir"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "update", "resume"], ["data:update:resume"], ["update", "data", "resume"], ["update:data:resume"], ["update", "resume", "data"], ["update:resume:data"], ["data", "resume", "update"], ["data:resume:update"], ["resume", "data", "update"], ["resume:data:update"], ["resume", "update", "data"], ["resume:update:data"], ["data:update", "resume"], ["data", "update:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--flags-dir", "--job-id", "--wait", "-i", "-w"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--flags-dir"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "upsert", "resume"], ["data:upsert:resume"], ["upsert", "data", "resume"], ["upsert:data:resume"], ["upsert", "resume", "data"], ["upsert:resume:data"], ["data", "resume", "upsert"], ["data:resume:upsert"], ["resume", "data", "upsert"], ["resume:data:upsert"], ["resume", "upsert", "data"], ["resume:upsert:data"], ["data:upsert", "resume"], ["data", "upsert:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--api-version", "--flags-dir", "--job-id", "--loglevel", "--target-org", "--wait", "-i", "-o"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--flags-dir"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}},
+                {"op": "executable-path-set.v1", "config": {"executables": ["sf", "sf.cmd", "sfdx", "sfdx.cmd"], "paths": [["data", "export", "resume"], ["data:export:resume"], ["export", "data", "resume"], ["export:data:resume"], ["export", "resume", "data"], ["export:resume:data"], ["data", "resume", "export"], ["data:resume:export"], ["resume", "data", "export"], ["resume:data:export"], ["resume", "export", "data"], ["resume:export:data"], ["data:export", "resume"], ["data", "export:resume"]], "allow_leading_options": false, "fail_secure_unknown_options": true, "leading_options_with_values": [], "interspersed_options_with_values": ["--api-version", "--flags-dir", "--job-id", "-i"], "options_with_values": [], "interspersed_flags": ["--help", "--json", "--use-most-recent", "-h"], "forbidden_flags": [], "required_flags": ["--flags-dir"], "required_flags_in_all_arguments": true, "required_option_values": [], "inverse_flag_pairs": []}}
+              ]
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.salesforce.sf.permission.resume-unbound",
+        "risk_classes": ["network_egress"],
+        "rule_id": "command.salesforce.sf.resume-unbound",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": ["Review the target org, object, record set or query, and job ID before confirming."],
+        "severity": "high",
+        "title": "Salesforce unbound job resume"
+      }
+    ],
+    "safer_alternatives": ["Review the target org, object, record set or query, and job ID before confirming."],
+    "source": "built-in",
+    "version": "1.0.0"
+  }
+}

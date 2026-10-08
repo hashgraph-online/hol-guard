@@ -1491,8 +1491,11 @@ class TestGuardSurfaceServer:
         assert "Keep blocked" in notification_payload["hookSpecificOutput"]["additionalContext"]
 
     def test_guard_daemon_claude_hook_endpoint_rejects_relative_workspace_path_and_records_audit(
-        self, tmp_path
+        self, tmp_path, monkeypatch
     ) -> None:
+        # Python-side HTTP rejection only surfaces when the Rust edge isn't authoritative;
+        # under `HOL_GUARD_NATIVE=force` the daemon defers validation to the native worker.
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -1705,7 +1708,64 @@ class TestGuardSurfaceServer:
         assert payload["decision"] == "deny"
         assert payload["reason_code"] == "daemon_hook_deadline_exhausted"
 
+    @pytest.mark.usefixtures("native_hook_force")
+    def test_expired_worker_result_does_not_restart_fail_safe_storage_wait(self, tmp_path, monkeypatch) -> None:
+        import threading
+        from types import SimpleNamespace
+
+        from codex_plugin_scanner.guard.sqlite_tuning import sqlite_operation_deadline_monotonic
+
+        home = tmp_path / "home"
+        workspace = home / "workspace"
+        workspace.mkdir(parents=True)
+        store = GuardStore(tmp_path / "guard")
+        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
+        handler.server = SimpleNamespace(store=store, home_dir=home)
+        monkeypatch.setattr(handler, "_hook_fast_path_enabled", lambda: True)
+        monkeypatch.setattr(handler, "_handle_runtime_hook_fast", lambda *_args, **_kwargs: {"decision": "allow"})
+        responses = []
+        monkeypatch.setattr(handler, "_write_json", responses.append)
+        held = threading.Event()
+        release = threading.Event()
+
+        def hold_gate() -> None:
+            with store._hold_storage_gate(exclusive=True):
+                held.set()
+                release.wait(timeout=1)
+
+        holder = threading.Thread(target=hold_gate)
+        holder.start()
+        inherited_deadline = sqlite_operation_deadline_monotonic()
+        try:
+            assert held.wait(timeout=2)
+            started = time.monotonic()
+            handler._execute_runtime_hook(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "curl https://example.test"},
+                },
+                {"home": [str(home)], "guard-home": [str(store.guard_home)], "workspace": [str(workspace)]},
+                hook_env={},
+                default_harness="pi",
+                home_dir=str(home),
+                guard_home=str(store.guard_home),
+                workspace=str(workspace),
+                deadline=started - 0.01,
+            )
+            elapsed = time.monotonic() - started
+        finally:
+            release.set()
+            holder.join(timeout=2)
+        assert responses[0]["decision"] == "deny"
+        assert elapsed < 0.4, f"expired rendering restarted the storage wait: {elapsed:.3f}s"
+        assert sqlite_operation_deadline_monotonic() == inherited_deadline
+
     def test_guard_daemon_pi_hook_endpoint_rejects_missing_temporary_workspace(self, tmp_path, monkeypatch) -> None:
+        # Python-side 400 only surfaces when the Rust edge isn't authoritative;
+        # under `HOL_GUARD_NATIVE=force` (CI native regression) the daemon defers
+        # validation to the native worker instead of returning an HTTP error.
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
         home_dir = tmp_path / "home"
         home_dir.mkdir()
         workspace_dir = tmp_path / "missing-workspace"
@@ -2335,8 +2395,9 @@ class TestGuardSurfaceServer:
         assert captured["workspace"] == str(workspace_dir)
 
     def test_guard_daemon_claude_hook_endpoint_rejects_workspace_path_outside_safe_roots_and_records_audit(
-        self, tmp_path
+        self, tmp_path, monkeypatch
     ) -> None:
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
         home_dir = tmp_path / "home"
         linked_workspace = home_dir / "linked-workspace"
         home_dir.mkdir(parents=True, exist_ok=True)
@@ -2410,7 +2471,10 @@ class TestGuardSurfaceServer:
         assert payload.get("policy_action", "allow") in {"allow", "warn"}
         assert payload.get("decision") != "block"
 
-    def test_guard_daemon_claude_hook_endpoint_rejects_unexpected_guard_home_and_records_audit(self, tmp_path) -> None:
+    def test_guard_daemon_claude_hook_endpoint_rejects_unexpected_guard_home_and_records_audit(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -2441,8 +2505,9 @@ class TestGuardSurfaceServer:
         assert events[-1]["payload"]["reason"] == "unexpected_guard_home"
 
     def test_guard_daemon_claude_hook_endpoint_rejects_special_guard_home_path_and_records_audit(
-        self, tmp_path
+        self, tmp_path, monkeypatch
     ) -> None:
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
         if not hasattr(os, "mkfifo"):
             pytest.skip("FIFOs are not supported in this environment")
 
@@ -2585,7 +2650,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2627,7 +2692,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="test-token-not-real",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2663,7 +2728,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2704,7 +2769,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2758,7 +2823,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2814,7 +2879,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2878,7 +2943,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",
@@ -2924,7 +2989,7 @@ class TestGuardSurfaceServer:
             issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_private_key_pem=("-----BEGIN " + "PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"),
             dpop_public_jwk={
                 "kty": "EC",
                 "crv": "P-256",

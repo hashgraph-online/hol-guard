@@ -49,18 +49,18 @@ def test_every_cdx_062_case_retains_exact_review_or_block_floor() -> None:
         assert operation is not None
         operations.add(operation)
         # The native catalog models the read-only --check form. Applying an
-        # unchecked patch is still unsupported and cannot inherit the host
-        # syntax candidate's weaker review floor or bypass Git controls.
-        expected_floor = "block" if operation == "patch-apply" else "review"
+        # unchecked patch stays unattributed: it needs a human review and is
+        # never contained automatically, and disabled Git controls still block.
         if operation == "patch-apply":
             unsupported_apply_count += 1
-            assert reviewed.native_minimum_action == "block"
-            assert reviewed.payload["reason_code"] == "native_command_extension_uncertain"
-            assert any(
-                reason.reason_code == "native.classification-block" for reason in evaluation.decision_plane.reasons
-            )
-        assert evaluation.minimum_action == expected_floor
-        assert evaluation.decision_plane.action == expected_floor
+            assert reviewed.native_minimum_action == "review"
+            extensions = reviewed.payload["command_extensions"]
+            assert isinstance(extensions, dict)
+            binding = extensions["binding"]
+            assert isinstance(binding, dict)
+            assert int(binding["uncertainty_count"]) > 0
+        assert evaluation.minimum_action == "review"
+        assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
     assert benign_count == 100
     assert unsupported_apply_count == 25

@@ -22,13 +22,16 @@ from codex_plugin_scanner.guard.local_supply_chain import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.proxy.runtime_mcp import _bound_external_archive_mcp_request
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
+from codex_plugin_scanner.guard.runtime.supply_chain_package_services import _TARBALL_SCAN_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
 
 def _hook_inputs(
@@ -94,7 +97,6 @@ def _package_artifact(workspace: Path, command: str) -> GuardArtifact:
 def test_package_firewall_reuses_one_review_to_inspect_then_launch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    native_hook_force: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -122,7 +124,7 @@ def test_package_firewall_reuses_one_review_to_inspect_then_launch(
     def downloaded_archive(
         source_url: str,
         *,
-        timeout_seconds: float = evaluator._TARBALL_SCAN_TIMEOUT_SECONDS,
+        timeout_seconds: float = _TARBALL_SCAN_TIMEOUT_SECONDS,
     ) -> RestrictedArchiveDownload:
         del timeout_seconds
         download_calls.append(source_url)
@@ -134,7 +136,7 @@ def test_package_firewall_reuses_one_review_to_inspect_then_launch(
             final_url=source_url,
         )
 
-    monkeypatch.setattr(evaluator, "_download_external_tarball", downloaded_archive)
+    monkeypatch.setattr(package_services, "_download_external_tarball", downloaded_archive)
     baseline = build_package_protect_payload(
         command=command,
         store=store,
@@ -189,7 +191,7 @@ def test_package_firewall_reuses_one_review_to_inspect_then_launch(
 
     assert approved is not None
     approved_payload, approved_rc = approved
-    assert approved_rc == 0
+    assert approved_rc == 0, approved_payload["verdict"]
     assert approved_payload["executed"] is True
     assert download_calls == ["https://packages.example.com/demo.tgz"]
     assert len(launches) == 1

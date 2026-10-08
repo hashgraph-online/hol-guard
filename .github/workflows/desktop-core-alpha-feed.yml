@@ -309,6 +309,13 @@ jobs:
               *) echo "Version stamping changed an unexpected Core file: $changed_path" >&2; exit 1 ;;
             esac
           done < <(git -C "$SOURCE" diff --name-only)
+          SOURCE_COMPILER="$RUNNER_TEMP/guard-command-source"
+          unzip -p "$RUNNER_TEMP/attested-macos-arm64.whl" \
+            codex_plugin_scanner/_native/guard-command-source > "$SOURCE_COMPILER"
+          chmod 0755 "$SOURCE_COMPILER"
+          test -x "$SOURCE_COMPILER"
+          python3 -I "$SOURCE/scripts/build_native_command_program.py" \
+            --compiler "$SOURCE_COMPILER"
           python3 -I scripts/release/stage_guard_cloud_review_artifacts.py \
             --source-root "$SOURCE"
           mkdir -p "$RUNNER_TEMP/native-runtime"

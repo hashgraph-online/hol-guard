@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shlex
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,13 @@ from tests.native_command_test_support import RealNativeReviewFixture, real_nati
 
 
 @pytest.fixture(autouse=True)
-def _real_native_command_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+def _real_native_command_reviews(
+    monkeypatch: pytest.MonkeyPatch,
+    package_intent_native: Path,
+    native_mcp_probe: Callable[[Path], None],
+    tmp_path: Path,
+) -> None:
+    native_mcp_probe(tmp_path / "home" / ".guard")
     from codex_plugin_scanner.guard.runtime import native_command_evaluation
     from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
@@ -407,7 +414,16 @@ def test_compound_stdin_only_python_observer_requires_host_binary_proof(
             assert not is_trusted_absolute_command_path(Path(sys.executable), cwd=workspace, home_dir=home)
         assert artifact is not None
         assert artifact.metadata["compound_segment_count"] == 3
-        assert artifact.metadata["reason_code"] == "interpreter_host_binding_unverified"
+        # Which fail-closed reason fires depends on where the launch identity
+        # check lands: an interpreter the host classifies as untrusted reports
+        # that identity first, and one it trusts reaches the Windows host-ACL
+        # floor below.  A real Windows host takes the first path, a host faking
+        # `os.name` for the classifier can take either, so both are accepted —
+        # what must hold is that the compound launch is not allowed outright.
+        assert artifact.metadata["reason_code"] in {
+            "interpreter_identity_untrusted",
+            "interpreter_host_binding_unverified",
+        }
         assert artifact.metadata["guard_default_action"] == "require-reapproval"
     else:
         assert artifact is None
@@ -467,7 +483,7 @@ def test_harnesses_keep_guard_removal_at_the_destructive_floor(
     harness: str,
 ) -> None:
     home = tmp_path / "home"
-    home.mkdir()
+    home.mkdir(exist_ok=True)
 
     artifact = _artifact("hol-guard uninstall --all", home=home, harness=harness)
 
@@ -477,7 +493,7 @@ def test_harnesses_keep_guard_removal_at_the_destructive_floor(
 
 def test_guard_removal_help_stays_non_destructive(tmp_path: Path) -> None:
     home = tmp_path / "home"
-    home.mkdir()
+    home.mkdir(exist_ok=True)
 
     artifact = _artifact("hol-guard uninstall --help", home=home)
 
@@ -541,7 +557,7 @@ def test_guard_removal_wrappers_keep_the_destructive_floor(
     command: str,
 ) -> None:
     home = tmp_path / "home"
-    home.mkdir()
+    home.mkdir(exist_ok=True)
 
     artifact = _artifact(command, home=home)
 

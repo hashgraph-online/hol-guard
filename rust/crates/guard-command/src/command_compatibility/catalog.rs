@@ -9,6 +9,7 @@ pub fn compatibility_rule_ids() -> &'static [&'static str] {
         "command.git.unverified-fetch",
         "command.git.index-inspection",
         "command.git.branch",
+        "command.git.worktree",
         "command.git.pull",
         "command.git.push",
         "command.git.clone",

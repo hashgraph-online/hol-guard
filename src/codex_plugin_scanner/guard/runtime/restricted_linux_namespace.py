@@ -51,7 +51,7 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
     system_roots = tuple(path.resolve() for path in _LINUX_READ_ROOTS if path.is_dir())
     if any(plan.workspace.is_relative_to(path) for path in system_roots):
         raise LinuxContainmentUnavailableError("Workspace overlaps a system runtime grant.")
-    runtime_roots = _runtime_read_roots(plan)
+    runtime_roots = _runtime_read_roots(plan, private_root=private_root)
     helper_root = python.parent.parent if python.parent.name == "bin" else python.parent
     # Preserve lexical loader/runtime aliases: canonical-only mounts can remove
     # /lib or a managed interpreter alias required by the kernel's PT_INTERP.
@@ -62,7 +62,6 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
         entry,
         boundary,
         mappings,
-        *images,
     ]
     grants = list(collect_linux_read_grants(plan.workspace))
     indexed = {grant.path: (grant.device, grant.inode) for grant in grants}
@@ -168,6 +167,11 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
     argv.extend(("--ro-bind", str(plan.workspace), str(plan.workspace)))
     for path in write_roots:
         argv.extend(("--bind", str(path), str(path)))
+    # The private root is writable scratch, but approved executable images in it
+    # must be rebound read-only after that writable mount is installed.
+    for path in sorted(images, key=lambda path: (len(path.parts), str(path))):
+        source = path.resolve(strict=True)
+        argv.extend(("--ro-bind", str(source), str(path)))
     # Create an owner-only namespace directory and mount only the plan read-only.
     # The entrypoint never opens a caller-chosen path, even before Landlock starts.
     argv.extend(("--perms", "0700", "--dir", str(PLAN_DIRECTORY)))

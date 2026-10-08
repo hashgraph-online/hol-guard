@@ -4,7 +4,7 @@ use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::{containment, lease, restart_budget, CLIENT_RETRY_DELAY};
+use super::{containment, handoff, lease, restart_budget, CLIENT_RETRY_DELAY};
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
     runtime_digest, state_scope, token_from_state, validate_package_process_identity,
@@ -19,9 +19,23 @@ fn try_live_or_restart(
     payload: &[u8],
     deadline: Instant,
     preferred_digest: &str,
+    last_failure: &mut Option<String>,
 ) -> Result<Option<Vec<u8>>, String> {
-    match try_home_states(state_base, payload, deadline, preferred_digest) {
-        Err(error) if error == "native_resident_live_request_failed" => Ok(None),
+    retain_live_failure(
+        try_home_states(state_base, payload, deadline, preferred_digest),
+        last_failure,
+    )
+}
+
+fn retain_live_failure(
+    result: Result<Option<Vec<u8>>, String>,
+    last_failure: &mut Option<String>,
+) -> Result<Option<Vec<u8>>, String> {
+    match result {
+        Err(error) if error.starts_with("native_resident_live_request_failed:") => {
+            *last_failure = Some(error);
+            Ok(None)
+        }
         other => other,
     }
 }
@@ -33,10 +47,21 @@ fn try_home_states(
     preferred_digest: &str,
 ) -> Result<Option<Vec<u8>>, String> {
     let runtime_digest = runtime_digest()?;
-    for (_scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
+    for (scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
     {
         if deadline.saturating_duration_since(Instant::now()).is_zero() {
             return Ok(None);
+        }
+        // Hand the home over from an older resident nothing of its runtime
+        // still uses; this client then starts its own resident.
+        if handoff::retire_orphaned_foreign_resident(
+            state_base,
+            &scope,
+            &state,
+            &runtime_digest,
+            deadline,
+        ) {
+            continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
         if (same_runtime
@@ -73,7 +98,18 @@ fn try_home_states(
             Ok(response) => return Ok(Some(response)),
             Err(error)
                 if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
-            Err(_) => return Err("native_resident_live_request_failed".to_owned()),
+            Err(error) => {
+                let code = if error.code.len() <= 96
+                    && !error.code.is_empty()
+                    && error.code.bytes().all(|byte| {
+                        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
+                    }) {
+                    error.code.as_str()
+                } else {
+                    "native_client_request_failed"
+                };
+                return Err(format!("native_resident_live_request_failed:{code}"));
+            }
         }
     }
     Ok(None)
@@ -83,7 +119,33 @@ pub(super) fn client_request_with_deadline(
     state_base: &Path,
     payload: &[u8],
     overall_deadline: Instant,
+    client_lease: &lease::ClientLease,
+) -> Result<Vec<u8>, String> {
+    let mut last_failure = None;
+    client_request_with_deadline_inner(
+        state_base,
+        payload,
+        overall_deadline,
+        client_lease,
+        &mut last_failure,
+    )
+    .inspect_err(|_| {
+        if let Some(cause) = last_failure.as_deref() {
+            // Keep the finite wire error vocabulary unchanged. The native CLI
+            // exposes this bounded diagnostic separately on stderr, followed
+            // by the original registered failure from main(). No request data
+            // or filesystem paths are included.
+            eprintln!("native_resident_recovery_previous_failure={cause}");
+        }
+    })
+}
+
+fn client_request_with_deadline_inner(
+    state_base: &Path,
+    payload: &[u8],
+    overall_deadline: Instant,
     _client_lease: &lease::ClientLease,
+    last_failure: &mut Option<String>,
 ) -> Result<Vec<u8>, String> {
     // Keep the caller's budget intact. Windows spawn already has
     // CLIENT_START_TIMEOUT; shrinking every live request by 300ms makes the
@@ -94,7 +156,9 @@ pub(super) fn client_request_with_deadline(
     let digest = runtime_digest()?;
     let _update_lock = crate::resident_update_lock::acquire_shared(state_base, &digest)?;
     let scope = state_scope(state_base, &digest)?;
-    if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
+    if let Some(response) =
+        try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)?
+    {
         return Ok(response);
     }
     if Instant::now() >= overall_deadline {
@@ -112,7 +176,7 @@ pub(super) fn client_request_with_deadline(
         let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
         while Instant::now() < deadline {
             if let Some(response) =
-                try_live_or_restart(state_base, payload, overall_deadline, &digest)?
+                try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)?
             {
                 return Ok(response);
             }
@@ -128,10 +192,12 @@ pub(super) fn client_request_with_deadline(
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
-    if let Some(response) = try_live_or_restart(state_base, payload, overall_deadline, &digest)? {
+    if let Some(response) =
+        try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)?
+    {
         return Ok(response);
     }
-    restart_budget::consume(&scope)?;
+    restart_budget::consume_for_spawn(state_base, &scope)?;
     let generation = next_generation(&scope, &digest)?;
     let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
     getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;
@@ -148,7 +214,7 @@ pub(super) fn client_request_with_deadline(
         if Instant::now() >= deadline {
             break Err("native_resident_start_timeout".to_owned());
         }
-        match try_live_or_restart(state_base, payload, overall_deadline, &digest) {
+        match try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure) {
             Ok(Some(response)) => break Ok(response),
             Ok(None) => {}
             Err(error) => break Err(error),
@@ -172,3 +238,7 @@ pub(super) fn client_request_with_deadline(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "managed_resident_live_failure_tests.rs"]
+mod tests;

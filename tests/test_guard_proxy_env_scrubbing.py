@@ -80,6 +80,7 @@ class TestStdioProxyScrubbing:
                 self.stdout = None
                 self.stderr = None
                 self.returncode = 0
+                self.pid = 2147483647
 
             def poll(self) -> int:
                 return 0
@@ -120,23 +121,11 @@ class TestRuntimeMcpProxyScrubbing:
 
         captured_env: dict[str, str] = {}
 
-        class FakePopen:
-            def __init__(self, *args: object, **kwargs: object) -> None:
-                captured_env.update(kwargs.get("env", {}))
-                self.stdin = None
-                self.stdout = None
-                self.stderr = None
-                self.returncode = 0
-                self.pid = 2147483647
-
-            def poll(self) -> int:
-                return 0
-
-            def wait(self, timeout: float | None = None) -> int:
-                return 0
-
-            def terminate(self) -> None:
-                pass
+        def fake_open_native(argv: object, **kwargs: object) -> dict[str, object]:
+            extra_env = kwargs.get("extra_env")
+            if isinstance(extra_env, dict):
+                captured_env.update({str(k): str(v) for k, v in extra_env.items()})
+            return {"status": "opened", "session_id": "test-session"}
 
         context = HarnessContext(
             home_dir=tmp_path,
@@ -144,28 +133,36 @@ class TestRuntimeMcpProxyScrubbing:
             guard_home=tmp_path,
         )
 
-        # Build minimal mocks for required constructor args
-        store = type("MockStore", (), {"get_managed_install": lambda self, h: None})()
+        # `_start_process` provisions the native resident verifier key from the
+        # store's integrity secret material, so a bare mock raises
+        # `native_policy_snapshot_integrity_key_unavailable`.
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        store = GuardStore(tmp_path)
         config = type("MockConfig", (), {})()
 
-        # See the stdio variant: the Popen fake would also intercept the
-        # native digest client's spawn, so the hash seam is stubbed.
+        # RTM-023 moved child spawn to `mcp_stdio_session_open_native`; the
+        # scrubbed env is passed via `extra_env`. Stub the native opener and the
+        # hash seam so the proxy resolves to a deterministic session.
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.proxy.runtime_mcp.build_configured_environment_hash",
             lambda *_args, **_kwargs: "0" * 64,
         )
-        with mock.patch("codex_plugin_scanner.guard.proxy.runtime_mcp.subprocess.Popen", FakePopen):
-            proxy = RuntimeMcpGuardProxy(
-                harness="codex",
-                server_name="test",
-                command=["echo", "hello"],
-                context=context,
-                store=store,
-                config=config,
-                source_scope="project",
-                config_path=str(tmp_path / ".mcp.json"),
-            )
-            proxy._start_process()
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.proxy.runtime_mcp.mcp_stdio_session_open_native",
+            fake_open_native,
+        )
+        proxy = RuntimeMcpGuardProxy(
+            harness="codex",
+            server_name="test",
+            command=["echo", "hello"],
+            context=context,
+            store=store,
+            config=config,
+            source_scope="project",
+            config_path=str(tmp_path / ".mcp.json"),
+        )
+        proxy._start_process()
 
         assert "HERMES_GUARD_TOKEN" not in captured_env, (
             "HERMES_GUARD_TOKEN leaked into runtime_mcp proxy subprocess env"

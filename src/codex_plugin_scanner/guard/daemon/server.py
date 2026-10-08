@@ -283,7 +283,8 @@ from .extension_control_api import ExtensionControlApiError, ExtensionControlApi
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
 from .hook_process_runner import HookProcessRunner
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
-from .hook_worker_responses import prepare_native_hook_policy
+from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
+from .hook_worker_responses import _hook_harness_is_unmanaged, prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiService
@@ -308,7 +309,7 @@ from .protection_repair_stages import (
 )
 from .request_executor import BoundedRequestExecutor as _BoundedRequestExecutor
 from .runtime_heartbeat import RuntimeHeartbeatWriter
-from .runtime_hook_deadline import RuntimeHookDeadline
+from .runtime_hook_deadline import PROMPT_ADMISSION_SECONDS, RuntimeHookDeadline
 from .runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from .runtime_hook_scheduler import RuntimeHookAdmissionReason, RuntimeHookLane, RuntimeHookScheduler
 from .service_lifecycle import (
@@ -448,6 +449,7 @@ _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
 _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS = 3.0
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
 _RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS = 2.75
+_RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS = WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS = 5.0
 _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
@@ -543,6 +545,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     containment_health_cache: dict[str, object] | None
     containment_health_cache_monotonic: float
     containment_health_cache_lock: threading.Lock
+    containment_health_refreshing: bool
+    containment_health_refresh_event: threading.Event
+    containment_health_generation: int
+    containment_health_completed_generation: int
     network_supervisor: NetworkSupervisor
     active_hook_requests: int
     rejected_hook_requests: int
@@ -667,6 +673,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.containment_health_refreshing = False
+        self.containment_health_refresh_event = threading.Event()
+        self.containment_health_generation = 0
+        self.containment_health_completed_generation = 0
         self.network_supervisor = NetworkSupervisor()
         self.active_hook_requests = 0
         self.rejected_hook_requests = 0
@@ -2487,6 +2497,72 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> str | None
 
 _GuardDaemonHttpServer = _GuardDaemonHTTPServer
 
+_CONTAINMENT_HEALTH_CACHE_SECONDS = 10.0
+
+
+def cached_containment_health(
+    server: _GuardDaemonHttpServer,
+    *,
+    force_refresh: bool,
+    probe: Callable[[], dict[str, object]],
+) -> dict[str, object] | None:
+    """Return containment health without holding the cache lock across the probe.
+
+    A fresh cache is shared. When the cache is due, one caller runs the probe
+    and everyone else keeps the previous payload. Callers only wait together
+    when no payload exists yet.
+    """
+
+    arrived_generation: int | None = None
+    probe_generation = 0
+    while True:
+        with server.containment_health_cache_lock:
+            if arrived_generation is None:
+                arrived_generation = server.containment_health_generation
+            cached = server.containment_health_cache
+            age = time.monotonic() - server.containment_health_cache_monotonic
+            if cached is not None and age <= _CONTAINMENT_HEALTH_CACHE_SECONDS and not force_refresh:
+                return dict(cached)
+            if server.containment_health_refreshing:
+                if cached is not None and not force_refresh:
+                    return dict(cached)
+                event = server.containment_health_refresh_event
+                run_probe = False
+            else:
+                event = threading.Event()
+                server.containment_health_refresh_event = event
+                server.containment_health_refreshing = True
+                server.containment_health_generation += 1
+                probe_generation = server.containment_health_generation
+                run_probe = True
+        if not run_probe:
+            event.wait()
+            with server.containment_health_cache_lock:
+                done = server.containment_health_completed_generation
+                if force_refresh and arrived_generation is not None and done <= arrived_generation:
+                    continue
+                return None if server.containment_health_cache is None else dict(server.containment_health_cache)
+        break
+    payload: dict[str, object] | None = None
+    failed = False
+    try:
+        payload = probe()
+    except (OSError, RuntimeError, TypeError, ValueError):
+        payload = None
+        failed = True
+    except BaseException:
+        failed = True
+        raise
+    finally:
+        with server.containment_health_cache_lock:
+            if failed or payload is not None:
+                server.containment_health_cache = None if payload is None else dict(payload)
+                server.containment_health_cache_monotonic = time.monotonic()
+            server.containment_health_refreshing = False
+            server.containment_health_completed_generation = probe_generation
+            event.set()
+    return None if payload is None else dict(payload)
+
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
@@ -2805,8 +2881,43 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/connect/state":
             self._write_legacy_pairing_disabled()
             return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "business-summary":
+            from .business_review_summary import handle_business_review_summary
+
+            handle_business_review_summary(self, path_parts[2])
+            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
+            if approval is None and not self._is_hosted_dashboard_origin():
+                from .business_review_queue import NativeBusinessReviewQueueReadError, native_request_detail
+
+                try:
+                    native_detail = native_request_detail(store, unquote(path_parts[2]))
+                except NativeBusinessReviewQueueReadError:
+                    self._write_json(
+                        {
+                            "error": "native_local_business_queue_read_failed",
+                            "message": (
+                                "Saved request details could not be verified. "
+                                "Refresh this request or return to the queue."
+                            ),
+                            "recovery": {
+                                "code": "request_unavailable",
+                                "title": "Request details are unavailable.",
+                                "body": (
+                                    "The saved request could not be checked. "
+                                    "Refresh this request or return to the queue."
+                                ),
+                                "queue_url": self._local_queue_url(),
+                            },
+                        },
+                        status=503,
+                        extra_headers={"Cache-Control": "no-store"},
+                    )
+                    return
+                if native_detail is not None:
+                    self._write_json(native_detail, extra_headers={"Cache-Control": "no-store"})
+                    return
             if approval is None:
                 self._write_json(
                     {
@@ -3162,6 +3273,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
             self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
+            return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
+            self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])
             return
         if parsed.path == "/v1/clients/attach":
             self._handle_client_attach(payload)
@@ -5059,8 +5173,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "invalid_status"}, status=400)
             return
         include_totals = self._query_bool(query_string, "include_totals", default=True)
+        from .business_review_queue import NativeBusinessReviewQueueReadError, local_request_page
+
         try:
-            page = self.server.store.list_approval_request_page(  # type: ignore[attr-defined]
+            read_page = (
+                self.server.store.list_approval_request_page
+                if self._is_hosted_dashboard_origin()
+                else (lambda **options: local_request_page(self.server.store, **options))
+            )
+            page = read_page(
                 status=status_filter,
                 limit=limit,
                 cursor=self._query_string(query_string, "cursor"),
@@ -5068,6 +5189,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 search=self._query_string(query_string, "search"),
                 include_totals=include_totals,
             )
+        except NativeBusinessReviewQueueReadError:
+            self._write_json(
+                {"error": "native_local_business_queue_read_failed"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
         except InvalidApprovalCursorError:
             self._write_json(
                 {
@@ -5081,7 +5209,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=400,
             )
             return
-        self._write_json(page)
+        self._write_json(page, extra_headers={"Cache-Control": "no-store"})
 
     @staticmethod
     def _optional_bool(value: object, *, default: bool) -> bool:
@@ -5740,108 +5868,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_mcp_policy_decision(self, request_id: str, payload: dict[str, object]) -> None:
-        """Resolve an MCP policy creation request via human approval.
+        from .mcp_policy_decisions import handle_mcp_policy_decision
 
-        POST /v1/mcp-policy/requests/<id>/decision
-        Body: {"action": "approve" | "decline", ...approval_gate_input}
-
-        On approve: obtains the ApprovalGateGrant via require_high_risk
-        (purpose="policy_import"), then calls apply_pending_policy_request
-        with the grant.  On decline: calls decline_pending_policy_request.
-        """
-
-        from codex_plugin_scanner.guard.mcp.policy_errors import PolicyToolError
-        from codex_plugin_scanner.guard.mcp.policy_tools import (
-            apply_pending_policy_request,
-            decline_pending_policy_request,
-        )
-
-        action = payload.get("action")
-        if not isinstance(action, str) or action.strip() not in {"approve", "decline"}:
-            self._write_json(
-                {"resolved": False, "error": "missing_required_fields"},
-                status=400,
-            )
-            return
-        action = action.strip()
-        store = self.server.store  # type: ignore[attr-defined]
-        guard_home = store.guard_home
-
-        if action == "decline":
-            try:
-                decline_result = decline_pending_policy_request(store, request_id)
-            except PolicyToolError as error:
-                if error.code == "approval_already_resolved":
-                    # VPC047: a terminal/expired/declined request is stable.
-                    # Return the honest current state so the dashboard renders
-                    # disabled controls instead of an error.
-                    from codex_plugin_scanner.guard.mcp.policy_store import (
-                        MCPolicyRequestRepository,
-                    )
-
-                    repo = MCPolicyRequestRepository(store)
-                    current = repo.get_request(request_id)
-                    if current is not None:
-                        self._write_json(
-                            {
-                                "resolved": True,
-                                "requestId": current.request_id,
-                                "status": current.status,
-                                "resolvedAt": current.resolved_at,
-                            }
-                        )
-                        return
-                self._write_json(
-                    {"resolved": False, "error": error.code, "message": error.message},
-                    status=400,
-                )
-                return
-            self._write_json({"resolved": True, **decline_result})
-            return
-
-        # action == "approve" — obtain the grant and apply.
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="policy_import",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-
-        try:
-            apply_result = apply_pending_policy_request(
-                store,
-                request_id,
-                approval_gate_grant=approval_gate_grant,
-            )
-        except PolicyToolError as error:
-            if error.code == "approval_already_resolved":
-                # VPC047: re-approving a terminal request is stable; return
-                # the honest current state so controls render disabled.
-                from codex_plugin_scanner.guard.mcp.policy_store import (
-                    MCPolicyRequestRepository,
-                )
-
-                repo = MCPolicyRequestRepository(store)
-                current = repo.get_request(request_id)
-                if current is not None:
-                    self._write_json(
-                        {
-                            "resolved": True,
-                            "requestId": current.request_id,
-                            "status": current.status,
-                            "resolvedAt": current.resolved_at,
-                        }
-                    )
-                    return
-            self._write_json(
-                {"resolved": False, "error": error.code, "message": error.message},
-                status=400,
-            )
-            return
-        self._write_json({"resolved": True, **apply_result})
+        handle_mcp_policy_decision(self, request_id, payload)
 
     def _handle_initialize(self, payload: dict[str, object]) -> None:
         client_name = self._optional_string(payload.get("client_name")) or "guard-client"
@@ -6182,6 +6211,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             request,
             payload,
             home_dir=home_dir,
+            guard_home=daemon_server.store.guard_home,
             claimed_saved_allow_hash=claimed_saved_allow_hash,
             claimed_approval_request_id=claimed_approval_request_id,
             reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: (
@@ -6240,20 +6270,125 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             status=410,
         )
 
+    def _handle_hook_readiness(
+        self,
+        payload: dict[str, object],
+        query: str,
+        *,
+        default_harness: str,
+    ) -> None:
+        """Prepare the active workspace before a host's timed hook starts.
+
+        This route is deliberately separate from semantic hook review. It gives
+        the native publisher and isolated worker the existing setup budget so a
+        first tool call does not spend its short host deadline on cold startup.
+        """
+
+        params = parse_qs(query)
+        workspace_candidate = self._normalized_hook_workspace_string(
+            params.get("workspace", [None])[-1] or payload.get("workspace") or payload.get("cwd")
+        )
+        try:
+            _ = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            if _hook_harness_is_unmanaged(self._daemon_server(), default_harness):
+                self._write_json(
+                    {"ready": True, "native_required": False, "workspace_acknowledged": False, "worker_ready": True},
+                    extra_headers={"Cache-Control": "no-store"},
+                )
+                return
+            workspace = self._validated_hook_directory_string(
+                "workspace",
+                workspace_candidate,
+                roots=self._hook_safe_roots(),
+            )
+        except _HookPathValidationError as error:
+            self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+            self._write_json(
+                {"ready": False, "reason_code": f"invalid_{error.parameter.replace('-', '_')}"},
+                status=400,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        if workspace is None:
+            self._write_json(
+                {"ready": False, "reason_code": "workspace_required"},
+                status=400,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        if not _native_mode_requires_rust():
+            self._write_json(
+                {
+                    "ready": True,
+                    "native_required": False,
+                    "workspace_acknowledged": False,
+                    "worker_ready": True,
+                },
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        daemon_server = self._daemon_server()
+        readiness_deadline = time.monotonic() + _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS
+        try:
+            prepared_policy = daemon_server.hook_worker.prepare_workspace_policy(
+                Path(workspace),
+                deadline=readiness_deadline,
+            )
+        except Exception:
+            daemon_server.diagnostics.record_exception("native_workspace_readiness_failed")
+            prepared_policy = None
+        if not isinstance(prepared_policy, dict):
+            self._write_json(
+                {"ready": False, "reason_code": "native_policy_not_ready"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+
+        remaining_seconds = max(0.0, readiness_deadline - time.monotonic())
+        worker_ready = daemon_server.hook_process_runner.wait_for_capacity(
+            minimum_workers=1,
+            timeout_seconds=remaining_seconds,
+        )
+        if not worker_ready:
+            self._write_json(
+                {"ready": False, "reason_code": "native_worker_not_ready"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        self._write_json(
+            {
+                "ready": True,
+                "native_required": True,
+                "native_route": "native_resident",
+                "workspace_acknowledged": True,
+                "worker_ready": True,
+            },
+            extra_headers={"Cache-Control": "no-store"},
+        )
+
     def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
         from .hook_request_parsing import (
             HookPayloadReferenceError,
             hook_payload_reference_size,
+            runtime_hook_event_name,
         )
 
-        transport_deadline = self._daemon_server().request_deadline(
-            self.request,
-            _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS,
-        )
+        prompt_event = runtime_hook_event_name(payload) == "UserPromptSubmit"
+        admission_seconds = PROMPT_ADMISSION_SECONDS if prompt_event else _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
+        transport_deadline = self._daemon_server().request_deadline(self.request, admission_seconds)
         params = parse_qs(query)
-        remaining_hint = _runtime_hook_remaining_hint(payload)
-        hinted_deadline = RuntimeHookDeadline.from_remaining_hint(remaining_hint)
-        hook_deadline = RuntimeHookDeadline(expires_at=min(hinted_deadline.expires_at, transport_deadline))
+        hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
+        hook_deadline = RuntimeHookDeadline.for_admission(
+            _runtime_hook_remaining_hint(payload),
+            hint_missing=hint_missing,
+            prompt_event=prompt_event,
+            admission_seconds=admission_seconds,
+            transport_deadline=transport_deadline,
+        )
         hook_env = _runtime_hook_env_overlay_from_payload(payload)
         payload = {key: value for key, value in payload.items() if key != "hook_env"}
         daemon_server = self._daemon_server()
@@ -6566,39 +6701,46 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None = None,
     ) -> None:
         if self._hook_fast_path_enabled() or _native_mode_requires_rust():
-            result = self._handle_runtime_hook_fast(
-                payload,
-                params,
-                default_harness=default_harness,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-                deadline=deadline,
-            )
-            if result is not None:
-                if deadline is not None and time.monotonic() >= deadline:
-                    result = self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
-                        reason_code="daemon_hook_deadline_exhausted",
-                        native_authoritative=_native_mode_requires_rust(),
-                    )
-                self._write_json(result)
-                return
-            if _native_mode_requires_rust():
-                self._write_json(
-                    self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete the native hook decision safely.",
-                        reason_code="native_hook_worker_unavailable",
-                        native_authoritative=True,
-                    )
+            from contextlib import nullcontext
+
+            from ..sqlite_tuning import sqlite_operation_deadline
+
+            with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+                result = self._handle_runtime_hook_fast(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    deadline=deadline,
                 )
-                return
+                if result is not None:
+                    if deadline is not None and time.monotonic() >= deadline:
+                        result = self._runtime_hook_fail_safe_response(
+                            payload,
+                            params,
+                            default_harness=default_harness,
+                            reason=(
+                                "HOL Guard could not complete local review within the hook deadline. Retry this action."
+                            ),
+                            reason_code="daemon_hook_deadline_exhausted",
+                            native_authoritative=_native_mode_requires_rust(),
+                        )
+                    self._write_json(result)
+                    return
+                if _native_mode_requires_rust():
+                    self._write_json(
+                        self._runtime_hook_fail_safe_response(
+                            payload,
+                            params,
+                            default_harness=default_harness,
+                            reason="HOL Guard could not complete the native hook decision safely.",
+                            reason_code="native_hook_worker_unavailable",
+                            native_authoritative=True,
+                        )
+                    )
+                    return
 
         self._handle_runtime_hook_compatibility_cli(
             payload,
@@ -6628,36 +6770,42 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None,
     ) -> dict[str, object] | None:
         """Try the resident hook worker; only explicit rollback may fall back."""
+        from contextlib import nullcontext
+
+        from ..sqlite_tuning import sqlite_operation_deadline
+
         daemon_server = self._daemon_server()
         effective_home_dir = Path(home_dir) if home_dir is not None else daemon_server.home_dir
         effective_guard_home = Path(guard_home) if guard_home is not None else daemon_server.store.guard_home
 
-        try:
-            worker = daemon_server.hook_worker
-            return worker.review_http_payload(
-                payload=payload,
-                params=params,
-                default_harness=default_harness,
-                home_dir=effective_home_dir,
-                guard_home=effective_guard_home,
-                workspace=Path(workspace) if workspace else None,
-                deadline=deadline,
-            )
-        except Exception as error:
-            # Fail safe: deny/block. Do not fall back to compatibility CLI for
-            # requests that omitted full output and supplied only guard_source_ref.
-            self._daemon_server().hook_worker.metrics.record_failure(
-                stage="server",
-                exception_type=type(error).__name__,
-            )
-            return self._runtime_hook_fail_safe_response(
-                payload,
-                params,
-                default_harness=default_harness,
-                reason="HOL Guard could not complete local hook review safely.",
-                reason_code="daemon_worker_exception",
-                native_authoritative=_native_mode_requires_rust(),
-            )
+        # Keep failure rendering on the same storage clock as direct review.
+        with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+            try:
+                worker = daemon_server.hook_worker
+                return worker.review_http_payload(
+                    payload=payload,
+                    params=params,
+                    default_harness=default_harness,
+                    home_dir=effective_home_dir,
+                    guard_home=effective_guard_home,
+                    workspace=Path(workspace) if workspace else None,
+                    deadline=deadline,
+                )
+            except Exception as error:
+                # Fail safe: deny/block. Do not fall back to compatibility CLI for
+                # requests that omitted full output and supplied only guard_source_ref.
+                self._daemon_server().hook_worker.metrics.record_failure(
+                    stage="server",
+                    exception_type=type(error).__name__,
+                )
+                return self._runtime_hook_fail_safe_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    reason="HOL Guard could not complete local hook review safely.",
+                    reason_code="daemon_worker_exception",
+                    native_authoritative=_native_mode_requires_rust(),
+                )
 
     def _handle_runtime_hook_compatibility_cli(
         self,
@@ -7407,6 +7555,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
         if self.command == "GET":
+            if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "business-summary":
+                return True
             if len(path_parts) == 4 and path_parts[:3] == ["v1", "mcp-policy", "requests"]:
                 return True
             if len(path_parts) == 3 and path_parts[:2] in (
@@ -7793,22 +7943,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _containment_health_payload(self, *, force_refresh: bool = False) -> dict[str, object] | None:
         from ..runtime.containment_health import probe_containment_health
 
-        server = self._daemon_server()
-        with server.containment_health_cache_lock:
-            age = time.monotonic() - server.containment_health_cache_monotonic
-            if not force_refresh and server.containment_health_cache is not None and age <= 10.0:
-                return dict(server.containment_health_cache)
-            try:
-                payload = probe_containment_health(
-                    daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
-                ).to_dict()
-            except (OSError, RuntimeError, TypeError, ValueError):
-                server.containment_health_cache = None
-                server.containment_health_cache_monotonic = time.monotonic()
-                return None
-            server.containment_health_cache = payload
-            server.containment_health_cache_monotonic = time.monotonic()
-            return dict(payload)
+        def probe() -> dict[str, object]:
+            return probe_containment_health(
+                daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
+            ).to_dict()
+
+        return cached_containment_health(self._daemon_server(), force_refresh=force_refresh, probe=probe)
 
     def _detailed_healthz_payload(self) -> dict[str, object]:
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]

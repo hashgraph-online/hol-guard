@@ -12,15 +12,42 @@ def _operations(extension_id: str) -> dict[str, dict[str, object]]:
     return {str(row["id"]): row for row in public_operations(extension)}
 
 
-def test_every_public_operation_uses_its_generated_permission_example() -> None:
+def test_public_operations_only_use_unambiguous_permission_examples() -> None:
     for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
         operations = _operations(extension.extension_id)
         assert set(operations) == {rule.rule_id for rule in extension.rules}
         for rule in extension.rules:
             permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id(rule.rule_id)
             assert permission is not None
-            expected = [permission.example_command] if permission.example_command else []
+            expected = (
+                [permission.example_command]
+                if permission.example_command and permission.rule_ids == (rule.rule_id,)
+                else []
+            )
             assert operations[rule.rule_id]["commands"] == expected
+
+
+def test_shared_mutation_permissions_do_not_publish_opposite_operation_examples() -> None:
+    for extension_id, rule_ids in (
+        ("command.routed", ("command.routed.adapters-install", "command.routed.adapters-uninstall")),
+        (
+            "command.xencode",
+            (
+                "command.xencode.worktree-add",
+                "command.xencode.worktree-remove",
+                "command.xencode.plugin-install",
+                "command.xencode.plugin-remove",
+            ),
+        ),
+    ):
+        operations = _operations(extension_id)
+        for rule_id in rule_ids:
+            assert operations[rule_id]["example"] is None
+            assert operations[rule_id]["commands"] == []
+            assert operations[rule_id]["permissionId"] is not None
+            assert operations[rule_id]["defaultAction"] == "review"
+
+    assert _operations("command.routed")["command.routed.update"]["example"] == "routed update"
 
 
 def test_aws_s3_operations_keep_generated_examples_defaults_and_permissions() -> None:

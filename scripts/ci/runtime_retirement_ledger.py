@@ -125,7 +125,7 @@ def _param_value_id(value: ast.expr) -> str | None:
     return None
 
 
-def _parametrize_suffixes(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | None | object:
+def _parametrize_suffixes(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | object | None:
     """Collect the valid ``[param]`` suffixes for a test function.
 
     Returns ``None`` when the node carries no parametrize mark, a set of

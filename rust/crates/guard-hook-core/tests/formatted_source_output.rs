@@ -60,7 +60,7 @@ fn request(root: &std::path::Path, output: &str) -> NativeHookRequestV1 {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn formatted_reads_require_complete_scanned_output_and_clean_source() {
     let root = TestRoot::new();
@@ -97,7 +97,7 @@ fn formatted_reads_require_complete_scanned_output_and_clean_source() {
     assert_eq!(review_post_tool(&base).reason_code, "source_secret_match");
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 #[test]
 fn formatted_reads_fail_closed_without_descriptor_verified_source_reads() {
     let root = TestRoot::new();
@@ -154,6 +154,56 @@ fn external_and_linked_plaintext_is_scanned_without_checkout_location_allowlists
     std::os::unix::fs::symlink(&dotenv, &link).unwrap();
     assert_ne!(
         review_post_tool(&secret).model_output_action,
+        "allow_original"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn resolved_directory_target_is_rechecked_before_inline_output_allow() {
+    let root = TestRoot::new();
+    let workspace = root.path().join("workspace");
+    let ordinary = root.path().join("ordinary");
+    let credentials = root.path().join(".ssh");
+    std::fs::create_dir_all(&workspace).unwrap();
+    std::fs::create_dir_all(&ordinary).unwrap();
+    std::fs::create_dir_all(&credentials).unwrap();
+
+    let mut ordinary_request = request(&workspace, "ordinary/\n");
+    ordinary_request
+        .payload
+        .as_object_mut()
+        .unwrap()
+        .remove("guard_source_ref");
+    ordinary_request.payload["tool_input"]["path"] = json!(ordinary.to_string_lossy());
+    let ordinary_result = review_post_tool(&ordinary_request);
+    assert_eq!(ordinary_result.model_output_action, "allow_original");
+
+    let mut redirected_request = request(&workspace, "id_ed25519\n");
+    redirected_request
+        .payload
+        .as_object_mut()
+        .unwrap()
+        .remove("guard_source_ref");
+    redirected_request.payload["tool_input"]["path"] = json!(credentials.to_string_lossy());
+    let redirected_result = review_post_tool(&redirected_request);
+    assert_eq!(redirected_result.reason_code, "sensitive_path");
+    assert_ne!(redirected_result.model_output_action, "allow_original");
+
+    let mut selector_redirected_request = request(&workspace, "ordinary/\n");
+    selector_redirected_request
+        .payload
+        .as_object_mut()
+        .unwrap()
+        .remove("guard_source_ref");
+    selector_redirected_request.payload["tool_input"]["path"] =
+        json!(format!("{}:1-5", ordinary.display()));
+    selector_redirected_request.payload["resolved_directory_target"] =
+        json!(credentials.to_string_lossy());
+    let selector_redirected_result = review_post_tool(&selector_redirected_request);
+    assert_eq!(selector_redirected_result.reason_code, "sensitive_path");
+    assert_ne!(
+        selector_redirected_result.model_output_action,
         "allow_original"
     );
 }

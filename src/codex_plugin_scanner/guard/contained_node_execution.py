@@ -8,6 +8,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import native_execution as _native_execution
 from .containment_execution_support import (
     contained_process_effect_decision as _contained_decision,
 )
@@ -88,10 +89,20 @@ def try_execute_contained_node_command(
     intent = parse_package_intent(
         shlex.join((normalized_manager, *argv)),
         workspace=canonical_workspace,
+        guard_home=guard_home,
     )
     if intent is None or len(intent.local_executions) != 1:
         return None
     execution = intent.local_executions[0]
+    native_result = _native_execution.contained_node_execute_native(
+        workspace,
+        normalized_manager,
+        argv,
+        guard_home=guard_home,
+        evidence=execution.to_dict(),
+    )
+    if native_result is not None:
+        return native_result
     evidence = build_local_node_runner_evidence(
         normalized_manager,
         argv,

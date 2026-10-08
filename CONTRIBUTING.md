@@ -31,7 +31,7 @@ maintainer checks across supported AI plugin ecosystems.
 Command source files under `contributions/command-sources/` own extension metadata, permissions,
 rules, and typed matcher trees. Rust validates and compiles them into descriptors, the catalog,
 and the native program. Use the Extension Builder to write the source, portable fixture, reviewed
-external trust-map entry, and deterministic projections together; do not hand-edit generated
+external trust binding, and deterministic projections together; do not hand-edit generated
 artifacts. Existing Python detector modules are retained for migration or reference coverage; do
 not copy their registration pattern to add an extension.
 
@@ -44,7 +44,10 @@ not copy their registration pattern to add an extension.
 3. Open a PR using the **Command extension** template. Ready PRs receive Gitar's managed label,
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
-The canonical source, portable fixture, and external trust entry are contributor-owned inputs.
+The canonical source, portable fixture, and per-extension trust binding are contributor-owned inputs.
+The shared `contracts/extensions/build-trust-class-map.v1.json` is ignored build output. Rust builds
+derive it from the bindings; package builds generate and verify the shipped aggregate. Never
+commit the aggregate or hand-merge it when adding an extension.
 The command catalog, native program, descriptors and public directory remain maintainer-published
 at their existing paths. Keep their generated changes out of contribution PRs. CI compiles the
 current sources and validates matching projections on both PRs and main; the publication workflow
@@ -67,6 +70,21 @@ receive maintainer pushes at all. Maintainers land those through an upstream
 keeps the contributor commits as ancestors so attribution and the original PR
 stay intact. Several contributions can also be batched onto one
 `intake/batch-...` branch so artifact regeneration runs once.
+
+## Guard Gauntlet: live-agent acceptance
+
+Changes to pre-tool behavior, command sources, policy composition, harness adapters or
+acceptance tooling must preserve ordinary agent workflows and harmful-call protection.
+Run [Guard Gauntlet](ci/gauntlet/README.md) with the actual Oh My Pi CLI, real model
+inference and the exact installed native build. Attach its verified public evidence
+through the **Guard Gauntlet evidence** workflow. Live qualification is an optional
+check, separate from the required `ci (3.12)` aggregate, and does not block merge.
+
+A model refusal, admission-only probe, unit-test pass or prose completion is not live
+qualification. Keep failed evidence, add the relevant benign/security pair, and test
+again on the final source. Do not revive old false-positive behavior just to satisfy
+historical assertions. Contributors and coding agents should follow the complete
+run → verify → pack → attest sequence when submitting live qualification.
 
 ## Development setup
 
@@ -126,7 +144,7 @@ cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-ta
 ```
 
 Command source changes need native fixture evaluation and generated-artifact checks. Contributors
-submit the source, its portable fixture, and the reviewed trust-map entry; maintainers run the
+submit the source, its portable fixture, and the reviewed per-extension trust binding; maintainers run the
 documented preparation command to synchronize descriptors and public catalogs. Follow the
 [extension validation steps](docs/guard/extensions/contributing.md#local-validation); a passing
 Python reference test alone does not establish native behavior.
@@ -152,6 +170,27 @@ For packaging or release changes, verify the wheel build:
 ```bash
 uv build --wheel
 ```
+
+Wheel and source-distribution builds generate the command catalog and native command
+program from `contributions/command-sources/`, `contributions/mcp-servers/`, and the
+reviewed trust map using Rust 1.88.0. Their contract files and packaged copies are
+ignored build outputs; do not commit them or resolve merge conflicts in them.
+The build rejects invalid sources and mismatched compiler identities. To reuse an
+already-built source compiler, set `HOL_GUARD_BUILD_SOURCE_COMPILER` to its path.
+Source archives include a build fingerprint and frozen projections. A wheel build
+from an unchanged archive verifies those inputs without requiring Rust; changing
+an authored source, native implementation, or generated projection rejects reuse.
+
+Editable dependency installation does not compile Rust or stage these projections.
+Before running Python tests from a fresh checkout, generate them explicitly:
+
+```bash
+uv run --no-sync python scripts/build_native_command_program.py --projections-only
+```
+
+CI stages and checks the projections before test collection. Installed Guard reads
+the frozen package resources; it does not discover built-in policy from a mutable
+extension directory at startup. External extensions retain their opt-in requirement.
 
 A source checkout or generic wheel build does not qualify a platform release. The
 [native wheel workflow](.github/workflows/native-wheel-ci.yml) assembles and tests the native
@@ -189,6 +228,24 @@ Keep examples and published CLI names aligned with `hol-guard` and `plugin-scann
 `codex_plugin_scanner` Python import namespace remains in use. Update user-facing docs when CLI
 behavior, security boundaries, or published workflows change, and keep secrets, credentials,
 and local environment files out of commits.
+
+## Real-agent acceptance: Guard Gauntlet
+
+Changes to Guard enforcement, pre-tool parsing, policy composition, harness adapters,
+or the acceptance runner can use optional [Guard Gauntlet](ci/gauntlet/README.md) evidence for
+that exact PR head. Run a real tool-capable model in the pinned Oh My Pi CLI against
+the candidate's installed native wheel. Ordinary tasks must finish quietly; harmful
+synthetic attempts must actually reach Guard and be denied before their effects occur.
+Unit tests validate the judge but cannot replace the live run.
+
+Add a scenario and a paired protection boundary for a reported false positive before
+changing policy. Preserve failed evidence, check physical outcomes, and do not weaken
+runtime protection to satisfy a stale assertion. Run the entire core profile on the
+final source, verify and package its public evidence, then submit it through the
+trusted evidence workflow. The workflow publishes a source-bound PR result without
+blocking merge. Never upload provider keys, raw model reasoning, private
+prompts, or real credentials. Platform-specific containment still needs its own live
+run on the supported platform. See the [battle plan](ci/gauntlet/BATTLE_PLAN.md).
 
 ## License
 

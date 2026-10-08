@@ -115,6 +115,12 @@ def _node_resolver(node: Path) -> Callable[[str, Path], str]:
     return resolve
 
 
+@pytest.fixture(autouse=True)
+def _native_node_intents(package_intent_native, native_mcp_probe, tmp_path: Path) -> None:
+    native_mcp_probe(tmp_path)
+    native_mcp_probe(tmp_path / "guard-home")
+
+
 def test_resolve_node_rejects_symlink_back_into_shim_directory(tmp_path: Path) -> None:
     shim = tmp_path / "shim"
     _write(shim / "node", "synthetic-node", executable=True)

@@ -15,18 +15,33 @@ import importlib
 import json
 import os
 import shutil
-import signal
 import stat
 import subprocess
 import sys
 import tempfile
 import textwrap
-import threading
 import time
 from collections.abc import Mapping
 from importlib import metadata
 from pathlib import Path
 from typing import Any
+
+try:
+    from ci.native_runtime.probe_daemon_calls import (
+        ProbeCleanupError,
+        ProbeCleanupUnsafeError,
+        ProbeError,
+        _DaemonCallTimeoutError,
+        bounded_daemon_call,
+    )
+except ModuleNotFoundError:  # Run directly as a script from its own directory.
+    from probe_daemon_calls import (  # type: ignore[no-redef]
+        ProbeCleanupError,
+        ProbeCleanupUnsafeError,
+        ProbeError,
+        _DaemonCallTimeoutError,
+        bounded_daemon_call,
+    )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TEXT_LIMIT = 12_000
@@ -34,7 +49,6 @@ _NODE_PROBE_TIMEOUT = 5.0
 # Cold policy publication is setup, not part of the timed hook request.
 # Match the production workspace-readiness cap without extending hook budgets.
 _DAEMON_READINESS_TIMEOUT = 25.0
-_DAEMON_CLEANUP_TIMEOUT = 10.0
 _NODE_PROBE_SOURCE = 'const typedValue: string = "node-capability-probe";\nprocess.stdout.write(typedValue);\n'
 _ENV_ALLOWLIST = {
     "COMSPEC",
@@ -50,20 +64,16 @@ _ENV_ALLOWLIST = {
 }
 
 
-class ProbeError(RuntimeError):
-    """Raised when the installed Pi/native boundary cannot be proven."""
+def _daemon_cleanup_timeout_seconds() -> float:
+    from codex_plugin_scanner.guard.native_resident_client import NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS
+
+    return NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS
 
 
-class ProbeCleanupError(ProbeError):
-    """Raised when startup cleanup must be retained for a bounded retry."""
+def _native_cleanup_retry_interval_seconds() -> float:
+    from codex_plugin_scanner.guard.native_resident_client import NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
 
-
-class ProbeCleanupUnsafeError(ProbeCleanupError):
-    """Raised when daemon containment is unproven and the scratch root may be mutable."""
-
-
-class _DaemonCallTimeoutError(ProbeCleanupUnsafeError):
-    """Internal signal interruption for a bounded daemon lifecycle call."""
+    return NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
 
 
 def _is_source_checkout_package(package_path: Path, repo_root: Path) -> bool:
@@ -890,73 +900,8 @@ def _prepare_installed_daemon_workspace(daemon: Any, workspace: Path) -> Any:
     return prepared
 
 
-def _restore_alarm_state(
-    *,
-    prior_handler: Any,
-    prior_timer: tuple[float, float],
-    elapsed: float,
-) -> None:
-    """Restore SIGALRM even when setup or the bounded call failed."""
-    restoration_error: BaseException | None = None
-    try:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-    except BaseException as exc:
-        restoration_error = exc
-
-    handler_restored = False
-    try:
-        signal.signal(signal.SIGALRM, prior_handler)
-        handler_restored = True
-    except BaseException as exc:
-        restoration_error = restoration_error or exc
-
-    if handler_restored:
-        prior_remaining, prior_interval = prior_timer
-        if prior_remaining > 0:
-            remaining = prior_remaining - elapsed
-            if remaining <= 0:
-                # The prior timer may have expired while this bounded call ran.
-                # Deliver it shortly instead of silently discarding it.
-                remaining = 0.001
-            try:
-                signal.setitimer(signal.ITIMER_REAL, remaining, prior_interval)
-            except BaseException as exc:
-                restoration_error = restoration_error or exc
-
-    if restoration_error is not None:
-        raise ProbeCleanupUnsafeError("Guard daemon alarm state restoration failed") from restoration_error
-
-
 def _bounded_daemon_call(daemon: Any, method_name: str) -> object | None:
-    if threading.current_thread() is not threading.main_thread():
-        raise ProbeError("bounded Guard daemon cleanup must run on the main thread")
-    method = getattr(daemon, method_name, None)
-    if not callable(method):
-        raise ProbeError(f"installed Guard daemon {method_name} signal is unavailable")
-
-    try:
-        prior_handler = signal.getsignal(signal.SIGALRM)
-        prior_timer = signal.getitimer(signal.ITIMER_REAL)
-    except BaseException as exc:
-        raise ProbeCleanupUnsafeError("Guard daemon alarm state could not be inspected") from exc
-    started = time.monotonic()
-
-    def timeout_handler(_signum: int, _frame: Any) -> None:
-        raise _DaemonCallTimeoutError(f"authenticated Guard daemon {method_name} timed out")
-
-    try:
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.setitimer(signal.ITIMER_REAL, _DAEMON_CLEANUP_TIMEOUT)
-        return method()
-    except _DaemonCallTimeoutError:
-        raise
-    except BaseException as exc:
-        if method_name == "stop":
-            raise ProbeError(f"authenticated Guard daemon cleanup failed: {type(exc).__name__}") from exc
-        raise ProbeError(f"authenticated Guard daemon {method_name} failed: {type(exc).__name__}") from exc
-    finally:
-        elapsed = time.monotonic() - started
-        _restore_alarm_state(prior_handler=prior_handler, prior_timer=prior_timer, elapsed=elapsed)
+    return bounded_daemon_call(daemon, method_name, _daemon_cleanup_timeout_seconds())
 
 
 def _bounded_daemon_finish(daemon: Any) -> bool:
@@ -966,8 +911,15 @@ def _bounded_daemon_finish(daemon: Any) -> bool:
 
 
 def _cleanup_installed_daemon(daemon: Any) -> None:
+    stop_timeout: _DaemonCallTimeoutError | None = None
     try:
-        _bounded_daemon_call(daemon, "stop")
+        try:
+            _bounded_daemon_call(daemon, "stop")
+        except _DaemonCallTimeoutError as exc:
+            # stop() has already requested shutdown before its bounded finish
+            # can be interrupted. Retry the authenticated completion check so
+            # a daemon that actually stopped is not left quarantined.
+            stop_timeout = exc
         if not _bounded_daemon_finish(daemon):
             raise ProbeCleanupUnsafeError("authenticated Guard daemon containment was not confirmed")
         is_quarantined = getattr(daemon, "_is_quarantined", None)
@@ -978,6 +930,10 @@ def _cleanup_installed_daemon(daemon: Any) -> None:
         if callable(is_alive) and is_alive():
             raise ProbeCleanupUnsafeError("authenticated Guard daemon serve thread remained alive")
     except BaseException as exc:
+        if stop_timeout is not None and exc is not stop_timeout:
+            raise ProbeCleanupUnsafeError(
+                "authenticated Guard daemon cleanup did not complete after stop timeout"
+            ) from exc
         if isinstance(exc, ProbeCleanupUnsafeError):
             raise exc
         if isinstance(exc, ProbeError):
@@ -1013,34 +969,47 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
         stop_native_resident,
     )
 
-    cleanup_error: OSError | RuntimeError | None = None
-    try:
-        contained = close_native_residents(guard_home)
-    except (OSError, RuntimeError) as exc:
+    deadline = time.monotonic() + _daemon_cleanup_timeout_seconds()
+    last_error: OSError | RuntimeError | None = None
+    stop_confirmed = True
+    while True:
         contained = False
-        cleanup_error = exc
-    if _native_state_files(guard_home):
+        cleanup_error: OSError | RuntimeError | None = None
         try:
-            if not stop_native_resident(
-                executable=identity.path,
-                state_dir=guard_home / "native-runtime",
-                environment=_native_cleanup_environment(),
-                timeout_seconds=2.0,
-            ):
-                cleanup_error = cleanup_error or RuntimeError("native resident stop did not complete")
-        except (OSError, RuntimeError) as exc:
-            cleanup_error = cleanup_error or exc
-    if cleanup_error is None and not contained:
-        try:
-            contained = close_native_residents(guard_home)
+            contained = close_native_residents(guard_home, deadline_monotonic=deadline)
         except (OSError, RuntimeError) as exc:
             cleanup_error = exc
-    if cleanup_error is None and not contained:
-        cleanup_error = RuntimeError("native resident containment did not complete")
-    if cleanup_error is None and _native_state_files(guard_home):
-        cleanup_error = RuntimeError("native resident state remained after cleanup")
-    if cleanup_error is not None:
-        raise ProbeError(f"authenticated native cleanup failed: {type(cleanup_error).__name__}") from cleanup_error
+        state_files = _native_state_files(guard_home)
+        if state_files or not stop_confirmed:
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                stop_confirmed = False
+                try:
+                    if not stop_native_resident(
+                        executable=identity.path,
+                        state_dir=guard_home / "native-runtime",
+                        environment=_native_cleanup_environment(),
+                        timeout_seconds=min(2.0, remaining),
+                        # This isolated probe owns the fixture Guard home. Retire
+                        # its verified clients too, so a retry can authenticate
+                        # idempotent containment after the generation disappears.
+                        retire_clients=True,
+                        deadline_monotonic=deadline,
+                    ):
+                        cleanup_error = RuntimeError("native resident stop did not complete")
+                    else:
+                        stop_confirmed = True
+                except (OSError, RuntimeError) as exc:
+                    cleanup_error = exc
+                state_files = _native_state_files(guard_home)
+        if cleanup_error is None and contained and not state_files and stop_confirmed:
+            return
+        last_error = cleanup_error or last_error
+        if time.monotonic() >= deadline:
+            if last_error is None:
+                last_error = RuntimeError("native resident containment did not complete")
+            raise ProbeError(f"authenticated native cleanup failed: {type(last_error).__name__}") from last_error
+        time.sleep(min(_native_cleanup_retry_interval_seconds(), max(0.0, deadline - time.monotonic())))
 
 
 def _remove_probe_path(path: Path) -> bool:

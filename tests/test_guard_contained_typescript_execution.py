@@ -24,6 +24,15 @@ from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 
 
+@pytest.fixture(autouse=True)
+def _native_typescript_intents(
+    package_intent_native: Path,
+    native_mcp_probe: Callable[[Path], None],
+    tmp_path: Path,
+) -> None:
+    native_mcp_probe(tmp_path)
+
+
 def _write(path: Path, content: str, *, executable: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     _ = path.write_text(content, encoding="utf-8")

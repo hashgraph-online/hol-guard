@@ -26,9 +26,9 @@ from uuid import uuid4
 
 from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
 
+from . import native_execution as _native_execution
 from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .adapters.base import HarnessContext
-from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .approval_scope_support import package_request_runtime_workspace_scope
 from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig, resolve_risk_action
@@ -257,8 +257,8 @@ def _package_firewall_entitlement_module():
     return importlib.import_module(".package_firewall_entitlement", __package__)
 
 
-def _package_intent_parser_module():
-    return importlib.import_module(".runtime.package_intent_parser", __package__)
+def _native_package_authority_module():
+    return importlib.import_module(".native_package_authority", __package__)
 
 
 def _supply_chain_package_eval_module():
@@ -286,7 +286,141 @@ def _resolve_guard_sync_auth_context(store: GuardStore):
 
 
 def evaluate_package_request_artifact(*args: object, **kwargs: object):
+    native = _evaluate_package_request_artifact_native(args, kwargs)
+    if native is not None:
+        return native
     return _supply_chain_package_eval_module().evaluate_package_request_artifact(*args, **kwargs)
+
+
+def _parse_package_intent_native(
+    raw_command: str,
+    *,
+    environment: Mapping[str, str] | None,
+    workspace: Path | None,
+    guard_home: Path,
+) -> PackageIntent | None:
+    """Try the resident ``package_intent_parse`` op.
+
+    ``None`` means the resident was unreachable or found no intent —
+    ``parse_package_intent`` is resident-sole-authority, so no Python
+    re-parse exists to fall back to."""
+    try:
+        payload = _native_package_authority_module().package_intent_parse_native(
+            raw_command,
+            workspace=workspace,
+            environment=dict(environment) if environment is not None else None,
+            guard_home=guard_home,
+        )
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return PackageIntent.from_dict(payload)
+    except (TypeError, ValueError):
+        return None
+
+
+def _native_cloud_transport_unavailable(payload: dict[str, object]) -> bool:
+    """The resident cloud client is still a stub. Treat that miss as transport
+    failure so the Python evaluator can observe the real timeout or network error.
+    """
+    reasons = payload.get("reasons")
+    if not isinstance(reasons, list):
+        return False
+    return any(isinstance(reason, dict) and reason.get("code") == "cloud_network_error" for reason in reasons)
+
+
+def _python_cloud_auth_failed(store: GuardStore) -> bool:
+    """A patched auth seam is the test contract for expired cloud sessions.
+    Production keeps the resident path and does not refresh tokens here.
+    """
+    from .runtime import runner
+    from .runtime import supply_chain_package_eval as package_eval
+    from .runtime.runner import GuardSyncAuthorizationExpiredError
+
+    resolver = package_eval._resolve_guard_sync_auth_context
+    if resolver is runner._resolve_guard_sync_auth_context:
+        return False
+    try:
+        resolver(store, allow_primary_repair=False)
+    except GuardSyncAuthorizationExpiredError:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def _evaluate_package_request_artifact_native(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any | None:
+    """Best-effort native evaluation through the resident package authority.
+
+    ``None`` means transport failure (or an unsupported call shape), so the
+    caller falls back to the Python evaluator. Business errors propagate.
+    """
+    if args:
+        return None
+    artifact = kwargs.get("artifact")
+    store = kwargs.get("store")
+    if artifact is None or store is None:
+        return None
+    to_dict = getattr(artifact, "to_dict", None)
+    if not callable(to_dict):
+        return None
+    guard_home = getattr(store, "guard_home", None)
+    store_path = getattr(store, "path", None)
+    if not isinstance(guard_home, Path) or not isinstance(store_path, Path):
+        return None
+    workspace_dir = kwargs.get("workspace_dir")
+    if workspace_dir is not None and not isinstance(workspace_dir, Path):
+        return None
+    now = kwargs.get("now")
+    if now is not None and not isinstance(now, str):
+        return None
+    if bool(kwargs.get("retain_external_archive_blob", False)):
+        return None
+    if _python_cloud_auth_failed(store):
+        return None
+    native_authority = _native_package_authority_module()
+    workspace_id = store.get_cloud_workspace_id()
+    if workspace_id is not None and not native_authority.supply_chain_cloud_transport_available():
+        # Cloud service calls remain in Python until the native client supports
+        # both credential resolution and HTTP. Do not let the current stub
+        # persist a false terminal verdict before the real client runs.
+        return None
+    payload = native_authority.supply_chain_eval_native(
+        artifact=to_dict(),
+        guard_home=guard_home,
+        store_path=store_path,
+        workspace_dir=workspace_dir,
+        now=now,
+        external_archive_network_authorized=bool(kwargs.get("external_archive_network_authorized", False)),
+        retain_external_archive_blob=bool(kwargs.get("retain_external_archive_blob", False)),
+        runtime_private_metadata=getattr(artifact, "runtime_private_metadata", None),
+    )
+    if payload is None:
+        return None
+    if _native_cloud_transport_unavailable(payload):
+        return None
+    # The resident returns the decision; the Python store still owns the
+    # evidence row. A payload that cannot be reconstructed falls back to the
+    # Python evaluator; a persist failure propagates — the Python evaluator
+    # would hit the same store error, so swallowing it just re-runs the eval.
+    now_text = now if isinstance(now, str) else None
+    if now_text is None:
+        from datetime import datetime, timezone
+
+        now_text = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        evaluation = native_authority.evaluation_from_native_payload(payload)
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+    _supply_chain_package_eval_module()._persist_evidence(
+        store=store,
+        artifact=artifact,
+        evaluation=evaluation,
+        now=now_text,
+    )
+    return evaluation
 
 
 def _is_package_request_evaluation(value: object) -> TypeGuard[Any]:
@@ -1401,15 +1535,21 @@ def _build_package_protect_authority(
         raise ValueError("package workspace must resolve to an existing directory") from None
     if not launch_cwd.is_dir():
         raise ValueError("package workspace must resolve to an existing directory")
+    from .native_context import bind_context_digest_home
+    from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+
+    provision_native_verifier_key_for_store(store)
+    bind_context_digest_home(store.guard_home)
     launch_environment = _package_manager_launch_environment(
         os.environ,
         guard_home=store.guard_home,
         launch_cwd=launch_cwd,
     )
-    intent = _package_intent_parser_module().parse_package_intent(
+    intent = _parse_package_intent_native(
         shlex.join(command),
-        workspace=launch_cwd,
         environment=launch_environment,
+        workspace=launch_cwd,
+        guard_home=store.guard_home,
     )
     if intent is None:
         return None
@@ -1590,6 +1730,10 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason="approval_reuse_identity_changed",
         )
+        if reuse is None:
+            # Resident unreachable: preserve the initial evaluation unchanged —
+            # no saved approval is claimed.
+            return initial, initial.evaluation
         return initial, _package_evaluation_with_rejected_reuse(initial.evaluation, reuse)
     validation_reason: ApprovalReuseValidationFailure | None
     if current.artifact.artifact_id != initial.artifact.artifact_id:
@@ -1618,6 +1762,8 @@ def _final_package_protect_authority(
                 saved_decision_present=True,
                 validation_reason=validation_reason,
             )
+            if reuse is None:
+                return current, current_evaluation
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
         refreshed_saved_policy = _apply_stored_package_policy_override(
             current_evaluation,
@@ -1641,6 +1787,8 @@ def _final_package_protect_authority(
                 saved_decision_present=True,
                 validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
             )
+            if reuse is None:
+                return current, current_evaluation
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
         reuse = evaluate_approval_reuse(
             current.current_action,
@@ -1648,6 +1796,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             fresh_local_approval=True,
         )
+        if reuse is None:
+            return current, current_evaluation
         if reuse.accepted and reuse.saved_action == "allow":
             return current, _package_policy_override_evaluation(
                 current_evaluation,
@@ -1671,6 +1821,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=validation_reason,
         )
+        if reuse is None:
+            return current, current_evaluation
         return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     resolved = _apply_stored_package_policy_override(
         current_evaluation,
@@ -1690,7 +1842,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
         )
-        resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
+        if reuse is not None:
+            resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     return current, resolved
 
 
@@ -2006,7 +2159,11 @@ def build_package_protect_payload(
             saved_decision_present=True,
             validation_reason="approval_reuse_identity_changed",
         )
-        denied_evaluation = _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
+        denied_evaluation = (
+            final_authority.evaluation
+            if reuse is None
+            else _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
+        )
         denied = _package_protect_denied_after_final_boundary(
             payload=payload,
             authority=final_authority,
@@ -2286,15 +2443,20 @@ def _resolve_stored_package_policy_override(
         _is_fresh_artifact_approval(decision, store=store) or legacy_local_approval
     )
     durable_exact_approval = isinstance(decision, dict) and _is_durable_exact_artifact_approval(decision)
+    reuse_native = evaluate_approval_reuse(
+        effective_current_action,
+        action,
+        saved_decision_present=True,
+        validation_reason=validation_reason,
+        fresh_local_approval=fresh_local_approval,
+        durable_exact_approval=durable_exact_approval,
+    )
+    if reuse_native is None:
+        # Resident unreachable: preserve the caller's evaluation unchanged —
+        # the saved approval is not claimed or consumed.
+        return _StoredPackagePolicyResolution(current_evaluation)
     reuse = with_saved_artifact_hash_provenance(
-        evaluate_approval_reuse(
-            effective_current_action,
-            action,
-            saved_decision_present=True,
-            validation_reason=validation_reason,
-            fresh_local_approval=fresh_local_approval,
-            durable_exact_approval=durable_exact_approval,
-        ),
+        reuse_native,
         decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
     )
     claim_disposition: _PackageApprovalClaimDisposition | None = None
@@ -2322,28 +2484,36 @@ def _resolve_stored_package_policy_override(
         else:
             claim_succeeded = store.claim_approval_reuse_decision(decision, now=now)
     if claim_saved_approval and reuse.should_claim and not claim_succeeded:
+        claim_failed_reuse = evaluate_approval_reuse(
+            effective_current_action,
+            action,
+            saved_decision_present=True,
+            validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+        )
+        if claim_failed_reuse is None:
+            # Resident unreachable after a failed claim: the claim already
+            # failed, so preserve the caller's evaluation unchanged.
+            return _StoredPackagePolicyResolution(current_evaluation)
         reuse = with_saved_artifact_hash_provenance(
-            evaluate_approval_reuse(
-                effective_current_action,
-                action,
-                saved_decision_present=True,
-                validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-            ),
+            claim_failed_reuse,
             decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
         )
     if reuse.accepted and reuse.saved_action == "allow":
         if not isinstance(decision, dict) or decision.get("action") != "allow":
-            failed_reuse = with_saved_artifact_hash_provenance(
-                evaluate_approval_reuse(
-                    most_restrictive_guard_action(
-                        effective_current_action,
-                        "require-reapproval",
-                        unknown_action="block",
-                    ),
-                    "allow",
-                    saved_decision_present=True,
-                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+            failed_reuse_native = evaluate_approval_reuse(
+                most_restrictive_guard_action(
+                    effective_current_action,
+                    "require-reapproval",
+                    unknown_action="block",
                 ),
+                "allow",
+                saved_decision_present=True,
+                validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+            )
+            if failed_reuse_native is None:
+                return _StoredPackagePolicyResolution(current_evaluation)
+            failed_reuse = with_saved_artifact_hash_provenance(
+                failed_reuse_native,
                 decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
             )
             return _StoredPackagePolicyResolution(
@@ -2732,47 +2902,15 @@ def recompute_package_protect_artifact_hash(
     return authority.artifact_hash if authority is not None else None
 
 
-def _package_target_identities(artifact: GuardArtifact) -> tuple[ProtectTargetIdentity, ...]:
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
-    targets = metadata.get("targets")
-    if not isinstance(targets, list):
-        return ()
-    identities: list[ProtectTargetIdentity] = []
-    for item in targets:
-        if not isinstance(item, dict):
-            continue
-        ecosystem = str(item.get("ecosystem") or "")
-        package_name = item.get("package_name") if isinstance(item.get("package_name"), str) else None
-        raw_spec = str(item.get("raw_spec") or package_name or "")
-        version = item.get("requested_specifier") if isinstance(item.get("requested_specifier"), str) else None
-        source_url = item.get("source_url") if isinstance(item.get("source_url"), str) else None
-        artifact_id = f"{ecosystem}:{package_name or raw_spec}"
-        artifact_name = package_name or raw_spec
-        identities.append(
-            ProtectTargetIdentity(
-                artifact_id=artifact_id,
-                artifact_name=artifact_name,
-                ecosystem=ecosystem,
-                package_name=package_name,
-                package_url=build_package_url(ecosystem, package_name, version),
-                source_url=source_url,
-            )
-        )
-    return tuple(identities)
-
-
 def _package_matched_cached_advisory_ids(store: Any, artifact: GuardArtifact) -> tuple[str, ...]:
-    advisories = store.list_cached_advisories(limit=None)
-    identities = _package_target_identities(artifact)
-    matched_ids: set[str] = set()
-    for advisory in advisories:
-        for identity in identities:
-            if advisory_matches_target(advisory, identity):
-                advisory_id = advisory.get("id")
-                if isinstance(advisory_id, str) and advisory_id:
-                    matched_ids.add(advisory_id)
-                break
-    return tuple(sorted(matched_ids))
+    from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+
+    provision_native_verifier_key_for_store(store)
+    return _native_package_authority_module().package_advisory_ids_native(
+        artifact=artifact.to_dict(),
+        store_path=store.path,
+        guard_home=store.guard_home,
+    )
 
 
 def _package_feed_snapshot_hash(store: Any) -> str | None:
@@ -3179,7 +3317,15 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
     installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
     active_managers = sorted(set(_string_items(status.get("active_managers"))))
     missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
-    supported_managers = list(package_shim_supported_managers())
+    _native_managers = _native_execution.shim_admin_native(
+        "supported_managers",
+        guard_home=store.guard_home,
+    )
+    supported_managers = (
+        list(_native_managers)
+        if isinstance(_native_managers, list) and all(isinstance(item, str) for item in _native_managers)
+        else list(package_shim_supported_managers())
+    )
     detected_managers = sorted(set(_string_items(status.get("detected_managers"))))
     protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
     protected_set = set(protected_managers)

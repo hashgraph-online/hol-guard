@@ -33,6 +33,35 @@ fn safe_header(value: &str) -> bool {
         })
 }
 
+fn static_endpoint(value: &str, read_only: bool) -> bool {
+    let mut bytes = value.bytes();
+    let mut decoded = Vec::with_capacity(value.len());
+    while let Some(byte) = bytes.next() {
+        if byte == b'%' && read_only {
+            let Some(high) = bytes.next().and_then(|byte| (byte as char).to_digit(16)) else {
+                return false;
+            };
+            let Some(low) = bytes.next().and_then(|byte| (byte as char).to_digit(16)) else {
+                return false;
+            };
+            let byte = (high * 16 + low) as u8;
+            if byte.is_ascii_control() {
+                return false;
+            }
+            decoded.push(byte);
+        } else if byte.is_ascii_alphanumeric() || b"_./{}:+,@=?&-".contains(&byte) {
+            decoded.push(byte);
+        } else {
+            return false;
+        }
+    }
+    let decoded = String::from_utf8_lossy(&decoded);
+    let path = decoded
+        .split_once('?')
+        .map_or(decoded.as_ref(), |(path, _)| path);
+    !path.trim_matches('/').eq_ignore_ascii_case("graphql")
+}
+
 pub(super) fn classify(arguments: &[String]) -> Capabilities {
     let mut endpoint: Option<&str> = None;
     let mut method: Option<&str> = None;
@@ -117,20 +146,18 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
         index += 1;
     }
     let endpoint = endpoint?;
-    if endpoint.is_empty()
-        || endpoint.starts_with('-')
-        || endpoint.contains("://")
-        || !endpoint
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"_./{}:+,@=?&-".contains(&byte))
-        || endpoint.eq_ignore_ascii_case("graphql")
-    {
-        return None;
-    }
     let method = method
         .unwrap_or(if fields.is_empty() { "GET" } else { "POST" })
         .to_ascii_uppercase();
-    if matches!(method.as_str(), "GET" | "HEAD") {
+    let read_only = matches!(method.as_str(), "GET" | "HEAD");
+    if endpoint.is_empty()
+        || endpoint.starts_with('-')
+        || endpoint.contains("://")
+        || !static_endpoint(endpoint, read_only)
+    {
+        return None;
+    }
+    if read_only {
         return one("read_remote");
     }
     Some(mutation_capabilities(endpoint, &method, &fields))
@@ -232,4 +259,51 @@ fn mutation_capabilities(
         capabilities.push("mutate_remote");
     }
     capabilities
+}
+
+#[cfg(test)]
+mod encoded_endpoint_tests {
+    use super::classify;
+
+    #[test]
+    fn encoded_read_paths_and_queries_keep_read_capability() {
+        for arguments in [
+            vec!["repos/example/repo/contents/app/%28group%29/file.ts?ref=main"],
+            vec![
+                "-H",
+                "Accept: application/vnd.github.raw",
+                "repos/example/repo/contents/a%20b.ts",
+            ],
+            vec!["-X", "HEAD", "repos/example/repo/contents/%E2%9C%93.ts"],
+            vec!["repos/example/repo/commits?path=app/%28group%29/file.ts&per_page=3"],
+        ] {
+            let arguments: Vec<String> = arguments.into_iter().map(String::from).collect();
+            assert_eq!(classify(&arguments), Some(vec!["read_remote"]));
+        }
+    }
+
+    #[test]
+    fn malformed_encodings_and_encoded_mutations_stay_unproven() {
+        for arguments in [
+            vec!["repos/example/repo/contents/%2"],
+            vec!["repos/example/repo/contents/%GG"],
+            vec!["repos/example/repo/contents/%00"],
+            vec!["graph%71l"],
+            vec!["graph%71l?query=synthetic"],
+            vec!["%2fgraphql"],
+            vec![
+                "-X",
+                "DELETE",
+                "repos/example/repo/contents/%28group%29/file.ts",
+            ],
+            vec![
+                "repos/example/repo/contents/%28group%29/file.ts",
+                "-f",
+                "content=synthetic",
+            ],
+        ] {
+            let arguments: Vec<String> = arguments.into_iter().map(String::from).collect();
+            assert_eq!(classify(&arguments), None);
+        }
+    }
 }
