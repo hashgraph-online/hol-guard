@@ -166,6 +166,7 @@ jobs:
         if: steps.release.outputs.available == 'true'
         id: registry
         env:
+          GH_TOKEN: ${{ github.token }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
           PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
         shell: bash

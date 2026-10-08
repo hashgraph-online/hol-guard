@@ -46,6 +46,8 @@ def test_feed_registry_checks_keep_the_authorized_distribution_filename(workflow
     assert len(checks) == 2
     assert all('--filename "$ATTESTED_WHEEL_FILENAME"' in check for check in checks)
     assert all('--bundle "$RUNNER_TEMP/core-trust-assets/' in check for check in checks)
+    registry = next(step for step in steps if step.get("id") == "registry")
+    assert registry["env"]["GH_TOKEN"] == "${{ github.token }}"
 
 
 @pytest.mark.parametrize("repaired", [False, True])
