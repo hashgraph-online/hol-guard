@@ -75,6 +75,18 @@ fn verified_cd_and_bounded_output_filters_reach_containment() {
                 "bunx --cwd=web/ vitest run x".into(),
                 "native_vitest_readonly_containment_required",
             ),
+            (
+                "bunx vitest run --testNamePattern='a b' 2>&1 | tail -5".into(),
+                "native_vitest_readonly_containment_required",
+            ),
+            (
+                "bunx vitest run -t 'renders (empty)' | tail -20".into(),
+                "native_vitest_readonly_containment_required",
+            ),
+            (
+                "pytest -q tests/a\\ b.py | head -3".into(),
+                "native_pytest_readonly_containment_required",
+            ),
         ] {
             let result = classify(&root, harness, &command);
             assert_eq!(result.decision, "deny", "{harness}: {command}");

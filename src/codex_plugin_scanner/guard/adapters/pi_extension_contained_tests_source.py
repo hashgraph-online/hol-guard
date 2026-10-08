@@ -111,11 +111,7 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
       ];
       if (!GUARD_HOME_DIR_IS_DEFAULT) args.push("--home", GUARD_HOME_DIR);
       const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
-      // Keep a bounded output filter the sink peeled, so the agent sees what it asked for.
-      const filter = /(?:\s+2>&1)?\s*\|\s*(?:tail|head)\s+(?:-[0-9]{1,6}|-n\s+[0-9]{1,6})\s*$/.exec(
-        (input as Record<string, unknown>).command as string,
-      );
-      const command = [GUARD_CLI_WRAPPER_COMMAND, ...args].map(quote).join(" ") + (filter ? filter[0] : "");
+      const command = [GUARD_CLI_WRAPPER_COMMAND, ...args].map(quote).join(" ");
       containedTestRequests.set(key, directory);
       containedTestPresentations.set(key, { input: { ...(input as Record<string, unknown>) }, command });
       while (containedTestPresentations.size > 256) {

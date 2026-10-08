@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .restricted_node_capabilities import linux_node_environment
-from .restricted_node_test import _node_runtime_args, prepare_restricted_node_test
+from .restricted_node_test import _node_runtime_args, nearest_project_root, prepare_restricted_node_test
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TOOL_READ_ONLY_PROFILE_VERSION,
@@ -92,21 +92,23 @@ def prepare_restricted_vitest(
             target = (cwd or workspace) / target
         try:
             original = workspace.resolve(strict=True)
-            workspace = target.resolve(strict=True)
-            if not workspace.is_dir():
+            cwd = target.resolve(strict=True)
+            if not cwd.is_dir():
                 raise OSError("not a directory")
-            if Path(command[0]).name == "bunx" and not _path_is_within(workspace, original):
+            if Path(command[0]).name == "bunx" and not _path_is_within(cwd, original):
                 raise OSError("outside the workspace")
         except (OSError, RuntimeError) as error:
             raise RestrictedPytestError(
                 "vitest_restricted_invalid_command", "Vitest working directory is unavailable."
             ) from error
-        cwd = workspace
+        if not _path_is_within(cwd, original):
+            workspace = cwd
     plan = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd)
-    lexical = plan.workspace / "node_modules" / "vitest" / "vitest.mjs"
     try:
-        entry = lexical.resolve(strict=True)
-        if not entry.is_file() or not _path_is_within(entry, plan.workspace / "node_modules"):
+        # Keep the approved root: a package directory may rely on hoisted dependencies.
+        modules = nearest_project_root(plan.cwd, plan.workspace, "node_modules/vitest/vitest.mjs") / "node_modules"
+        entry = (modules / "vitest" / "vitest.mjs").resolve(strict=True)
+        if not entry.is_file() or not _path_is_within(entry, modules):
             raise OSError("invalid local Vitest entrypoint")
         if (
             Path(command[0]).name in {"node", "nodejs"}
