@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
-TRUST_MAP = ROOT / "contracts/extensions/trust-class-map.v1.json"
+TRUST_MAP = ROOT / "contracts/extensions/build-trust-class-map.v1.json"
 TARGET_DIR = ROOT / "rust/target"
 COMPILER = TARGET_DIR / "release/guard-command-source"
 TOOLCHAIN = "1.88.0"
@@ -122,7 +122,7 @@ def check_trust_consistency() -> None:
     """Fail if a staged aggregate map drifts from the authored bindings."""
     if TRUST_MAP.is_file() and _read(TRUST_MAP) != _projected_aggregate():
         raise SystemExit(
-            "trust-class-map.v1.json is out of sync with contracts/extensions/trust/; "
+            "build-trust-class-map.v1.json is out of sync with contracts/extensions/trust/; "
             "edit the per-extension binding and run `refresh_extension_artifacts.py --trust-only`"
         )
 

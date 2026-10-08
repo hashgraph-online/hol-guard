@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
+import sys
 from pathlib import Path
 
 _STATIC_ARTIFACTS = {
@@ -12,7 +14,6 @@ _STATIC_ARTIFACTS = {
     "contracts/guard-cloud-review/v2/command-result.json": "guard-cloud-review/v2/command-result.json",
     "contracts/guard-cloud-review/v2/fixtures.json": "guard-cloud-review/v2/fixtures.json",
     "docs/guard/contracts/guard-cloud-review.md": "guard-cloud-review/guard-cloud-review.md",
-    "contracts/extensions/trust-class-map.v1.json": "extensions/trust-class-map.v1.json",
     "contracts/extensions/contribution.v1.schema.json": "extensions/contribution.v1.schema.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
 }
@@ -44,6 +45,10 @@ def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) 
     """Copy canonical artifacts into package data and return staged paths."""
 
     source_root = source_root.resolve()
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from extension_trust_projection import repository_trust_map
+
+    trust_map = repository_trust_map(source_root)
     data_root = (
         destination_root.resolve()
         if destination_root is not None
@@ -68,6 +73,10 @@ def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) 
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
         staged.append(destination)
+    trust_destination = data_root / "extensions/trust-class-map.v1.json"
+    trust_destination.parent.mkdir(parents=True, exist_ok=True)
+    trust_destination.write_text(json.dumps(trust_map, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    staged.append(trust_destination)
     for package in (
         data_root,
         data_root / "extensions",

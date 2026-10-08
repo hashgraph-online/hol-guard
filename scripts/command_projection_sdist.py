@@ -36,10 +36,16 @@ def _generator(root: Path):
     return module
 
 
+def _trust_artifact(root: Path) -> Path:
+    """Use the archive resource only inside a source distribution."""
+    name = "trust-class-map.v1.json" if (root / "PKG-INFO").is_file() else "build-trust-class-map.v1.json"
+    return root / "contracts/extensions" / name
+
+
 def projection_manifest(root: Path, *, descriptors: Path | None = None, trust_map: Path | None = None) -> dict:
     """Fingerprint canonical sources, native implementation, and packaged outputs."""
     generator = _generator(root)
-    trust_map = trust_map or root / "contracts/extensions/trust-class-map.v1.json"
+    trust_map = trust_map or _trust_artifact(root)
     paths = {
         name: trust_map if name == "trust-class-map.v1.json" else root / "contracts/extensions" / name for name in NAMES
     }
@@ -87,6 +93,6 @@ def verify_projection_manifest(root: Path) -> None:
     generator = _generator(root)
     saved = generator.read_object(root / MANIFEST)
     descriptors = root / "contributions/extensions" if "descriptors" in saved else None
-    trust_map = root / "contracts/extensions/trust-class-map.v1.json" if "trust_map_sha256" in saved else None
+    trust_map = _trust_artifact(root) if "trust_map_sha256" in saved else None
     if saved != projection_manifest(root, descriptors=descriptors, trust_map=trust_map):
         raise ValueError("source-distribution command projections do not match their build inputs")

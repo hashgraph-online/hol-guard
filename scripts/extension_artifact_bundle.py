@@ -8,6 +8,7 @@ import json
 import re
 import stat
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -40,7 +41,7 @@ def source_sha(value: str) -> str:
 
 
 def selected_files(root: Path) -> list[Path]:
-    paths = [root / name for name in FILES]
+    paths = [root / name for name in FILES if name != "contracts/extensions/trust-class-map.v1.json"]
     for name in DIRECTORIES:
         directory = root / name
         if directory.is_symlink():
@@ -64,6 +65,14 @@ def create_bundle(root: Path, output: Path, expected_sha: str) -> dict:
     if actual != expected_sha:
         raise ValueError("snapshot checkout does not match the requested source")
     files = {path.relative_to(root).as_posix(): path.read_bytes() for path in selected_files(root)}
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from extension_trust_projection import repository_trust_map
+
+    files["contracts/extensions/trust-class-map.v1.json"] = (
+        json.dumps(repository_trust_map(root), sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    if len(files) > MAX_FILES or sum(map(len, files.values())) > MAX_BYTES:
+        raise ValueError("snapshot exceeds inventory or byte limit")
     catalog = json.loads(files[FILES[0]])
     manifest = {
         "schema": SCHEMA,
