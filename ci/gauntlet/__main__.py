@@ -144,7 +144,9 @@ def main() -> int:
                 from .luna_route import NativeLunaRoute
 
                 # Unwind the context manager on SIGTERM/SIGHUP so the adapter is always reaped.
-                for name in (signal.SIGTERM, signal.SIGHUP):
+                for name in (signal.SIGTERM, getattr(signal, "SIGHUP", None)):
+                    if name is None:
+                        continue
                     signal.signal(name, lambda number, _frame: sys.exit(128 + number))
 
                 route = stack.enter_context(NativeLunaRoute(omp=args.omp, sdk_root=args.sdk_root))
