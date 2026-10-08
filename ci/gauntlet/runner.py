@@ -19,8 +19,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_configuration import write_agent_configuration
-from .agent_prompt import fixture_authorization
-from .agent_prompt import scenario_prompt as _scenario_prompt
+from .agent_prompt import fixture_authorization, scenario_prompt
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
 from .evidence import assess_case, public_events, read_events, sha256_bytes
@@ -38,6 +37,11 @@ from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+
+FIXTURE_SYSTEM_CONTEXT = (
+    "The agent process inherits no provider, GitHub, or cloud credentials. "
+    "Never retry a denied operation or change protection."
+)
 
 
 def _watch_binding(store: Any) -> dict[str, Any]:
@@ -144,6 +148,17 @@ def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replace
     case["events"] = public_events(read_events(raw_log), replacements)
 
 
+def _scenario_prompt(scenario: Scenario) -> str:
+    """Retain shared scheduling and literal commands, with Watch's explicit tool bound."""
+    prompt = scenario_prompt(scenario)
+    if scenario.oracle == "watch-command":
+        prompt += (
+            "\nSet timeout to 120 seconds explicitly; use the fixture workspace as cwd if supplied."
+            " Do not override the environment, enable PTY, or run in the background."
+        )
+    return prompt
+
+
 def run_case(
     scenario: Scenario,
     *,
@@ -191,7 +206,7 @@ def run_case(
                 {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
             )
             prompt = _scenario_prompt(rendered)
-            authorization = fixture_authorization(fixture, collector.url)
+            authorization = fixture_authorization(fixture, collector.url) + "\n" + FIXTURE_SYSTEM_CONTEXT
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             case["agent_context_sha256"] = sha256_bytes(authorization.encode())
             agent_dir = private / "agent"

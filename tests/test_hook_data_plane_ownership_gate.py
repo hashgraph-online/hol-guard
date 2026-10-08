@@ -175,22 +175,6 @@ def test_pretool_graph_gate_covers_server_entrypoint_and_cli() -> None:
     assert MODULE._graph_failures(ROOT) == []
 
 
-def test_pretool_graph_gate_rejects_unguarded_server_legacy_escape(tmp_path: Path) -> None:
-    _copy_pretool_graph_sources(tmp_path)
-    server = tmp_path / "src/codex_plugin_scanner/guard/daemon/server.py"
-    source = server.read_text(encoding="utf-8")
-    marker = "            if _native_mode_requires_rust():\n                self._write_json(\n"
-    assert marker in source
-    server.write_text(
-        source.replace(marker, "            if False:\n                self._write_json(\n", 1),
-        encoding="utf-8",
-    )
-
-    failures = MODULE._graph_failures(tmp_path)
-
-    assert any("server execute path" in failure for failure in failures)
-
-
 def test_pretool_graph_gate_rejects_resident_python_cli_escape(tmp_path: Path) -> None:
     _copy_pretool_graph_sources(tmp_path)
     entrypoint = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py"

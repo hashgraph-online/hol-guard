@@ -166,6 +166,13 @@ pub(super) fn inspection_arguments<'a>(
         {
             return None;
         }
+        // Like `cd`, an absolute Windows target must be its exact canonical spelling.
+        #[cfg(windows)]
+        if std::path::Path::new(target).is_absolute()
+            && !crate::pretool::directory_targets::exact_existing_drive_target(target)
+        {
+            return None;
+        }
         saw_change_directory = true;
         index += 1;
     }
@@ -199,7 +206,8 @@ pub(super) fn observe_with_context(
         return;
     };
     let command = arguments[command_index].as_str();
-    let inspection = inspection_arguments(arguments, context);
+    let inspection = inspection_arguments(arguments, context)
+        .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment));
     let plumbing = (command_index == 0 && read_only_plumbing(arguments))
         || inspection.is_some_and(read_only_plumbing);
     if plumbing {

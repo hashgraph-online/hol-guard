@@ -39,6 +39,7 @@ from ..runtime.approval_reuse import (
     APPROVAL_REUSE_NO_SAVED_DECISION,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
 )
 from ..runtime.decisions import build_authoritative_decision, evaluation_authority_error
@@ -844,7 +845,13 @@ def _compose_consumer_saved_policy(
             validation_reason = cast(ApprovalReuseValidationFailure, diagnosed_reason)
 
     if not has_saved_state:
-        return evaluate_approval_reuse(current_action), False
+        # No saved evidence: preserve the current action unchanged regardless
+        # of resident reachability (the resident composes the same
+        # no_saved_decision result; on transport failure we project it locally).
+        no_state = evaluate_approval_reuse(current_action)
+        if no_state is None:
+            no_state = approval_reuse_authority_unavailable(current_action)
+        return no_state, False
 
     reuse = evaluate_approval_reuse(
         current_action,
@@ -852,6 +859,10 @@ def _compose_consumer_saved_policy(
         saved_decision_present=True,
         validation_reason=validation_reason,
     )
+    if reuse is None:
+        # Resident unreachable: no saved approval is claimed; the caller's
+        # current evaluation stands unchanged.
+        return approval_reuse_authority_unavailable(current_action), True
     if reuse.should_claim and saved_decision is not None and pending_approval_claims is not None:
         pending_approval_claims.append((saved_decision, artifact_id, artifact_hash))
     return reuse, True
@@ -1299,10 +1310,18 @@ def evaluate_detection(
             claimed=claimed_saved_approval,
         )
         if claimed_saved_approval:
-            approval_reuse = evaluate_approval_reuse(
+            claimed_reuse = evaluate_approval_reuse(
                 current_policy_action,
                 "allow",
                 saved_decision_present=True,
+            )
+            approval_reuse = (
+                claimed_reuse
+                if claimed_reuse is not None
+                # Resident unreachable: the claim disposition is already
+                # recorded; project the current action unchanged with no
+                # additional claim authority.
+                else approval_reuse_authority_unavailable(current_policy_action)
             )
             has_saved_state = True
         trusted_request_override = _trusted_request_override_applies(
@@ -1601,10 +1620,18 @@ def evaluate_detection(
             claimed=claimed_saved_approval,
         )
         if claimed_saved_approval:
-            approval_reuse = evaluate_approval_reuse(
+            claimed_reuse = evaluate_approval_reuse(
                 current_policy_action,
                 "allow",
                 saved_decision_present=True,
+            )
+            approval_reuse = (
+                claimed_reuse
+                if claimed_reuse is not None
+                # Resident unreachable: the claim disposition is already
+                # recorded; project the current action unchanged with no
+                # additional claim authority.
+                else approval_reuse_authority_unavailable(current_policy_action)
             )
             has_saved_state = True
         trusted_request_override = _trusted_request_override_applies(

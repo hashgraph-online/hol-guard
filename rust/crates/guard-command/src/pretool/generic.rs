@@ -327,6 +327,7 @@ fn evaluate_envelope(
                         execution_environment,
                     );
                     !segment.environment_names.is_empty()
+                        || !super::directory_targets::drive_targets_quoted(segment)
                         || inspection == Some(false)
                         // Only inspection operations have a configuration proof
                         // to invalidate. Other Git operations retain their own

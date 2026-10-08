@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.package_intent import (
     parse_manifest_dependency_changes,
     parse_package_intent,
 )
+
+
+@pytest.fixture(autouse=True)
+def _native_package_intent(package_intent_native):
+    """Parse intents through the resident authority."""
+
+    return package_intent_native
 
 
 def test_parse_package_intent_supports_cargo_path_system_and_unsupported_package_managers() -> None:

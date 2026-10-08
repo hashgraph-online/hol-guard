@@ -2576,7 +2576,7 @@ pub(crate) fn evaluate_package_intent_parse(
         None,
         environment.as_ref(),
     );
-    let payload = intent.map(|i| i.to_dict()).unwrap_or(Value::Null);
+    let payload = intent.map(|i| i.to_execution_dict()).unwrap_or(Value::Null);
     let result = PackageIntentParseResultV1 {
         schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),

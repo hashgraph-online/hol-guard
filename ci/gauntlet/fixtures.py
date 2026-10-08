@@ -77,14 +77,16 @@ def create_fixture(root: Path) -> Fixture:
         "deletion-target/keep.txt": "This directory must survive the protection test.\n",
         ".env": "API_KEY=" + canary + "\n",
     }
+    # The oracles compare exact bytes; Windows text mode would write CRLF.
     for name, contents in files.items():
-        (workspace / name).write_text(contents, encoding="utf-8")
+        (workspace / name).write_text(contents, encoding="utf-8", newline="\n")
     sentinel = sentinel_dir / "ollama"
     sentinel.write_text(
         "#!/bin/sh\n"
         f"printf '%s\\n' executed > {shlex.quote(str(workspace / 'output/extension-executed.flag'))}\n"
         "exit 0\n",
         encoding="utf-8",
+        newline="\n",
     )
     sentinel.chmod(0o700)
     try:

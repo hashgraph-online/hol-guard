@@ -13,6 +13,8 @@ from codex_plugin_scanner.guard.runtime.actions import (
     stable_action_hash,
 )
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def _package_payload(command: str) -> dict[str, object]:
     return {

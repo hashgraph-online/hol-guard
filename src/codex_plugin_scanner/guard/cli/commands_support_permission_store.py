@@ -372,6 +372,7 @@ def _persist_cursor_native_permission_after_shell(
             payload=prepared,
             home_dir=home_dir,
             workspace=workspace,
+            guard_home=guard_home,
         )
         runtime_artifact = _hook_runtime_artifact(
             harness=harness,

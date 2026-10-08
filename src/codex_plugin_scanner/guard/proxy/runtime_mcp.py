@@ -1778,6 +1778,7 @@ class RuntimeMcpGuardProxy:
             arguments,
             action_envelope_command=_command_argument(arguments),
             workspace=self.context.workspace_dir,
+            guard_home=self.context.guard_home,
         )
         if intent is None:
             return None

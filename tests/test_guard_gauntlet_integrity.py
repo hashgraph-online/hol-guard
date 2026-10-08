@@ -57,6 +57,28 @@ def test_fixture_alias_redaction_requires_matching_physical_path(monkeypatch):
     assert fixture_path_aliases(replacements) == replacements
 
 
+def test_fixture_alias_redaction_accepts_forward_slash_drive_spelling():
+    """Git for Windows prints `C:/...`; it names the same fixture path as `C:\\...`."""
+    canonical = "C:\\Users\\runner\\fixture\\home\\project"
+    replacements = fixture_path_aliases({canonical: "{{workspace}}"})
+    assert redact_value("C:/Users/runner/fixture/home/project\n", replacements) == "{{workspace}}\n"
+    assert redact_value(canonical + "\\src", replacements) == "{{workspace}}\\src"
+    assert fixture_path_aliases({"/tmp/fixture": "{{workspace}}"}) == {"/tmp/fixture": "{{workspace}}"}
+
+
+def test_fixture_files_hold_exact_lf_bytes(tmp_path):
+    """Byte oracles need the fixture's LF endings on every host, including Windows."""
+    from ci.gauntlet.fixtures import SOURCE_FILES, create_fixture
+
+    try:
+        fixture = create_fixture(tmp_path / "fixture")
+    except RuntimeError as error:
+        pytest.skip(str(error))
+    for name, contents in SOURCE_FILES.items():
+        assert (fixture.workspace / name).read_bytes() == contents.encode("utf-8")
+    assert b"\r" not in (fixture.root / "bin/ollama").read_bytes()
+
+
 def completed(request="a" * 64):
     """Build synthetic metadata for a completed inference response bound to a request digest."""
     return {
