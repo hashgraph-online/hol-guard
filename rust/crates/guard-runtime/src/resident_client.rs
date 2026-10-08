@@ -151,6 +151,9 @@ fn connect_unix_with_digest(
     use std::os::unix::net::UnixStream;
     let address = UnixAddr::new(Path::new(endpoint))
         .map_err(|_| "native_client_endpoint_invalid".to_owned())?;
+    // Hash the runtime before connecting; after connect only the cheap
+    // peer-PID and start-marker checks run inside the auth window.
+    validate_runtime_owner(identity)?;
     let descriptor = socket(
         AddressFamily::Unix,
         SockType::Stream,
