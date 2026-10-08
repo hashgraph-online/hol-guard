@@ -19,6 +19,7 @@ from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_configuration import write_agent_configuration
 from .agent_prompt import fixture_authorization, scenario_prompt
+from .business_policy import BUSINESS_DIRECTORY_DELETE, bind_business_snapshot, install_business_policy
 from .case_worker import SubprocessCaseWorker
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
@@ -196,7 +197,14 @@ def run_case(
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
                 )
+            if scenario.id == BUSINESS_DIRECTORY_DELETE:
+                case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
+            if scenario.id == BUSINESS_DIRECTORY_DELETE:
+                publisher = daemon._server.hook_worker.policy_snapshot_publisher
+                case["business_policy"] = bind_business_snapshot(
+                    case["business_policy"], publisher.current_snapshot(), policy_snapshot
+                )
             worker = daemon._server.hook_worker
             if scenario.oracle == "watch-command":
                 case["watch_binding_before"] = _watch_binding(worker.store)
