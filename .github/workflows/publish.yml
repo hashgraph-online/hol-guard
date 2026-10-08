@@ -764,6 +764,7 @@ jobs:
   assemble-native-guard-distributions:
     name: Assemble native Guard distributions
     if: >-
+      always() && !cancelled() &&
       needs.build.result == 'success' &&
       needs.build-native-guard-wheels.result == 'success'
     needs: [build, build-native-guard-wheels]
@@ -820,6 +821,7 @@ jobs:
   publish-testpypi:
     name: Publish PR canary to TestPyPI
     if: >-
+      always() && !cancelled() && needs.build.result == 'success' && needs.assemble-native-guard-distributions.result == 'success' &&
       vars.PR_CANARY_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -851,6 +853,7 @@ jobs:
   pr-installed-canary:
     name: Installed PR canary (${{ matrix.os }})
     if: >-
+      always() && !cancelled() && needs.build.result == 'success' && needs.publish-testpypi.result == 'success' &&
       vars.PR_CANARY_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -1788,6 +1791,8 @@ jobs:
       needs.build.outputs.channel == 'stable'
     needs: [build, assemble-native-guard-distributions, reserve-main-tag]
     runs-on: ubuntu-latest
+    outputs:
+      core_ready: ${{ steps.core-inputs.outputs.core_ready }}
     permissions:
       attestations: write
       contents: write
@@ -1797,7 +1802,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
-          ref: ${{ needs.build.outputs.source_sha }}
+          ref: ${{ github.sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions-native
@@ -1824,6 +1829,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: cp "${{ steps.provenance.outputs.bundle-path }}" "dist/hol-guard-v${VERSION}.intoto.jsonl"
       - name: Publish immutable package inputs for Desktop signing
+        id: core-inputs
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
@@ -1863,6 +1869,17 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.build.outputs.source_sha }}
+      - name: Checkout trusted release validation tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: .release-validation
+          sparse-checkout: |
+            scripts/ci/verify_release_asset_inventory.py
+            scripts/release/release_readiness_notes.py
+          sparse-checkout-cone-mode: false
       - name: Checkout release-notes tooling
         if: needs.publish-main-pypi.outputs.pypi_deferred == 'true'
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1909,6 +1926,10 @@ jobs:
             --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" \
             --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md" \
             "${deferred_args[@]}"
+      - name: Explain package and Desktop readiness
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: python3 .release-validation/scripts/release/release_readiness_notes.py "$RUNNER_TEMP/release-notes.md"
       - name: Create discoverable main release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1933,7 +1954,7 @@ jobs:
               exit 1
             fi
             existing_dir=$(mktemp -d)
-            gh release download "$tag" --dir "$existing_dir" || true
+            gh release download "$tag" --dir "$existing_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl" --pattern "*.cdx.json" --pattern "*.mcpb" --pattern "*.mcpb.sha256" || true
             missing_files=()
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
@@ -1944,7 +1965,7 @@ jobs:
             if [[ "${#missing_files[@]}" -gt 0 ]]; then
               gh release upload "$tag" "${missing_files[@]}"
               existing_dir=$(mktemp -d)
-              gh release download "$tag" --dir "$existing_dir"
+              gh release download "$tag" --dir "$existing_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl" --pattern "*.cdx.json" --pattern "*.mcpb" --pattern "*.mcpb.sha256"
             fi
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
@@ -1953,7 +1974,9 @@ jobs:
                 cmp --silent "$local_file" "$remote_file"
               fi
             done
-            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" stable
+            gh release view "$tag" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/package-release-assets.txt"
+            python .release-validation/scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" stable \
+              --allow-core-in-progress --asset-names-file "$RUNNER_TEMP/package-release-assets.txt"
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
             shopt -s nullglob
@@ -1993,7 +2016,8 @@ jobs:
     if: >-
       always() && github.repository == 'hashgraph-online/hol-guard' &&
       github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
-      needs.publish-main-assets.result == 'success' && needs.build.outputs.channel == 'stable'
+      needs.publish-main-assets.result == 'success' && needs.publish-main-assets.outputs.core_ready == 'true' &&
+      needs.build.outputs.channel == 'stable'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -2005,18 +2029,51 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
+          PUBLICATION_RUN_ID: ${{ github.run_id }}
+          PUBLICATION_SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if ! [[ "$VERSION" =~ ^3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "Published Core version is not canonical stable" >&2
             exit 1
           fi
-          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION"
-          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION"
+          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
+          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
+
+  wake-final-core-feeds:
+    name: Dispatch feeds after manual stable publication
+    needs: [build, publish-main-assets, release-main]
+    if: >-
+      always() && github.repository == 'hashgraph-online/hol-guard' &&
+      github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+      needs.publish-main-assets.result == 'success' && needs.publish-main-assets.outputs.core_ready != 'true' && needs.release-main.result == 'success' &&
+      needs.build.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # Exact published wheel provenance is ready while PyPI verification continues.
+      - name: Dispatch the exact published Core version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PUBLICATION_RUN_ID: ${{ github.run_id }}
+          PUBLICATION_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Published Core version is not canonical stable" >&2
+            exit 1
+          fi
+          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
+          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
 
   release-alpha:
     name: Create alpha GitHub prerelease
     if: >-
+      always() && !cancelled() && needs.build.result == 'success' && needs.publish-alpha-pypi.result == 'success' &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       needs.build.outputs.channel == 'alpha' &&
       (

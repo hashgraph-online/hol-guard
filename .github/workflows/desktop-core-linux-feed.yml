@@ -9,6 +9,7 @@ on:
       - tests/test_stage_native_runtime_for_desktop_core.py
       - tests/test_verify_*.py
       - tests/test_seal_pyinstaller_native_manifest.py
+      - scripts/release/wait_for_core_publication.py
       - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
@@ -18,6 +19,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/desktop-core-linux-feed.yml
+      - scripts/release/wait_for_core_publication.py
       - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
@@ -29,6 +31,12 @@ on:
     inputs:
       core_version:
         description: Optional exact published stable Core version to backfill
+        type: string
+      publication_run_id:
+        description: Stable publish run whose registry verification must succeed
+        type: string
+      publication_source_sha:
+        description: Exact automation commit of the stable publish run
         type: string
 permissions:
   contents: read
@@ -67,6 +75,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     permissions:
+      actions: read
       contents: write
       id-token: write
       attestations: write
@@ -414,6 +423,14 @@ jobs:
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.json
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.attested.json
+      - name: Require verified registry publication before updater upload
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
+          PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+        run: python3 -I scripts/release/wait_for_core_publication.py --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-linux-x64.whl"
       - name: Publish immutable Core assets
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:

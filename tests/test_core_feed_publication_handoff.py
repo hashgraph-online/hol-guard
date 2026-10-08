@@ -17,12 +17,13 @@ def handoff() -> dict:
 
 def test_handoff_requires_verified_stable_publication() -> None:
     job = handoff()
-    assert job["needs"] == ["build", "release-main"]
+    assert job["needs"] == ["build", "publish-main-assets"]
     for gate in (
         "github.repository == 'hashgraph-online/hol-guard'",
         "github.event_name == 'workflow_dispatch'",
         "github.run_attempt == 1",
-        "needs.release-main.result == 'success'",
+        "needs.publish-main-assets.result == 'success'",
+        "needs.publish-main-assets.outputs.core_ready == 'true'",
         "needs.build.outputs.channel == 'stable'",
     ):
         assert gate in job["if"]
@@ -71,6 +72,8 @@ def test_handoff_dispatches_only_canonical_exact_versions(tmp_path: Path, versio
             "CAPTURE_FILE": str(capture),
             "GITHUB_REPOSITORY": "hashgraph-online/hol-guard",
             "VERSION": version,
+            "PUBLICATION_RUN_ID": "123",
+            "PUBLICATION_SOURCE_SHA": "a" * 40,
         },
         capture_output=True,
         text=True,
@@ -94,6 +97,10 @@ def test_handoff_dispatches_only_canonical_exact_versions(tmp_path: Path, versio
             "main",
             "-f",
             f"core_version={version}",
+            "-f",
+            "publication_run_id=123",
+            "-f",
+            "publication_source_sha=" + "a" * 40,
         ]
         for workflow in ("desktop-core-alpha-feed.yml", "desktop-core-linux-feed.yml")
     ]

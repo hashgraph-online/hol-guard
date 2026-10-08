@@ -11,6 +11,7 @@ import pytest
 from scripts.release import publish_core_inputs
 from scripts.release.prepared_native import transfer
 from scripts.release.ready_core_releases import ready_tags
+from scripts.release.wait_for_core_publication import publication_ready
 from tests.release_workflow_helpers import load_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,6 +88,19 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
     cache = next(step for step in warm["jobs"]["compile"]["steps"] if "rust-cache@" in step.get("uses", ""))
     assert "github.event_name == 'push'" in cache["with"]["save-if"]
     assert "refs/heads/main" in cache["with"]["save-if"]
+    assert jobs["publish-main-assets"]["steps"][0]["with"]["ref"] == "${{ github.sha }}"
+    assert "needs.release-main.result == 'success'" in jobs["wake-final-core-feeds"]["if"]
+    for name, publisher in [
+        ("desktop-core-alpha-feed.yml", "publish-macos-arm64"),
+        ("desktop-core-linux-feed.yml", "publish-linux-x64"),
+    ]:
+        steps = load_workflow(ROOT / ".github/workflows" / name)["jobs"][publisher]["steps"]
+        gate = next(i for i, step in enumerate(steps) if "wait_for_core_publication.py" in step.get("run", ""))
+        upload = next(i for i, step in enumerate(steps) if step.get("name") == "Publish immutable Core assets")
+        signing = next(
+            i for i, step in enumerate(steps) if step.get("name") == "Attest complete hardened Core asset set"
+        )
+        assert signing < gate < upload
 
 
 def test_early_asset_publication_rejects_a_different_tag_before_upload(tmp_path, monkeypatch):
@@ -137,3 +151,51 @@ def test_early_asset_publication_never_overwrites_an_existing_wheel(tmp_path, mo
     with pytest.raises(ValueError, match="immutable release asset differs"):
         publish_core_inputs.publish(tmp_path)
     assert not any(command[:3] == ("gh", "release", "upload") for command in commands)
+
+
+@pytest.mark.parametrize("conclusion,expected", [("success", True), ("null", False), ("failure", None)])
+def test_signed_core_waits_for_the_exact_registry_publish_job(monkeypatch, conclusion, expected):
+    run = {
+        "path": ".github/workflows/publish.yml",
+        "event": "workflow_dispatch",
+        "head_sha": "a" * 40,
+        "conclusion": None,
+    }
+
+    def api(args, **kwargs):
+        return conclusion + "\n" if "--paginate" in args else json.dumps(run)
+
+    monkeypatch.setattr(subprocess, "check_output", api)
+    if expected is None:
+        with pytest.raises(ValueError, match="withholding updater"):
+            publication_ready("hashgraph-online/hol-guard", "123", "a" * 40)
+    else:
+        assert publication_ready("hashgraph-online/hol-guard", "123", "a" * 40) is expected
+    with pytest.raises(ValueError, match="authorized release dispatch"):
+        publication_ready("hashgraph-online/hol-guard", "123", "b" * 40)
+
+
+def test_no_public_release_is_created_before_manual_registry_success(tmp_path, monkeypatch):
+    for key, value in {
+        "VERSION": "3.34.1",
+        "SOURCE_SHA": "a" * 40,
+        "GITHUB_REPOSITORY": "hashgraph-online/hol-guard",
+        "GITHUB_OUTPUT": str(tmp_path / "output"),
+    }.items():
+        monkeypatch.setenv(key, value)
+    (tmp_path / "wheel.whl").write_bytes(b"fixture")
+    commands = []
+
+    def run(*args):
+        commands.append(args)
+        return "a" * 40 if args[:2] == ("git", "rev-parse") else ""
+
+    monkeypatch.setattr(publish_core_inputs, "run", run)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="HTTP 404: Not Found"),
+    )
+    publish_core_inputs.publish(tmp_path)
+    assert (tmp_path / "output").read_text() == "core_ready=false\n"
+    assert all(command[0] == "git" for command in commands)

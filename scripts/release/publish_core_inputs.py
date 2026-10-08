@@ -29,22 +29,10 @@ def publish(directory: Path) -> None:
     if lookup.returncode:
         if "404" not in lookup.stderr:
             raise RuntimeError(lookup.stderr)
-        run(
-            "gh",
-            "release",
-            "create",
-            tag,
-            "--repo",
-            repo,
-            "--verify-tag",
-            "--target",
-            source,
-            "--title",
-            f"Guard {version}",
-            "--notes",
-            "Verified package assets are being published. Registry verification and Desktop signing are in progress.",
-        )
-        releases = json.loads(run("gh", "api", f"repos/{repo}/releases/tags/{tag}"))
+        # Manual publication creates its release only after registry success.
+        with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+            output.write("core_ready=false\n")
+        return
     else:
         releases = json.loads(lookup.stdout)
     if releases["draft"] or releases["prerelease"]:
@@ -83,6 +71,8 @@ def publish(directory: Path) -> None:
                 except subprocess.CalledProcessError:
                     run(*command, os.environ["GITHUB_SHA"])
     print("Verified package assets are ready; registry verification and Desktop signing continue independently.")
+    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+        output.write("core_ready=true\n")
 
 
 if __name__ == "__main__":
