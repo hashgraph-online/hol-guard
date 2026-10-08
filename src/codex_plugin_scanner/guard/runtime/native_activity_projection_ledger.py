@@ -78,21 +78,11 @@ def _quarantine_other_bindings(
     eligibility: NativeActivityEligibility,
     now: str,
 ) -> int:
-    # Quarantined rows can never be sent under a foreign binding, so their
-    # pending ``guard_cloud_events`` row is dead weight — delete it now so the
-    # queue cannot accumulate unbounded stale slots across rebinding cycles.
-    connection.execute(
-        f"""
-        delete from guard_cloud_events
-        where uploaded_at is null
-          and idempotency_key in (
-            select idempotency_key from {_LEDGER}
-            where state = 'projected'
-              and (workspace_id != ? or installation_id != ?)
-          )
-        """,
-        (eligibility.workspace_id, eligibility.installation_id),
-    )
+    # Quarantined rows are not deletable here — the row itself must remain in
+    # the ledger so the queue can still track and report them (the ledger is
+    # the authority for "this request was quarantined"). Dead queue weight is
+    # handled by `_prune_ledger` once the per-(workspace, installation) cap
+    # is exceeded.
     cursor = connection.execute(
         f"""
         update {_LEDGER}
