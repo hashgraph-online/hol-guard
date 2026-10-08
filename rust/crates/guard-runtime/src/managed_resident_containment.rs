@@ -354,8 +354,24 @@ pub(super) fn wait_for_stop_containment(
     deadline: Instant,
     known_processes: &[ManagedProcessIdentity],
 ) -> Result<(), String> {
+    wait_for_matching_stop_containment(scope, digest, deadline, known_processes, |_| true)
+}
+
+/// Wait for only the discovered states that `matches` selects to stop.
+pub(super) fn wait_for_matching_stop_containment(
+    scope: &Path,
+    digest: &str,
+    deadline: Instant,
+    known_processes: &[ManagedProcessIdentity],
+    matches: impl Fn(&ResidentState) -> bool,
+) -> Result<(), String> {
+    let discover = || -> Result<Vec<ResidentState>, String> {
+        let mut states = discover_states(scope, digest)?;
+        states.retain(|state| matches(state));
+        Ok(states)
+    };
     loop {
-        let states = discover_states(scope, digest)?;
+        let states = discover()?;
         let process_ids = generation_process_ids(&states, known_processes);
         let processes_remain = any_process_alive(&process_ids)?;
         if states.is_empty() && !processes_remain {
@@ -380,7 +396,7 @@ pub(super) fn wait_for_stop_containment(
                     }
                 }
             }
-            let states_remaining = !discover_states(scope, digest)?.is_empty();
+            let states_remaining = !discover()?.is_empty();
             let processes_remaining = any_process_alive(&process_ids)?;
             if !states_remaining && !processes_remaining {
                 return Ok(());

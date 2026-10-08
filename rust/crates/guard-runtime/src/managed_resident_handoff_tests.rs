@@ -1,5 +1,9 @@
-use super::{retire_orphaned_foreign_resident, shutdown_acknowledged};
-use crate::resident_state::{process_start_marker, runtime_digest, ResidentState};
+use super::{
+    retire_orphaned_foreign_resident, shutdown_acknowledged, wait_for_resident_stop_containment,
+};
+use crate::resident_state::{
+    discover_states, process_start_marker, publish_state, runtime_digest, ResidentState,
+};
 use std::fs;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -93,4 +97,26 @@ fn only_a_stop_acknowledgement_counts_as_shut_down() {
         br#"{"error":"native_resident_overloaded"}"#
     ));
     assert!(!shutdown_acknowledged(b"not json"));
+}
+
+#[test]
+fn stop_containment_leaves_a_replacement_resident_alone() {
+    let root = test_root("replacement");
+    let digest = runtime_digest().unwrap();
+    // A client of the stopped runtime started a replacement meanwhile.
+    publish_state(
+        &root,
+        2,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &[7u8; crate::AUTH_TOKEN_BYTES],
+    )
+    .unwrap();
+    let stopped = state(&digest);
+    let deadline = Instant::now() + Duration::from_millis(200);
+    assert!(wait_for_resident_stop_containment(&root, &stopped, deadline, &[]).is_ok());
+    assert_eq!(discover_states(&root, &digest).unwrap().len(), 1);
+    fs::remove_dir_all(root).unwrap();
 }

@@ -42,13 +42,29 @@ pub(super) fn retire_orphaned_foreign_resident(
         )
     });
     acknowledged == Some(true)
-        && containment::wait_for_stop_containment(
-            scope,
-            &state.runtime_sha256,
-            deadline,
-            &process_ids,
-        )
-        .is_ok()
+        && wait_for_resident_stop_containment(scope, state, deadline, &process_ids).is_ok()
+}
+
+/// Contain only the stopped resident. A replacement that a client of the
+/// same runtime starts after the lease lock is released has a different
+/// identity and is left alone.
+fn wait_for_resident_stop_containment(
+    scope: &Path,
+    resident: &ResidentState,
+    deadline: Instant,
+    known_processes: &[containment::ManagedProcessIdentity],
+) -> Result<(), String> {
+    containment::wait_for_matching_stop_containment(
+        scope,
+        &resident.runtime_sha256,
+        deadline,
+        known_processes,
+        |state| {
+            state.generation == resident.generation
+                && state.process_id == resident.process_id
+                && state.process_start_marker == resident.process_start_marker
+        },
+    )
 }
 
 fn request_shutdown(state: &ResidentState, deadline: Instant) -> bool {
