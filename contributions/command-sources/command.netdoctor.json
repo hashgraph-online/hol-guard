@@ -8,7 +8,7 @@
     "conflicts": [],
     "delegated_protection": null,
     "dependencies": [],
-    "description": "Classifies netdoctor, a read-only network health-check CLI. One-shot checks (DNS lookup, one ICMP ping, a TCP connect, an HTTP GET, and a traceroute) are low-risk outbound probes and stay inert. Live --watch and --mtr monitors re-probe on an interval until interrupted and are reviewed.",
+    "description": "Reviews netdoctor, a network health-check CLI that writes nothing locally. Every run sends DNS queries, an ICMP ping, a TCP connect, HTTP GET requests, and usually a traceroute to hosts and paths taken from its arguments, so the arguments can carry data out. Live --watch and --mtr monitors repeat those probes until interrupted and are reviewed separately.",
     "ecosystem_ids": [
       "netdoctor"
     ],
@@ -29,25 +29,25 @@
         "action_classes": [
           "netdoctor network diagnosis"
         ],
-        "baseline_floor": "allow",
+        "baseline_floor": "review",
         "configurable": true,
         "conflicts": [],
         "default_enabled": true,
         "dependencies": [],
         "deprecated": false,
-        "description": "One-shot netdoctor runs against the named targets: DNS resolution, a single ICMP ping, a TCP connect, HTTP GET probes (5 by default), and a traceroute. Output goes to the terminal or stdout as JSON; nothing is written to disk.",
+        "description": "netdoctor runs against the named targets. It resolves each host name, pings it once, opens a TCP connection, sends HTTP GET requests for the target path (5 by default), and runs a traceroute. Host names and URL paths come from the arguments and leave the machine in DNS queries and request lines. Nothing is written to disk.",
         "example_command": "netdoctor github.com --json",
         "family": null,
         "fixed_reason": null,
         "implementation_version": "1.0.0",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
-        "label": "netdoctor one-shot network check",
+        "label": "netdoctor network check",
         "permission_id": "command.netdoctor.permission.diagnose",
         "replacement_permission_id": null,
-        "risk_tier": "low",
+        "risk_tier": "medium",
         "safer_guidance": [
-          "One-shot netdoctor checks only resolve, ping, connect to, and request the named targets; confirm the target hosts are ones you intend to contact."
+          "Check that every target host, URL, and --path value is one you mean to contact and carries no secrets, since netdoctor sends them out in DNS queries and HTTP requests."
         ],
         "typed_capabilities": []
       },
@@ -98,8 +98,8 @@
         "action_classes": [
           "netdoctor network diagnosis"
         ],
-        "default_mode": "disabled",
-        "description": "Matches one-shot netdoctor runs, including --json, --quick, --no-trace, help, and version. These make outbound DNS, ICMP, TCP, HTTP, and traceroute probes to the named targets and write nothing locally.",
+        "default_mode": "review",
+        "description": "Matches every netdoctor run except plain -h, --help, -V, and --version, which exit before any probe. Each run sends DNS queries and HTTP GET requests whose host names and paths come from the arguments, so a target such as https://host/?k=value or a --path value can carry data to a remote server.",
         "family": null,
         "matcher": {
           "config": {},
@@ -113,9 +113,10 @@
                 ],
                 "fail_secure_unknown_options": false,
                 "forbidden_flags": [
-                  "-w",
-                  "--watch",
-                  "--mtr"
+                  "-h",
+                  "--help",
+                  "-v",
+                  "--version"
                 ],
                 "interspersed_flags": [],
                 "interspersed_options_with_values": [],
@@ -140,41 +141,6 @@
                 "subcommands": []
               },
               "op": "executable.v1"
-            },
-            {
-              "config": {
-                "allow_leading_options": false,
-                "executables": [
-                  "netdoctor",
-                  "netdoctor.exe"
-                ],
-                "fail_secure_unknown_options": false,
-                "forbidden_flags": [],
-                "interspersed_flags": [],
-                "interspersed_options_with_values": [],
-                "inverse_flag_pairs": [],
-                "leading_options_with_values": [],
-                "options_with_values": [
-                  "-p",
-                  "--port",
-                  "--scheme",
-                  "--path",
-                  "-t",
-                  "--timeout",
-                  "-n",
-                  "--interval",
-                  "--max-runs",
-                  "-s",
-                  "--samples"
-                ],
-                "required_flags": [
-                  "--json"
-                ],
-                "required_flags_in_all_arguments": false,
-                "required_option_values": [],
-                "subcommands": []
-              },
-              "op": "executable.v1"
             }
           ],
           "op": "any.v1"
@@ -188,17 +154,17 @@
         "rule_version": "1.0.0",
         "safe_variants": [],
         "safer_alternatives": [
-          "One-shot netdoctor checks only resolve, ping, connect to, and request the named targets; confirm the target hosts are ones you intend to contact."
+          "Check that every target host, URL, and --path value is one you mean to contact and carries no secrets, since netdoctor sends them out in DNS queries and HTTP requests."
         ],
-        "severity": "low",
-        "title": "netdoctor one-shot network check"
+        "severity": "medium",
+        "title": "netdoctor network check"
       },
       {
         "action_classes": [
           "netdoctor continuous monitor"
         ],
         "default_mode": "review",
-        "description": "Identifies netdoctor --watch (-w) and --mtr, which repeat network probes on an interval until interrupted or until --max-runs is reached. With --json the monitor flags are ignored and the run is one-shot.",
+        "description": "Identifies netdoctor --watch (-w) and --mtr, including the abbreviations Python argparse accepts (--w through --watc, and --mt), which repeat network probes on an interval until interrupted or until --max-runs is reached. --max-runs does not clear review because 0 means unbounded. With --json, or its abbreviations --j through --jso, the monitor flags are ignored and the run is one-shot.",
         "family": null,
         "matcher": {
           "config": {},
@@ -214,7 +180,7 @@
                 "forbidden_flags": [
                   "-h",
                   "--help",
-                  "-V",
+                  "-v",
                   "--version"
                 ],
                 "interspersed_flags": [],
@@ -254,7 +220,167 @@
                 "forbidden_flags": [
                   "-h",
                   "--help",
-                  "-V",
+                  "-v",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-p",
+                  "--port",
+                  "--scheme",
+                  "--path",
+                  "-t",
+                  "--timeout",
+                  "-n",
+                  "--interval",
+                  "--max-runs",
+                  "-s",
+                  "--samples"
+                ],
+                "required_flags": [
+                  "--watc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "netdoctor",
+                  "netdoctor.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "-h",
+                  "--help",
+                  "-v",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-p",
+                  "--port",
+                  "--scheme",
+                  "--path",
+                  "-t",
+                  "--timeout",
+                  "-n",
+                  "--interval",
+                  "--max-runs",
+                  "-s",
+                  "--samples"
+                ],
+                "required_flags": [
+                  "--wat"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "netdoctor",
+                  "netdoctor.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "-h",
+                  "--help",
+                  "-v",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-p",
+                  "--port",
+                  "--scheme",
+                  "--path",
+                  "-t",
+                  "--timeout",
+                  "-n",
+                  "--interval",
+                  "--max-runs",
+                  "-s",
+                  "--samples"
+                ],
+                "required_flags": [
+                  "--wa"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "netdoctor",
+                  "netdoctor.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "-h",
+                  "--help",
+                  "-v",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-p",
+                  "--port",
+                  "--scheme",
+                  "--path",
+                  "-t",
+                  "--timeout",
+                  "-n",
+                  "--interval",
+                  "--max-runs",
+                  "-s",
+                  "--samples"
+                ],
+                "required_flags": [
+                  "--w"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "netdoctor",
+                  "netdoctor.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "-h",
+                  "--help",
+                  "-v",
                   "--version"
                 ],
                 "interspersed_flags": [],
@@ -294,7 +420,7 @@
                 "forbidden_flags": [
                   "-h",
                   "--help",
-                  "-V",
+                  "-v",
                   "--version"
                 ],
                 "interspersed_flags": [],
@@ -322,20 +448,8 @@
                 "subcommands": []
               },
               "op": "executable.v1"
-            }
-          ],
-          "op": "any.v1"
-        },
-        "native_capability": null,
-        "permission_id": "command.netdoctor.permission.continuous-monitor",
-        "risk_classes": [
-          "network_egress"
-        ],
-        "rule_id": "command.netdoctor.continuous-monitor",
-        "rule_version": "1.0.0",
-        "safe_variants": [
-          {
-            "matcher": {
+            },
+            {
               "config": {
                 "allow_leading_options": false,
                 "executables": [
@@ -343,7 +457,12 @@
                   "netdoctor.exe"
                 ],
                 "fail_secure_unknown_options": false,
-                "forbidden_flags": [],
+                "forbidden_flags": [
+                  "-h",
+                  "--help",
+                  "-v",
+                  "--version"
+                ],
                 "interspersed_flags": [],
                 "interspersed_options_with_values": [],
                 "inverse_flag_pairs": [],
@@ -362,13 +481,171 @@
                   "--samples"
                 ],
                 "required_flags": [
-                  "--json"
+                  "--mt"
                 ],
                 "required_flags_in_all_arguments": false,
                 "required_option_values": [],
                 "subcommands": []
               },
               "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.netdoctor.permission.continuous-monitor",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.netdoctor.continuous-monitor",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netdoctor",
+                      "netdoctor.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-p",
+                      "--port",
+                      "--scheme",
+                      "--path",
+                      "-t",
+                      "--timeout",
+                      "-n",
+                      "--interval",
+                      "--max-runs",
+                      "-s",
+                      "--samples"
+                    ],
+                    "required_flags": [
+                      "--json"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netdoctor",
+                      "netdoctor.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-p",
+                      "--port",
+                      "--scheme",
+                      "--path",
+                      "-t",
+                      "--timeout",
+                      "-n",
+                      "--interval",
+                      "--max-runs",
+                      "-s",
+                      "--samples"
+                    ],
+                    "required_flags": [
+                      "--jso"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netdoctor",
+                      "netdoctor.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-p",
+                      "--port",
+                      "--scheme",
+                      "--path",
+                      "-t",
+                      "--timeout",
+                      "-n",
+                      "--interval",
+                      "--max-runs",
+                      "-s",
+                      "--samples"
+                    ],
+                    "required_flags": [
+                      "--js"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netdoctor",
+                      "netdoctor.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "-p",
+                      "--port",
+                      "--scheme",
+                      "--path",
+                      "-t",
+                      "--timeout",
+                      "-n",
+                      "--interval",
+                      "--max-runs",
+                      "-s",
+                      "--samples"
+                    ],
+                    "required_flags": [
+                      "--j"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
             },
             "title": "netdoctor JSON output runs once",
             "variant_id": "json-one-shot"
@@ -383,7 +660,7 @@
       }
     ],
     "safer_alternatives": [
-      "One-shot netdoctor checks only resolve, ping, connect to, and request the named targets; confirm the target hosts are ones you intend to contact.",
+      "Check that every target host, URL, and --path value is one you mean to contact and carries no secrets, since netdoctor sends them out in DNS queries and HTTP requests.",
       "Run a one-shot check (netdoctor <host>) or pass --json, which runs the ladder once even with --watch or --mtr.",
       "If a live monitor is needed, add --max-runs N so it stops on its own instead of probing until interrupted."
     ],
