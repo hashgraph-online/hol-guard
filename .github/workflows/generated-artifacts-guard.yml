@@ -21,7 +21,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          owned='^contracts/extensions/(native-command-program|command-catalog)\.v1\.json$'
+          owned='^contracts/extensions/(native-command-program|command-catalog|trust-class-map)\.v1\.json$'
           owned+='|^contracts/extensions/(build-descriptors/|build-trust-class-map\.v1\.json$)'
           # Legacy directory copies remain accepted until open PRs and readers
           # have migrated. They no longer determine packaged metadata.
@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           changed=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
-            --jq '.[] | select(.status != "removed") | select(.filename | test("^contracts/extensions/(command-catalog|native-command-program)\\.v1\\.json$|^src/codex_plugin_scanner/guard/contracts/data/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$")) | .filename')
+            --jq '.[] | select(.status != "removed") | select(.filename | test("^contracts/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$|^src/codex_plugin_scanner/guard/contracts/data/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$")) | .filename')
           if [ -n "${changed}" ]; then
             printf '%s\n' "::error::Package projections must remain untracked, including in regeneration PRs:" "${changed}"
             exit 1

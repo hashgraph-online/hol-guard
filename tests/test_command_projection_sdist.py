@@ -13,6 +13,7 @@ import pytest
 @pytest.fixture
 def archive(tmp_path):
     """Create a minimal source archive with fingerprints for authored inputs and outputs."""
+    (tmp_path / "PKG-INFO").write_text("Metadata-Version: 2.1\n")
     root = Path(__file__).parents[1]
     spec = importlib.util.spec_from_file_location(
         "command_projection_sdist_test", root / "scripts/command_projection_sdist.py"

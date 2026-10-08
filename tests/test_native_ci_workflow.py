@@ -33,6 +33,7 @@ def _workflow(name: str) -> dict:
         ("refs/heads/contributor", "push", "Windows", "true", False),
         ("refs/heads/main-other", "workflow_dispatch", "Windows", "true", False),
         ("refs/heads/main", "schedule", "Windows", "false", False),
+        ("refs/heads/main", "workflow_dispatch", "Windows", None, False),
         ("refs/heads/main", "workflow_dispatch", "macOS", "true", False),
         ("refs/heads/main", "schedule", "Linux", "true", False),
     ],
@@ -40,6 +41,8 @@ def _workflow(name: str) -> dict:
 def test_effective_cache_write_privilege_is_limited_to_trusted_main_builds(ref, event, platform, opt_in, allowed):
     action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
     cache = next(step for step in action["runs"]["steps"] if step.get("uses", "").startswith("Swatinem/"))
+    if opt_in is None:
+        opt_in = action["inputs"]["save-main-cache"]["default"]
     expression = cache["with"]["save-if"].strip()[3:-2]
     for name, value in {
         "github.ref": ref,

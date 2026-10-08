@@ -53,7 +53,7 @@ for PRs #3576 (484 files) and #2797 (1,848 files). It found overlapping groups:
 | Directory catalogs | 11 |
 | Aggregate trust map | 31 |
 
-These paths remain tracked. Existing PRs may keep legacy directory edits;
+Directory compatibility paths remain tracked. Existing PRs may keep legacy directory edits;
 package builds and snapshots regenerate authoritative outputs from sources.
 The generated-path guard continues to reject reintroducing ignored native
 program/catalog copies. Existing schema, fixture, and trust validation remain
@@ -70,9 +70,16 @@ No contributor refactor, automatic branch rewrite, or mandatory rebase is part
 of this transition. Maintainers own compatibility cleanup after readers and
 existing PRs have migrated.
 
-## Compatibility trust map
+## Generated trust map
 
-The tracked aggregate remains a legacy compatibility copy while open PRs still
-modify it. Rust builds read reviewed bindings, and package builds derive a new
-map from those bindings. Unbound canonical contributions default to external.
-Edits to the compatibility copy cannot grant trust or enable an extension.
+The aggregate trust map is no longer tracked, including as a compatibility
+copy. Open contribution PRs must drop aggregate edits and retain their reviewed
+per-extension bindings. CI rejects adding the shared map back, including from
+regeneration PRs.
+
+Rust builds and source runtimes read reviewed bindings. Package builds and
+snapshot publication derive their maps from those bindings. Build outputs use
+the ignored `contracts/extensions/build-trust-class-map.v1.json`; release staging
+derives packaged trust directly. Installed and frozen runtimes read the packaged
+map, without a fallback to a repository aggregate. Unbound canonical
+contributions default to external and still require explicit activation.

@@ -18,6 +18,8 @@ from .codex_daemon_hook_transport import _daemon_response_once, _DaemonGeneratio
 
 _DAEMON_START_TIMEOUT_SECONDS = 8
 _DAEMON_RPC_TIMEOUT_SECONDS = 4.0
+# A new workspace's first prompt waits for its policy overlay to publish.
+_DAEMON_PROMPT_RPC_TIMEOUT_SECONDS = 10.0
 _FALLBACK_TIMEOUT_SECONDS = 4.0
 _MINIMUM_OPERATION_SECONDS = 0.01
 _OVERLOAD_RESERVE_MS = 100
@@ -180,8 +182,10 @@ def bridge_review_response(
     manifest_path: str | Path | None,
     config_json: str | None,
     failure_causes: list[BridgeFailureCause] | None = None,
+    event_name: str | None = None,
 ) -> tuple[dict[str, object] | None, bool, bool]:
     response: dict[str, object] | None = None
+    rpc_cap = _DAEMON_PROMPT_RPC_TIMEOUT_SECONDS if event_name == "UserPromptSubmit" else _DAEMON_RPC_TIMEOUT_SECONDS
     trusted_launch: TrustedHookLaunch | None = None
     launch_integrity_failed = False
     daemon_overloaded = False
@@ -191,7 +195,7 @@ def bridge_review_response(
             state_path=state_path,
             query=query,
             data=data,
-            timeout_seconds=min(_remaining_seconds(deadline), _DAEMON_RPC_TIMEOUT_SECONDS),
+            timeout_seconds=min(_remaining_seconds(deadline), rpc_cap),
         )
 
     try:

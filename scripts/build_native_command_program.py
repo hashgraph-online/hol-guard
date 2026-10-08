@@ -193,11 +193,7 @@ def main() -> int:
         "source_digest": compiled["source_digest"],
         "implementation_digest": compiled["implementation_digest"],
     }
-    trust_path = (
-        ROOT
-        / "contracts/extensions"
-        / ("build-trust-class-map.v1.json" if args.descriptor_dir else "trust-class-map.v1.json")
-    )
+    trust_path = ROOT / "contracts/extensions/build-trust-class-map.v1.json"
     outputs = {
         trust_path: canonical_bytes(packaged_trust_map(request_value)),
         ARTIFACT: canonical_bytes(program),
