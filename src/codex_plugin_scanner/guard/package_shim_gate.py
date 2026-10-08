@@ -94,16 +94,13 @@ def _parse_shim_package_intent(raw_command: str, *, workspace: Path | None = Non
     from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 
     try:
-        payload = package_intent_parse_native(
+        intent = package_intent_parse_native(
             raw_command,
             workspace=workspace,
             guard_home=resolve_guard_home(),
         )
     except Exception:  # transport failures degrade to the Python parser
-        payload = None
-    if isinstance(payload, dict):
-        try:
-            return PackageIntent.from_dict(payload)
-        except (TypeError, ValueError):
-            pass
+        intent = None
+    if isinstance(intent, PackageIntent):
+        return intent
     return parse_package_intent(raw_command, workspace=workspace)

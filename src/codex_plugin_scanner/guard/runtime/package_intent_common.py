@@ -127,10 +127,13 @@ class PackageIntent:
         return payload
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, object]) -> PackageIntent:
-        """Reconstruct an intent from a ``to_dict`` payload (e.g. the native
-        ``package_intent_parse`` result). Command tokens round-trip through
-        ``redacted_command`` exactly as the native surface serializes them."""
+    def from_dict(
+        cls,
+        payload: Mapping[str, object],
+        *,
+        runtime_private_metadata: Mapping[str, object] | None = None,
+    ) -> PackageIntent:
+        """Hydrate exact execution targets without rehashing redacted sources."""
 
         if not isinstance(payload.get("package_manager"), str):
             raise ValueError("package intent payload missing package_manager")
@@ -146,11 +149,7 @@ class PackageIntent:
             intent_kind=cast(IntentKind, intent_kind),
             command_tokens=_str_tuple(command_tokens),
             redacted_command=str(redacted_command) if isinstance(redacted_command, str) else "",
-            targets=tuple(
-                evidence
-                for evidence in (_package_intent_target_from_dict(item) for item in _dict_items(payload.get("targets")))
-                if evidence is not None
-            ),
+            targets=_package_intent_targets_from_dict(payload.get("targets"), runtime_private_metadata),
             manifest_paths=_str_tuple(payload.get("manifest_paths")),
             lockfile_paths=_str_tuple(payload.get("lockfile_paths")),
             flags=_str_tuple(payload.get("flags")),
@@ -258,6 +257,46 @@ def _local_execution_evidence_from_dict(value: object) -> LocalPackageExecutionE
         ),
         typescript_launch=_typescript_launch_evidence_from_dict(value.get("typescript_launch")),
     )
+
+
+def _package_intent_targets_from_dict(
+    public_targets: object,
+    runtime_private_metadata: Mapping[str, object] | None,
+) -> tuple[PackageIntentTarget, ...]:
+    targets: list[PackageIntentTarget] = []
+    if runtime_private_metadata is None:
+        for public_target in _dict_items(public_targets):
+            target = _package_intent_target_from_dict(public_target)
+            if target is None:
+                continue
+            expected = target.to_dict()
+            if any(
+                key in public_target and public_target[key] != expected.get(key)
+                for key in ("raw_spec_hash", "source_url_hash")
+            ):
+                raise ValueError("package intent exact target metadata missing")
+            targets.append(target)
+        return tuple(targets)
+
+    private_targets = runtime_private_metadata.get("package_targets")
+    if (
+        not isinstance(public_targets, (list, tuple))
+        or not isinstance(private_targets, (list, tuple))
+        or len(private_targets) != len(public_targets)
+    ):
+        raise ValueError("package intent private target integrity invalid")
+    for private_target, public_target in zip(private_targets, public_targets, strict=True):
+        target = _package_intent_target_from_dict(private_target)
+        if target is None or not isinstance(public_target, Mapping):
+            raise ValueError("package intent private target integrity invalid")
+        public_fields = dict(public_target)
+        extras = public_fields.get("extras")
+        if isinstance(extras, list):
+            public_fields["extras"] = tuple(extras)
+        if target.to_dict() != public_fields:
+            raise ValueError("package intent private target integrity invalid")
+        targets.append(target)
+    return tuple(targets)
 
 
 def _package_intent_target_from_dict(value: object) -> PackageIntentTarget | None:

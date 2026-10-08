@@ -248,6 +248,31 @@ jobs:
             tests/test_guard_command_corpus_native_contract.py::test_native_contract_validates_every_authored_signature_without_rewriting_evidence \
             tests/test_pi_adapter.py::TestPiInstall::test_install_writes_managed_extension_that_denies_on_hook_errors \
             tests/test_pi_adapter.py::TestPiInstall::test_managed_extension_fails_safe_on_ambiguous_success_payloads
+      - name: Capture native serving wait once on native Linux
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+          HOL_GUARD_NATIVE_DIAGNOSTIC: "1"
+        run: |
+          umask 077
+          mkdir -m 0700 "$RUNNER_TEMP/native-wait-probe"
+          strace -f -ttt -T -yy \
+            -e trace=openat,openat2,newfstatat,fstat,statx,readlink,readlinkat,read,pread64,readv,preadv,preadv2,write,pwrite64,writev,pwritev,pwritev2,lseek,fcntl,flock,futex,getrandom,connect,accept,accept4,recvfrom,sendto,recvmsg,sendmsg,recvmmsg,sendmmsg,poll,ppoll,epoll_wait,epoll_pwait,clone,clone3,fork,vfork,setpgid,wait4,waitid \
+            -e raw=read,pread64,readv,preadv,preadv2,write,pwrite64,writev,pwritev,pwritev2,getrandom,recvfrom,sendto,recvmsg,sendmsg,recvmmsg,sendmmsg \
+            -o "$RUNNER_TEMP/native-wait-probe/trace.log" \
+            uv run --no-sync python -m pytest -q \
+            'tests/test_guard_runtime_mcp_saved_blocks.py::test_authenticated_saved_package_block_is_terminal_before_generic_approval[native]' \
+            --tb=short --basetemp "$RUNNER_TEMP/native-wait-probe/pytest"
+      - name: Retain only masked native wait syscall metadata
+        if: always() && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-wait-syscalls-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-wait-probe/trace.log
+          if-no-files-found: error
+          retention-days: 1
       - name: Upload native command evaluators
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

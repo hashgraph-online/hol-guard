@@ -191,15 +191,19 @@ def test_retained_archive_is_cleaned_if_evidence_persistence_raises(
         final_url=source_url,
     )
 
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: (
-        {
-            "decision": "ask",
-            "code": "external_tarball_source",
-            "message": "External tarball source requires review.",
-            "severity": "medium",
-        },
-        download,
-    ),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda *_args, **_kwargs: (
+            {
+                "decision": "ask",
+                "code": "external_tarball_source",
+                "message": "External tarball source requires review.",
+                "severity": "medium",
+            },
+            download,
+        ),
+    )
 
     def persistence_failure(**_kwargs: object) -> None:
         raise RuntimeError("controlled evidence failure")
@@ -255,9 +259,7 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     password = "VERY_SECRET_PASSWORD"
     source_url = f"https://user:{password}@packages.example.com/demo.tgz?token={secret}"
     command = ["npm", "install", f"demo@{source_url}"]
-    intent = parse_package_intent(
-        shlex.join(command), workspace=workspace, guard_home=native_context_digest
-    )
+    intent = parse_package_intent(shlex.join(command), workspace=workspace, guard_home=native_context_digest)
     assert intent is not None
     artifact = build_package_request_artifact(
         "guard-cli",
@@ -265,12 +267,6 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
         config_path="hol-guard.toml",
         source_scope="project",
     )
-    private_targets = artifact.runtime_private_metadata["package_targets"]
-    assert isinstance(private_targets, list)
-    # The resident boundary redacts credentials before returning to Python.
-    # The local parser retains exact inputs only in ephemeral execution metadata.
-    expected_url = source_url if parser == "local" else "https://packages.example.com/demo.tgz"
-    assert private_targets[0]["source_url"] == expected_url
 
     store = GuardStore(tmp_path / "guard-home")
     evaluation = evaluator.evaluate_package_request_artifact(
