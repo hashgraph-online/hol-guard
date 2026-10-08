@@ -26,7 +26,7 @@ pub(crate) fn canonical_material_bytes(material: &Value) -> Vec<u8> {
 }
 
 // Native authority matches OpaqueMaterialDigest: raw UTF-8, not a fallback sentinel.
-pub(crate) fn context_opaque_digest_strict(material: &str, _unbound_label: &str) -> String {
+pub(crate) fn context_opaque_digest_strict(material: &str) -> String {
     sha256_hex(material.as_bytes())
 }
 
@@ -38,8 +38,7 @@ pub(crate) fn launch_argv_digest(argv: &[String]) -> String {
     if write_canonical_json(&material, &mut bytes).is_err() {
         bytes.clear();
     }
-    let text = String::from_utf8_lossy(&bytes);
-    context_opaque_digest_strict(&text, "launch-argv")
+    sha256_hex(&bytes)
 }
 
 // `_runtime_launch_identity` argv construction (:906-920), extracted so the

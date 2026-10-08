@@ -82,14 +82,13 @@ fn token_hex(bytes: usize) -> String {
     }
 }
 // Native authority hashes canonical structured material.
-fn context_sha256_digest_strict(material: &Value, _unbound_label: &str) -> String {
+fn context_sha256_digest_strict(material: &Value) -> String {
     sha256_hex(&canonical_material_bytes(material))
 }
 
-// `_opaque_identity_digest` (:883-889) — `context_opaque_digest(material,
-// unbound_label="opaque-identity")` (strict).
+// Hash raw UTF-8 identity material.
 fn opaque_identity_digest(material: &str) -> String {
-    context_opaque_digest_strict(material, "opaque-identity")
+    context_opaque_digest_strict(material)
 }
 
 fn is_sha256_hex(value: &Value) -> bool {
@@ -218,7 +217,7 @@ fn executable_path_chain_snapshot(path: &Path) -> Option<Vec<Value>> {
             snapshot.insert(
                 "target_sha256".to_string(),
                 match &target {
-                    Some(t) => Value::String(context_opaque_digest_strict(t, "path-target")),
+                    Some(t) => Value::String(context_opaque_digest_strict(t)),
                     None => Value::Null,
                 },
             );
@@ -598,7 +597,7 @@ pub fn build_runtime_executable_identity(
         }
     }
     if let Some(s) = &shebang {
-        identity["shebang_sha256"] = Value::String(context_opaque_digest_strict(s, "shebang"));
+        identity["shebang_sha256"] = Value::String(context_opaque_digest_strict(s));
     }
     with_launch_cwd(identity, eff_cwd_ref)
 }
@@ -832,10 +831,7 @@ fn runtime_launch_verification_digest(identity: &Value) -> Option<String> {
     if write_canonical_json(&material, &mut bytes).is_err() {
         return None;
     }
-    Some(context_sha256_digest_strict(
-        &material,
-        "launch-verification",
-    ))
+    Some(context_sha256_digest_strict(&material))
 }
 
 // `_verified_identity_path` (:1720-1727).
@@ -1205,7 +1201,7 @@ fn direct_executable_runtime_entrypoint_identity(
         "launcher": launcher_identity,
         "script_args_sha256": launch_argv_digest(launch_args),
         "shebang_args_sha256": launch_argv_digest(&shebang_args),
-        "shebang_sha256": context_opaque_digest_strict(shebang, "shebang"),
+        "shebang_sha256": context_opaque_digest_strict(shebang),
         "status": "verified",
     });
 
@@ -1286,8 +1282,7 @@ fn direct_executable_runtime_entrypoint_identity(
         .and_then(|v| v.get("PATH"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    result["search_path_sha256"] =
-        Value::String(context_opaque_digest_strict(search_path, "search-path"));
+    result["search_path_sha256"] = Value::String(context_opaque_digest_strict(search_path));
     let (interpreter, interpreter_args) = match env_command {
         None => {
             result.as_object_mut().unwrap().extend(
