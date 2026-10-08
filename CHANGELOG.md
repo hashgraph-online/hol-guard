@@ -88,6 +88,28 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.36.0](https://github.com/hashgraph-online/hol-guard/compare/v3.35.0...v3.36.0) (2026-10-08)
+
+
+### Features
+
+* **mcp:** support direct-command launcher and add run MCP contribution ([#3325](https://github.com/hashgraph-online/hol-guard/issues/3325)) ([76fe4b0](https://github.com/hashgraph-online/hol-guard/commit/76fe4b080192ac8bb5deb4a9c3fba9d633725fcb))
+
+
+### Bug Fixes
+
+* **extensions:** bind the run MCP contribution to the external trust class ([#3784](https://github.com/hashgraph-online/hol-guard/issues/3784)) ([c3d8209](https://github.com/hashgraph-online/hol-guard/commit/c3d8209a745c75466f39bc79da3c86498a63d64c))
+* **gauntlet:** bind native edit grammar and preserve bounded corpus memory ([#3776](https://github.com/hashgraph-online/hol-guard/issues/3776)) ([8ae4da5](https://github.com/hashgraph-online/hol-guard/commit/8ae4da5456f968f7879bcaa1a154597a9145977a))
+* **guard:** allow relative cd into the workspace, piped git reads and pipe-through cat ([#3780](https://github.com/hashgraph-online/hol-guard/issues/3780)) ([25b661b](https://github.com/hashgraph-online/hol-guard/commit/25b661b80c743cb73378a78bab4689dbbbda68a6))
+* **guard:** offer and honor exact-action Always on daemon native reviews ([#3772](https://github.com/hashgraph-online/hol-guard/issues/3772)) ([429e8f8](https://github.com/hashgraph-online/hol-guard/commit/429e8f81690d84ba2b8d52657f80113e4bcb5c9d))
+* **update:** refresh managed hook clients and keep settings scoped to --guard-home ([#3764](https://github.com/hashgraph-online/hol-guard/issues/3764)) ([9b71e1a](https://github.com/hashgraph-online/hol-guard/commit/9b71e1a7207cc12320bad120a1f4412a46fefd8f))
+* **update:** retry native resident retirement before failing the update ([#3781](https://github.com/hashgraph-online/hol-guard/issues/3781)) ([e0d10a6](https://github.com/hashgraph-online/hol-guard/commit/e0d10a656a52c25a0209fec145c8964005c1b058))
+
+
+### Performance Improvements
+
+* **release:** content-addressed release compilation and one build graph ([#3782](https://github.com/hashgraph-online/hol-guard/issues/3782)) ([db079dd](https://github.com/hashgraph-online/hol-guard/commit/db079ddd7a823b0588fd898ea4643dd3dd76d860))
+
 ## [3.35.0](https://github.com/hashgraph-online/hol-guard/compare/v3.34.1...v3.35.0) (2026-10-08)
 
 
