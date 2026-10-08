@@ -90,9 +90,19 @@ def test_determinism_gate_compares_cached_and_cold_binaries_without_writing_cach
     cached = steps["Compile with the release compiler cache"]
     assert cached["env"]["SCCACHE_GHA_RW_MODE"] == "READ_ONLY"
     assert cached["env"]["SCCACHE_GHA_VERSION"] == "release-native-v1"
-    cold = steps["Compile cold without any compiler cache"]
-    assert "env" not in cold
-    assert cold["run"].index("cargo clean") < cold["run"].index("cargo build")
+    cold = steps["Compile cold into an empty compiler cache"]
+    assert cold["env"] == {
+        "RUSTC_WORKSPACE_WRAPPER": cached["env"]["RUSTC_WORKSPACE_WRAPPER"],
+        "SCCACHE_GHA_ENABLED": "off",
+        "SCCACHE_DIR": "${{ runner.temp }}/sccache-cold",
+    }
+    order = [cold["run"].index(token) for token in ("--stop-server", "cargo clean", "cargo build", "hits != 0")]
+    assert order == sorted(order)
+
+    def build_line(script):
+        return next(line for line in script.splitlines() if line.lstrip().startswith("cargo build"))
+
+    assert build_line(cached["run"]) == build_line(cold["run"])
     compare = steps["Require byte-identical release binaries"]["run"]
     assert "hol-guard-runtime guard-command-source" in compare
     assert 'exit "$status"' in compare

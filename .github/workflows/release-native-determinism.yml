@@ -132,12 +132,32 @@ jobs:
           for binary in hol-guard-runtime guard-command-source; do
             cp "rust/target/$RUST_TARGET/release/$binary$SUFFIX" "$RUNNER_TEMP/cached/"
           done
-      - name: Compile cold without any compiler cache
+      - name: Compile cold into an empty compiler cache
         shell: bash
+        env:
+          # The wrapper is part of Cargo's crate metadata hash, so the cold build
+          # keeps the release wrapper and only swaps in an empty local cache.
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'off'
+          SCCACHE_DIR: ${{ runner.temp }}/sccache-cold
         run: |
           set -euo pipefail
+          "$SCCACHE_PATH" --stop-server || true
           cargo clean --manifest-path rust/Cargo.toml
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          "$SCCACHE_PATH" --show-stats
+          "$SCCACHE_PATH" --show-stats --stats-format json > "$RUNNER_TEMP/sccache-cold-stats.json"
+          python - "$RUNNER_TEMP/sccache-cold-stats.json" <<'PY'
+          import json
+          import sys
+
+          stats = json.load(open(sys.argv[1], encoding="utf-8"))["stats"]
+          hits = sum(stats["cache_hits"]["counts"].values())
+          misses = sum(stats["cache_misses"]["counts"].values())
+          if hits != 0 or misses == 0:
+              sys.exit(f"::error::Cold build must compile every workspace crate fresh (hits={hits}, misses={misses})")
+          print(f"cold compiles: {misses}")
+          PY
       - name: Require byte-identical release binaries
         shell: bash
         run: |
