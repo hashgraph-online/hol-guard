@@ -346,7 +346,7 @@ jobs:
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
           echo "HOL_GUARD_SECURE_STATE_DIR=$RUNNER_TEMP/hol-guard-secure-state" >> "$GITHUB_ENV"
         shell: bash
-        run: |
+      - run: |
           shard_file=$(printf 'pytest-shards/shard-%03d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
           # PRs need the same behavioral suite, not the coverage tracer tax. Main
