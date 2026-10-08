@@ -60,3 +60,20 @@ def get_policy_decision_payload(
             payload["integrity_mode"] = state.get("mode")
             payload["integrity_enforcement"] = state.get("enforcement")
         return payload
+
+
+def policy_decision_hash_exists(store, *, harness: str, artifact_id: str, artifact_hash: str) -> bool:
+    """Cheaply report whether any artifact-scoped decision names this exact hash.
+
+    The full lookup refreshes integrity state and dispatches to the native
+    resolver, so hot hook paths use this read-only probe to skip it when no
+    exact decision could possibly match.
+    """
+
+    query = """
+        select 1 from policy_decisions
+        where harness in (?, '*') and scope = 'artifact' and artifact_id = ? and artifact_hash = ?
+        limit 1
+    """
+    with store._connect() as connection:
+        return connection.execute(query, (harness, artifact_id, artifact_hash)).fetchone() is not None

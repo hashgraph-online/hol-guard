@@ -9,8 +9,10 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 ## Unreleased
 
 ### Fixed
-* **approval:** native authenticated SQLite and inline lookup qualify exact artifact-context grants for reapproval reuse. Generic hooks and harness-start consumers preserve qualification across atomic claims and revalidation; final native decision contracts accept qualified reapproval claims. Changed artifacts, invalid integrity, and terminal restrictions remain enforced.
+* **approval:** native authenticated SQLite and inline lookup qualify exact artifact-context grants for reapproval reuse. Generic hooks and harness-start consumers preserve qualification across atomic claims and revalidation; final native decision contracts accept qualified reapproval claims. Changed artifacts, incomplete directory identities, invalid integrity, and terminal restrictions remain enforced.
 * **launch:** compute launch argv and canonical authority digests in Rust instead of emitting unbound sentinels; bind previews and execution to the selected store Guard home, including explicit prompt transport. Qualified installed-wheel OMP launches and managed-extension reads retain native content and context verification. Launch approvals issued with the former unbound digests require fresh approval after upgrading.
+* **gauntlet:** match the pinned native edit grammar's horizontal header padding while retaining byte-identical edit input, exact reviewed targets, and rejection of ambiguous or changed paths; explicitly advertise parallel native-tool capability without forcing model calls.
+* **ci:** stream full command-corpus worker reports into owned result groups instead of retaining duplicate case-ID lists; preserve all three partitions, worker concurrency, original oracles, and time and memory limits.
 * **contracts:** complete canonical external trust bindings for CodeSage, VaultSync, Omairc, FetchSandbox MCP, and Setup Doctor MCP after retiring the derived repository trust cache; retain full-catalog ownership validation and opt-in review boundaries.
 * **ci:** create the managed-resident integration fixture's Guard home with private permissions before publishing signed snapshots, so real handoff and retained-client checks reach their intended lifecycle paths without weakening native directory ownership checks.
 * **ci:** bind manual Sonar analysis to the exact checkout and its unique open same-repository pull request instead of overwriting main; reject stale or mismatched server analysis and enforce the complete standard quality gate within the existing shared polling budget.
@@ -87,6 +89,29 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a context-digest request whose deadline ran out — the client's `native_client_timed_out` or the resident's own `native_client_deadline_exceeded` — is retried once with twice the cold-start allowance. The pooled resident serves one request at a time, so a sibling's long RPC could consume the steady-state budget and fail a request that was neither slow nor dead, and the resident's own bound (which the request carries) must not make the retry hopeless. Only a request that has already failed pays for the retry; every other failure still fails after a single attempt, and the reason names the transport, the attempt count and the budget that actually failed.
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
+
+## [3.35.0](https://github.com/hashgraph-online/hol-guard/compare/v3.34.1...v3.35.0) (2026-10-08)
+
+
+### Features
+
+* **gauntlet:** run catalog cases in parallel with --jobs ([#3765](https://github.com/hashgraph-online/hol-guard/issues/3765)) ([5f1ca7c](https://github.com/hashgraph-online/hol-guard/commit/5f1ca7cdeb81d3301ee2f630757be6acd7fef5b5))
+* **gauntlet:** run the native Luna route at medium effort by default ([#3767](https://github.com/hashgraph-online/hol-guard/issues/3767)) ([4e0234d](https://github.com/hashgraph-online/hol-guard/commit/4e0234d3876035d44aa7c41535c2bd0a8ddf7265))
+* **guard:** prove Wrangler version, help and whoami reads benign ([#3774](https://github.com/hashgraph-online/hol-guard/issues/3774)) ([632a120](https://github.com/hashgraph-online/hol-guard/commit/632a1202dacee3bc787fbcd3779aea9cf4d5aab2))
+
+
+### Bug Fixes
+
+* **ci:** reuse native source compiler for shard wheel builds ([#3701](https://github.com/hashgraph-online/hol-guard/issues/3701)) ([fb3af28](https://github.com/hashgraph-online/hol-guard/commit/fb3af285669014676038e6e1266626a0e9f5756a))
+* **gauntlet:** run the native Luna route on Windows ([#3759](https://github.com/hashgraph-online/hol-guard/issues/3759)) ([d52e029](https://github.com/hashgraph-online/hol-guard/commit/d52e0295a73a62fdce59e83d26b6c763ce2bd80b))
+* **guard:** contain test runs wrapped in a workspace cd or output filter ([#3775](https://github.com/hashgraph-online/hol-guard/issues/3775)) ([44d5a31](https://github.com/hashgraph-online/hol-guard/commit/44d5a319cdeb2edf461b2319a995313a5356feca))
+* **guard:** stop asking approval for bounded waits and read-only probes ([#3773](https://github.com/hashgraph-online/hol-guard/issues/3773)) ([d992303](https://github.com/hashgraph-online/hol-guard/commit/d992303ed65c36c928e0147449bc56cabbe14d6d))
+* **windows:** restore the native build and parallel Gauntlet workers ([#3771](https://github.com/hashgraph-online/hol-guard/issues/3771)) ([a8c8c3c](https://github.com/hashgraph-online/hol-guard/commit/a8c8c3cdafbe0e3fd13e6a7d039baeb55ca99195))
+
+
+### Performance Improvements
+
+* **release:** compile in parallel and start Desktop signing sooner ([87a5329](https://github.com/hashgraph-online/hol-guard/commit/87a532952ab75ea87d04ebd05489c9de5c71131f))
 
 ## [3.34.1](https://github.com/hashgraph-online/hol-guard/compare/v3.34.0...v3.34.1) (2026-10-08)
 

@@ -794,6 +794,7 @@ def _compose_consumer_saved_policy(
     workspace: str | None,
     publisher: str | None,
     current_action: GuardAction,
+    identity_reusable: bool,
     now: str,
     memory_command: str | None = None,
     memory_artifact_type: str | None = None,
@@ -858,8 +859,12 @@ def _compose_consumer_saved_policy(
         saved_action,
         saved_decision_present=True,
         validation_reason=validation_reason,
-        fresh_local_approval=saved_decision is not None and saved_decision.get("fresh_local_approval") is True,
-        durable_exact_approval=saved_decision is not None and saved_decision.get("durable_exact_approval") is True,
+        fresh_local_approval=(
+            identity_reusable and saved_decision is not None and saved_decision.get("fresh_local_approval") is True
+        ),
+        durable_exact_approval=(
+            identity_reusable and saved_decision is not None and saved_decision.get("durable_exact_approval") is True
+        ),
     )
     if reuse is None:
         # Resident unreachable: no saved approval is claimed; the caller's
@@ -1294,13 +1299,14 @@ def evaluate_detection(
             workspace=workspace,
             publisher=artifact.publisher,
             current_action=current_policy_action,
+            identity_reusable=skill_directory_identity_reusable is not False,
             now=now,
             memory_command=artifact.command,
             memory_artifact_type=artifact.artifact_type,
             memory_artifact_name=artifact.name,
             pending_approval_claims=pending_approval_claims,
         )
-        claimed_saved_approval = _claimed_saved_approval_applies(
+        claimed_saved_approval = skill_directory_identity_reusable is not False and _claimed_saved_approval_applies(
             claimed_saved_approval_overrides,
             retained_saved_approval_overrides,
             artifact_id=artifact.artifact_id,
@@ -1615,6 +1621,7 @@ def evaluate_detection(
             workspace=workspace,
             publisher=previous_publisher,
             current_action=current_policy_action,
+            identity_reusable=skill_directory_identity_reusable is not False,
             now=now,
             memory_command=previous_command_value if isinstance(previous_command_value, str) else None,
             memory_artifact_type=(
@@ -1623,7 +1630,7 @@ def evaluate_detection(
             memory_artifact_name=previous_name_value if isinstance(previous_name_value, str) else None,
             pending_approval_claims=pending_approval_claims,
         )
-        claimed_saved_approval = _claimed_saved_approval_applies(
+        claimed_saved_approval = skill_directory_identity_reusable is not False and _claimed_saved_approval_applies(
             claimed_saved_approval_overrides,
             retained_saved_approval_overrides,
             artifact_id=artifact_id,

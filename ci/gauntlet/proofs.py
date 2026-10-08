@@ -131,8 +131,8 @@ def _edit_path(args: dict[str, Any]) -> str | None:
     text = args["input"]
     if not isinstance(text, str):
         return None
-    headers = re.findall(r"^\[([^\n]+)#[0-9A-Fa-f]{4}\]$", text, re.MULTILINE)
-    if len(headers) != 1:
+    headers = [header.strip(" \t") for header in re.findall(r"^\[([^\n]+)#[0-9A-Fa-f]{4}\]$", text, re.MULTILINE)]
+    if len(headers) != 1 or not headers[0]:
         return None
     path = _fixture_path(headers[0])
     explicit = _path(args)
