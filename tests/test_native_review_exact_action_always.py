@@ -200,6 +200,28 @@ def test_saved_allow_reuses_only_overridable_reviews(
     assert native_saved_decision_response(store, token=token + "x", native_result=result, **kwargs) is None
 
 
+def test_unsaved_token_skips_the_integrity_refreshing_lookup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    token = _token("npx wrangler --version", workspace)
+    assert token is not None
+    _save(store, token + "-other", "allow")
+
+    def _unexpected_lookup(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("full policy lookup ran without a matching exact decision")
+
+    monkeypatch.setattr(store, "resolve_policy_decision_lookup", _unexpected_lookup)
+    result, _ = _verdict()
+    assert (
+        native_saved_decision_response(
+            store, harness=_HARNESS, token=token, artifact_id=_ARTIFACT_ID, native_result=result, workspace=workspace
+        )
+        is None
+    )
+
+
 def test_saved_block_blocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path) -> None:
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     store = GuardStore(tmp_path / "guard-home")

@@ -21,6 +21,7 @@ from ..runtime.approval_context import (
     parse_approval_context_token,
     runtime_launch_identity_is_reusable,
 )
+from ..store_policy_decision import policy_decision_hash_exists
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import harness_json_from_native_pre_tool
@@ -119,6 +120,10 @@ def native_saved_decision_response(
     if not callable(lookup):
         return None
     try:
+        # The full lookup refreshes integrity state under a write lock. Skip it
+        # on the hot hook path unless an exact decision for this token exists.
+        if not policy_decision_hash_exists(store, harness=harness, artifact_id=artifact_id, artifact_hash=token):
+            return None
         result = lookup(
             harness,
             artifact_id,
