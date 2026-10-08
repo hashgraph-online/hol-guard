@@ -1,11 +1,12 @@
-//! Seeded generated-input checks for the Gmail send preparation chain.
+//! Seeded generated-input checks for the Gmail send preparation chain and the
+//! owned business input commitment.
 //!
 //! Each property runs a fixed number of cases from a deterministic SplitMix64
 //! stream, so failures reproduce from the printed seed and case number without
 //! adding a property-testing dependency.
 
 use base64::{
-    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
+    engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD},
     Engine,
 };
 use guard_command::business_gmail_plain::{GmailPlainErrorV1, GmailPlainInputV1};
@@ -13,8 +14,15 @@ use guard_command::business_gmail_wire::{
     GmailSendWireErrorV1, GmailSendWireInputV1, GMAIL_SEND_MAX_PARAM_BYTES,
 };
 use guard_command::business_gws_command::{GwsGmailCommandErrorV1, GwsGmailSendCommandInputV1};
+use guard_command::business_input::{
+    business_input_snapshot_digest, PreparedBusinessInputErrorV1, PreparedBusinessInputV1,
+};
 use guard_command::MAX_COMMAND_BYTES;
-use guard_contracts::{BusinessRecipientKindV1, MAX_BUSINESS_INLINE_BYTES};
+use guard_contracts::{
+    BusinessRecipientKindV1, MAX_BUSINESS_ACTION_ITEMS, MAX_BUSINESS_INLINE_BYTES,
+};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 const SEED: u64 = 0x5eed_0fb0_517e_5500;
 const CASES: u64 = 512;
@@ -630,4 +638,446 @@ fn recipient_and_header_counts_are_bounded() {
         plain(&render(&headers, "body")).err(),
         Some(GmailPlainErrorV1::BoundsExceeded)
     );
+}
+
+/// Fragments that exercise ASCII, whitespace, the QP escape octet and
+/// multi-byte UTF-8 in decoded text.
+const TEXT: &[&str] = &[
+    "a",
+    "Z",
+    "0",
+    " ",
+    "\t",
+    "=",
+    ".",
+    "~",
+    "\u{e9}",
+    "\u{6f22}",
+    "\u{1f600}",
+    "\u{df}",
+];
+
+fn generated_text(rng: &mut Rng) -> String {
+    let lines: Vec<String> = (0..1 + rng.below(5))
+        .map(|_| (0..1 + rng.below(40)).map(|_| *rng.pick(TEXT)).collect())
+        .collect();
+    lines.join("\r\n")
+}
+
+fn crlf_lines(bytes: &[u8]) -> Vec<&[u8]> {
+    let mut lines = Vec::new();
+    let (mut start, mut index) = (0, 0);
+    while index + 1 < bytes.len() {
+        if &bytes[index..index + 2] == b"\r\n" {
+            lines.push(&bytes[start..index]);
+            index += 2;
+            start = index;
+        } else {
+            index += 1;
+        }
+    }
+    lines.push(&bytes[start..]);
+    lines
+}
+
+/// Canonical quoted-printable: uppercase escapes, escaped line-final
+/// whitespace and soft breaks that keep every encoded line within 76 octets.
+fn quoted_printable(bytes: &[u8]) -> String {
+    let mut lines = Vec::new();
+    for line in crlf_lines(bytes) {
+        let mut encoded = String::new();
+        let mut width = 0;
+        for (index, byte) in line.iter().enumerate() {
+            let literal = ((33..=126).contains(byte) && *byte != b'=')
+                || (matches!(byte, b' ' | b'\t') && index + 1 != line.len());
+            let token = if literal {
+                char::from(*byte).to_string()
+            } else {
+                format!("={byte:02X}")
+            };
+            if width + token.len() > 75 {
+                encoded.push_str("=\r\n");
+                width = 0;
+            }
+            width += token.len();
+            encoded.push_str(&token);
+        }
+        lines.push(encoded);
+    }
+    lines.join("\r\n")
+}
+
+fn wrapped_base64(bytes: &[u8]) -> String {
+    let encoded = STANDARD.encode(bytes);
+    let lines: Vec<&str> = encoded
+        .as_bytes()
+        .chunks(76)
+        .map(|chunk| std::str::from_utf8(chunk).unwrap())
+        .collect();
+    lines.join("\r\n")
+}
+
+fn encoded(encoding: &str, body: &[u8]) -> Result<GmailPlainInputV1, GmailPlainErrorV1> {
+    let mut mime = format!(
+        "From: sender@example.test\r\nTo: to@example.test\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         Content-Transfer-Encoding: {encoding}\r\n\r\n"
+    )
+    .into_bytes();
+    mime.extend_from_slice(body);
+    plain(&mime)
+}
+
+fn longest_line(text: &str) -> usize {
+    text.split("\r\n").map(str::len).max().unwrap_or(0)
+}
+
+#[test]
+fn generated_text_round_trips_through_every_transfer_encoding() {
+    for case in 0..CASES {
+        let mut rng = Rng::for_case(14, case);
+        let text = generated_text(&mut rng);
+        let b64 = wrapped_base64(text.as_bytes());
+        for (encoding, body) in [
+            ("8bit", text.clone()),
+            ("quoted-printable", quoted_printable(text.as_bytes())),
+            ("base64", b64.clone()),
+            ("base64", format!("{b64}\r\n")),
+        ] {
+            let input = encoded(encoding, body.as_bytes())
+                .unwrap_or_else(|error| panic!("case {case} {encoding}: {error:?} {body:?}"));
+            assert_eq!(
+                input.body_bytes(),
+                text.as_bytes(),
+                "case {case} {encoding}"
+            );
+            assert_eq!(
+                encoded(encoding, body.as_bytes()).unwrap().input_binding(),
+                input.input_binding(),
+                "case {case} {encoding}"
+            );
+        }
+        let seven = encoded("7bit", text.as_bytes());
+        if text.is_ascii() {
+            assert_eq!(seven.unwrap().body_bytes(), text.as_bytes(), "case {case}");
+        } else {
+            assert_eq!(
+                seven.err(),
+                Some(GmailPlainErrorV1::Unsupported),
+                "case {case}"
+            );
+        }
+    }
+}
+
+#[test]
+fn malformed_transfer_encodings_fail_closed() {
+    for case in 0..CASES {
+        let mut rng = Rng::for_case(15, case);
+        let text = generated_text(&mut rng);
+        let b64 = wrapped_base64(text.as_bytes());
+        let qp = quoted_printable(text.as_bytes());
+        let mut corrupt: Vec<(&str, String)> = Vec::new();
+
+        let mut inserted = b64.clone();
+        inserted.insert(
+            rng.below(b64.len() + 1),
+            *rng.pick(&['-', '_', ' ', '.', '!', '\t']),
+        );
+        corrupt.push(("base64", inserted));
+        let data: Vec<usize> = b64
+            .char_indices()
+            .filter(|(_, ch)| !matches!(ch, '\r' | '\n'))
+            .map(|(index, _)| index)
+            .collect();
+        let mut deleted = b64.clone();
+        deleted.remove(data[rng.below(data.len())]);
+        corrupt.push(("base64", deleted));
+        if b64.ends_with('=') {
+            corrupt.push(("base64", b64.trim_end_matches('=').to_owned()));
+        }
+        if b64.contains("\r\n") {
+            corrupt.push(("base64", b64.replacen("\r\n", "\n", 1)));
+            assert_eq!(
+                encoded("base64", b64.replace("\r\n", "").as_bytes()).err(),
+                Some(GmailPlainErrorV1::BoundsExceeded),
+                "case {case}"
+            );
+        }
+
+        corrupt.push(("quoted-printable", format!("{qp}=")));
+        corrupt.push(("quoted-printable", format!("{qp} ")));
+        let mut raw = qp.clone();
+        raw.insert(rng.below(qp.len() + 1), '\u{e9}');
+        corrupt.push(("quoted-printable", raw));
+        let bytes = qp.as_bytes();
+        if let Some(index) = (0..bytes.len().saturating_sub(2)).find(|&index| {
+            let pair = &bytes[index + 1..index + 3];
+            bytes[index] == b'='
+                && pair.iter().all(u8::is_ascii_hexdigit)
+                && pair.iter().any(u8::is_ascii_uppercase)
+        }) {
+            let mut lower = qp.clone();
+            lower.replace_range(
+                index + 1..index + 3,
+                &qp[index + 1..index + 3].to_lowercase(),
+            );
+            corrupt.push(("quoted-printable", lower));
+        }
+        if qp.contains("\r\n") {
+            corrupt.push(("quoted-printable", qp.replacen("\r\n", "\n", 1)));
+        }
+        let unwrapped = qp.replace("=\r\n", "");
+        let result = encoded("quoted-printable", unwrapped.as_bytes());
+        if longest_line(&unwrapped) > 76 {
+            assert_eq!(
+                result.err(),
+                Some(GmailPlainErrorV1::BoundsExceeded),
+                "case {case}"
+            );
+        } else {
+            assert_eq!(result.unwrap().body_bytes(), text.as_bytes(), "case {case}");
+        }
+
+        for (encoding, body) in corrupt {
+            assert!(
+                matches!(
+                    encoded(encoding, body.as_bytes()),
+                    Err(GmailPlainErrorV1::Invalid | GmailPlainErrorV1::BoundsExceeded)
+                ),
+                "case {case} {encoding}: {body:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn encodings_never_smuggle_text_the_plain_profile_rejects() {
+    let forbidden: &[(&[u8], GmailPlainErrorV1)] = &[
+        (b"\0", GmailPlainErrorV1::Invalid),
+        (b"\xff", GmailPlainErrorV1::Invalid),
+        (b"\n", GmailPlainErrorV1::Invalid),
+        (b"\r", GmailPlainErrorV1::Invalid),
+        (b"\x07", GmailPlainErrorV1::Unsupported),
+        (b"\x7f", GmailPlainErrorV1::Unsupported),
+        ("\u{85}".as_bytes(), GmailPlainErrorV1::Unsupported),
+        ("\u{2028}".as_bytes(), GmailPlainErrorV1::Unsupported),
+    ];
+    for case in 0..CASES {
+        let mut rng = Rng::for_case(16, case);
+        let text = generated_text(&mut rng);
+        let boundaries: Vec<usize> = text
+            .char_indices()
+            .map(|(index, _)| index)
+            .chain([text.len()])
+            .collect();
+        let at = boundaries[rng.below(boundaries.len())];
+        let (insert, expected) = *rng.pick(forbidden);
+        let mut bytes = text.as_bytes().to_vec();
+        bytes.splice(at..at, insert.iter().copied());
+        let overlong = format!("{text}{}", "x".repeat(999));
+        for (encoding, body, expected) in [
+            ("base64", wrapped_base64(&bytes), expected),
+            ("quoted-printable", quoted_printable(&bytes), expected),
+            (
+                "base64",
+                wrapped_base64(overlong.as_bytes()),
+                GmailPlainErrorV1::BoundsExceeded,
+            ),
+            (
+                "quoted-printable",
+                quoted_printable(overlong.as_bytes()),
+                GmailPlainErrorV1::BoundsExceeded,
+            ),
+        ] {
+            assert_eq!(
+                encoded(encoding, body.as_bytes()).err(),
+                Some(expected),
+                "case {case} {encoding}: {bytes:?}"
+            );
+        }
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+/// Top-level fields of complete synthetic facts committing to these bytes.
+fn facts_fields(primary: &[u8], attachments: &[Vec<u8>]) -> Vec<(&'static str, Value)> {
+    let total = primary.len() + attachments.iter().map(Vec::len).sum::<usize>();
+    vec![
+        ("schema", json!("guard.business-action.v1")),
+        ("version", json!(1)),
+        (
+            "provider",
+            json!({
+                "service": "google_gmail", "identity_state": "known",
+                "account_binding": "a".repeat(64), "tenant_binding": "b".repeat(64),
+                "tool_identity_digest": "c".repeat(64), "tool_schema_digest": "d".repeat(64)
+            }),
+        ),
+        ("operation", json!("mail_send")),
+        (
+            "audience",
+            json!({"kind": "named", "expansion_state": "known", "recipients": [
+                {"identity_binding": "e".repeat(64), "domain": "example.test", "kind": "to"}
+            ]}),
+        ),
+        (
+            "content",
+            json!({
+                "snapshot_digest": business_input_snapshot_digest(primary, attachments).unwrap(),
+                "attachment_digests": attachments.iter().map(|bytes| sha256_hex(bytes)).collect::<Vec<_>>(),
+                "inspection_state": "known", "inspected_bytes": total,
+                "sensitivity_labels": ["confidential"]
+            }),
+        ),
+        (
+            "target",
+            json!({
+                "resource_binding": "1".repeat(64), "revision_binding": "2".repeat(64),
+                "field_diff_digest": "3".repeat(64), "batch_manifest_digest": "4".repeat(64)
+            }),
+        ),
+        (
+            "volume",
+            json!({"recipient_count": 1, "record_count": 1, "byte_count": total}),
+        ),
+        ("completeness", json!("known")),
+    ]
+}
+
+fn facts_json(fields: &[(&str, Value)], order: &[usize]) -> Vec<u8> {
+    let members: Vec<String> = order
+        .iter()
+        .map(|&index| format!("{}:{}", json!(fields[index].0), fields[index].1))
+        .collect();
+    format!("{{{}}}", members.join(",")).into_bytes()
+}
+
+fn generated_input(rng: &mut Rng) -> (Vec<u8>, Vec<Vec<u8>>) {
+    let primary = rng.bytes(256);
+    let attachments = (0..rng.below(5)).map(|_| rng.bytes(64)).collect();
+    (primary, attachments)
+}
+
+#[test]
+fn prepared_input_keeps_exact_bytes_and_a_key_order_independent_binding() {
+    for case in 0..CASES {
+        let mut rng = Rng::for_case(17, case);
+        let (primary, attachments) = generated_input(&mut rng);
+        let fields = facts_fields(&primary, &attachments);
+        let natural: Vec<usize> = (0..fields.len()).collect();
+        let mut shuffled = natural.clone();
+        for index in (1..shuffled.len()).rev() {
+            shuffled.swap(index, rng.below(index + 1));
+        }
+        let first = PreparedBusinessInputV1::prepare(
+            &facts_json(&fields, &natural),
+            primary.clone(),
+            attachments.clone(),
+        )
+        .unwrap_or_else(|error| panic!("case {case}: {error:?}"));
+        assert_eq!(first.primary_bytes(), primary, "case {case}");
+        assert!(first
+            .attachments()
+            .eq(attachments.iter().map(Vec::as_slice)));
+        let second = PreparedBusinessInputV1::prepare(
+            &facts_json(&fields, &shuffled),
+            primary.clone(),
+            attachments.clone(),
+        )
+        .unwrap();
+        assert_eq!(first.binding(), second.binding(), "case {case}");
+    }
+}
+
+#[test]
+fn altered_bytes_or_partitions_never_match_committed_facts() {
+    for case in 0..CASES {
+        let mut rng = Rng::for_case(18, case);
+        let (primary, attachments) = generated_input(&mut rng);
+        let fields = facts_fields(&primary, &attachments);
+        let facts = facts_json(&fields, &(0..fields.len()).collect::<Vec<_>>());
+        let mut variants: Vec<(Vec<u8>, Vec<Vec<u8>>)> = Vec::new();
+
+        let mut flipped = primary.clone();
+        let at = rng.below(flipped.len());
+        flipped[at] ^= 1 + rng.below(255) as u8;
+        variants.push((flipped, attachments.clone()));
+        variants.push((
+            primary.clone(),
+            [attachments.clone(), vec![Vec::new()]].concat(),
+        ));
+        if !attachments.is_empty() {
+            let mut changed = attachments.clone();
+            let which = rng.below(changed.len());
+            let at = rng.below(changed[which].len());
+            changed[which][at] ^= 1 + rng.below(255) as u8;
+            variants.push((primary.clone(), changed));
+            variants.push((
+                primary.clone(),
+                attachments[..attachments.len() - 1].to_vec(),
+            ));
+            // Same concatenated bytes and total, different partition.
+            let mut moved = attachments.clone();
+            let mut shorter = primary.clone();
+            moved[0].insert(0, shorter.pop().unwrap());
+            assert_ne!(
+                business_input_snapshot_digest(&shorter, &moved).unwrap(),
+                business_input_snapshot_digest(&primary, &attachments).unwrap(),
+                "case {case}"
+            );
+            variants.push((shorter, moved));
+        }
+        if attachments.len() >= 2 && attachments.first() != attachments.last() {
+            let mut reversed = attachments.clone();
+            reversed.reverse();
+            variants.push((primary.clone(), reversed));
+        }
+        for (index, (primary, attachments)) in variants.into_iter().enumerate() {
+            assert_eq!(
+                PreparedBusinessInputV1::prepare(&facts, primary, attachments).err(),
+                Some(PreparedBusinessInputErrorV1::ContentMismatch),
+                "case {case} variant {index}"
+            );
+        }
+    }
+}
+
+#[test]
+fn prepared_input_bounds_apply_before_facts_are_parsed() {
+    let limit = MAX_BUSINESS_INLINE_BYTES as usize;
+    let too_many = vec![Vec::new(); MAX_BUSINESS_ACTION_ITEMS + 1];
+    assert_eq!(
+        business_input_snapshot_digest(b"", &too_many).err(),
+        Some(PreparedBusinessInputErrorV1::BoundsExceeded)
+    );
+    assert_eq!(
+        PreparedBusinessInputV1::prepare(b"{}", Vec::new(), too_many).err(),
+        Some(PreparedBusinessInputErrorV1::BoundsExceeded)
+    );
+    for case in 0..16 {
+        let mut rng = Rng::for_case(19, case);
+        for (total, expected) in [
+            (limit, PreparedBusinessInputErrorV1::InvalidFacts),
+            (limit + 1, PreparedBusinessInputErrorV1::BoundsExceeded),
+        ] {
+            let parts = 1 + rng.below(4);
+            let mut sizes: Vec<usize> = (0..parts).map(|_| rng.below(total + 1)).collect();
+            sizes.extend([0, total]);
+            sizes.sort_unstable();
+            let mut chunks = sizes.windows(2).map(|pair| vec![b'x'; pair[1] - pair[0]]);
+            let primary = chunks.next().unwrap();
+            let attachments: Vec<Vec<u8>> = chunks.collect();
+            let digest = business_input_snapshot_digest(&primary, &attachments);
+            assert_eq!(digest.is_ok(), total == limit, "case {case}");
+            assert_eq!(
+                PreparedBusinessInputV1::prepare(b"{}", primary, attachments).err(),
+                Some(expected),
+                "case {case} total {total}"
+            );
+        }
+    }
 }
