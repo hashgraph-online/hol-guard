@@ -57,7 +57,7 @@ jobs:
   publish-linux-x64:
     name: Publish Linux x64 Core sidecar
     concurrency:
-      group: desktop-core-stable-feed
+      group: desktop-core-stable-feed-linux-x64
       cancel-in-progress: false
       queue: max
     if: github.event_name != 'pull_request'
