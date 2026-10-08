@@ -104,7 +104,34 @@ def _prune_ledger(
     projected row stays pinned until its matching event has been uploaded.
     Pruning is by retention cap: keep the newest ``_LEDGER_RETENTION_CAP`` rows
     per (workspace, installation); older terminal rows are dead weight.
+    Quarantined rows are dropped along with their unuploaded
+    ``guard_cloud_events`` row so the queue cannot accumulate dead weight
+    across binding changes.
     """
+    connection.execute(
+        f"""
+        delete from guard_cloud_events
+        where uploaded_at is null
+          and idempotency_key in (
+            select idempotency_key from {_LEDGER}
+            where workspace_id = ? and installation_id = ?
+              and state = 'quarantined'
+              and (source_kind, decision_id) in (
+                select source_kind, decision_id from {_LEDGER}
+                where workspace_id = ? and installation_id = ?
+                order by recorded_at desc
+                limit -1 offset ?
+              )
+          )
+        """,
+        (
+            eligibility.workspace_id,
+            eligibility.installation_id,
+            eligibility.workspace_id,
+            eligibility.installation_id,
+            _LEDGER_RETENTION_CAP,
+        ),
+    )
     cursor = connection.execute(
         f"""
         delete from {_LEDGER}

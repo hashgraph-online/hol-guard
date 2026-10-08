@@ -94,6 +94,14 @@ pub(crate) fn apply_hook(
     }
     if !journal.records.contains_key(&request_id) {
         if journal.records.len() >= MAX_RECORDS {
+            // Evict blocked records before refusing a new origin — a blocked
+            // decision is terminal for that request_id and cannot admit new
+            // work, so it is safe to drop when the journal is otherwise full.
+            // ``positive`` records are kept because they are the replay/
+            // idempotency witness for the matching request_id.
+            journal.records.retain(|_, record| record.blocked.is_none());
+        }
+        if journal.records.len() >= MAX_RECORDS {
             // Keep the computed native denial visible without dropping protected
             // consumption/replay evidence or manufacturing a new executable origin.
             return Ok(baseline);
