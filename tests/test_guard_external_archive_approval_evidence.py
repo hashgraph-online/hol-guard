@@ -237,10 +237,17 @@ def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_pat
     assert secret not in repr(result.to_dict())
 
 
+@pytest.mark.parametrize("parser", ["resident", "local"])
 def test_external_archive_credentials_stay_private_across_artifact_and_receipt_surfaces(
     tmp_path: Path,
     native_context_digest: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    parser: str,
 ) -> None:
+    if parser == "local":
+        from codex_plugin_scanner.guard.runtime import package_intent_parser
+
+        monkeypatch.setattr(package_intent_parser, "_native_package_intent", lambda *args, **kwargs: None)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "package.json").write_text("{}\n", encoding="utf-8")
@@ -248,7 +255,9 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     password = "VERY_SECRET_PASSWORD"
     source_url = f"https://user:{password}@packages.example.com/demo.tgz?token={secret}"
     command = ["npm", "install", f"demo@{source_url}"]
-    intent = parse_package_intent(shlex.join(command), workspace=workspace)
+    intent = parse_package_intent(
+        shlex.join(command), workspace=workspace, guard_home=native_context_digest
+    )
     assert intent is not None
     artifact = build_package_request_artifact(
         "guard-cli",
@@ -258,7 +267,10 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     )
     private_targets = artifact.runtime_private_metadata["package_targets"]
     assert isinstance(private_targets, list)
-    assert private_targets[0]["source_url"] == source_url
+    # The resident boundary redacts credentials before returning to Python.
+    # The local parser retains exact inputs only in ephemeral execution metadata.
+    expected_url = source_url if parser == "local" else "https://packages.example.com/demo.tgz"
+    assert private_targets[0]["source_url"] == expected_url
 
     store = GuardStore(tmp_path / "guard-home")
     evaluation = evaluator.evaluate_package_request_artifact(

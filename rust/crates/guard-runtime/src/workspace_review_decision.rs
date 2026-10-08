@@ -65,6 +65,7 @@ pub(crate) struct VerifiedWorkspaceReviewDecision {
     pub(crate) retry_scope_binding: String,
     pub(crate) request_snapshot_digest: Option<String>,
     pub(crate) envelope_digest: String,
+    pub(crate) observed_at_ms: u64,
     /// True only when the same durable claim is being resumed after a lost
     /// response. It is never a second acceptance of the envelope.
     pub(crate) replayed: bool,
@@ -321,6 +322,7 @@ fn verify_envelope_mode(
         retry_scope_binding: envelope.retry_scope_binding.clone(),
         request_snapshot_digest: None,
         envelope_digest: digest_bytes(&canonical),
+        observed_at_ms: now_ms,
         replayed: false,
     };
     Ok((verified, canonical))
