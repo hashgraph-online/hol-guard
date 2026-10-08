@@ -93,6 +93,21 @@ jobs:
             exit 1
           fi
 
+  precompile-native:
+    name: Prepare native release binaries
+    needs: authorize-release
+    if: >-
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+      github.ref == format('refs/tags/v{0}', inputs.release_version) &&
+      inputs.release_channel == 'stable' && inputs.release_train == 'main'
+    uses: ./.github/workflows/release-native-prepare.yml
+    with:
+      source_sha: ${{ github.sha }}
+      version: ${{ inputs.release_version }}
+    permissions:
+      contents: read
+
   build:
     name: Build + Verify
     if: >-
@@ -509,7 +524,8 @@ jobs:
   build-native-guard-wheels:
     name: Build native Guard wheel (${{ matrix.target }})
     if: >-
-      needs.build.result == 'success' &&
+      always() && !cancelled() && needs.build.result == 'success' &&
+      (needs.precompile-native.result == 'success' || needs.precompile-native.result == 'skipped') &&
       (
         (
           github.event_name == 'pull_request' &&
@@ -533,7 +549,7 @@ jobs:
           github.event.inputs.release_train == 'main'
         )
       )
-    needs: build
+    needs: [build, precompile-native]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
@@ -599,6 +615,7 @@ jobs:
           HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
         run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
       - name: Install pinned Rust target
+        if: needs.precompile-native.result != 'success'
         shell: bash
         env:
           RUST_TARGET: ${{ matrix.target }}
@@ -607,11 +624,12 @@ jobs:
           rustup default 1.88.0
           rustup target add "$RUST_TARGET"
       - name: Install Linux static toolchain
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && needs.precompile-native.result != 'success'
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
       - name: Cache trusted release compilation
+        if: needs.precompile-native.result != 'success'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           prefix-key: release-native-v1
@@ -623,6 +641,7 @@ jobs:
           # restore this trusted cache, but cannot publish entries to it.
           save-if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}
       - name: Build version-matched runtime
+        if: needs.precompile-native.result != 'success'
         shell: bash
         env:
           HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
@@ -637,6 +656,21 @@ jobs:
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p guard-command --bin guard-command-source
           "$RUNTIME" self-test --json
+      - name: Restore exact-run native binaries
+        if: needs.precompile-native.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-native-${{ matrix.target }}
+          path: prepared-native/
+      - name: Verify and install prepared native binaries
+        if: needs.precompile-native.result == 'success'
+        shell: bash
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+          SOURCE_COMPILER: ${{ matrix.source_compiler }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: python scripts/release/prepared_native.py install --directory prepared-native
       - name: Verify native command program is current
         shell: bash
         env:
@@ -647,12 +681,15 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags }}
           SOURCE_COMPILER: ${{ matrix.source_compiler }}
           RUST_TARGET: ${{ matrix.target }}
+          PRECOMPILED: ${{ needs.precompile-native.result == 'success' }}
         run: |
           # Generated projections may lag their canonical tagged inputs.
           # Bind both the binary and packaged JSON to this release build.
           python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
-          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" \
-            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          if [[ "$PRECOMPILED" != "true" ]]; then
+            cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" \
+              -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          fi
           arguments=(--compiler "$SOURCE_COMPILER")
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
@@ -743,6 +780,7 @@ jobs:
   assemble-native-guard-distributions:
     name: Assemble native Guard distributions
     if: >-
+      always() && !cancelled() &&
       needs.build.result == 'success' &&
       needs.build-native-guard-wheels.result == 'success'
     needs: [build, build-native-guard-wheels]
@@ -799,6 +837,7 @@ jobs:
   publish-testpypi:
     name: Publish PR canary to TestPyPI
     if: >-
+      always() && !cancelled() && needs.build.result == 'success' && needs.assemble-native-guard-distributions.result == 'success' &&
       vars.PR_CANARY_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -830,6 +869,7 @@ jobs:
   pr-installed-canary:
     name: Installed PR canary (${{ matrix.os }})
     if: >-
+      always() && !cancelled() && needs.build.result == 'success' && needs.publish-testpypi.result == 'success' &&
       vars.PR_CANARY_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -1751,8 +1791,8 @@ jobs:
             [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
           fi
 
-  release-main:
-    name: Create main GitHub release
+  publish-main-assets:
+    name: Publish verified main release assets
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
@@ -1763,10 +1803,12 @@ jobs:
       github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
-      needs.publish-main-pypi.result == 'success' &&
+      needs.reserve-main-tag.result == 'success' &&
       needs.build.outputs.channel == 'stable'
-    needs: [build, assemble-native-guard-distributions, publish-main-pypi]
+    needs: [build, assemble-native-guard-distributions, reserve-main-tag]
     runs-on: ubuntu-latest
+    outputs:
+      core_ready: ${{ steps.core-inputs.outputs.core_ready }}
     permissions:
       attestations: write
       contents: write
@@ -1776,14 +1818,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
-          ref: ${{ needs.build.outputs.source_sha }}
-      - name: Checkout release-notes tooling
-        if: needs.publish-main-pypi.outputs.pypi_deferred == 'true'
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 1
-          ref: ${{ github.event.repository.default_branch }}
-          path: .release-tooling
+          ref: ${{ github.sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions-native
@@ -1809,6 +1844,87 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: cp "${{ steps.provenance.outputs.bundle-path }}" "dist/hol-guard-v${VERSION}.intoto.jsonl"
+      - name: Publish immutable package inputs for Desktop signing
+        id: core-inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: python scripts/release/publish_core_inputs.py --directory dist
+      - name: Retain exact provenance for final release verification
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: main-release-provenance
+          path: dist/*.intoto.jsonl
+          if-no-files-found: error
+
+  release-main:
+    name: Create main GitHub release
+    if: >-
+      always() &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.run_attempt == 1 &&
+      (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
+      github.event.inputs.release_channel == 'stable' &&
+      github.event.inputs.release_train == 'main' &&
+      needs.build.result == 'success' &&
+      needs.assemble-native-guard-distributions.result == 'success' &&
+      needs.publish-main-pypi.result == 'success' &&
+      needs.publish-main-assets.result == 'success' &&
+      needs.build.outputs.channel == 'stable'
+    needs: [build, assemble-native-guard-distributions, publish-main-pypi, publish-main-assets]
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+      attestations: write
+      contents: write
+      id-token: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build.outputs.source_sha }}
+      - name: Checkout trusted release validation tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: .release-validation
+          sparse-checkout: |
+            scripts/ci/verify_release_asset_inventory.py
+            scripts/release/release_readiness_notes.py
+          sparse-checkout-cone-mode: false
+      - name: Checkout release-notes tooling
+        if: needs.publish-main-pypi.outputs.pypi_deferred == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          path: .release-tooling
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distributions-native
+          path: dist/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distribution-sha256-native
+      - name: Download release toolchain SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-toolchain-sbom
+          path: dist/
+      - name: Verify and select release assets
+        run: |
+          sha256sum --check distribution-sha256-native.txt
+          rm -f dist/plugin_scanner-* dist/plugin-scanner-*
+      - name: Download exact published provenance
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: main-release-provenance
+          path: dist/
       - name: Generate release notes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1827,6 +1943,10 @@ jobs:
             --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" \
             --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md" \
             "${deferred_args[@]}"
+      - name: Explain package and Desktop readiness
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: python3 .release-validation/scripts/release/release_readiness_notes.py "$RUNNER_TEMP/release-notes.md"
       - name: Create discoverable main release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1851,7 +1971,7 @@ jobs:
               exit 1
             fi
             existing_dir=$(mktemp -d)
-            gh release download "$tag" --dir "$existing_dir" || true
+            gh release download "$tag" --dir "$existing_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl" --pattern "*.cdx.json" --pattern "*.mcpb" --pattern "*.mcpb.sha256" || true
             missing_files=()
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
@@ -1862,7 +1982,7 @@ jobs:
             if [[ "${#missing_files[@]}" -gt 0 ]]; then
               gh release upload "$tag" "${missing_files[@]}"
               existing_dir=$(mktemp -d)
-              gh release download "$tag" --dir "$existing_dir"
+              gh release download "$tag" --dir "$existing_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl" --pattern "*.cdx.json" --pattern "*.mcpb" --pattern "*.mcpb.sha256"
             fi
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
@@ -1871,7 +1991,9 @@ jobs:
                 cmp --silent "$local_file" "$remote_file"
               fi
             done
-            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" stable
+            gh release view "$tag" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/package-release-assets.txt"
+            python .release-validation/scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" stable \
+              --allow-core-in-progress --asset-names-file "$RUNNER_TEMP/package-release-assets.txt"
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
             shopt -s nullglob
@@ -1905,36 +2027,82 @@ jobs:
             --verify-tag \
             "${ASSET_FILES[@]}"
 
+      - name: Record completed stable publication for future repairs and backfills
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SOURCE_SHA" \
+            -f state=success -f context="hol-guard / published $VERSION" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            -f description="Stable registry publication verified"
+
   wake-main-core-feeds:
     name: Dispatch published Desktop Core feeds
-    needs: [build, release-main]
+    needs: [build, publish-main-assets]
     if: >-
       always() && github.repository == 'hashgraph-online/hol-guard' &&
       github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
-      needs.release-main.result == 'success' && needs.build.outputs.channel == 'stable'
+      needs.publish-main-assets.result == 'success' && needs.publish-main-assets.outputs.core_ready == 'true' &&
+      needs.build.outputs.channel == 'stable'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: write
       contents: read
     steps:
-      # release-main verifies uploaded assets and provenance after the PyPI upload.
+      # Exact published wheel provenance is ready while PyPI verification continues.
       - name: Dispatch the exact published Core version
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
+          PUBLICATION_RUN_ID: ${{ github.run_id }}
+          PUBLICATION_SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if ! [[ "$VERSION" =~ ^3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "Published Core version is not canonical stable" >&2
             exit 1
           fi
-          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION"
-          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION"
+          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
+          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
+
+  wake-final-core-feeds:
+    name: Dispatch feeds after manual stable publication
+    needs: [build, publish-main-assets, release-main]
+    if: >-
+      always() && github.repository == 'hashgraph-online/hol-guard' &&
+      github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+      needs.publish-main-assets.result == 'success' && needs.publish-main-assets.outputs.core_ready != 'true' && needs.release-main.result == 'success' &&
+      needs.build.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # Exact published wheel provenance is ready while PyPI verification continues.
+      - name: Dispatch the exact published Core version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PUBLICATION_RUN_ID: ${{ github.run_id }}
+          PUBLICATION_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Published Core version is not canonical stable" >&2
+            exit 1
+          fi
+          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
+          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
 
   release-alpha:
     name: Create alpha GitHub prerelease
     if: >-
+      always() && !cancelled() && needs.build.result == 'success' && needs.publish-alpha-pypi.result == 'success' &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       needs.build.outputs.channel == 'alpha' &&
       (

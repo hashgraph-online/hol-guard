@@ -10,6 +10,7 @@ pub struct PathContext<'a> {
     pub cwd: Option<&'a str>,
 }
 
+mod contained_wrapper;
 pub(crate) mod directory_targets;
 pub(crate) use directory_targets::safe_directory_target;
 mod git_config;
@@ -177,6 +178,10 @@ fn safe_git_arguments(
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };
+    if subcommand == "worktree" {
+        return matches!(&arguments[1..], [list] if list == "list")
+            || matches!(&arguments[1..], [list, flag] if list == "list" && flag == "--porcelain");
+    }
     if !matches!(
         subcommand,
         "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote"
@@ -276,6 +281,9 @@ fn exact_safe_command_with_context(
         || model.segments.is_empty()
         || !model.wrapper_chain.is_empty()
     {
+        return false;
+    }
+    if !safe_scalar::bounded_total_sleep(model) {
         return false;
     }
     if segment_proof::exact_safe_cwd_compound(model, context) {
@@ -487,3 +495,5 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_benign_probes;

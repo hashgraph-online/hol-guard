@@ -427,10 +427,7 @@ def run_contained_profile(
                 "",
                 "| Case | Outcome | Actual tools |",
                 "| --- | --- | ---: |",
-                *[
-                    f"| {case['id']} | {case['outcome']} | {case['tool_calls']} |"
-                    for case in report["cases"]
-                ],
+                *[f"| {case['id']} | {case['outcome']} | {case['tool_calls']} |" for case in report["cases"]],
             ]
         )
         + "\n",

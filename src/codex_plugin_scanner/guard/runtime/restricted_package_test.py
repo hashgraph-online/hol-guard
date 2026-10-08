@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .package_evidence_common import read_json_with_integrity
+from .restricted_node_test import nearest_project_root
 from .restricted_pytest_model import RestrictedPytestError
 from .restricted_pytest_validation import _normalized_command
 
@@ -25,14 +26,15 @@ def is_package_test(command: Sequence[str]) -> bool:
     )
 
 
-def resolve_package_test(command: Sequence[str], *, workspace: Path) -> tuple[str, ...]:
+def resolve_package_test(command: Sequence[str], *, workspace: Path, cwd: Path | None = None) -> tuple[str, ...]:
     argv = _normalized_command(command)
     if not is_package_test(argv):
         raise RestrictedPytestError("package_test_invalid_command", "Only local package test scripts are supported.")
     trailing = argv[2:] if argv[1] == "test" else argv[3:]
     if trailing and trailing[0] != "--":
         raise RestrictedPytestError("package_test_invalid_command", "Test arguments must follow an explicit --.")
-    manifest, _digest = read_json_with_integrity(workspace / "package.json")
+    package = nearest_project_root(cwd or workspace, workspace, "package.json")
+    manifest, _digest = read_json_with_integrity(package / "package.json")
     scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
     if not isinstance(scripts, dict) or not isinstance(scripts.get("test"), str):
         raise RestrictedPytestError("package_test_invalid_command", "The local test script is unavailable.")

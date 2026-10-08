@@ -15348,7 +15348,9 @@ def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
+    approval_output = capsys.readouterr()
+    assert approval_rc == 0, approval_output.err
+    json.loads(approval_output.out)
 
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
     second_rc = main(

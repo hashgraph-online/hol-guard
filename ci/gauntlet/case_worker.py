@@ -108,6 +108,14 @@ class SubprocessCaseWorker:
 
 def _watch_parent(parent_pid: int) -> None:
     """Unwind if the runner disappears without cleanup (SIGKILL, crash)."""
+    if os.name == "nt":
+        # A venv python.exe is a launcher that runs the interpreter as its child, so
+        # getppid() names the worker's own launcher. Wait on the runner itself.
+        from .windows_job import wait_for_process_exit
+
+        wait_for_process_exit(parent_pid)
+        os.kill(os.getpid(), signal.SIGTERM)
+        return
     while True:
         if os.getppid() != parent_pid:
             os.kill(os.getpid(), signal.SIGTERM)

@@ -39,6 +39,8 @@ use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE
 mod bound_open;
 #[path = "directory_binding.rs"]
 mod directory_binding;
+#[path = "file_identity.rs"]
+mod file_identity;
 #[path = "private_files.rs"]
 mod private_files;
 #[path = "process_lifecycle.rs"]
@@ -48,9 +50,9 @@ pub use directory_binding::{
     bind_directory, bind_private_directory, create_private_directory, path_is_within,
     PrivateDirectoryBinding,
 };
+pub use file_identity::{is_single_link_file, is_single_link_handle, remove_file_if_same};
 pub use private_files::{
-    create_private_file, delete_private_file_handle, is_single_link_file, open_private_directory,
-    open_private_file, remove_file_if_same,
+    create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
 };
 pub use process_lifecycle::{
     process_start_marker, terminate_process, terminate_process_verified, wait_for_process_exit,
