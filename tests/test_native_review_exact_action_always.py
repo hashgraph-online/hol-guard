@@ -136,6 +136,11 @@ def test_token_changes_when_native_rules_change(
         "bash deploy.sh",
         "node script.js",
         "sed -f program.sed input.txt",
+        "sed -n '1e ./build.sh' notes.txt",
+        "terraform apply",
+        "pytest tests/",
+        "R -f analysis.R",
+        "ansible-playbook play.yml",
     ],
 )
 def test_unbound_code_stays_once_only(

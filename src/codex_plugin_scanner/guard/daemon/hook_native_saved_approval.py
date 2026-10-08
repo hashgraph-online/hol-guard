@@ -79,6 +79,12 @@ _EXTRA_MUTABLE_LAUNCHERS = frozenset(
         "rscript",
         "julia",
         "swift",
+        "r",
+        # Tools that load project code or config the token cannot bind.
+        *("terraform", "tofu", "terragrunt", "pulumi", "ansible", "ansible-playbook"),
+        *("pytest", "py.test", "tox", "nox", "jest", "vitest", "mocha", "rake", "gradle", "mvn"),
+        # GNU sed can run shell commands from its script (``e``).
+        "sed",
     }
 )
 _FIND_EXEC_OPTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
