@@ -11,20 +11,6 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-// `_canonical_material_bytes` (native_context.py :383-388) → canonical JSON
-// UTF-8 bytes. `ensure_ascii=True` semantics are enforced inside
-// `write_canonical_json` (the contract is byte-identical).
-pub(crate) fn canonical_material_bytes(material: &Value) -> Vec<u8> {
-    let mut out = Vec::with_capacity(256);
-    // JSON encode failure is unreachable for identity material (only strings,
-    // numbers, arrays, maps); fail closed to an empty-payload digest rather
-    // than panic, matching the unbound degrade semantics.
-    if write_canonical_json(material, &mut out).is_err() {
-        return Vec::new();
-    }
-    out
-}
-
 // Native authority matches OpaqueMaterialDigest: raw UTF-8, not a fallback sentinel.
 pub(crate) fn context_opaque_digest_strict(material: &str) -> String {
     sha256_hex(material.as_bytes())
