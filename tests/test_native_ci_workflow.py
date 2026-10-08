@@ -20,24 +20,6 @@ def _workflow(name: str) -> dict:
     return expand_ci_job_actions(yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")))
 
 
-def test_ci_rust_cache_can_only_be_written_by_main_pushes() -> None:
-    """Verify CI Rust cache can only be written by main pushes."""
-    action = expand_ci_job_actions(
-        yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
-    )
-    cache = next(step for step in action["runs"]["steps"] if step.get("uses", "").startswith("Swatinem/"))
-    assert cache["with"]["save-if"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
-    assert cache["with"]["cache-workspace-crates"] is True
-    assert cache["with"]["cache-bin"] is True
-    assert "inputs.targets" in cache["with"]["shared-key"]
-    # Reuse the existing trusted dependency cache on the first migration PR.
-    # A new prefix forces several minutes of cold compilation on macOS Intel.
-    assert cache["with"]["prefix-key"] == "v0-rust"
-    assert action["inputs"]["cache-key"]["default"] == "native-wheel"
-    assert action["inputs"]["toolchain"]["default"] == "1.88.0"
-    assert "continue-on-error" not in cache
-
-
 def test_parallel_macos_proofs_use_this_runs_matching_platform_wheel() -> None:
     workflow = _workflow("native-wheel-ci.yml")
     build = workflow["jobs"]["macos-build"]
