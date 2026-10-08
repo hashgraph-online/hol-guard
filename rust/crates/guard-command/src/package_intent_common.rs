@@ -287,19 +287,43 @@ pub struct PackageIntent {
 
 impl PackageIntent {
     /// `to_dict` (:122-126): `command_tokens` are re-split from the redacted
-    /// command so exact argv never leaves the process.
+    /// command so private argv is excluded from public output.
     pub fn to_dict(&self) -> Value {
+        self.serialize(false)
+    }
+
+    /// Exact request values for ephemeral, private enforcement IPC only.
+    pub fn to_execution_dict(&self) -> Value {
+        self.serialize(true)
+    }
+
+    fn serialize(&self, execution: bool) -> Value {
         let mut payload = Map::new();
         payload.insert("package_manager".to_owned(), json!(self.package_manager));
         payload.insert("intent_kind".to_owned(), json!(self.intent_kind));
         payload.insert(
             "command_tokens".to_owned(),
-            json!(shlex_split(&self.redacted_command).unwrap_or_default()),
+            if execution {
+                json!(self.command_tokens)
+            } else {
+                json!(shlex_split(&self.redacted_command).unwrap_or_default())
+            },
         );
         payload.insert("redacted_command".to_owned(), json!(self.redacted_command));
         payload.insert(
             "targets".to_owned(),
-            Value::Array(self.targets.iter().map(|t| t.to_dict()).collect()),
+            Value::Array(
+                self.targets
+                    .iter()
+                    .map(|target| {
+                        if execution {
+                            target.to_execution_dict()
+                        } else {
+                            target.to_dict()
+                        }
+                    })
+                    .collect(),
+            ),
         );
         payload.insert("manifest_paths".to_owned(), json!(self.manifest_paths));
         payload.insert("lockfile_paths".to_owned(), json!(self.lockfile_paths));
@@ -1023,7 +1047,10 @@ pub fn redacted_command(tokens: &[String]) -> String {
             redacted.push("--hash=<hash>".to_owned());
             continue;
         }
-        if HTTP_SOURCE_IN_TOKEN_RE.is_match(token) || token.starts_with("git+") {
+        if HTTP_SOURCE_IN_TOKEN_RE.is_match(token)
+            || token.starts_with("git+")
+            || url_authority_contains_userinfo(token)
+        {
             redacted.push(sanitize_url(token));
             continue;
         }
@@ -2441,6 +2468,50 @@ mod tests {
             "http:<redacted-source>"
         );
         assert_eq!(sanitize_url("plain-token"), "plain-token");
+    }
+
+    #[test]
+    fn redacted_command_strips_non_http_url_userinfo() {
+        let tokens: Vec<String> = [
+            "cargo",
+            "install",
+            "--git",
+            "ssh://user:TOKEN@git.example.com/owner/repo.git",
+            "git+ssh://git@github.com/owner/repo2.git",
+            "--index-url",
+            "https://token@example.com/simple",
+            "--registry",
+            "https://crates.example.com/index",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(
+            redacted_command(&tokens),
+            concat!(
+                "cargo install --git ssh://git.example.com/owner/repo.git ",
+                "git+ssh://github.com/owner/repo2.git --index-url ",
+                "https://example.com/simple --registry https://crates.example.com/index"
+            )
+        );
+    }
+
+    #[test]
+    fn redacted_command_strips_url_userinfo_in_env_assignments() {
+        let tokens: Vec<String> = [
+            "PIP_INDEX_URL=ssh://user:TOKEN@index.example.com/simple",
+            "UV_DEFAULT_INDEX=not-a-url",
+            "pip",
+            "install",
+            "flask",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(
+            redacted_command(&tokens),
+            "PIP_INDEX_URL=ssh://index.example.com/simple UV_DEFAULT_INDEX=not-a-url pip install flask"
+        );
     }
 
     #[test]

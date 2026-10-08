@@ -18,6 +18,8 @@ from .guard_tier2_phase13_support import (
     write_text,
 )
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def test_evaluate_package_request_artifact_blocks_vulnerable_cargo_version_from_cargo_lock(
     tmp_path: Path,

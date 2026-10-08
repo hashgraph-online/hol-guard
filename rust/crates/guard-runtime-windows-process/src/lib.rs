@@ -14,6 +14,8 @@ use std::io;
 use std::path::Path;
 
 #[cfg(windows)]
+mod known_folders;
+#[cfg(windows)]
 mod secure_storage;
 #[cfg(windows)]
 mod windows;
@@ -29,6 +31,9 @@ pub use windows::{
     regular_file_id, remove_file_if_same, terminate_process, terminate_process_verified,
     wait_for_process_exit, FileId, PrivateDirectoryBinding,
 };
+
+#[cfg(windows)]
+pub use known_folders::trusted_install_roots;
 
 #[cfg(windows)]
 pub use secure_storage::{

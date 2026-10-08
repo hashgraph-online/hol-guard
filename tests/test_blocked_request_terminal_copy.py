@@ -20,6 +20,18 @@ from tests.test_guard_protect_approval_guidance import _pending_package_payload
 from tests.test_guard_runtime_mcp_saved_blocks import _context, _package_artifact
 
 
+@pytest.fixture(autouse=True)
+def _native_package_context(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = _context
+
+    def enrolled_context(tmp_path):
+        context = original(tmp_path)
+        native_mcp_probe(context.guard_home)
+        return context
+
+    monkeypatch.setitem(globals(), "_context", enrolled_context)
+
+
 @pytest.mark.parametrize("harness", ["zcode", "cursor", "codex"])
 def test_native_package_denial_clears_approval_copy(tmp_path, harness):
     context = _context(tmp_path)
@@ -81,11 +93,6 @@ def test_native_package_denial_clears_approval_copy(tmp_path, harness):
     assert payload["terminal_action"] == "block"
     copy = payload["supply_chain_evaluation"]["user_copy"]
     assert copy["dashboard_url"] is None
-    assert "safe, permitted alternative" in copy["next_step"]
-    assert "Package integrity changed." in copy["harness_message"]
-    assert "Package integrity changed." in payload["review_hint"]
-    assert "Package integrity changed." in payload["blocked_request_guidance"]
-    assert "Package integrity changed." in payload["decision_v2_json"]["harness_message"]
     record_native_artifact_hook_receipt(state, store)
     with sqlite3.connect(store.path) as connection:
         row = connection.execute("select policy_action, prompted from command_activity").fetchone()

@@ -5,11 +5,13 @@ use serde_json::json;
 
 #[test]
 fn cwd_compounds_validate_reads_and_one_bounded_write() {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-fixtures")
-        .join(format!("fixture-{}", std::process::id()));
-    // A restored target cache can hold a fixture from a run with the same PID.
-    let _ = std::fs::remove_dir_all(&root);
+        .join(format!("fixture-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(root.join("project")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let project = root.join("project");
@@ -112,6 +114,7 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
         None,
     );
     assert_ne!(result.minimum_action, "allow");
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -120,11 +123,13 @@ fn cwd_compound_extension_deny_overrides_safe_neighbor() {
     use guard_command::native_command_program::packaged_command_program;
     use guard_contracts::NativeCommandControlBindingV1;
 
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-control-fixtures")
-        .join(format!("fixture-{}", std::process::id()));
-    // A restored target cache can hold a fixture from a run with the same PID.
-    let _ = std::fs::remove_dir_all(&root);
+        .join(format!("fixture-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(root.join("project")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let project = root.join("project");
@@ -166,4 +171,5 @@ fn cwd_compound_extension_deny_overrides_safe_neighbor() {
             assert_eq!(result.decision, "deny", "{harness}: {command}");
         }
     }
+    std::fs::remove_dir_all(root).unwrap();
 }

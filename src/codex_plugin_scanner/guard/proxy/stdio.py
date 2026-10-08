@@ -9,6 +9,7 @@ import queue
 import select
 import subprocess
 import threading
+import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -52,6 +53,7 @@ from ..runtime.approval_reuse import (
     APPROVAL_REUSE_NO_SAVED_DECISION,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
 )
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
@@ -68,6 +70,7 @@ _GUARD_PROXY_TIMEOUT_ERROR_CODE = -32800
 # Bump when sensitive-read classification or action-composition semantics change.
 _STDIO_SENSITIVE_READ_EVALUATOR_POLICY_VERSION = "stdio-sensitive-read-evaluation-v1"
 _APPROVAL_REUSE_CONFIG_REFRESH_FAILED = "approval_reuse_current_config_refresh_failed"
+_APPROVAL_REUSE_DEADLINE_SECONDS = 2.0
 
 
 def _sensitive_read_current_action(
@@ -735,23 +738,38 @@ class StdioGuardProxy:
                         else diagnosed_reason
                     )
                 )
-                reuse = evaluate_approval_reuse(
+                reuse_deadline_monotonic = time.monotonic() + _APPROVAL_REUSE_DEADLINE_SECONDS
+                reuse_native = evaluate_approval_reuse(
                     current_action,
                     saved_action,
                     saved_decision_present=(
                         saved_decision is not None or ignored_integrity is not None or diagnosed_reason is not None
                     ),
                     validation_reason=validation_reason,
+                    deadline_monotonic=reuse_deadline_monotonic,
+                )
+                reuse = (
+                    reuse_native
+                    if reuse_native is not None
+                    # Resident unreachable: preserve the recomputed action
+                    # unchanged; no saved approval may be claimed.
+                    else approval_reuse_authority_unavailable(current_action)
                 )
                 claimed_allow_hash: str | None = None
                 config_refresh_failed = False
                 if reuse.should_claim and saved_decision is not None and self.guard_store is not None:
                     if not self.guard_store.claim_approval_reuse_decision(saved_decision):
-                        reuse = evaluate_approval_reuse(
+                        claim_failed_native = evaluate_approval_reuse(
                             current_action,
                             saved_action,
                             saved_decision_present=True,
                             validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+                            deadline_monotonic=reuse_deadline_monotonic,
+                        )
+                        reuse = (
+                            claim_failed_native
+                            if claim_failed_native is not None
+                            else approval_reuse_authority_unavailable(current_action)
                         )
                     else:
                         claimed_allow_hash = runtime_artifact_hash
@@ -768,10 +786,16 @@ class StdioGuardProxy:
                         fresh_config = None
                     if not isinstance(fresh_config, GuardConfig):
                         config_refresh_failed = True
-                        reuse = evaluate_approval_reuse(
+                        refresh_reuse = evaluate_approval_reuse(
                             "require-reapproval",
                             "allow",
                             saved_decision_present=True,
+                            deadline_monotonic=reuse_deadline_monotonic,
+                        )
+                        reuse = (
+                            refresh_reuse
+                            if refresh_reuse is not None
+                            else approval_reuse_authority_unavailable("require-reapproval")
                         )
                     else:
                         self.guard_config = fresh_config
@@ -825,11 +849,17 @@ class StdioGuardProxy:
                                     fresh_artifact_hash,
                                 ),
                             )
-                        reuse = evaluate_approval_reuse(
+                        postclaim_reuse = evaluate_approval_reuse(
                             fresh_current_action,
                             postclaim_saved_action,
                             saved_decision_present=True,
                             validation_reason=postclaim_validation_reason,
+                            deadline_monotonic=reuse_deadline_monotonic,
+                        )
+                        reuse = (
+                            postclaim_reuse
+                            if postclaim_reuse is not None
+                            else approval_reuse_authority_unavailable(fresh_current_action)
                         )
                         runtime_artifact = fresh_artifact
                         runtime_artifact_hash = fresh_artifact_hash

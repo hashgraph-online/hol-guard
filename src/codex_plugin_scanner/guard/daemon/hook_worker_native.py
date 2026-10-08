@@ -651,6 +651,7 @@ class HookWorkerNativeMixin:
                     workspace=workspace,
                     guard_home=guard_home,
                     home_dir=home_dir,
+                    deadline=deadline,
                     claim_saved_approval=claim_saved_approval,
                     claimed_saved_allow_hash=claimed_saved_allow_hash,
                     claimed_approval_request_id=claimed_approval_request_id,

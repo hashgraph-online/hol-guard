@@ -186,6 +186,7 @@ def test_deeply_nested_npm_aliases_fail_without_recursion() -> None:
     assert parsed.reason == "npm_source_alias_depth_exceeded"
 
 
+@pytest.mark.usefixtures("package_intent_native")
 @pytest.mark.parametrize(
     "source",
     [
@@ -194,12 +195,7 @@ def test_deeply_nested_npm_aliases_fail_without_recursion() -> None:
         f"git@github.com:hashgraph-online/hol-guard.git#{COMMIT}",
     ],
 )
-def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit(
-    source: str, monkeypatch, _native_context_home
-) -> None:
-    from codex_plugin_scanner.guard import config
-
-    monkeypatch.setattr(config, "resolve_guard_home", lambda: _native_context_home)
+def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit(source: str) -> None:
     first = _artifact_for_source(f"github:Hashgraph-Online/hol-guard.git#{COMMIT}")
     equivalent = _artifact_for_source(source)
     different_commit = _artifact_for_source(

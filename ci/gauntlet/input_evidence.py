@@ -13,6 +13,10 @@ def fixture_path_aliases(replacements: dict[str, str]) -> dict[str, str]:
     """Redact macOS display aliases only when they resolve to the same fixture path."""
     result = dict(replacements)
     for original, placeholder in replacements.items():
+        if re.fullmatch(r"[A-Za-z]:\\.+", original):
+            # Git for Windows prints the same drive path with forward slashes.
+            result[original.replace("\\", "/")] = placeholder
+            continue
         path = Path(original)
         if path.parts[:2] != ("/", "private") or len(path.parts) < 3 or path.parts[2] not in {"tmp", "var"}:
             continue

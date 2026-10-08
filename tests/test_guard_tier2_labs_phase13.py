@@ -18,6 +18,8 @@ from .guard_tier2_phase13_support import (
     package_fixture,
 )
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 FIXTURES = Path(__file__).parent / "fixtures" / "tier2"
 
 
