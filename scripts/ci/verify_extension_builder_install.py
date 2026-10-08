@@ -217,6 +217,19 @@ def verify(python: Path, wheel: Path, source: Path) -> dict[str, object]:
         environment_root = python.parent.parent.resolve()
         if not package.is_relative_to(environment_root) or package.is_relative_to(source):
             raise AssertionError("Authoring was imported from source instead of the isolated installed wheel")
+        listing_schema = _run(
+            [
+                str(python),
+                "-I",
+                "-c",
+                "import json; from codex_plugin_scanner.guard.extension_builder.listing import listing_schema; "
+                "print(json.dumps({'schemaVersion': listing_schema()['properties']['schemaVersion']['const']}))",
+            ],
+            root,
+            environment,
+        )
+        if listing_schema != {"schemaVersion": "guard.extension-listing.v2"}:
+            raise AssertionError("Installed wheel did not include the current extension listing schema")
         results = [_example(binary, source, root, environment, kind) for kind in ("cli", "mcp")]
         maximum = _maximum_inventory(binary, root, environment)
         if list((root / "home").glob(".hol-guard*")):

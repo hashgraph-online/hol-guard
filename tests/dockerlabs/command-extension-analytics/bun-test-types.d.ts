@@ -23,6 +23,7 @@ declare namespace Bun {
     },
   ): {
     exited: Promise<number>;
+    kill(signal?: number | string): void;
     stderr: ReadableStream<Uint8Array>;
     stdout: ReadableStream<Uint8Array>;
   };

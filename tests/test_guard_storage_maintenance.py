@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.store_receipt_rollups import (
     backfill_receipt_rollups,
     receipt_rollups_need_backfill,
 )
+from tests.test_native_decision_receipt import _receipt as native_test_receipt
 
 
 def _insert_receipt(
@@ -260,6 +261,21 @@ def test_storage_maintenance_prunes_native_decision_receipts(tmp_path: Path) -> 
                     recent,
                 ),
             )
+    for request_id, timestamp in (("prompt-old", old), ("prompt-recent", recent)):
+        prompt = native_test_receipt(
+            request_id=request_id,
+            event_name="UserPromptSubmit",
+            decision="deny",
+            model_output_action="not_applicable",
+            policy_action="block",
+            reason_code="native_guard_bypass_prompt",
+        )
+        assert store.record_native_decision_receipt(prompt)
+        with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
+            connection.execute(
+                "update native_prompt_decision_receipts set recorded_at = ? where decision_id = ?",
+                (timestamp, prompt["decision_id"]),
+            )
 
     result = store.maintain_storage(
         now=now,
@@ -268,10 +284,12 @@ def test_storage_maintenance_prunes_native_decision_receipts(tmp_path: Path) -> 
         batch_size=10,
     )
 
-    assert result.native_decision_receipts_deleted == 4
+    assert result.native_decision_receipts_deleted == 5
     with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
         remaining = connection.execute("select count(*) from native_hook_decision_receipts").fetchone()[0]
+        prompt_remaining = connection.execute("select count(*) from native_prompt_decision_receipts").fetchone()[0]
     assert remaining == 2
+    assert prompt_remaining == 1
 
 
 def test_fresh_store_uses_incremental_auto_vacuum(tmp_path: Path) -> None:

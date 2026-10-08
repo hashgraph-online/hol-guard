@@ -10,19 +10,28 @@ import subprocess
 import sys
 from hashlib import sha256
 from pathlib import Path
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from ...ecosystems.opencode import _strip_jsonc
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
+from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from .adapter_safe_output import write_text_at_authorized_path
-from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
+from .base import (
+    HarnessAdapter,
+    HarnessContext,
+    PreparedHarnessInstall,
+    _ensure_path_within_root,
+    _json_payload,
+    _run_command_probe,
+)
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .copilot_state_paths import (
     commit_copilot_target_and_state,
     copilot_lifecycle_install,
     copilot_lifecycle_uninstall,
+    copilot_state_authorizes_backup_reuse,
+    copilot_state_payload,
     validated_copilot_state_entries,
 )
 from .hook_payloads import inline_hooks_payload
@@ -35,6 +44,9 @@ from .mcp_servers import (
 )
 from .state_files import load_backup_payload
 from .workspace_overrides import should_skip_workspace_override
+
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionFile
 
 _MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest", "permissionRequestV2")
 _DETECTABLE_HOOK_EVENTS = (
@@ -91,7 +103,12 @@ def _copilot_json_payload(path: Path) -> dict[str, object]:
     return _parse_copilot_json_text(raw_text) or {}
 
 
-def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> tuple[str, ...]:
+def _hook_command_parts(
+    context: HarnessContext,
+    *,
+    include_workspace: bool,
+    prepared_files: list[TransitionFile] | None = None,
+) -> tuple[str, ...]:
     guard_args = [
         "guard",
         "hook",
@@ -111,16 +128,31 @@ def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> 
         cli_args=guard_args,
         harness="copilot",
         timeout_seconds=_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS,
+        prepared_files=prepared_files,
     )
 
 
-def _hook_shell_commands(context: HarnessContext, *, include_workspace: bool) -> tuple[str, str]:
-    command_parts = _hook_command_parts(context, include_workspace=include_workspace)
+def _hook_shell_commands(
+    context: HarnessContext,
+    *,
+    include_workspace: bool,
+    prepared_files: list[TransitionFile] | None = None,
+) -> tuple[str, str]:
+    command_parts = _hook_command_parts(context, include_workspace=include_workspace, prepared_files=prepared_files)
     return shlex.join(command_parts), subprocess.list2cmdline(list(command_parts))
 
 
-def _hook_entry(context: HarnessContext, *, include_workspace: bool) -> dict[str, object]:
-    bash_command, powershell_command = _hook_shell_commands(context, include_workspace=include_workspace)
+def _hook_entry(
+    context: HarnessContext,
+    *,
+    include_workspace: bool,
+    prepared_files: list[TransitionFile] | None = None,
+) -> dict[str, object]:
+    bash_command, powershell_command = _hook_shell_commands(
+        context,
+        include_workspace=include_workspace,
+        prepared_files=prepared_files,
+    )
     entry: dict[str, object] = {
         "type": "command",
         "bash": bash_command,
@@ -134,7 +166,7 @@ def _hook_entry(context: HarnessContext, *, include_workspace: bool) -> dict[str
     return entry
 
 
-def _is_managed_hook_command(command: str) -> bool:
+def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) -> bool:
     normalized_command = command.lower()
     if all(pattern.search(normalized_command) is not None for pattern in _LEGACY_MANAGED_HOOK_PATTERNS):
         return True
@@ -156,6 +188,23 @@ def _is_managed_hook_command(command: str) -> bool:
             return False
         normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
         return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
+    if len(tokens) == 3 and tokens[1] == "-I":
+        if guard_home is None:
+            return False
+        from .bounded_cli_hook_bridge import bounded_hook_script_path
+        from .cursor_hook_config import isolated_cursor_hook_python
+
+        expected_script = bounded_hook_script_path(guard_home, "copilot")
+        interpreter = isolated_cursor_hook_python()
+        if expected_script is None or interpreter is None:
+            return False
+        try:
+            return (
+                Path(tokens[0]).resolve() == Path(interpreter).resolve()
+                and Path(tokens[2]).resolve() == expected_script.resolve()
+            )
+        except OSError:
+            return False
     if len(tokens) < 3:
         return False
     executable = Path(tokens[0]).name.lower()
@@ -218,7 +267,13 @@ def _argv_targets_copilot(argv: tuple[str, ...]) -> bool:
     return False
 
 
-def _is_managed_hook_entry(entry: object, bash_command: str, powershell_command: str) -> bool:
+def _is_managed_hook_entry(
+    entry: object,
+    bash_command: str,
+    powershell_command: str,
+    *,
+    guard_home: Path | None = None,
+) -> bool:
     if not isinstance(entry, dict):
         return False
     if entry.get("bash") == bash_command and entry.get("powershell") == powershell_command:
@@ -228,25 +283,42 @@ def _is_managed_hook_entry(entry: object, bash_command: str, powershell_command:
             continue
         if command in {bash_command, powershell_command}:
             return True
-        if _is_managed_hook_command(command):
+        if _is_managed_hook_command(command, guard_home=guard_home):
             return True
     return False
 
 
-def _merge_hook_entries(entries: object, hook_entry: dict[str, object]) -> list[object]:
+def _merge_hook_entries(
+    entries: object,
+    hook_entry: dict[str, object],
+    *,
+    guard_home: Path | None = None,
+) -> list[object]:
     normalized = list(entries) if isinstance(entries, list) else []
     bash_command = str(hook_entry["bash"])
     powershell_command = str(hook_entry["powershell"])
     preserved_entries = [
-        entry for entry in normalized if not _is_managed_hook_entry(entry, bash_command, powershell_command)
+        entry
+        for entry in normalized
+        if not _is_managed_hook_entry(entry, bash_command, powershell_command, guard_home=guard_home)
     ]
     return [*preserved_entries, hook_entry]
 
 
-def _remove_hook_entries(entries: object, bash_command: str, powershell_command: str) -> list[object]:
+def _remove_hook_entries(
+    entries: object,
+    bash_command: str,
+    powershell_command: str,
+    *,
+    guard_home: Path | None = None,
+) -> list[object]:
     if not isinstance(entries, list):
         return []
-    return [entry for entry in entries if not _is_managed_hook_entry(entry, bash_command, powershell_command)]
+    return [
+        entry
+        for entry in entries
+        if not _is_managed_hook_entry(entry, bash_command, powershell_command, guard_home=guard_home)
+    ]
 
 
 def _hooks_payload(payload: dict[str, object]) -> dict[str, object]:
@@ -420,7 +492,18 @@ class CopilotHarnessAdapter(HarnessAdapter):
             raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}")
         return payload
 
-    def detect(self, context: HarnessContext) -> HarnessDetection:
+    def detect(
+        self,
+        context: HarnessContext,
+        *,
+        config_contents: dict[Path, bytes | None] | None = None,
+    ) -> HarnessDetection:
+        def captured_payload(path: Path) -> dict[str, object]:
+            if config_contents is None:
+                return _copilot_json_payload(path)
+            data = config_contents.get(path)
+            return _parse_copilot_json_text(data.decode("utf-8")) or {} if data is not None else {}
+
         config_candidates = [
             context.home_dir / ".copilot" / "config.json",
             context.home_dir / ".copilot" / "mcp-config.json",
@@ -429,7 +512,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
         for config_path in config_candidates:
-            payload = _copilot_json_payload(config_path)
+            payload = captured_payload(config_path)
             if not payload:
                 continue
             found_paths.append(str(config_path))
@@ -441,9 +524,14 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 artifacts.extend(self._mcp_artifacts(config_path, payload, scope))
         if context.workspace_dir is not None:
             hooks_dir = context.workspace_dir / ".github" / "hooks"
-            if hooks_dir.is_dir():
-                for hook_path in sorted(path for path in hooks_dir.glob("*.json") if path.is_file()):
-                    payload = _copilot_json_payload(hook_path)
+            if hooks_dir.is_dir() or config_contents is not None:
+                hook_paths = (
+                    sorted(path for path in config_contents if path.parent == hooks_dir and path.suffix == ".json")
+                    if config_contents is not None
+                    else sorted(path for path in hooks_dir.glob("*.json") if path.is_file())
+                )
+                for hook_path in hook_paths:
+                    payload = captured_payload(hook_path)
                     if not payload:
                         continue
                     hook_artifacts = self._hook_artifacts(hook_path, payload, "project")
@@ -462,7 +550,83 @@ class CopilotHarnessAdapter(HarnessAdapter):
 
     @copilot_lifecycle_install
     def install(self, context: HarnessContext) -> dict[str, object]:
-        detection = self.detect(context)
+        return self._render_install(context)
+
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        """Prepare a rebind using existing enrolled lifecycle authority; never create a key."""
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
+
+        # A runtime rebind must retain the installation's authority. Enrollment
+        # remains the normal installer responsibility, outside this transition.
+        try:
+            copilot_state_payload(
+                context,
+                target_path=self._target_mcp_paths(context)[0],
+                backup_path=self._backup_path(self._target_mcp_paths(context)[0], context),
+                state_path=self._state_path(self._target_mcp_paths(context)[0], context),
+                scope="global",
+                create_key=False,
+            )
+        except FileNotFoundError as error:
+            raise TransitionError("adapter_preparation_authority_missing") from error
+        except (OSError, ValueError) as error:
+            raise TransitionError("adapter_preparation_authority_invalid") from error
+        files = [TransitionFile.identity_dependency(context.guard_home / "managed/adapter-state.key")]
+        paths = {
+            self._config_path(context),
+            context.home_dir / ".copilot/mcp-config.json",
+            *self._workspace_mcp_paths(context),
+        }
+        hook_path = self._hook_path(context)
+        if hook_path is not None:
+            paths.add(hook_path)
+            paths.update(path for path in hook_path.parent.glob("*.json") if path.is_file())
+        contents = {path: _snapshot(path) for path in paths}
+        manifest = self._render_install(context, prepared_files=files, config_contents=contents)
+        planned = {change.path for change in files}
+        for path, data in contents.items():
+            if path.resolve(strict=False) not in planned:
+                mode = path.stat().st_mode & 0o777 if data is not None else 0o600
+                files.append(TransitionFile(path.resolve(strict=False), data, data, before_mode=mode, after_mode=mode))
+        unique: dict[Path, TransitionFile] = {}
+        for change in files:
+            if change.path in unique and change != unique[change.path]:
+                raise TransitionError("adapter_preparation_generation_conflict")
+            unique[change.path] = change
+        prepared = PreparedHarnessInstall(tuple(unique.values()), manifest)
+        RuntimeTransition._compare({"files": [change.payload() for change in prepared.files]}, "before")
+        return prepared
+
+    def _render_install(
+        self,
+        context: HarnessContext,
+        *,
+        prepared_files: list[TransitionFile] | None = None,
+        config_contents: dict[Path, bytes | None] | None = None,
+    ) -> dict[str, object]:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        def captured(path: Path) -> bytes | None:
+            return config_contents[path] if config_contents is not None and path in config_contents else _snapshot(path)
+
+        def parsed(path: Path) -> dict[str, object]:
+            if config_contents is None:
+                return _copilot_json_payload(path)
+            data = captured(path)
+            return _parse_copilot_json_text(data.decode("utf-8")) or {} if data is not None else {}
+
+        def prepare_file(path: Path, after: bytes | None, *, before: bytes | None) -> None:
+            assert prepared_files is not None
+            mode = path.stat().st_mode & 0o777 if before is not None else 0o600
+            change = TransitionFile(
+                path.resolve(strict=False), before, after, before_mode=mode, after_mode=mode, no_follow=True
+            )
+            change.payload()
+            prepared_files.append(change)
+
+        detection = self.detect(context, config_contents=config_contents)
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
         target_mcp_paths = self._target_mcp_paths(context)
@@ -471,14 +635,19 @@ class CopilotHarnessAdapter(HarnessAdapter):
         for target_mcp_path in target_mcp_paths:
             target_root = context.workspace_dir if context.workspace_dir is not None else context.home_dir
             _ensure_path_within_root(target_root, target_mcp_path, label="Copilot MCP")
-            original_text = target_mcp_path.read_text(encoding="utf-8") if target_mcp_path.is_file() else None
+            target_before = captured(target_mcp_path) if prepared_files is not None else None
+            original_text = (
+                (target_before.decode("utf-8") if target_before is not None else None)
+                if (prepared_files is not None)
+                else (target_mcp_path.read_text(encoding="utf-8") if target_mcp_path.is_file() else None)
+            )
             backup_path = self._backup_path(target_mcp_path, context)
             _ensure_path_within_root(context.guard_home, backup_path, label="Copilot backup")
             backup_paths.append(str(backup_path))
             state_path = self._state_path(target_mcp_path, context)
             _ensure_path_within_root(context.guard_home, state_path, label="Copilot state")
             state_paths.append(str(state_path))
-            mcp_payload = _copilot_json_payload(target_mcp_path)
+            mcp_payload = parsed(target_mcp_path)
             existing_servers = _mcp_servers_payload(target_mcp_path, mcp_payload)
             normalized_servers = dict(existing_servers) if isinstance(existing_servers, dict) else {}
             for name, server_config in tuple(normalized_servers.items()):
@@ -511,44 +680,105 @@ class CopilotHarnessAdapter(HarnessAdapter):
             mcp_payload[payload_key] = normalized_servers
             alternate_key = "servers" if payload_key == "mcpServers" else "mcpServers"
             mcp_payload.pop(alternate_key, None)
-            target_mcp_path.parent.mkdir(parents=True, exist_ok=True)
-            commit_copilot_target_and_state(
-                context,
-                target_path=target_mcp_path,
-                target_payload=json.dumps(mcp_payload, indent=2) + "\n",
-                original_text=original_text,
-                backup_path=backup_path,
-                state_path=state_path,
-                scope=self._scope_for(context, target_mcp_path),
-            )
-        shim_manifest = install_guard_shim(self.harness, context)
+            if prepared_files is None:
+                target_mcp_path.parent.mkdir(parents=True, exist_ok=True)
+                commit_copilot_target_and_state(
+                    context,
+                    target_path=target_mcp_path,
+                    target_payload=json.dumps(mcp_payload, indent=2) + "\n",
+                    original_text=original_text,
+                    backup_path=backup_path,
+                    state_path=state_path,
+                    scope=self._scope_for(context, target_mcp_path),
+                )
+            else:
+                backup_before, state_before = _snapshot(backup_path), _snapshot(state_path)
+                state_before_payload = json.loads(state_before) if state_before is not None else {}
+                reuse = copilot_state_authorizes_backup_reuse(
+                    context,
+                    target_path=target_mcp_path,
+                    backup_path=backup_path,
+                    state_path=state_path,
+                    state_payload=state_before_payload if isinstance(state_before_payload, dict) else {},
+                )
+                backup_after = (
+                    backup_before
+                    if reuse
+                    else (
+                        json.dumps({"existed": original_text is not None, "content": original_text}, indent=2) + "\n"
+                    ).encode("utf-8")
+                )
+                state_after = copilot_state_payload(
+                    context,
+                    target_path=target_mcp_path,
+                    backup_path=backup_path,
+                    state_path=state_path,
+                    scope=self._scope_for(context, target_mcp_path),
+                    create_key=False,
+                )
+                prepare_file(backup_path, backup_after, before=backup_before)
+                prepare_file(
+                    target_mcp_path, (json.dumps(mcp_payload, indent=2) + "\n").encode("utf-8"), before=target_before
+                )
+                prepare_file(
+                    state_path, (json.dumps(state_after, indent=2) + "\n").encode("utf-8"), before=state_before
+                )
+        if prepared_files is None:
+            shim_manifest = install_guard_shim(self.harness, context)
+        else:
+            shim = prepare_guard_shim(self.harness, context)
+            prepared_files.extend(shim.files)
+            shim_manifest = shim.manifest
         primary_target_mcp_path = target_mcp_paths[0]
         primary_backup_path = backup_paths[0]
         primary_state_path = state_paths[0]
         config_path = self._config_path(context)
         _ensure_path_within_root(context.home_dir, config_path, label="Copilot config")
-        config_payload = self._strict_json_object(config_path, label="Copilot config", recover_malformed=True)
+        config_payload = (
+            self._strict_json_object(config_path, label="Copilot config", recover_malformed=True)
+            if prepared_files is None
+            else parsed(config_path)
+        )
         hooks_payload = _inline_hooks_payload(config_payload)
-        hook_entry = _hook_entry(context, include_workspace=False)
+        hook_entry = _hook_entry(context, include_workspace=False, prepared_files=prepared_files)
         for hook_name in _MANAGED_HOOK_EVENTS:
-            hooks_payload[hook_name] = _merge_hook_entries(hooks_payload.get(hook_name), hook_entry)
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        write_text_at_authorized_path(config_path, json.dumps(config_payload, indent=2) + "\n")
+            hooks_payload[hook_name] = _merge_hook_entries(
+                hooks_payload.get(hook_name),
+                hook_entry,
+                guard_home=context.guard_home,
+            )
+        if prepared_files is None:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            write_text_at_authorized_path(config_path, json.dumps(config_payload, indent=2) + "\n")
+        else:
+            prepare_file(
+                config_path, (json.dumps(config_payload, indent=2) + "\n").encode("utf-8"), before=captured(config_path)
+            )
         managed_hook_path = self._hook_path(context)
         if managed_hook_path is not None:
             if context.workspace_dir is None:
                 raise ValueError("Copilot workspace hook requires a workspace root")
             _ensure_path_within_root(context.workspace_dir, managed_hook_path, label="Copilot hook")
-            managed_hook_payload = _managed_hook_payload(_json_payload(managed_hook_path))
+            managed_hook_payload = _managed_hook_payload(
+                _json_payload(managed_hook_path) if prepared_files is None else parsed(managed_hook_path),
+            )
             managed_workspace_hooks = managed_hook_payload["hooks"]
-            managed_workspace_entry = _hook_entry(context, include_workspace=True)
+            managed_workspace_entry = _hook_entry(context, include_workspace=True, prepared_files=prepared_files)
             for hook_name in _MANAGED_HOOK_EVENTS:
                 managed_workspace_hooks[hook_name] = _merge_hook_entries(
                     managed_workspace_hooks.get(hook_name),
                     managed_workspace_entry,
+                    guard_home=context.guard_home,
                 )
-            managed_hook_path.parent.mkdir(parents=True, exist_ok=True)
-            write_text_at_authorized_path(managed_hook_path, json.dumps(managed_hook_payload, indent=2) + "\n")
+            if prepared_files is None:
+                managed_hook_path.parent.mkdir(parents=True, exist_ok=True)
+                write_text_at_authorized_path(managed_hook_path, json.dumps(managed_hook_payload, indent=2) + "\n")
+            else:
+                prepare_file(
+                    managed_hook_path,
+                    (json.dumps(managed_hook_payload, indent=2) + "\n").encode("utf-8"),
+                    before=captured(managed_hook_path),
+                )
         return {
             "harness": self.harness,
             "active": True,
@@ -607,7 +837,12 @@ class CopilotHarnessAdapter(HarnessAdapter):
         bash_command, powershell_command = _hook_shell_commands(context, include_workspace=False)
         if len(remaining_state_entries) == 0:
             for hook_name in _MANAGED_HOOK_EVENTS:
-                updated_entries = _remove_hook_entries(hooks_payload.get(hook_name), bash_command, powershell_command)
+                updated_entries = _remove_hook_entries(
+                    hooks_payload.get(hook_name),
+                    bash_command,
+                    powershell_command,
+                    guard_home=context.guard_home,
+                )
                 if len(updated_entries) > 0:
                     hooks_payload[hook_name] = updated_entries
                     continue
@@ -629,6 +864,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                     managed_workspace_hooks.get(hook_name),
                     managed_bash_command,
                     managed_powershell_command,
+                    guard_home=context.guard_home,
                 )
                 if len(updated_entries) > 0:
                     managed_workspace_hooks[hook_name] = updated_entries

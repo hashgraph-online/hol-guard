@@ -77,6 +77,15 @@ def test_raw_http_clients_are_confined_to_enterprise_transport_or_loopback_ipc()
             if call_name not in _RAW_HTTP_CALLS:
                 continue
             observed_boundaries.add(relative)
+            if relative == "evaluation_witness.py":
+                loopback_only = (
+                    call_name == "http.client.HTTPConnection"
+                    and bool(node.args)
+                    and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == "127.0.0.1"
+                )
+                if loopback_only:
+                    continue
             if relative not in _RAW_HTTP_BOUNDARIES:
                 violations.append(f"{relative}:{node.lineno}:{call_name}")
 

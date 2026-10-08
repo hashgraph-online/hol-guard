@@ -702,6 +702,7 @@ def test_runtime_snapshot_marks_supply_chain_policy_as_cloud_managed(tmp_path: P
 def test_guard_protect_returns_controlled_execution_error_for_install_subprocess_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    native_context_digest: Path,
     raised_error: subprocess.TimeoutExpired | OSError,
     expected_fragment: str,
 ) -> None:

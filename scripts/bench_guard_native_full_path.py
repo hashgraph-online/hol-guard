@@ -19,10 +19,10 @@ from pathlib import Path
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import (
     review_post_tool_native,
 )
-from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -242,7 +242,7 @@ def _collect_measurements(
                 guard_home=guard_home,
                 iterations=2,
             )
-            close_resident_native_runtimes()
+            close_native_residents()
             first_native_started = time.perf_counter()
             with native_policy_snapshot(guard_home) as snapshot:
                 first_native = review_post_tool_native(
@@ -267,7 +267,7 @@ def _collect_measurements(
                 )
         finally:
             python_runner.close()
-            close_resident_native_runtimes()
+            close_native_residents()
         python_cold = _bench_python_cold(
             workspace=workspace,
             guard_home=guard_home,

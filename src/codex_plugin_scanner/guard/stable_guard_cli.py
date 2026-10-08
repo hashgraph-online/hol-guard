@@ -9,10 +9,28 @@ from __future__ import annotations
 
 import os
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 MACOS_BUNDLED_HOL_GUARD = Path("/Applications/HOL Guard.app/Contents/MacOS/hol-guard")
 CURRENT_HOL_GUARD_SHIM = "current-hol-guard"
+_EXACT_PROCESS_BINDING: ContextVar[str | None] = ContextVar("guard_exact_process_binding", default=None)
+
+
+@contextmanager
+def exact_process_guard_cli_binding():
+    """Prepare immutable current-process argv; this scope grants no authority.
+
+    A transition must bind candidate hooks before publishing its pointer. The
+    stable launcher would still resolve the predecessor at that boundary.
+    """
+    executable = str(Path(sys.executable).resolve(strict=True))
+    token = _EXACT_PROCESS_BINDING.set(executable)
+    try:
+        yield
+    finally:
+        _EXACT_PROCESS_BINDING.reset(token)
 
 
 def desktop_core_shim_for_executable(executable: Path) -> Path | None:
@@ -106,6 +124,9 @@ def resolve_frozen_guard_cli() -> str:
     versioned runtime. Other frozen layouts keep ``sys.executable``.
     """
 
+    exact = _EXACT_PROCESS_BINDING.get()
+    if exact is not None:
+        return exact
     executable = Path(sys.executable)
     shim = desktop_core_shim_for_executable(executable)
     if shim is not None and frozen_cli_path_is_runnable(shim):

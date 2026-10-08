@@ -3,23 +3,108 @@ from __future__ import annotations
 import os
 import stat
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import github_pr_body_file as body_file_module
 from codex_plugin_scanner.guard.runtime.github_pr_body_file import (
     github_pr_body_file_is_safe,
 )
 
 
-def test_github_pr_body_file_accepts_bounded_owner_controlled_markdown(tmp_path: Path) -> None:
+@pytest.mark.parametrize("newline", (b"\n", b"\r\n"), ids=("lf", "crlf"))
+def test_github_pr_body_file_accepts_bounded_owner_controlled_markdown(tmp_path: Path, newline: bytes) -> None:
     body_file = tmp_path / "focused-pr-body.md"
-    _ = body_file.write_text("## Summary\n- Focused change.\n", encoding="utf-8")
+    _ = body_file.write_bytes(newline.join((b"## Summary", b"- Focused change.", b"")))
 
     assert github_pr_body_file_is_safe(
         str(body_file),
         cwd=tmp_path,
         home_dir=tmp_path.parent,
     )
+
+
+@pytest.mark.parametrize(
+    "changed_at", (None, "open", "open-unavailable", "different-file", "read", "after", "short-read")
+)
+def test_windows_body_file_reader_binds_locked_path_and_descriptor_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed_at: str | None
+) -> None:
+    body_file = tmp_path / "pr-body.md"
+    _ = body_file.write_bytes(b"## Summary\r\n- Focused change.\r\n")
+    metadata = os.lstat(body_file)
+    fields = {
+        name: getattr(metadata, name)
+        for name in (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_nlink",
+            "st_size",
+            "st_mtime",
+            "st_mtime_ns",
+            "st_ctime",
+            "st_ctime_ns",
+        )
+    }
+    path_stats = 0
+    descriptor_stats = 0
+    locked = False
+
+    def path_stat(candidate: Path) -> SimpleNamespace:
+        nonlocal path_stats
+        assert candidate == body_file
+        path_stats += 1
+        assert locked is (path_stats > 1)
+        if changed_at == "open-unavailable" and path_stats == 2:
+            raise FileNotFoundError("parent directory moved during open")
+        result = {**fields, "st_file_attributes": 0x20}
+        if (changed_at == "open" and path_stats == 2) or (changed_at == "after" and path_stats == 3):
+            result["st_ino"] += 1
+        return SimpleNamespace(**result)
+
+    def descriptor_stat(_descriptor: int) -> SimpleNamespace:
+        nonlocal descriptor_stats
+        descriptor_stats += 1
+        assert locked
+        # CPython can expose different ctime values across these stat APIs,
+        # while the volume/file identity must still bind the actual handle.
+        result = {**fields, "st_ctime_ns": fields["st_ctime_ns"] + 1, "st_file_attributes": 0}
+        if changed_at == "different-file":
+            result["st_ino"] += 1
+        if changed_at == "read" and descriptor_stats == 2:
+            result["st_mtime_ns"] += 1
+        return SimpleNamespace(**result)
+
+    def open_locked(candidate: Path) -> int:
+        nonlocal locked
+        assert candidate == body_file
+        descriptor = os.open(candidate, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        locked = True
+        return descriptor
+
+    def read_locked(descriptor: int, size: int) -> bytes:
+        assert locked
+        payload = os.read(descriptor, size)
+        return payload[:-1] if changed_at == "short-read" else payload
+
+    def close_locked(descriptor: int) -> None:
+        nonlocal locked
+        os.close(descriptor)
+        locked = False
+
+    monkeypatch.setattr(body_file_module, "open_windows_locked_regular_descriptor", open_locked)
+    monkeypatch.setattr(
+        body_file_module,
+        "os",
+        SimpleNamespace(name="nt", lstat=path_stat, fstat=descriptor_stat, read=read_locked, close=close_locked),
+    )
+
+    safe = github_pr_body_file_is_safe(str(body_file), cwd=tmp_path, home_dir=tmp_path.parent)
+
+    assert not locked
+    assert safe is (changed_at is None)
 
 
 @pytest.mark.parametrize(

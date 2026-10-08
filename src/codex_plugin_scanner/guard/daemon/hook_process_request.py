@@ -25,7 +25,6 @@ def build_hook_process_review_request(
     hook_env: Mapping[str, str],
     claim_saved_approval: bool,
     claimed_saved_allow_hash: str | None,
-    claimed_trusted_request_override: bool,
     claimed_approval_request_id: str | None,
     deadline: float | None = None,
 ) -> dict[str, object]:
@@ -38,7 +37,6 @@ def build_hook_process_review_request(
         "hook_env": {key: value for key, value in hook_env.items() if key in HOOK_ENV_ALLOWLIST},
         "claim_saved_approval": claim_saved_approval,
         "claimed_saved_allow_hash": claimed_saved_allow_hash,
-        "claimed_trusted_request_override": claimed_trusted_request_override,
         "claimed_approval_request_id": claimed_approval_request_id,
         "deadline": deadline,
     }
@@ -63,7 +61,6 @@ class ResidentHookRequest:
     workspace: Path | None
     claim_saved_approval: bool
     claimed_saved_allow_hash: str | None
-    claimed_trusted_request_override: bool
     claimed_approval_request_id: str | None
     deadline: float | None = None
 
@@ -76,7 +73,6 @@ def coerce_resident_hook_request(request: dict[str, object]) -> ResidentHookRequ
     workspace_value = request.get("workspace")
     claim_saved_approval = request.get("claim_saved_approval", True)
     claimed_saved_allow_hash = request.get("claimed_saved_allow_hash")
-    claimed_trusted_request_override = request.get("claimed_trusted_request_override", False)
     claimed_approval_request_id = request.get("claimed_approval_request_id")
     raw_deadline = request.get("deadline")
     typed_payload = as_string_object_dict(payload)
@@ -86,7 +82,7 @@ def coerce_resident_hook_request(request: dict[str, object]) -> ResidentHookRequ
         return None
     if workspace_value is not None and not isinstance(workspace_value, str):
         return None
-    if not isinstance(claim_saved_approval, bool) or not isinstance(claimed_trusted_request_override, bool):
+    if not isinstance(claim_saved_approval, bool):
         return None
     if claimed_saved_allow_hash is not None and not isinstance(claimed_saved_allow_hash, str):
         return None
@@ -100,7 +96,6 @@ def coerce_resident_hook_request(request: dict[str, object]) -> ResidentHookRequ
         workspace=Path(workspace_value) if isinstance(workspace_value, str) else None,
         claim_saved_approval=claim_saved_approval,
         claimed_saved_allow_hash=claimed_saved_allow_hash,
-        claimed_trusted_request_override=claimed_trusted_request_override,
         claimed_approval_request_id=claimed_approval_request_id,
         deadline=(
             float(raw_deadline)

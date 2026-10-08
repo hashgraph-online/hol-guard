@@ -2,163 +2,65 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from .command_contained_routine_candidates import contained_routine_candidate_factor
 from .command_critical_floors import command_critical_floor_factors
 from .command_decision_adapter import (
     command_uncertainties,
     decision_factors,
-    effect_decision_to_dict,
     extension_evidence_batch,
     extension_uncertainties,
 )
-from .command_extension_observations import CommandExtensionObservation
+from .command_evaluation_types import _FLOOR_RANK, _MODE_FLOOR, _SEVERITY_RANK, _UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS
+from .command_evaluation_types import (
+    CommandDecisionFloor as CommandDecisionFloor,
+)
+from .command_evaluation_types import (
+    CommandRuleMatch as CommandRuleMatch,
+)
+from .command_evaluation_types import (
+    CompositeCommandEvaluation as CompositeCommandEvaluation,
+)
+from .command_evaluation_types import (
+    OwnedCommandRuleMatch as OwnedCommandRuleMatch,
+)
 from .command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
     risk_classes_for_command_action,
 )
-from .command_model import CanonicalCommand, parse_shell_command
-from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
+from .command_model import CanonicalCommand
+from .command_native_factors import (
+    _direct_github_permission_ids,
+    _explicit_permission_allow_factors,
+    _native_classification_factors,
+)
 from .command_shell_read_factors import shell_read_floor_factors
 from .command_verified_read_candidates import verified_read_candidate_factor
 from .command_workspace_write_candidates import workspace_write_candidate_factors
-from .effect_contract import DecisionBasis, ProofRequirement, ProofRoute, UncertaintyKind
 from .effect_decision import (
-    DecisionFactor,
-    DecisionFactorSource,
-    EffectDecision,
     EffectDecisionRequest,
-    PositiveProof,
     evaluate_effect_decision,
 )
 from .extension_control_contract import (
-    ControlResolution,
     ControlSurface,
     ExtensionControlLayer,
     ResolverFailureCode,
 )
 from .extension_control_resolver import resolve_extension_controls
 from .extension_control_runtime import (
-    ExtensionControlDecisionEvidence,
     ExtensionControlRuntimeSnapshot,
     current_extension_control_snapshot,
 )
-from .extension_trust import extension_is_active, filter_inert_external_observations
-from .github_capability_contract import github_capability_contract
-from .github_command_capabilities import classify_github_cli
+from .extension_trust import filter_inert_external_observations
 from .github_workflow_authorization import (
     GitHubWorkflowAuthorization,
     github_workflow_authorization_evidence,
 )
-
-CommandDecisionFloor = Literal["allow", "monitor", "review", "block"]
-_FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
-_UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS = frozenset(
-    {
-        "destructive_shell",
-        "credential_exfiltration",
-        "data_flow_exfiltration",
-        "encoded_execution",
-        "encoded_exfiltration",
-        "guard_bypass",
-        "policy_bypass",
-    }
+from .native_command_extension_evidence import (
+    observations_from_native_evidence,
 )
-_SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-_MODE_FLOOR: dict[CommandRuleMode, CommandDecisionFloor] = {
-    "disabled": "allow",
-    "monitor": "monitor",
-    "review": "review",
-    "enforce": "block",
-    "required": "review",
-}
-
-
-@dataclass(frozen=True, slots=True)
-class OwnedCommandRuleMatch:
-    """One rule match with its owning extension."""
-
-    extension: CommandSafetyExtension
-    match: CommandRuleMatch
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "extension_id": self.extension.extension_id,
-            **self.match.to_dict(),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class CompositeCommandEvaluation:
-    """All command matches plus the compatibility-preserving controlling action."""
-
-    command: CanonicalCommand
-    matches: tuple[OwnedCommandRuleMatch, ...]
-    controlling_action_class: str | None
-    controlling_reason: str | None
-    controlling_rule_id: str | None
-    minimum_action: CommandDecisionFloor
-    extension_observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...]
-    decision_plane: EffectDecision
-    baseline_factors: tuple[DecisionFactor, ...]
-    baseline_uncertainties: tuple[UncertaintyKind, ...]
-    control_resolution: ControlResolution
-    private_control_evidence: ExtensionControlDecisionEvidence | None
-
-    @property
-    def risk_classes(self) -> tuple[str, ...]:
-        risks = {risk for owned in self.matches for risk in owned.match.rule.risk_classes}
-        if self.controlling_action_class is not None:
-            risks.update(risk_classes_for_command_action(self.controlling_action_class))
-        if any(factor.reason_code == "critical.local-secret-read" for factor in self.baseline_factors):
-            risks.add("local_secret_read")
-        if any(factor.reason_code == "critical.local-script-execution" for factor in self.baseline_factors):
-            risks.add("execution")
-        return tuple(sorted(risks))
-
-    @property
-    def matched(self) -> bool:
-        return self.controlling_action_class is not None or bool(self.matches)
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "security_identity": self.command.security_identity,
-            "controlling_action_class": self.controlling_action_class,
-            "controlling_reason": self.controlling_reason,
-            "controlling_rule_id": self.controlling_rule_id,
-            "minimum_action": self.minimum_action,
-            "risk_classes": list(self.risk_classes),
-            "matches": [owned.to_dict() for owned in self.matches],
-            "extension_observations": [item.to_dict() for item in self.extension_observations],
-            "decision_plane": effect_decision_to_dict(self.decision_plane),
-            "parse_confidence": self.command.confidence,
-            "uncertainty_reason": self.command.uncertainty_reason,
-        }
-
-
-def _accepted_compatibility_rule(
-    registry: CommandSafetyExtensionRegistry,
-    compatibility_action_class: str | None,
-    control_layers: tuple[ExtensionControlLayer, ...],
-) -> tuple[tuple[CommandSafetyExtension, CommandSafetyRule] | None, str | None]:
-    """Keep unknown legacy classes, but drop inert external owners."""
-
-    if compatibility_action_class is None:
-        return None, None
-    extension = registry.for_action_class(compatibility_action_class)
-    rule = registry.rule_for_action_class(compatibility_action_class)
-    if extension is None or rule is None:
-        return None, compatibility_action_class
-    if not extension_is_active(extension.extension_id, control_layers, required=extension.required):
-        return None, None
-    return (extension, rule), compatibility_action_class
 
 
 def evaluate_command(
@@ -171,6 +73,7 @@ def evaluate_command(
     home_dir: Path | None = None,
     workflow_authorization: GitHubWorkflowAuthorization | None = None,
     registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    native_extension_evidence: object | None = None,
     extension_control_layers: tuple[ExtensionControlLayer, ...] | None = None,
     extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
 ) -> CompositeCommandEvaluation:
@@ -183,18 +86,43 @@ def evaluate_command(
         runtime_snapshot = current_extension_control_snapshot()
     control_layers = runtime_snapshot.layers if runtime_snapshot is not None else (extension_control_layers or ())
 
-    command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-    observations = filter_inert_external_observations(registry.observations(command), control_layers)
+    if native_extension_evidence is None:
+        raise RuntimeError("native command extension evidence is required; the Python matcher oracle is retired")
+    if canonical_command is None:
+        raise RuntimeError("native canonical command model is required; Python semantic parsing is retired")
+    command = canonical_command
+    if runtime_snapshot is None:
+        raise RuntimeError("authenticated extension control snapshot is required with native evidence")
+    observations = filter_inert_external_observations(
+        observations_from_native_evidence(
+            native_extension_evidence,
+            registry,
+            command=command,
+            control_snapshot=runtime_snapshot,
+        ),
+        control_layers,
+    )
     structured = tuple(
         (item.extension, item.rule, item.effective_evidence) for item in observations if item.effective_evidence
     )
     selected = list(structured)
-    selected_rule_ids = {rule.rule_id for _extension, rule, _evidence in selected}
-    compatibility_rule, effective_compatibility_class = _accepted_compatibility_rule(
-        registry, compatibility_action_class, control_layers
+    # Compatibility labels are display metadata, not additional observations.
+    # Several rules share one label (for example, Git workspace operations),
+    # so looking it up globally can invent an unrelated matched rule.
+    compatibility_rule = next(
+        (
+            (extension, rule)
+            for extension, rule, _evidence in selected
+            if compatibility_action_class in rule.action_classes
+        ),
+        None,
     )
-    if compatibility_rule is not None and compatibility_rule[1].rule_id not in selected_rule_ids:
-        selected.append((compatibility_rule[0], compatibility_rule[1], ()))
+    effective_compatibility_class = (
+        compatibility_action_class
+        if compatibility_rule is not None
+        or (compatibility_action_class is not None and registry.for_action_class(compatibility_action_class) is None)
+        else None
+    )
 
     owned_matches: list[OwnedCommandRuleMatch] = []
     for extension, rule, evidence in selected:
@@ -260,9 +188,57 @@ def evaluate_command(
     if controlling_action_class is None and controlling_match is not None:
         controlling_action_class = controlling_match.match.action_class
         controlling_reason = controlling_match.match.reason
+    authorization_evidence = github_workflow_authorization_evidence(
+        workflow_authorization,
+        command_identity=command.security_identity,
+    )
+    authorized_action_class = authorization_evidence[1] if authorization_evidence is not None else None
+    workflow_authorized_rule_ids = frozenset(
+        observation.rule.rule_id
+        for observation in observations
+        if authorized_action_class is not None
+        and not observation.uncertainty_reasons
+        and authorized_action_class in observation.rule.action_classes
+    )
     minimum_action: CommandDecisionFloor = "allow"
+    native_explicitly_benign = (
+        isinstance(native_extension_evidence, dict)
+        and command.confidence == "exact"
+        and native_extension_evidence.get("minimum_action") == "allow"
+        and native_extension_evidence.get("explicitly_benign") is True
+    )
+    # Ownership by a default-disabled rule is not proof that the command is
+    # safe. Only an explicit native benign classification may discharge an
+    # optional allow-floor observation; required rule floors remain active.
+    native_benign_rule_ids = (
+        frozenset(
+            owned.match.rule.rule_id
+            for owned in owned_matches
+            if _rule_floor(owned) == "allow"
+            and any(
+                observation.rule.rule_id == owned.match.rule.rule_id and not observation.uncertainty_reasons
+                for observation in observations
+            )
+        )
+        if native_explicitly_benign
+        else frozenset()
+    )
+    # A syntax-level benign classification does not bind a read/write executor,
+    # filesystem boundary, or launch identity. These candidates retain their
+    # independent proof requirement even when no extension rule raises a floor.
+    contained_routine_candidate = contained_routine_candidate_factor(command)
+    verified_read_candidate = verified_read_candidate_factor(command)
+    workspace_write_candidates = workspace_write_candidate_factors(command)
+    execution_proof_required = (
+        contained_routine_candidate is not None
+        or verified_read_candidate is not None
+        or bool(workspace_write_candidates)
+    )
+    native_host_floor_exempt = native_explicitly_benign and not execution_proof_required
     for owned in owned_matches:
-        if owned.match.rule.rule_id in explicitly_enabled_rule_ids:
+        if owned.match.rule.rule_id in (
+            native_benign_rule_ids | explicitly_enabled_rule_ids | workflow_authorized_rule_ids
+        ):
             continue
         minimum_action = _stronger_floor(minimum_action, _rule_floor(owned))
     compatibility_owned_rule_ids = frozenset(
@@ -271,29 +247,35 @@ def evaluate_command(
     compatibility_explicitly_enabled = (
         bool(compatibility_owned_rule_ids) and compatibility_owned_rule_ids.issubset(explicitly_enabled_rule_ids)
     ) or (compatibility_rule is not None and compatibility_rule[1].rule_id in explicitly_enabled_rule_ids)
-    if effective_compatibility_class is not None and not compatibility_explicitly_enabled:
+    compatibility_workflow_authorized = bool(compatibility_owned_rule_ids) and compatibility_owned_rule_ids.issubset(
+        workflow_authorized_rule_ids
+    )
+    if (
+        effective_compatibility_class is not None
+        and not compatibility_explicitly_enabled
+        and not compatibility_workflow_authorized
+    ):
         minimum_action = _stronger_floor(minimum_action, "review")
     if command.confidence != "exact" and (effective_compatibility_class is not None or owned_matches):
         minimum_action = _stronger_floor(minimum_action, "review")
     observation_uncertainties = extension_uncertainties(observations)
     if observation_uncertainties:
-        minimum_action = "block"
+        # Disabled controls still resolve to block through control_resolution below.
+        minimum_action = _stronger_floor(minimum_action, "review")
     evidence_batch = extension_evidence_batch(command, observations)
     effective_evidence_batch = type(evidence_batch)(
         tuple(
             evidence
             for evidence in evidence_batch.evidence
-            if evidence.identity.rule_id not in explicitly_enabled_rule_ids or evidence.uncertainty_reasons
+            if evidence.identity.rule_id not in native_benign_rule_ids
+            and (evidence.identity.rule_id not in explicitly_enabled_rule_ids or evidence.uncertainty_reasons)
         )
     )
-    contained_routine_candidate = contained_routine_candidate_factor(command)
-    verified_read_candidate = verified_read_candidate_factor(command)
-    workspace_write_candidates = workspace_write_candidate_factors(command)
-    authorization_evidence = github_workflow_authorization_evidence(
-        workflow_authorization,
-        command_identity=command.security_identity,
-    )
+    # A native benign proof cannot establish the resolved target of a file
+    # read, so secret-read floors remain active even for proven benign commands.
     read_factors = shell_read_floor_factors(command_text, command.security_identity, cwd=cwd, home_dir=home_dir)
+    if native_host_floor_exempt:
+        read_factors = tuple(factor for factor in read_factors if factor.reason_code == "critical.local-secret-read")
     if authorization_evidence is not None:
         # Claimed workflow proof already covers exact GitHub CLI execution.
         # Keep secret-read floors; do not let a script-shaped interpreter
@@ -301,7 +283,6 @@ def evaluate_command(
         read_factors = tuple(factor for factor in read_factors if factor.reason_code == "critical.local-secret-read")
     if read_factors:
         minimum_action = _stronger_floor(minimum_action, "review")
-    baseline_critical_floor_factors = (*command_critical_floor_factors(command), *read_factors)
     explicitly_allowed_github_capabilities = frozenset(
         capability
         for permission_id in relaxable_enabled_permissions
@@ -309,20 +290,35 @@ def evaluate_command(
         if permission is not None
         for capability in permission.typed_capabilities
     )
+    # Syntax classification cannot waive a candidate's execution proof. Other
+    # exact native benign commands retain their existing classification;
+    # permissions and non-benign commands keep the independent critical floors.
+    critical_floor_factors = (
+        ()
+        if native_host_floor_exempt
+        else command_critical_floor_factors(
+            command,
+            workflow_authorization,
+            explicitly_allowed_github_capabilities=(
+                explicitly_allowed_github_capabilities if command.confidence == "exact" else frozenset()
+            ),
+        )
+    )
+    baseline_critical_floor_factors = (*critical_floor_factors, *read_factors)
     explicit_permission_allow_factors = _explicit_permission_allow_factors(
         command,
         control_layers,
         relaxable_enabled_permissions,
         runtime_snapshot.private_evidence if runtime_snapshot is not None else None,
     )
-    critical_floor_factors = command_critical_floor_factors(
-        command,
-        workflow_authorization,
-        explicitly_allowed_github_capabilities=(
-            explicitly_allowed_github_capabilities if command.confidence == "exact" else frozenset()
-        ),
-    )
-    authorized_action_class = authorization_evidence[1] if authorization_evidence is not None else None
+    if authorized_action_class is not None:
+        effective_evidence_batch = type(effective_evidence_batch)(
+            tuple(
+                evidence
+                for evidence in effective_evidence_batch.evidence
+                if evidence.identity.rule_id not in workflow_authorized_rule_ids or evidence.uncertainty_reasons
+            )
+        )
     if contained_routine_candidate is not None:
         minimum_action = _stronger_floor(minimum_action, "review")
     if verified_read_candidate is not None:
@@ -351,8 +347,22 @@ def evaluate_command(
             compatibility_rule=compatibility_rule,
         )
     )
+    native_classification_factors = _native_classification_factors(
+        native_extension_evidence, command, allow_benign_proof=not execution_proof_required
+    )
+    # Authenticated consent is evidence for the current decision, not proof
+    # that the same command is benign without the control layer.
+    baseline_native_factors = (
+        ()
+        if isinstance(native_extension_evidence, dict)
+        and native_extension_evidence.get("reason_code") == "native_command_explicit_permission_allow"
+        else native_classification_factors
+    )
     baseline_factors = (
+        *baseline_native_factors,
         *baseline_decision_factors,
+        *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
+        *((verified_read_candidate,) if verified_read_candidate is not None else ()),
         *workspace_write_candidates,
         *baseline_critical_floor_factors,
     )
@@ -414,6 +424,7 @@ def evaluate_command(
     decision_plane = evaluate_effect_decision(
         EffectDecisionRequest(
             factors=(
+                *native_classification_factors,
                 *current_decision_factors,
                 *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
                 *((verified_read_candidate,) if verified_read_candidate is not None else ()),
@@ -426,6 +437,12 @@ def evaluate_command(
             uncertainties=decision_uncertainties,
         )
     )
+    # The central decision plane includes intrinsic native evidence and
+    # non-extension factors that are intentionally absent from the legacy
+    # rule-floor accumulator. Public/runtime consumers must receive the
+    # strongest materialized floor rather than an internally contradictory
+    # ``minimum_action=allow`` with ``decision_plane.action=review``.
+    minimum_action = _stronger_floor(minimum_action, _decision_action_floor(decision_plane.action))
     return CompositeCommandEvaluation(
         command=command,
         matches=tuple(owned_matches),
@@ -442,94 +459,14 @@ def evaluate_command(
     )
 
 
-def _explicit_permission_allow_factors(
-    command: CanonicalCommand,
-    layers: tuple[ExtensionControlLayer, ...],
-    permission_ids: frozenset[str],
-    authority_evidence: ExtensionControlDecisionEvidence | None,
-) -> tuple[DecisionFactor, ...]:
-    if command.confidence != "exact" or not permission_ids:
-        return ()
-    canonical_layers = [
-        {
-            "kind": layer.kind.value,
-            "catalog_digest": layer.catalog_digest,
-            "global_lockdown": layer.global_lockdown,
-            "controls": [
-                {
-                    "kind": control.target.kind.value,
-                    "target_id": control.target.target_id,
-                    "state": control.state.value,
-                }
-                for control in sorted(
-                    layer.controls,
-                    key=lambda item: (item.target.kind.value, item.target.target_id),
-                )
-            ],
-        }
-        for layer in sorted(layers, key=lambda item: item.kind.value)
-    ]
-    requirements = frozenset(
-        {
-            ProofRequirement.CONFIGURATION_IDENTITY,
-            ProofRequirement.PARSER_CONFIDENCE,
-            ProofRequirement.CAPABILITY_CONSTRAINTS,
-        }
-    )
-    factors: list[DecisionFactor] = []
-    for permission_id in sorted(permission_ids):
-        binding_digest = hashlib.sha256(
-            json.dumps(
-                {
-                    "command_security_identity": command.security_identity,
-                    "permission_id": permission_id,
-                    "layers": canonical_layers,
-                    "authority": (
-                        {
-                            "revision": authority_evidence.revision,
-                            "effective_digest": authority_evidence.effective_digest,
-                        }
-                        if authority_evidence is not None
-                        else None
-                    ),
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        proof = PositiveProof(ProofRoute.VERIFIED, binding_digest, requirements)
-        factors.append(
-            DecisionFactor(
-                source=DecisionFactorSource.CONTROL,
-                reason_code="control.explicitly-enabled-permission",
-                basis=DecisionBasis("allow", ProofRoute.VERIFIED),
-                producer_ref=f"control:{permission_id}",
-                evidence_digest=binding_digest,
-                proof=proof,
-            )
-        )
-    return tuple(factors)
-
-
-def _direct_github_permission_ids(command: CanonicalCommand) -> set[str]:
-    """Resolve catalog permissions for exact GitHub capabilities without matcher rules."""
-
-    permission_ids: set[str] = set()
-    for segment in command.segments:
-        executable = (segment.executable or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
-        if executable.removesuffix(".exe") != "gh":
-            continue
-        assessment = classify_github_cli(segment.arguments)
-        permission_ids.update(
-            github_capability_contract(capability).permission_id for capability in assessment.capabilities
-        )
-    return permission_ids
-
-
 def _rule_floor(owned: OwnedCommandRuleMatch) -> CommandDecisionFloor:
     rule = owned.match.rule
     if owned.extension.required and rule.severity == "critical":
         return "block"
+    # Required extensions may also contain configurable, noncritical rules
+    # whose declared baseline is allow. They still need positive allow proof.
+    if rule.default_mode == "disabled":
+        return "allow"
     if owned.extension.required:
         return "review"
     return _MODE_FLOOR[rule.default_mode]
@@ -537,6 +474,16 @@ def _rule_floor(owned: OwnedCommandRuleMatch) -> CommandDecisionFloor:
 
 def _stronger_floor(left: CommandDecisionFloor, right: CommandDecisionFloor) -> CommandDecisionFloor:
     return left if _FLOOR_RANK[left] >= _FLOOR_RANK[right] else right
+
+
+def _decision_action_floor(action: str) -> CommandDecisionFloor:
+    if action == "allow":
+        return "allow"
+    if action == "warn":
+        return "monitor"
+    if action == "block":
+        return "block"
+    return "review"
 
 
 def _match_precedence_key(owned: OwnedCommandRuleMatch) -> tuple[int, int, int]:

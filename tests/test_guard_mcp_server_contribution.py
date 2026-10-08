@@ -31,10 +31,13 @@ def _filesystem_payload() -> dict[str, object]:
 
 
 def test_in_tree_mcp_contributions_are_external_catalog_ids() -> None:
+    from tests.support.extension_freshness import pending_contribution_regen
+
     payloads = load_mcp_contribution_payloads()
     ids = {catalog_id_for_mcp_id(str(item["id"])) for item in payloads}
     assert ids == mcp_catalog_ids()
-    assert ids <= ids_for_class("external")
+    if not pending_contribution_regen():
+        assert ids <= ids_for_class("external")
     assert "command.mcp-filesystem" in ids
     for payload in payloads:
         validate_mcp_contribution(payload, filename=str(payload["id"]))

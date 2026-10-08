@@ -30,6 +30,7 @@ from . import native_policy_snapshot_windows_io as _windows_io
 from . import native_policy_snapshot_windows_key as _windows_key
 from . import native_policy_snapshot_windows_state as _windows_state
 from . import native_policy_snapshot_windows_support as _windows_support
+from .fork_safety import forget_in_child
 from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
 globals().update({name: getattr(_constants, name) for name in _constants.__all__})
@@ -368,6 +369,7 @@ def native_policy_snapshot(
 
 _PUBLISHER_LOCK = threading.RLock()
 _PUBLISHERS: dict[str, set[NativePolicySnapshotPublisher]] = {}
+forget_in_child(_PUBLISHERS)
 
 
 def _publisher_key(guard_home: Path) -> str:
@@ -384,6 +386,22 @@ def notify_native_policy_mutation(guard_home: Path) -> None:
         publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
     for publisher in publishers:
         publisher.request_publish()
+
+
+def local_cli_publication_status(guard_home: Path, revision: int) -> dict[str, object]:
+    """Inspect existing publishers without starting a runtime or claiming readiness."""
+    with _PUBLISHER_LOCK:
+        publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
+    for publisher in publishers:
+        receipt = publisher.local_cli_publication_receipt(revision)
+        if receipt is not None:
+            return {"state": "acknowledged", **receipt}
+    errors = [publisher.last_error for publisher in publishers if not publisher.closed and publisher.last_error]
+    return {
+        "state": "failed" if errors else "pending" if publishers else "unavailable",
+        "revision": revision,
+        **({"reason": errors[0]} if errors else {}),
+    }
 
 
 def get_native_policy_snapshot_publisher(store: GuardStore) -> NativePolicySnapshotPublisher:

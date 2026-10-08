@@ -178,6 +178,14 @@ def _refresh_cloud_policy_bundle(*args: Any, **kwargs: Any):
         return _support_attr("_refresh_cloud_policy_bundle")(*args, **kwargs)
 
 
+def evaluate_native_artifact_hook(*args: Any, **kwargs: Any):
+    """Compatibility alias for the native artifact evaluator's test surface."""
+    with _support_overrides():
+        from .commands_hook_native_eval import evaluate_native_artifact_hook as _impl
+
+        return _impl(*args, **kwargs)
+
+
 def __getattr__(name: str) -> Any:
     if name in _SYNCED_CALLS:
         def _wrapped(*args: Any, **kwargs: Any):

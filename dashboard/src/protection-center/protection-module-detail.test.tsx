@@ -72,6 +72,11 @@ assert.match(permissions, /git push --force/);
 assert.match(permissions, /Recommended/);
 assert.match(permissions, />Allow</);
 assert.match(permissions, />Block</);
+assert.match(permissions, /Quick apply to 2 changeable settings/, "the nested Permissions tab offers the shared quick-apply toolbar");
+assert.match(permissions, /role="group" aria-label="Quick apply to 2 changeable settings"/);
+assert.match(permissions, /aria-pressed="true" title="Use Guard defaults for every matching capability."/, "Recommended is the pressed quick-apply choice on a clean draft");
+assert.match(permissions, /Allow all</);
+assert.match(permissions, /Deny all</);
 assert.match(simple, /Required by Guard/);
 const activity = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   extension: git,
@@ -127,6 +132,21 @@ assert.match(mcpDetail, /write_file/);
 assert.match(mcpDetail, />Block</);
 assert.match(mcpDetail, /This community MCP server stays off until you turn it on/);
 assert.match(mcpDetail, /MCP tools available/);
+const directMcpDetail = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
+  extension: protectionModuleFixture({
+    ...filesystem,
+    mcp_launch: { kind: "direct-command", command: "decided-mcp" },
+  }),
+  effective: PROTECTION_AUTHORITY_FIXTURES.protected,
+  catalogDigest: "a".repeat(64),
+  onBack: () => undefined,
+  onRefresh: () => undefined,
+  onRequestExtensionChange: () => undefined,
+}));
+assert.match(directMcpDetail, /decided-mcp/);
+assert.match(directMcpDetail, /Matching launches use this command/);
+assert.doesNotMatch(directMcpDetail, /Unknown package/);
+assert.match(directMcpDetail, /This community MCP server stays off until you turn it on/);
 const hostedMcp = protectionModuleFixture({
   extension_id: "command.mcp-instapods",
   name: "InstaPods MCP",

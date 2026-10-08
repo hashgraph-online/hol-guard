@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import itertools
 import json
 import os
 import pickle
@@ -60,6 +61,7 @@ from codex_plugin_scanner.guard.store import (
     GuardStore,
     SystemKeyringSecretStore,
 )
+from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
@@ -551,7 +553,10 @@ def test_trust_backend_check_separates_startup_and_runtime_timeouts(
 ) -> None:
     sleep_delays: list[float] = []
     join_timeouts: list[float | None] = []
-    monotonic_values = iter((100.0, 103.5))
+    # time.monotonic is patched globally, so unrelated in-process calls (e.g.
+    # coverage instrumentation) can consume values; repeat the last one so
+    # incidental callers cannot exhaust the deterministic sequence.
+    monotonic_values = itertools.chain((100.0, 103.5), itertools.repeat(103.5))
 
     class FakeProcess:
         def __init__(self, args: tuple[str, str, str]) -> None:
@@ -869,7 +874,7 @@ def test_policy_integrity_status_includes_trust_status(tmp_path: Path) -> None:
 def test_guard_store_init_does_not_create_policy_integrity_keyring_material(tmp_path: Path) -> None:
     store = _store(tmp_path)
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
 
     assert secret_store.get_secret(store._policy_integrity_key_ref) is None
     assert secret_store.get_secret(store._policy_integrity_control_ref) is None
@@ -1145,7 +1150,7 @@ def test_upsert_policy_uses_single_integrity_key_lookup_per_write(
     assert state["key_id"] is None
 
 
-def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
+def test_policy_integrity_status_caches_bounded_identity_verified_keychain_reads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1155,7 +1160,8 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
         "2026-06-14T00:00:00Z",
     )
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
+    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
     key_value = secret_store.get_secret(store._policy_integrity_key_ref)
     control_value = secret_store.get_secret(store._policy_integrity_control_ref)
     assert isinstance(key_value, str) and key_value
@@ -1179,7 +1185,7 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
             AssertionError("plain keyring reads should not run for policy integrity")
         ),
     )
-    monkeypatch.setattr(secret_store, "get_secret_with_timeout", _count_timed_reads)
+    monkeypatch.setattr(secret_store.primary, "get_secret_with_timeout", _count_timed_reads)
     store._clear_policy_integrity_cache()
 
     first_status = store.get_policy_integrity_status()
@@ -1187,7 +1193,10 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
 
     assert first_status["mode"] == "protected"
     assert second_status["mode"] == "protected"
+    # Control metadata must be selected with its signing-key identity before
+    # the normal key lookup. Subsequent status calls use the material cache.
     assert timed_reads == [
+        store._policy_integrity_key_ref,
         store._policy_integrity_control_ref,
         store._policy_integrity_key_ref,
     ]
@@ -1196,7 +1205,7 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
 def test_policy_integrity_status_and_verify_do_not_create_keyring_material_on_fresh_store(tmp_path: Path) -> None:
     store = _store(tmp_path)
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
     _delete_policy_integrity_key(store)
     _delete_policy_integrity_control_state(store)
     assert secret_store.get_secret(store._policy_integrity_key_ref) is None
@@ -1534,29 +1543,18 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
         store,
         artifact_id="codex:project:remote-tampered",
     )
-    original_result = GuardStore._policy_integrity_result_for_row
-
-    def _forced_invalid(
-        self: GuardStore,
-        row: sqlite3.Row,
-        *,
-        mode: str,
-        key: bytes | None,
-        key_id: str | None,
-        trusted_generation: int | None = None,
-    ) -> PolicyIntegrityVerificationResult:
-        if row["artifact_id"] == "codex:project:remote-tampered":
-            return PolicyIntegrityVerificationResult(status="invalid_mac", message="remote bundle row was tampered")
-        return original_result(
-            self,
-            row,
-            mode=mode,
-            key=key,
-            key_id=key_id,
-            trusted_generation=trusted_generation,
+    # Row verification now runs in the native resident. Remote-source rows
+    # (policy-bundle) bypass local HMAC — they are trusted via the materialized
+    # bundle-decision identity probe instead. Tamper with a field that is part
+    # of the materialized identity so the persisted row no longer matches the
+    # authorized bundle decision and is silently filtered: resolved=None and,
+    # critically, no `rule.ignored.local_integrity` evidence (which is reserved
+    # for local rules).
+    with store._connect() as connection:
+        connection.execute(
+            "update policy_decisions set reason = ? where artifact_id = ?",
+            ("tampered-reason", "codex:project:remote-tampered"),
         )
-
-    monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _forced_invalid)
 
     resolved = store.resolve_policy(
         "codex",
@@ -1568,7 +1566,10 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
     ignored_events = store.list_events(limit=100, event_name="rule.ignored.local_integrity")
 
     assert resolved is None
-    assert any(
+    # Remote rows bypass local HMAC; the tamper is detected by identity mismatch
+    # which is a silent filter (no policy_integrity_violation), and no
+    # rule.ignored.local_integrity (reserved for local rules).
+    assert not any(
         event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered" for event in integrity_events
     )
     assert not any(

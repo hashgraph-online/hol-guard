@@ -9,6 +9,7 @@ from pathlib import Path
 
 _DELETE = 0x00010000
 _FILE_ATTRIBUTE_NORMAL = 0x00000080
+_FILE_ATTRIBUTE_DIRECTORY = 0x00000010
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400
 _FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
 _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
@@ -32,7 +33,7 @@ class _FileAttributeTagInfo(ctypes.Structure):
 
 
 class _FileRenameMode(ctypes.Union):
-    _fields_ = [("replace_if_exists", ctypes.c_ubyte), ("flags", ctypes.c_uint32)]  # noqa: RUF012
+    _fields_ = (("replace_if_exists", ctypes.c_ubyte), ("flags", ctypes.c_uint32))
 
 
 class _FileRenameInfo(ctypes.Structure):
@@ -46,7 +47,7 @@ class _FileRenameInfo(ctypes.Structure):
 
 
 class _IoStatusValue(ctypes.Union):
-    _fields_ = [("status", ctypes.c_long), ("pointer", ctypes.c_void_p)]  # noqa: RUF012
+    _fields_ = (("status", ctypes.c_long), ("pointer", ctypes.c_void_p))
 
 
 class _IoStatusBlock(ctypes.Structure):
@@ -292,6 +293,49 @@ def _rename_file_handle(api: _WindowsApi, handle: int, parent_handle: int, name:
     ctypes.memmove(ctypes.addressof(buffer) + file_name_offset, encoded_name, len(encoded_name))
     if not api.rename_file(handle, buffer):
         _raise_windows_error("unable to atomically replace output file")
+
+
+def remove_file_no_follow_windows(path: Path) -> None:
+    """Delete a regular file by handle while its existing ancestry is locked."""
+    absolute = Path(os.path.abspath(path))
+    api = _WindowsApi()
+    directory_handles: list[int] = []
+    file_handle: int | None = None
+    try:
+        current = Path(absolute.anchor)
+        for part in (None, *absolute.parent.parts[1:]):
+            if part is not None:
+                current /= part
+            try:
+                directory_handles.append(_open_locked_directory(api, current))
+            except OSError as error:
+                if getattr(error, "winerror", None) in {2, 3}:
+                    return
+                raise
+        opened = api.create_file(
+            absolute,
+            _DELETE | _FILE_READ_ATTRIBUTES,
+            0,
+            _OPEN_EXISTING,
+            _FILE_FLAG_OPEN_REPARSE_POINT,
+        )
+        if opened == _INVALID_HANDLE_VALUE:
+            if ctypes.get_last_error() in {2, 3}:
+                return
+            _raise_windows_error("unable to bind output file for removal")
+        file_handle = int(opened)
+        info = _FileAttributeTagInfo()
+        if not api.inspect_file(file_handle, info):
+            _raise_windows_error("unable to inspect output file for removal")
+        if info.file_attributes & (_FILE_ATTRIBUTE_REPARSE_POINT | _FILE_ATTRIBUTE_DIRECTORY):
+            raise OSError("refusing non-regular output file removal")
+        if not api.delete_file_handle(file_handle):
+            _raise_windows_error("unable to remove bound output file")
+    finally:
+        if file_handle is not None:
+            api.close_handle(file_handle)
+        for handle in reversed(directory_handles):
+            api.close_handle(handle)
 
 
 def write_bytes_atomic_no_follow_windows(path: Path, payload: bytes) -> None:

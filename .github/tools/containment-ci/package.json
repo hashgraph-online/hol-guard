@@ -1,0 +1,10 @@
+{
+  "name": "guard-containment-test",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "5.8.3",
+    "vitest": "4.1.11"
+  }
+}

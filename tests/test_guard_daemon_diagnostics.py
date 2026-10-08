@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics, cle
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime_artifact_reconciliation import RuntimeArtifactReconciliation
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.coverage_ci import under_coverage_scale
 
 
 def test_daemon_diagnostics_writes_json_records_on_a_background_worker(tmp_path: Path) -> None:
@@ -47,7 +48,7 @@ def test_daemon_diagnostics_drops_records_when_the_queue_is_full_without_waiting
     assert diagnostics.record("first") is True
     started_at = time.monotonic()
     assert diagnostics.record("second") is False
-    assert time.monotonic() - started_at < 0.05
+    assert time.monotonic() - started_at < 0.05 * under_coverage_scale(4.0)
     assert diagnostics.close() is True
 
 

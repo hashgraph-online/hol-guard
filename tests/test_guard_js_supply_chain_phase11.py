@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
@@ -21,6 +22,8 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
 
 WORKSPACE_ID = "workspace-alpha"
 
@@ -319,7 +322,7 @@ def test_hosted_git_archive_requires_git_review_without_archive_download(
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
     monkeypatch.setattr(
-        supply_chain_package_eval_module,
+        package_services,
         "_scan_external_tarball",
         lambda *_args, **_kwargs: pytest.fail("hosted Git archives must not enter generic archive download"),
     )
@@ -427,7 +430,7 @@ def test_external_tarball_scan_failure_respects_security_level(
     _write_text(home_dir / "config.toml", f'security_level = "{security_level}"\n')
     store = GuardStore(home_dir)
     monkeypatch.setattr(
-        supply_chain_package_eval_module,
+        package_services,
         "_scan_external_tarball",
         lambda _url, **_kwargs: (None, None),
     )
@@ -459,7 +462,7 @@ def test_external_tarball_scan_failure_blocks_after_approval_in_balanced_mode(
     _write_text(home_dir / "config.toml", 'security_level = "balanced"\n[risks]\ncloud_advisory = "block"\n')
     store = GuardStore(home_dir)
     monkeypatch.setattr(
-        supply_chain_package_eval_module,
+        package_services,
         "_scan_external_tarball",
         lambda _url, **_kwargs: (None, None),
     )

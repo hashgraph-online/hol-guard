@@ -29,6 +29,8 @@ from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.types import GuardVerdict, GuardVerdictAction
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 def _artifact(tmp_path: Path) -> GuardArtifact:
     return GuardArtifact(

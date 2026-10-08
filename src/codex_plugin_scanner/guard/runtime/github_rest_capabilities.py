@@ -126,7 +126,7 @@ def _mutation_capabilities(
     *,
     method: str,
 ) -> tuple[GitHubCommandCapability, ...]:
-    endpoint = parsed.endpoint.strip("/").lower()
+    endpoint = parsed.endpoint.split("?", 1)[0].strip("/").lower()
     segments = tuple(segment for segment in endpoint.split("/") if segment)
     capabilities: set[GitHubCommandCapability] = set()
     issue_lock_endpoint = _is_issue_lock_endpoint(segments)

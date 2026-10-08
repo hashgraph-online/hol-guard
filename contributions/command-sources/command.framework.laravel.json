@@ -1,0 +1,4010 @@
+{
+  "extension": {
+    "action_classes": [
+      "Laravel database wipe command",
+      "Laravel destructive rebuild command",
+      "Laravel migration reset command",
+      "Laravel migration rollback command",
+      "Laravel queue purge command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews destructive Artisan database wipes, migration resets, and queue purges.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.framework.laravel",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Laravel command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Laravel database wipe command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Artisan db:wipe operations that drop all database tables, views, and types.",
+        "example_command": "php artisan db:wipe",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Laravel database wipe",
+        "permission_id": "command.framework.laravel.permission.database-wipe",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect migrations with migrate:status and confirm a current backup before wiping the database."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Laravel destructive rebuild command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Artisan migrate:fresh operations that drop every table and re-run all migrations.",
+        "example_command": "php artisan migrate:fresh --seed",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Laravel destructive rebuild",
+        "permission_id": "command.framework.laravel.permission.migrate-fresh",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Run migrate:status and review pending migrations before rebuilding the database from scratch."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Laravel migration reset command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Artisan migrate:reset and migrate:refresh operations that roll back every migration.",
+        "example_command": "php artisan migrate:reset",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Laravel migration reset",
+        "permission_id": "command.framework.laravel.permission.migrate-reset",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Review the rollback SQL with migrate:reset --pretend before resetting every migration."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Laravel migration rollback command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Artisan migrate:rollback operations that revert the last migration batch.",
+        "example_command": "php artisan migrate:rollback",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Laravel migration rollback",
+        "permission_id": "command.framework.laravel.permission.migrate-rollback",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect pending batches with migrate:status and dump the rollback SQL with --pretend first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Laravel queue purge command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Artisan queue:clear and queue:flush operations that delete queued or failed jobs.",
+        "example_command": "php artisan queue:clear redis --queue=emails",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Laravel queue purge",
+        "permission_id": "command.framework.laravel.permission.queue-purge",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect queued and failed jobs before clearing or flushing queue state."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://laravel.com/docs/13.x/migrations",
+      "https://laravel.com/docs/13.x/queues",
+      "https://laravel.com/docs/13.x/artisan"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Laravel database wipe command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Artisan db:wipe operations that drop all database tables, views, and types.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "artisan",
+                  "artisan.cmd",
+                  "artisan.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "db:wipe"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "artisan",
+                  "db:wipe"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "./artisan",
+                  "db:wipe"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "required_flags": [],
+                "subcommands": [
+                  "db:wipe"
+                ]
+              },
+              "op": "php-artisan-script.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.framework.laravel.permission.database-wipe",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.framework.laravel.database-wipe",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "db:wipe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "db:wipe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "db:wipe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "db:wipe"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "db:wipe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "db:wipe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "db:wipe"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "db:wipe"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect migrations with migrate:status and confirm a current backup before wiping the database."
+        ],
+        "severity": "critical",
+        "title": "Laravel database wipe"
+      },
+      {
+        "action_classes": [
+          "Laravel destructive rebuild command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Artisan migrate:fresh operations that drop every table and re-run all migrations.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "artisan",
+                  "artisan.cmd",
+                  "artisan.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "migrate:fresh"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "artisan",
+                  "migrate:fresh"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "./artisan",
+                  "migrate:fresh"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "required_flags": [],
+                "subcommands": [
+                  "migrate:fresh"
+                ]
+              },
+              "op": "php-artisan-script.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.framework.laravel.permission.migrate-fresh",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.framework.laravel.migrate-fresh",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:fresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:fresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:fresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "migrate:fresh"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:fresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:fresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:fresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "migrate:fresh"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run migrate:status and review pending migrations before rebuilding the database from scratch."
+        ],
+        "severity": "critical",
+        "title": "Laravel destructive rebuild"
+      },
+      {
+        "action_classes": [
+          "Laravel migration reset command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Artisan migrate:reset and migrate:refresh operations that roll back every migration.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "artisan",
+                  "artisan.cmd",
+                  "artisan.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "migrate:reset"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "artisan",
+                  "migrate:reset"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "./artisan",
+                  "migrate:reset"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "artisan",
+                  "artisan.cmd",
+                  "artisan.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "migrate:refresh"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "artisan",
+                  "migrate:refresh"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "./artisan",
+                  "migrate:refresh"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "required_flags": [],
+                "subcommands": [
+                  "migrate:reset"
+                ]
+              },
+              "op": "php-artisan-script.v1"
+            },
+            {
+              "config": {
+                "required_flags": [],
+                "subcommands": [
+                  "migrate:refresh"
+                ]
+              },
+              "op": "php-artisan-script.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.framework.laravel.permission.migrate-reset",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.framework.laravel.migrate-reset",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "subcommands": [
+                      "migrate:reset"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "subcommands": [
+                      "migrate:refresh"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Migration dry run",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Review the rollback SQL with migrate:reset --pretend before resetting every migration."
+        ],
+        "severity": "critical",
+        "title": "Laravel migration reset"
+      },
+      {
+        "action_classes": [
+          "Laravel migration rollback command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Artisan migrate:rollback operations that revert the last migration batch.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "artisan",
+                  "artisan.cmd",
+                  "artisan.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "migrate:rollback"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "artisan",
+                  "migrate:rollback"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "./artisan",
+                  "migrate:rollback"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "required_flags": [],
+                "subcommands": [
+                  "migrate:rollback"
+                ]
+              },
+              "op": "php-artisan-script.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.framework.laravel.permission.migrate-rollback",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.framework.laravel.migrate-rollback",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--pretend"
+                    ],
+                    "subcommands": [
+                      "migrate:rollback"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Migration dry run",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect pending batches with migrate:status and dump the rollback SQL with --pretend first."
+        ],
+        "severity": "high",
+        "title": "Laravel migration rollback"
+      },
+      {
+        "action_classes": [
+          "Laravel queue purge command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Artisan queue:clear and queue:flush operations that delete queued or failed jobs.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "artisan",
+                  "artisan.cmd",
+                  "artisan.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "queue:clear"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "artisan",
+                  "queue:clear"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "./artisan",
+                  "queue:clear"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "artisan",
+                  "artisan.cmd",
+                  "artisan.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "queue:flush"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "artisan",
+                  "queue:flush"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "php",
+                  "php.cmd",
+                  "php.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--ansi",
+                  "--help",
+                  "--no-ansi",
+                  "--no-interaction",
+                  "--quiet",
+                  "--silent",
+                  "--verbose",
+                  "-h",
+                  "-n",
+                  "-q",
+                  "-v",
+                  "-vv",
+                  "-vvv"
+                ],
+                "interspersed_options_with_values": [
+                  "--env"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--define",
+                  "--php-ini",
+                  "-c",
+                  "-d",
+                  "-z"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "./artisan",
+                  "queue:flush"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "required_flags": [],
+                "subcommands": [
+                  "queue:clear"
+                ]
+              },
+              "op": "php-artisan-script.v1"
+            },
+            {
+              "config": {
+                "required_flags": [],
+                "subcommands": [
+                  "queue:flush"
+                ]
+              },
+              "op": "php-artisan-script.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.framework.laravel.permission.queue-purge",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.framework.laravel.queue-purge",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "queue:clear"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "queue:clear"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "queue:clear"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "queue:flush"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "queue:flush"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "queue:flush"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "queue:clear"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "queue:flush"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "queue:clear"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "queue:clear"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "queue:clear"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "artisan",
+                      "artisan.cmd",
+                      "artisan.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "queue:flush"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "artisan",
+                      "queue:flush"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "php",
+                      "php.cmd",
+                      "php.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--ansi",
+                      "--help",
+                      "--no-ansi",
+                      "--no-interaction",
+                      "--quiet",
+                      "--silent",
+                      "--verbose",
+                      "-h",
+                      "-n",
+                      "-q",
+                      "-v",
+                      "-vv",
+                      "-vvv"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--env"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--define",
+                      "--php-ini",
+                      "-c",
+                      "-d",
+                      "-z"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "./artisan",
+                      "queue:flush"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "queue:clear"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                },
+                {
+                  "config": {
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "queue:flush"
+                    ]
+                  },
+                  "op": "php-artisan-script.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect queued and failed jobs before clearing or flushing queue state."
+        ],
+        "severity": "high",
+        "title": "Laravel queue purge"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect migration status and queue depth before destructive Artisan operations."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

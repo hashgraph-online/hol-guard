@@ -37,8 +37,19 @@ const unconfiguredSettingsPayload = {
     },
   },
 };
+const disabledUnconfiguredSettingsPayload = {
+  ...gatedSettingsPayload,
+  settings: {
+    ...gatedSettingsPayload.settings,
+    approval_gate: {
+      ...gatedSettingsPayload.settings.approval_gate,
+      enabled: false,
+      configured: false,
+    },
+  },
+};
 
-async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsPayload): Promise<{ settingsUpdates: Record<string, unknown>[] }> {
+async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsPayload, persistWrites = false): Promise<{ settingsUpdates: Record<string, unknown>[] }> {
   const settingsUpdates: Record<string, unknown>[] = [];
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -52,6 +63,9 @@ async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsP
     else if (path.endsWith("/settings")) {
       if (route.request().method() === "POST") {
         settingsUpdates.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>);
+        if (persistWrites) {
+          settingsPayload = { ...settingsPayload, settings: { ...settingsPayload.settings, ...settingsUpdates.at(-1)?.settings as object } };
+        }
       }
       body = settingsPayload;
     }
@@ -80,6 +94,29 @@ async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsP
   return { settingsUpdates };
 }
 
+for (const width of [1365, 390]) {
+  test(`blocked request radio controls work at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { settingsUpdates } = await mountSettingsFixture(page, disabledUnconfiguredSettingsPayload, true);
+    await page.goto(`/settings?${DAEMON}&section=approval`);
+    const safe = page.getByRole("radio", { name: /Find a safe alternative/ });
+    const ask = page.getByRole("radio", { name: /Ask me for approval/ });
+    await expect(safe).toBeChecked();
+    await safe.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(ask).toBeChecked();
+    await page.getByRole("button", { name: "Save settings", exact: true }).click();
+    await expect.poll(() => (settingsUpdates.at(-1)?.settings as Record<string, unknown>)?.blocked_request_mode).toBe("ask");
+    await page.reload();
+    await expect(ask).toBeChecked();
+    await safe.check();
+    await page.getByRole("button", { name: "Save settings", exact: true }).click();
+    await expect.poll(() => (settingsUpdates.at(-1)?.settings as Record<string, unknown>)?.blocked_request_mode).toBe("safe-alternative");
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`blocked-request-${width}.png`), fullPage: true });
+  });
+}
+
 test("production Settings password proof submits with Enter without React bridge failures", async ({ page }) => {
   const runtimeErrors: string[] = [];
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
@@ -99,6 +136,40 @@ test("production Settings password proof submits with Enter without React bridge
     page.getByRole("img", { name: "Scan this QR code in Google Authenticator or another TOTP app" })
   ).toBeVisible();
   await expect(runtimeErrors).toEqual([]);
+});
+
+test("re-enabling a retained authenticator gate submits confirmed password setup", async ({ page }) => {
+  const retainedSettings = {
+    ...gatedSettingsPayload,
+    settings: {
+      ...gatedSettingsPayload.settings,
+      approval_gate: {
+        ...gatedSettingsPayload.settings.approval_gate,
+        enabled: false,
+        totp_enabled: true,
+      },
+    },
+  };
+  const { settingsUpdates } = await mountSettingsFixture(page, retainedSettings, true);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
+  await page.getByRole("checkbox", { name: "Ask for proof on allow decisions" }).check();
+  await page.getByRole("button", { name: "Save settings", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Set your approval password" });
+  await expect(dialog.getByLabel("Authenticator code")).toHaveCount(0);
+  await dialog.getByLabel("Password", { exact: true }).fill("synthetic-new-password");
+  await expect(dialog.getByRole("button", { name: "Save settings", exact: true })).toBeDisabled();
+  await dialog.getByLabel("Confirm password", { exact: true }).fill("synthetic-new-password");
+  await dialog.getByRole("button", { name: "Save settings", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(settingsUpdates).toHaveLength(1);
+  expect(settingsUpdates[0].settings).toMatchObject({ approval_gate: {
+    enabled: true,
+    totp_enabled: true,
+    new_password: "synthetic-new-password",
+    confirm_password: "synthetic-new-password",
+  } });
+  await page.reload();
+  await expect(page.getByRole("checkbox", { name: "Ask for proof on allow decisions" })).toBeChecked();
 });
 
 test("first-time approval password setup is discoverable beside the gate", async ({ page }) => {
@@ -124,6 +195,44 @@ test("first-time approval password setup is discoverable beside the gate", async
   const updateSettings = fixture.settingsUpdates[0]?.settings as Record<string, unknown> | undefined;
   expect(updateSettings).toBeDefined();
   expect(Object.keys(updateSettings ?? {})).toEqual(["approval_gate"]);
+});
+
+test("approval password setup stays reachable while the gate is off", async ({ page }) => {
+  const fixture = await mountSettingsFixture(page, disabledUnconfiguredSettingsPayload);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
+
+  await page.getByRole("tabpanel", { name: "Approval gate settings" }).waitFor();
+  await expect(page.getByRole("button", { name: "Set up approval password" })).toBeVisible();
+  await expect(page.getByText("Authenticator app", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Set up approval password" }).click();
+  const setupDialog = page.getByRole("dialog", { name: "Set your approval password" });
+  await expect(setupDialog).toBeVisible();
+  await setupDialog.getByRole("textbox", { name: "Password", exact: true }).fill("test-password");
+  const confirmation = setupDialog.getByRole("textbox", { name: "Confirm password", exact: true });
+  await confirmation.fill("test-password");
+  await confirmation.press("Enter");
+  await expect.poll(() => fixture.settingsUpdates).toHaveLength(1);
+  const updateSettings = fixture.settingsUpdates[0]?.settings as Record<string, unknown> | undefined;
+  const gateUpdate = updateSettings?.approval_gate as Record<string, unknown> | undefined;
+  expect(gateUpdate?.enabled).toBe(true);
+  expect(gateUpdate?.new_password).toBe("test-password");
+});
+
+test("cancelling first-time password setup restores the off gate state", async ({ page }) => {
+  const fixture = await mountSettingsFixture(page, disabledUnconfiguredSettingsPayload);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
+
+  await page.getByRole("tabpanel", { name: "Approval gate settings" }).waitFor();
+  const gateToggle = page.locator("#settings-approval-gate");
+  await expect(gateToggle).not.toBeChecked();
+  await page.getByRole("button", { name: "Set up approval password" }).click();
+  const setupDialog = page.getByRole("dialog", { name: "Set your approval password" });
+  await expect(setupDialog).toBeVisible();
+  await expect(gateToggle).toBeChecked();
+  await setupDialog.getByRole("button", { name: "Go back" }).click();
+  await expect(setupDialog).toBeHidden();
+  await expect(gateToggle).not.toBeChecked();
+  expect(fixture.settingsUpdates).toHaveLength(0);
 });
 
 test("Enter on Go back cancels password proof rather than confirming it", async ({ page }) => {

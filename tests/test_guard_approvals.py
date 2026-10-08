@@ -1272,6 +1272,15 @@ class TestGuardApprovals:
         with store._connect() as connection:
             policy_count = connection.execute("select count(*) from policy_decisions").fetchone()[0]
         assert policy_count == 1
+        # Persist the resident verifier key before stripping the keyring. The
+        # verifier is provisioned lazily on first lookup; a store that wrote a
+        # signed policy already owns this file, and it must survive keyring loss
+        # so the resident can serve the lookup and degrade the unsigned row.
+        from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+            provision_native_verifier_key_for_store,
+        )
+
+        provision_native_verifier_key_for_store(store)
         store._policy_integrity_secret_store = None
         store._clear_policy_integrity_cache()
         first_retry = store.resolve_policy_decision(
@@ -1605,6 +1614,7 @@ class TestGuardApprovals:
             "_reap_stale_ephemeral_guard_daemons",
             lambda *_args, **_kwargs: None,
         )
+        monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
         monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
         monkeypatch.setattr(
             daemon_manager_module,
@@ -3146,7 +3156,7 @@ class TestGuardApprovals:
         assert approvals[0]["decision_v2_json"]["action"] == "ask"
         assert (
             approvals[0]["decision_v2_json"]["harness_message"]
-            == "HOL Guard needs a fresh approval because this action changed."
+            == "HOL Guard needs a fresh approval before this action can run."
         )
 
     def test_guard_approvals_cli_lists_and_resolves_requests(self, tmp_path, capsys, monkeypatch):
