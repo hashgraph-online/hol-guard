@@ -1242,6 +1242,7 @@
       "classes": {
         "external": [
           "command.agentbridge",
+          "command.agi-memory",
           "command.answerloops",
           "command.appimg",
           "command.blitcp",
