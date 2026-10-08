@@ -340,16 +340,13 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
         )
     }
 
-    // musl's aarch64 bindings omit SYS_kexec_file_load. Linux's generic
-    // table, which aarch64 uses, numbers that call 294. Keeping the number
-    // in this source means a lab image can compile the resident without
-    // editing the file. The command-program fingerprint covers this file,
-    // so a container sed between the source compiler and the resident
-    // splits program_digest and the resident masks that mismatch.
+    // ARM64 uses Linux's asm-generic syscall table. musl's libc bindings omit
+    // this constant, but the syscall must remain in the containment deny list.
+    // include/uapi/asm-generic/unistd.h defines __NR_kexec_file_load as 294.
     #[cfg(target_arch = "aarch64")]
-    const SYS_KEXEC_FILE_LOAD: i64 = 294;
+    const KEXEC_FILE_LOAD: libc::c_long = 294;
     #[cfg(not(target_arch = "aarch64"))]
-    const SYS_KEXEC_FILE_LOAD: i64 = libc::SYS_kexec_file_load;
+    const KEXEC_FILE_LOAD: libc::c_long = libc::SYS_kexec_file_load;
 
     let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
     for syscall in [
@@ -363,7 +360,7 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
         libc::SYS_bpf,
         libc::SYS_perf_event_open,
         libc::SYS_kexec_load,
-        SYS_KEXEC_FILE_LOAD,
+        KEXEC_FILE_LOAD,
         libc::SYS_init_module,
         libc::SYS_finit_module,
         libc::SYS_delete_module,

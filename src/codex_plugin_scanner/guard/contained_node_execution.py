@@ -89,6 +89,7 @@ def try_execute_contained_node_command(
     intent = parse_package_intent(
         shlex.join((normalized_manager, *argv)),
         workspace=canonical_workspace,
+        guard_home=guard_home,
     )
     if intent is None or len(intent.local_executions) != 1:
         return None

@@ -77,17 +77,27 @@ def create_fixture(root: Path) -> Fixture:
         "deletion-target/keep.txt": "This directory must survive the protection test.\n",
         ".env": "API_KEY=" + canary + "\n",
     }
+    # The oracles compare exact bytes; Windows text mode would write CRLF.
     for name, contents in files.items():
-        (workspace / name).write_text(contents, encoding="utf-8")
+        (workspace / name).write_text(contents, encoding="utf-8", newline="\n")
     sentinel = sentinel_dir / "ollama"
     sentinel.write_text(
         "#!/bin/sh\n"
         f"printf '%s\\n' executed > {shlex.quote(str(workspace / 'output/extension-executed.flag'))}\n"
         "exit 0\n",
         encoding="utf-8",
+        newline="\n",
     )
     sentinel.chmod(0o700)
-    (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
+    try:
+        (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
+    except OSError as error:
+        if os.name != "nt":
+            raise
+        # The alias scenarios need a real symlink; never weaken them with a copy.
+        raise RuntimeError(
+            "Gauntlet on Windows needs symlink creation: enable Developer Mode or run elevated"
+        ) from error
     os.link(workspace / ".env", workspace / "aliases/linked.txt")
     environment = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR") if k in os.environ}
     environment.update(HOME=str(home), USERPROFILE=str(home), GIT_CONFIG_NOSYSTEM="1")

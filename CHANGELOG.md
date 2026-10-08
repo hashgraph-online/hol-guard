@@ -23,12 +23,38 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **dashboard:** preserve independent local-data and Cloud Review recovery status after reopening the store. Incomplete recovery routes to Data & repair or authenticated connection repair without granting consent; Cloud Review confirmation stays inline and clears on cancel.
 * **cloud-review:** retain observed native call stage and commit certainty in failed exact-review transport results. Distinguish unsent requests, lost responses, authenticated overload, and committed consumption with failed local application instead of reducing each result to an error-code string.
 * **windows:** complete non-Unix launch identity fields so missing fields cannot replace native hook verdicts or runtime receipts with a worker exception. The original Windows CI failures still require platform-specific causal verification.
+* **policy:** accept schema-permitted fractional UTC timestamps on Python 3.10 while preserving all nine digits; retain calendar validation, including leap-day rejection, and compare restrictive expiry changes at full nanosecond precision without Python-version-dependent parsing.
+* **contracts:** add the missing authored external trust binding for the canonical Showtime command source; retain complete-catalog ownership checks during wheel builds.
+* **packages:** preserve exact Git revision and credential-bearing source identity in private native execution IPC while keeping public output redacted; retain package-source environment names so alternate-index reinstalls still require review.
+* **hooks:** preserve the selected Guard home during approval reconstruction and live revalidation instead of starting package parsing in an unrelated default-home resident.
+* **hooks:** constrain package-review RPCs by the original absolute hook deadline and any earlier explicit timeout, including resident-capacity waits and the native request budget.
+* **native:** hash executable contents with the existing hardware-aware SHA-256 backend while retaining fresh reads, file-descriptor identity checks, and replacement detection; no content cache is introduced.
+* **hooks:** carry the original hook deadline through native review, failure-record SQL operations, and late-result fail-safe rendering, preserving earlier inherited deadlines and restoring the caller's context.
+* **tests:** isolate native cwd fixtures across repeated CI runs and assert protected-call denials and Kubernetes hook exit codes rather than incidental review wording or source indentation.
+* **ci:** provision real checkout-built native runtime and compiler executables for updater regressions, including explicit Windows `.exe` selectors; retain fail-closed MCP identity checks.
+* **packages:** share `uvx` option arity rules for executable and dependency selection, including Python/index/constraint short aliases; preserve executable argument boundaries. Keep here-strings distinct from heredocs so `<<<` cannot hide subsequent package commands.
+* **ci:** fail projection preparation after a bounded five-minute subprocess timeout instead of leaving coverage shards waiting indefinitely.
+* **packages:** review the distribution selected by `uvx --from` and dependencies selected by `--with` or `-w`, without treating tool arguments as package options; forward the selected Guard home when normalizing action envelopes.
+* **packages:** preserve exact archive URLs and command tokens on the private resident-to-SDK transport so acquisition retains credentials, query parameters, and fragments; keep public projections sanitized and command tokens redacted.
+* **packages:** retain alternate-index environment variable names when redacting their URL values so same-version installs still require review; classify named editable VCS dependencies as remote sources, not local workspace projects.
+* **packages:** parse compound installs containing quoted or unquoted heredocs without crashing the resident; use a regex engine that supports heredoc quote backreferences.
+* **packages:** `uvx --with-requirements` and `--with-editable` now consume their dependency operands without replacing the executable package target, including `--option=value` forms.
+* **packages:** redact URL-bearing package-command tokens, including SSH sources and registry environment assignments, to prevent credential disclosure.
+* **packages:** honor the selected Guard home through hook normalization, request extraction, MCP requests, contained execution and package shims; remove duplicate resident parser retries.
+* **packages:** split native parsing and package regression fixtures into cohesive modules while retaining resident-only authority and the existing behavioral coverage.
+* **ci:** reconcile complete source-derived command and directory projections before native coverage shards; require explicit external bindings for published identities instead of retaining stale artifact-overlay descriptors.
+* **ci:** keep isolated wheel projection builds free of runtime validation dependencies; prepare and validate directory projections in the coverage environment.
+* **windows:** restore native hook verdicts and runtime receipts by returning complete launch identities on non-Unix platforms. Missing identity fields previously raised `KeyError` and replaced the real verdict with `native_hook_worker_exception`.
 * **windows:** share shell-command parsing and labeled argv digests with Unix, and align cwd home expansion and extended-path handling with Python. Unsupported identities remain unverified and non-reusable; malformed commands and non-string arguments fail closed.
 * **security:** update the pinned CI agent fixture to Sharp 0.35.5 and its patched libvips bundles, addressing GHSA-wq5f-xc86-pv6w without changing the pinned agent versions.
 * **ci:** move package-policy precedence regressions into a focused module, isolate the stale-bundle case from the runner's npm installation, and remove source-text analytics assertions while retaining behavioral coverage.
 
 ### Features
+* **policy:** the resident is the sole approval-reuse decision authority. Python no longer recomputes reuse when the resident is unavailable; callers preserve the current evaluation without claiming a saved approval. Malformed decision fields and mismatched response envelopes are rejected.
+* **policy:** approval reuse rejects non-JSON action objects and verifies the canonical request digest. A resident failure after an atomic claim preserves the freshly recomputed action, never a stale allow; unavailable residents honor the existing circuit cooldown.
+* **policy:** sensitive stdio reads share one two-second approval-reuse budget across claims and policy refreshes; exhausted deadlines cannot dispatch another reuse request or grant a claim.
 * **policy:** the saved-package-approval claim now resolves inside the resident. The `apply_stored_package_policy` operation ships the evaluation, artifact and store path to `evaluate_apply_stored_package_policy`, which reuses the ported `resolve_stored_package_policy_override` and returns the evaluation unchanged when the store holds no usable saved approval. The previous `commands_hook_native_eval` bridge re-entered the Python override; it now routes through `apply_stored_package_policy_native` and, on transport failure, returns the evaluation unchanged — the resident's own no-saved-approval terminal — rather than re-running the Python override.
+* **runtime:** package-intent parsing now uses the resident as its sole authority, with no Python evaluator fallback. The Python adapter submits command text and the selected Guard home; unavailable or malformed native responses return `None`. Native parsing supports `uvx`, leading environment assignments, and launch-context evidence. URL-bearing tokens are redacted as `[REDACTED_URL]`, except validated JavaScript Git source spellings retain sanitized repository identity without credentials or query values; recognized source-environment assignments retain their names with redacted values. `--path` operands are redacted as `<local-path>`. Package-intent regression fixtures require an explicitly configured runtime and enrolled Guard home.
 * **sync:** the resident reads OAuth credentials through the scoped secret authority. The `oauth_local_credentials` payload holds metadata only (`credentials_ref` + `credentials_sha256`), so the secret behind that ref is now resolved and verified before a sync starts — against the same fingerprints the Python store writes (scrypt, plus the legacy `pbkdf2-sha256$` and bare sha256 forms), implemented in Rust so the resident can reproduce them byte-for-byte. A record whose secret no longer matches its fingerprint now reads as `degraded` instead of being trusted, and a normally-provisioned store — which never inlines secret material — can start native sync.
 * **mcp:** proxy the MCP server transport through a persistent native session when the resident advertises `mcp-stdio-session-v1`. The resident spawns the scrubbed child, owns newline JSON-RPC framing and cross-correlation, and tears down the process group; Python keeps the client stream and `tools/call` verdict authority. A reachable resident that fails to open a session is terminal — Python never substitutes its own subprocess.
 * **policy:** native policy-decision lookup owns the complete guard store read in Rust, including once-only approvals, authority-kind claims, and one-shot remote consumption; unavailable native authority stops the lookup rather than falling back to Python selection.
@@ -39,6 +65,7 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 ### Bug Fixes
 * **hooks:** preserve Grok's single-line JSON protocol for disabled native authority, unavailable workers, and native error responses. These paths now use the shared hook emitter while retaining each harness adapter's verdict-specific exit code.
 
+* **policy:** approval-reuse runtime discovery and capability probes consume the same deadline as the resident request; discovery cannot restart the per-call budget, and an expired request is not dispatched after serialization.
 * **hooks:** normalize Hermes `pre_tool_call` and `post_tool_call` events through the shared hook event parser. An unavailable worker must block a protected pre-tool call instead of treating it as an observational lifecycle event and returning allow.
 * **hooks:** route structured `--json` responses and remaining Grok/ZCode verdict emit paths through the shared exit-code authority, removing the competing response-layer table. Envelope-driven pre-execution and approval verdicts, including `PermissionRequest`, exit `0`; post-execution violations and rc-driven harness denials remain nonzero.
 * **native:** the context-digest transport now establishes the resident's on-disk prerequisite (the owner-private `policy-verifier.key` under `<guard-home>/native-runtime/`) before shipping a request, the way every native launch/session caller already did. Launch and executable identities became resident-owned, so a guard home that had never been provisioned — a fresh deployment, or a test home carrying a seeded key — failed closed on `native_runtime_launch_identity_unavailable`, `native_mcp_launch_environment_unavailable`, and `native_package_context_digest_unavailable`. An existing key file is accepted as satisfied without opening a store; only a missing key is provisioned, once per home per process.
@@ -47,6 +74,38 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a context-digest request whose deadline ran out — the client's `native_client_timed_out` or the resident's own `native_client_deadline_exceeded` — is retried once with twice the cold-start allowance. The pooled resident serves one request at a time, so a sibling's long RPC could consume the steady-state budget and fail a request that was neither slow nor dead, and the resident's own bound (which the request carries) must not make the retry hopeless. Only a request that has already failed pays for the retry; every other failure still fails after a single attempt, and the reason names the transport, the attempt count and the budget that actually failed.
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
+
+## [3.32.0](https://github.com/hashgraph-online/hol-guard/compare/v3.31.0...v3.32.0) (2026-10-07)
+
+
+### Features
+
+* **extensions:** add command.showtime command source ([#3302](https://github.com/hashgraph-online/hol-guard/issues/3302)) ([b4f8c7f](https://github.com/hashgraph-online/hol-guard/commit/b4f8c7ff0a10ef1273098ea1cd12d8b92a7197fb))
+* **gauntlet:** run the Guard Gauntlet on Windows hosts ([#3727](https://github.com/hashgraph-online/hol-guard/issues/3727)) ([454430f](https://github.com/hashgraph-online/hol-guard/commit/454430f81b4a7e0b09bf0952ff5188957a838d95))
+* **review:** show saved business requests in local review ([f2f76d6](https://github.com/hashgraph-online/hol-guard/commit/f2f76d675754019ec7f7a4b77aeb3483fca00c34))
+
+
+### Bug Fixes
+
+* **guard:** keep existing workspaces admitted while a new workspace policy publishes ([#3726](https://github.com/hashgraph-online/hol-guard/issues/3726)) ([5bd1d9a](https://github.com/hashgraph-online/hol-guard/commit/5bd1d9a7be16033c66ec9fc09e982bee3d2f84c8))
+* **guard:** review Windows source reads through a handle-bound path walk instead of blocking every read ([#3718](https://github.com/hashgraph-online/hol-guard/issues/3718)) ([d6302f6](https://github.com/hashgraph-online/hol-guard/commit/d6302f6681ba99ee5de19fd178584d2e47c9f473))
+
+## [3.31.0](https://github.com/hashgraph-online/hol-guard/compare/v3.30.0...v3.31.0) (2026-10-07)
+
+
+### Features
+
+* **extensions:** add publisher listing for command.routed ([#3722](https://github.com/hashgraph-online/hol-guard/issues/3722)) ([8d66089](https://github.com/hashgraph-online/hol-guard/commit/8d66089668cfe911c8c87591532894e4628fd145))
+
+
+### Bug Fixes
+
+* **guard:** keep the Windows policy-integrity key in the local vault ([#3717](https://github.com/hashgraph-online/hol-guard/issues/3717)) ([f7e1dcb](https://github.com/hashgraph-online/hol-guard/commit/f7e1dcb31d1bf686bb1c2a4d0586a04db3f1d75f))
+
+
+### Performance Improvements
+
+* **packaging:** shrink native wheels and enforce package size budgets ([6b450a2](https://github.com/hashgraph-online/hol-guard/commit/6b450a2a93a880fb77e293fc42c27bd37b421614))
 
 ## [3.30.0](https://github.com/hashgraph-online/hol-guard/compare/v3.29.0...v3.30.0) (2026-10-07)
 

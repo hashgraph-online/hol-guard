@@ -35,12 +35,15 @@ use winapi::um::winbase::{
 };
 use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE};
 
+#[path = "bound_open.rs"]
+mod bound_open;
 #[path = "directory_binding.rs"]
 mod directory_binding;
 #[path = "private_files.rs"]
 mod private_files;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
+pub use bound_open::{handle_file_id, open_bound_regular_file, regular_file_id, FileId};
 pub use directory_binding::{
     bind_directory, bind_private_directory, create_private_directory, path_is_within,
     PrivateDirectoryBinding,

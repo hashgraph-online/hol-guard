@@ -124,6 +124,8 @@ pub(super) fn local_python_project_path(
     if let Some(url) = &source_url {
         if url.starts_with("file:") {
             raw_spec = Some(py_partition(url, "file:").2.to_string());
+        } else {
+            return None;
         }
     }
     if raw_spec.is_none() {

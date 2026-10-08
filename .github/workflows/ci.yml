@@ -196,6 +196,8 @@ jobs:
         run: |
           python3 scripts/refresh_extension_artifacts.py --trust-only
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+      - name: Check sizes of the existing native build
+        run: python3 scripts/ci/check_wheel_size.py --native-dir rust/target/release --platform manylinux_2_17_x86_64
       - name: Verify generated native command catalogs before pytest fan-out
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -224,6 +226,7 @@ jobs:
           HOL_GUARD_NATIVE_REGRESSION: "1"
         run: |
           uv run --no-sync pytest -q --tb=short \
+            ci/package_size \
             tests/test_guard_command_corpus_native_contract.py::test_native_contract_validates_every_authored_signature_without_rewriting_evidence \
             tests/test_pi_adapter.py::TestPiInstall::test_install_writes_managed_extension_that_denies_on_hook_errors \
             tests/test_pi_adapter.py::TestPiInstall::test_managed_extension_fails_safe_on_ambiguous_success_payloads

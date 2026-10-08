@@ -167,6 +167,10 @@ def _evaluate_tool_call(
             and calls.fresh_local_tool_approval_matches(saved_decision, artifact=artifact, artifact_hash=artifact_hash)
         ),
     )
+    if reuse is None:
+        # Resident unreachable: no saved approval is claimed; the recomputed
+        # current decision stands unchanged.
+        return current
     pending_decision: Mapping[str, object] | None = None
     claim_disposition: ApprovalReuseClaimDisposition | None = None
     if reuse.should_claim and saved_decision is not None:
@@ -175,12 +179,17 @@ def _evaluate_tool_call(
             claim_disposition = raw_claim_disposition
         if claim_saved_approval:
             if not store.claim_approval_reuse_decision(saved_decision):
-                reuse = calls.evaluate_approval_reuse(
+                claim_failed = calls.evaluate_approval_reuse(
                     current.action,
                     saved_action,
                     saved_decision_present=True,
                     validation_reason=calls.APPROVAL_REUSE_CLAIM_FAILED,
                 )
+                if claim_failed is not None:
+                    reuse = claim_failed
+                # Resident unreachable after a failed claim: keep the prior
+                # non-claiming composition (it already rejected reuse) rather
+                # than treating the claim as successful.
             else:
                 return _ClaimedToolApproval(saved_decision, claim_disposition)
         else:

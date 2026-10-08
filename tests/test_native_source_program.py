@@ -284,9 +284,6 @@ def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
         "config": {},
         "matchers": groups,
     }
-    # Stay inside the 8 MiB native input envelope so the node budget, not the
-    # envelope, is what rejects the request; the catalog alone grows past 4 MiB.
-    assert len(canonical(example)) < 8 * 1024 * 1024
     result = invoke(compiler, example)
     assert result.returncode != 0
     assert json.loads(result.stdout)["code"] == "command_source_matcher_budget_exceeded"

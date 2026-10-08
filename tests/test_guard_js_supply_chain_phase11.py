@@ -23,6 +23,8 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluat
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 WORKSPACE_ID = "workspace-alpha"
 
 
@@ -319,7 +321,11 @@ def test_hosted_git_archive_requires_git_review_without_archive_download(
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: pytest.fail("hosted Git archives must not enter generic archive download"),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda *_args, **_kwargs: pytest.fail("hosted Git archives must not enter generic archive download"),
+    )
 
     artifact = _artifact_from_command(
         "npm install https://github.com/hashgraph-online/hol-guard/archive/refs/heads/main.tar.gz?token=secret",
@@ -423,7 +429,11 @@ def test_external_tarball_scan_failure_respects_security_level(
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     _write_text(home_dir / "config.toml", f'security_level = "{security_level}"\n')
     store = GuardStore(home_dir)
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda _url, **_kwargs: (None, None),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda _url, **_kwargs: (None, None),
+    )
 
     artifact = _artifact_from_command(
         "npm install guard-query@https://example.com/guard.tgz?token=demo",
@@ -451,7 +461,11 @@ def test_external_tarball_scan_failure_blocks_after_approval_in_balanced_mode(
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     _write_text(home_dir / "config.toml", 'security_level = "balanced"\n[risks]\ncloud_advisory = "block"\n')
     store = GuardStore(home_dir)
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda _url, **_kwargs: (None, None),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda _url, **_kwargs: (None, None),
+    )
 
     artifact = _artifact_from_command(
         "npm install guard-query@https://example.com/guard.tgz?token=demo",

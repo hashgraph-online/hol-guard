@@ -153,6 +153,7 @@ def fresh_native_artifact_evaluation(
         payload=payload,
         home_dir=context.home_dir,
         workspace=runtime_workspace,
+        guard_home=context.guard_home,
     )
     fresh_data_flow_signals = _runtime_action_data_flow_signals(fresh_action_envelope, workspace=runtime_workspace)
     fresh_runtime_artifact = hook_runtime_artifact_for_store(

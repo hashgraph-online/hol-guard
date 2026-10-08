@@ -2622,7 +2622,11 @@ function CloudReviewSettings({ onOpenDataAndRepair }) {
     if (!status || !action || pending) return;
     const requireFreshTotp2 = status.approval_gate.totp_enabled === true;
     if (action === "enable" && cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp2)) return;
-    const proof = action === "enable" ? { approval_password: password, ...requireFreshTotp2 ? { approval_totp_code: totp } : {} } : {};
+    const proof = {};
+    if (action === "enable") {
+      proof.approval_password = password;
+      if (requireFreshTotp2) proof.approval_totp_code = totp;
+    }
     revision.current += 1;
     setPending(true);
     setError(null);
@@ -2657,6 +2661,9 @@ function CloudReviewSettings({ onOpenDataAndRepair }) {
   const deliveredAt = status?.last_synced_at && Number.isFinite(Date.parse(status.last_synced_at)) ? new Date(status.last_synced_at) : null;
   const cloudRecoveryIncomplete = status?.cloud_review_recovery?.cloudReview === false && status.cloud_review_recovery_repair.status !== "completed";
   const connectionRepairNeeded = cloudRecoveryIncomplete && status?.cloud_review_recovery_repair.status === "authentication_required";
+  let connectionLabel = status?.connected ? "Connected" : "Not connected";
+  if (cloudRecoveryIncomplete) connectionLabel = "Recovery incomplete";
+  if (connectionRepairNeeded) connectionLabel = "Device sign-in needed";
   const localDataRecoveryIncomplete = status?.cloud_review_recovery?.localCli === false;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cloud-review-heading", className: "border-t border-slate-200 pt-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
@@ -2688,7 +2695,7 @@ function CloudReviewSettings({ onOpenDataAndRepair }) {
     status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud connection" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: connectionRepairNeeded ? "Device sign-in needed" : cloudRecoveryIncomplete ? "Recovery incomplete" : status.connected ? "Connected" : "Not connected" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: connectionLabel })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud decisions" }),

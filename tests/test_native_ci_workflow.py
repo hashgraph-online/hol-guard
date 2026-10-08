@@ -150,6 +150,7 @@ def test_native_wheel_prs_only_fan_out_for_native_build_inputs() -> None:
     assert set(trigger["paths"]) == {
         "rust/**",
         "ci/native_runtime/**",
+        "ci/package_size/**",
         "contracts/extensions/**",
         "contributions/**",
         "src/codex_plugin_scanner/guard/*native*.py",

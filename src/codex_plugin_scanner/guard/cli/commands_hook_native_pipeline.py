@@ -111,7 +111,7 @@ def run_native_hook_pipeline(
         workspace_from_hook_payload=_workspace_from_hook_payload,
         handle_native_cursor_post_tool=handle_native_cursor_post_tool,
         resolve_copilot_workspace_root=_resolve_copilot_workspace_root,
-        action_envelope_for=_hook_action_envelope,
+        action_envelope_for=lambda **kwargs: _hook_action_envelope(guard_home=context.guard_home, **kwargs),
         copilot_hook_stage_for=_copilot_hook_stage,
         copilot_runtime_tool_call_for=_copilot_runtime_tool_call,
         config=config,
@@ -343,6 +343,7 @@ def run_native_hook_pipeline(
             payload=payload,
             home_dir=context.home_dir,
             workspace=runtime_workspace,
+            guard_home=context.guard_home,
         )
         return run_native_generic_payload(
             args,
@@ -376,6 +377,7 @@ def run_native_hook_pipeline(
         _claimed_saved_allow_hash=_claimed_saved_allow_hash,
         _claim_saved_approval=_claim_saved_approval,
     )
+
 
 
 __all__ = [

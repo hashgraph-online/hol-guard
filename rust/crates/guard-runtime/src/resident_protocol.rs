@@ -56,6 +56,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-workspace-review-enrollment-resident-v1".into(),
         "native-workspace-review-context-v1".into(),
         "native-local-business-review-summary-v1".into(),
+        "native-local-business-review-queue-v1".into(),
         "native-workspace-review-decision-v1".into(),
         "native-workspace-review-consumption-query-v1".into(),
         "native-cloud-review-consent-v1".into(),
@@ -135,6 +136,7 @@ pub(crate) enum ResidentOperationV1 {
     WorkspaceReviewAuthorityEnroll(WorkspaceReviewAuthorityEnrollRequestV1),
     WorkspaceReviewContext(WorkspaceReviewContextRequestV1),
     WorkspaceReviewLocalSummary(WorkspaceReviewContextRequestV1),
+    WorkspaceReviewLocalQueue(WorkspaceReviewLocalQueueRequestV1),
     WorkspaceReviewDecision(WorkspaceReviewDecisionRequestV1),
     WorkspaceReviewDecisionConsumption(WorkspaceReviewDecisionRequestV1),
     ContextDigest(ContextDigestRequestV1),
@@ -191,6 +193,10 @@ pub(crate) struct WorkspaceReviewDecisionRequestV1 {
 pub(crate) struct WorkspaceReviewContextRequestV1 {
     pub(crate) request_id: String,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkspaceReviewLocalQueueRequestV1 {}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

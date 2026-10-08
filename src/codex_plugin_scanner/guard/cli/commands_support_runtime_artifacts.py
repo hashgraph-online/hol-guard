@@ -657,6 +657,7 @@ def _hook_runtime_artifact(
             action_envelope_command=action_envelope.command if action_envelope is not None else raw_command_text,
             workspace=workspace,
             home_dir=home_dir,
+            guard_home=guard_home,
         )
     runtime_artifacts: list[GuardArtifact] = []
     native_review = (

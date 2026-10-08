@@ -224,6 +224,12 @@ fn persist_prepared_review(
         {
             return Err("native_business_snapshot_changed".into());
         }
+        let registration = super::super::workspace_review_business_queue::Registration::new(
+            store,
+            request_id,
+            &state_bytes,
+            prepared.binding(),
+        )?;
         let result = (|| {
             if existing.is_none() {
                 super::super::policy_store_persistence::persist_private_bytes(
@@ -252,9 +258,16 @@ fn persist_prepared_review(
             {
                 return Err("native_business_snapshot_changed".into());
             }
-            Ok(())
+            registration.publish(store)
         })();
         if let Err(original) = result {
+            let selector_cleanup = remove_created_file(
+                &registration.path,
+                &registration.bytes,
+                1024,
+                "business_queue_selector",
+                &private_root,
+            );
             let request_cleanup = remove_created_file(
                 &request_path,
                 &state_bytes,
@@ -273,7 +286,7 @@ fn persist_prepared_review(
             } else {
                 Ok(())
             };
-            request_cleanup.and(input_cleanup)?;
+            selector_cleanup.and(request_cleanup).and(input_cleanup)?;
             return Err(original);
         }
         Ok(())
