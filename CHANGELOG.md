@@ -9,6 +9,7 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 ## Unreleased
 
 ### Fixed
+* **ci:** make the authenticated native recovery fixture's accepted socket blocking on Unix before its unchanged read deadline, preserving authentication rejection and recovery checks without scheduler-dependent `WouldBlock` races or diagnostic-text assertions.
 * **policy:** accept schema-permitted fractional UTC timestamps on Python 3.10 while preserving all nine digits; retain calendar validation, including leap-day rejection, and compare restrictive expiry changes at full nanosecond precision without Python-version-dependent parsing.
 * **contracts:** add the missing authored external trust binding for the canonical Showtime command source; retain complete-catalog ownership checks during wheel builds.
 * **packages:** preserve exact Git revision and credential-bearing source identity in private native execution IPC while keeping public output redacted; retain package-source environment names so alternate-index reinstalls still require review.
