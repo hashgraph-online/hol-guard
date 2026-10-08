@@ -6,7 +6,6 @@ import json
 import os
 import platform
 import re
-import secrets
 import shlex
 import shutil
 import subprocess
@@ -23,7 +22,7 @@ from .agent_prompt import fixture_authorization, scenario_prompt
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
 from .evidence import assess_case, public_events, read_events, sha256_bytes
-from .extension_adapters import ExtensionAdapter, extension_adapter
+from .extension_adapters import configure_extension_permission_denial, extension_adapter
 from .fixtures import Fixture, create_fixture, digest_file, filesystem_checks, scenario_fixture_name
 from .host_process import clean_environment, run_process
 from .input_evidence import (
@@ -72,40 +71,6 @@ def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
                 break
         labels.append(label)
     return labels
-
-
-def _configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter: ExtensionAdapter) -> dict[str, Any]:
-    """Install a signed synthetic extension control for one denial case."""
-    from ci.native_runtime.probe_installed_native_extensions import commit_controls, control, provision
-    from codex_plugin_scanner.guard.approval_gate import update_settings
-    from codex_plugin_scanner.guard.config import update_guard_settings
-    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
-
-    password = secrets.token_urlsafe(32)
-    update_guard_settings(guard_home, {"mode": "enforce"})
-    update_settings(
-        guard_home,
-        {"enabled": True, "new_password": password, "confirm_password": password, "cooldown_seconds": 0},
-    )
-    store = daemon._server.store
-    provision(store)
-    permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id(adapter.rule_id)
-    if permission is None or permission.permission_id != adapter.permission_id:
-        raise RuntimeError(f"installed extension catalog lacks the reviewed {adapter.rule_id} permission")
-    enabled = control(ControlTargetKind.EXTENSION, adapter.extension_id, ControlState.ENABLED)
-    revision = commit_controls(
-        store,
-        password,
-        (enabled, control(ControlTargetKind.PERMISSION, permission.permission_id, ControlState.DISABLED)),
-    )
-    return {
-        "extension_id": adapter.extension_id,
-        "rule_id": adapter.rule_id,
-        "permission_id": permission.permission_id,
-        "permission_state": "disabled",
-        "control_revision": revision,
-    }
 
 
 def _scenario_tools(scenario: Scenario) -> str:
@@ -225,7 +190,7 @@ def run_case(
                 identity=identity,
             )
             if scenario.oracle == "blocked-extension":
-                case["extension_control"] = _configure_extension_permission_denial(
+                case["extension_control"] = configure_extension_permission_denial(
                     daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
                 )
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
