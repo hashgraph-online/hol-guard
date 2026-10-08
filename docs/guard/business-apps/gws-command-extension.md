@@ -13,9 +13,10 @@ and `delete`, and the Gmail settings that redirect or expose mail:
 `delegates create`.
 The CLI is a community project, not an officially supported Google product.
 
-Explicit service versions use the same rules. The routes also match the
-discovery-published `gmail:v1`, `drive:v3`, `drive:v2` and `calendar:v3` service
-tokens. Drive v2 method names (`permissions insert`/`patch`, `files trash`) are
+Discovery routes also match the explicit `gmail:v1`, `drive:v3`, `drive:v2` and
+`calendar:v3` service tokens. Gmail `+` helpers such as `+send` and `+forward`
+are matched only under the bare `gmail` service; this extension does not cover
+them with a versioned service token. Drive v2 method names (`permissions insert`/`patch`, `files trash`) are
 covered whether v2 is selected by `drive:v2` or by `--api-version v2`, and
 `teamdrives delete` is reviewed with shared drive deletion.
 Inline credential or configuration overrides, such as

@@ -13962,6 +13962,146 @@
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-send-help",
+      "command": "gws gmail:v1 users messages send --help",
+      "rule_id": "command.google-workspace.gws.send",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-send-short-help",
+      "command": "gws gmail:v1 users messages send -h",
+      "rule_id": "command.google-workspace.gws.send",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-delete-help",
+      "command": "gws drive:v3 files delete --help",
+      "rule_id": "command.google-workspace.gws.delete",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-delete-short-help",
+      "command": "gws drive:v3 files delete -h",
+      "rule_id": "command.google-workspace.gws.delete",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-share-short-help",
+      "command": "gws calendar:v3 acl insert -h",
+      "rule_id": "command.google-workspace.gws.share",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-calendar-help",
+      "command": "gws calendar:v3 events insert --help",
+      "rule_id": "command.google-workspace.gws.calendar",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-calendar-short-help",
+      "command": "gws calendar:v3 events insert -h",
+      "rule_id": "command.google-workspace.gws.calendar",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-drive-insert-short-help",
+      "command": "gws drive:v2 permissions insert -h",
+      "rule_id": "command.google-workspace.gws.share",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "gws-route-versioned-send-params-help-value",
+      "command": "gws gmail:v1 users messages send --params '--help'",
+      "rule_id": "command.google-workspace.gws.send",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "gws-route-versioned-calendar-params-help-value",
+      "command": "gws calendar:v3 events insert --params '--help'",
+      "rule_id": "command.google-workspace.gws.calendar",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "gws-route-versioned-send-params-short-help-value",
+      "command": "gws gmail:v1 users messages send --params '-h'",
+      "rule_id": "command.google-workspace.gws.send",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "gws-route-versioned-calendar-params-short-help-value",
+      "command": "gws calendar:v3 events insert --params '-h'",
+      "rule_id": "command.google-workspace.gws.calendar",
+      "enabled_extensions": [
+        "command.google-workspace.gws"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ]
     }
   ]
 }
