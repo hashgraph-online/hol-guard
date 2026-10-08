@@ -300,19 +300,19 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.init",
-              "rule_id": "command.dataman.rule.init",
-              "rule_version": "1.0.0",
-              "title": "DataMan init",
-              "severity": "medium",
               "risk_classes": [
                 "database_mutation"
               ],
+              "rule_id": "command.dataman.rule.init",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Check the working directory to ensure it is the intended project root before initializing."
-              ]
+              ],
+              "severity": "medium",
+              "title": "DataMan init"
             },
             {
               "action_classes": [
@@ -351,20 +351,20 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.create-table",
-              "rule_id": "command.dataman.rule.create-table",
-              "rule_version": "1.0.0",
-              "title": "DataMan create table",
-              "severity": "medium",
               "risk_classes": [
                 "database_mutation"
               ],
+              "rule_id": "command.dataman.rule.create-table",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Review the table name and operations flags before scaffolding.",
                 "Check existing tables/ directory to avoid naming collisions."
-              ]
+              ],
+              "severity": "medium",
+              "title": "DataMan create table"
             },
             {
               "action_classes": [
@@ -398,20 +398,20 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.create-database",
-              "rule_id": "command.dataman.rule.create-database",
-              "rule_version": "1.0.0",
-              "title": "DataMan create database",
-              "severity": "medium",
               "risk_classes": [
                 "database_mutation"
               ],
+              "rule_id": "command.dataman.rule.create-database",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Confirm the database identifier does not conflict with existing database aliases.",
                 "Verify the connection URL in database.py before migrating."
-              ]
+              ],
+              "severity": "medium",
+              "title": "DataMan create database"
             },
             {
               "action_classes": [
@@ -444,19 +444,19 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.makemigration",
-              "rule_id": "command.dataman.rule.makemigration",
-              "rule_version": "1.0.0",
-              "title": "DataMan makemigration",
-              "severity": "medium",
               "risk_classes": [
                 "database_mutation"
               ],
+              "rule_id": "command.dataman.rule.makemigration",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Inspect generated migration files before executing dataman migrate."
-              ]
+              ],
+              "severity": "medium",
+              "title": "DataMan makemigration"
             },
             {
               "action_classes": [
@@ -492,20 +492,20 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.migrate",
-              "rule_id": "command.dataman.rule.migrate",
-              "rule_version": "1.0.0",
-              "title": "DataMan migrate",
-              "severity": "high",
               "risk_classes": [
                 "database_mutation"
               ],
+              "rule_id": "command.dataman.rule.migrate",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Run dataman makemigration first and inspect the generated migration files.",
                 "Check target database connection before executing migrations on production databases."
-              ]
+              ],
+              "severity": "high",
+              "title": "DataMan migrate"
             },
             {
               "action_classes": [
@@ -539,19 +539,19 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.user-admin",
-              "rule_id": "command.dataman.rule.create-admin",
-              "rule_version": "1.0.0",
-              "title": "DataMan create-admin",
-              "severity": "high",
               "risk_classes": [
                 "security_credential_provisioning"
               ],
+              "rule_id": "command.dataman.rule.create-admin",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Verify the username and use strong, unique passwords for administrative accounts."
-              ]
+              ],
+              "severity": "high",
+              "title": "DataMan create-admin"
             },
             {
               "action_classes": [
@@ -585,19 +585,19 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.user-admin",
-              "rule_id": "command.dataman.rule.change-password",
-              "rule_version": "1.0.0",
-              "title": "DataMan change-password",
-              "severity": "high",
               "risk_classes": [
                 "security_credential_provisioning"
               ],
+              "rule_id": "command.dataman.rule.change-password",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Verify the username and use strong, unique passwords for administrative accounts."
-              ]
+              ],
+              "severity": "high",
+              "title": "DataMan change-password"
             },
             {
               "action_classes": [
@@ -634,20 +634,20 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.create-token",
-              "rule_id": "command.dataman.rule.create-token",
-              "rule_version": "1.0.0",
-              "title": "DataMan create-token",
-              "severity": "high",
               "risk_classes": [
                 "security_credential_provisioning"
               ],
+              "rule_id": "command.dataman.rule.create-token",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Limit token scopes to only the required tables and operations.",
                 "Set an explicit expiration duration using --expires-in."
-              ]
+              ],
+              "severity": "high",
+              "title": "DataMan create-token"
             },
             {
               "action_classes": [
@@ -691,19 +691,19 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.export-logs",
-              "rule_id": "command.dataman.rule.export-audit",
-              "rule_version": "1.0.0",
-              "title": "DataMan export-audit",
-              "severity": "medium",
               "risk_classes": [
                 "data_export"
               ],
+              "rule_id": "command.dataman.rule.export-audit",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Confirm the export target path is secure and does not expose sensitive PII or telemetry data."
-              ]
+              ],
+              "severity": "medium",
+              "title": "DataMan export-audit"
             },
             {
               "action_classes": [
@@ -743,44 +743,66 @@
                 },
                 "op": "executable.v1"
               },
+              "native_capability": null,
               "permission_id": "command.dataman.permission.export-logs",
-              "rule_id": "command.dataman.rule.export-telemetry",
-              "rule_version": "1.0.0",
-              "title": "DataMan export-telemetry",
-              "severity": "medium",
               "risk_classes": [
                 "data_export"
               ],
+              "rule_id": "command.dataman.rule.export-telemetry",
+              "rule_version": "1.0.0",
               "safe_variants": [],
-              "native_capability": null,
               "safer_alternatives": [
                 "Confirm the export target path is secure and does not expose sensitive PII or telemetry data."
-              ]
+              ],
+              "severity": "medium",
+              "title": "DataMan export-telemetry"
             }
           ],
-          "version": "1.0.0",
-          "source": "built-in",
           "safer_alternatives": [
             "Inspect migration files and verify target database connections before applying database schema changes.",
             "Review user administration and token creation parameters before provisioning credentials."
-          ]
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
         },
         "schema": "guard.command-extension-source.v1"
       }
     ],
     "trust": {
-      "schemaVersion": "guard.extension-trust-class-map.v1",
-      "publishers": {
-        "hol": {
-          "id": "hol",
-          "displayName": "Hashgraph Online"
-        },
-        "hol-curated": {
-          "id": "hol-curated",
-          "displayName": "HOL curated library"
-        }
-      },
       "classes": {
+        "external": [
+          "command.appimg",
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.dataman",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-contribos",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-loomdesk",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge"
+        ],
         "first-party": [
           "command.container-runtime",
           "command.data-protection",
@@ -846,265 +868,243 @@
           "command.storage.azure-blob",
           "command.storage.google-cloud",
           "command.storage.minio"
-        ],
-        "external": [
-          "command.appimg",
-          "command.blitcp",
-          "command.cloudg",
-          "command.cogext",
-          "command.cs",
-          "command.ctty",
-          "command.dataman",
-          "command.digline",
-          "command.errand",
-          "command.faf-cli",
-          "command.genclave",
-          "command.gitsync",
-          "command.mcp-contribos",
-          "command.mcp-filesystem",
-          "command.mcp-instapods",
-          "command.mcp-insumer",
-          "command.mcp-loomdesk",
-          "command.mcp-pr-ui-compare",
-          "command.mcp-reaper",
-          "command.noodle",
-          "command.ollama",
-          "command.probe",
-          "command.remote.essh",
-          "command.repo2nb",
-          "command.skill-base",
-          "command.skill-sunset",
-          "command.snoboard",
-          "command.syngraphe",
-          "command.tui-runner",
-          "command.uivoid",
-          "command.vttforge"
         ]
-      }
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
     }
   },
   "cases": [
     {
-      "id": "dataman-init",
       "command": "dataman init",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.init",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-init",
+      "rule_id": "command.dataman.rule.init"
     },
     {
-      "id": "dataman-create-table",
       "command": "dataman create table Employee -o crud",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.create-table",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-create-table",
+      "rule_id": "command.dataman.rule.create-table"
     },
     {
-      "id": "dataman-create-table-with-db",
       "command": "dataman create table Order --database analytics -o cr",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.create-table",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-create-table-with-db",
+      "rule_id": "command.dataman.rule.create-table"
     },
     {
-      "id": "dataman-create-database",
       "command": "dataman create database analytics",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.create-database",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-create-database",
+      "rule_id": "command.dataman.rule.create-database"
     },
     {
-      "id": "dataman-makemigration",
       "command": "dataman makemigration",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.makemigration",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-makemigration",
+      "rule_id": "command.dataman.rule.makemigration"
     },
     {
-      "id": "dataman-migrate",
       "command": "dataman migrate",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.migrate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-migrate",
+      "rule_id": "command.dataman.rule.migrate"
     },
     {
-      "id": "dataman-migrate-specific-db",
       "command": "dataman migrate --database analytics",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.migrate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-migrate-specific-db",
+      "rule_id": "command.dataman.rule.migrate"
     },
     {
-      "id": "dataman-users-create-admin",
       "command": "dataman users create-admin",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.create-admin",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-users-create-admin",
+      "rule_id": "command.dataman.rule.create-admin"
     },
     {
-      "id": "dataman-users-change-password",
       "command": "dataman users change-password",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.change-password",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-users-change-password",
+      "rule_id": "command.dataman.rule.change-password"
     },
     {
-      "id": "dataman-users-create-token",
       "command": "dataman users create-token ServiceKey --scopes \"customer:read\" --expires-in 30d",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.create-token",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-users-create-token",
+      "rule_id": "command.dataman.rule.create-token"
     },
     {
-      "id": "dataman-logs-export-audit",
       "command": "dataman logs export-audit --format json --output audit.json",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.export-audit",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-logs-export-audit",
+      "rule_id": "command.dataman.rule.export-audit"
     },
     {
-      "id": "dataman-logs-export-telemetry",
       "command": "dataman logs export-telemetry --format csv -o telemetry.csv",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.dataman.rule.export-telemetry",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "dataman-logs-export-telemetry",
+      "rule_id": "command.dataman.rule.export-telemetry"
     },
     {
-      "id": "dataman-server-start-safe",
       "command": "dataman server start",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
-      "expected_action": "allow",
-      "rule_id": "command.dataman.rule.init",
-      "expected_effective_segments": []
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dataman-server-start-safe",
+      "rule_id": "command.dataman.rule.init"
     },
     {
-      "id": "dataman-server-start-asgi-safe",
       "command": "dataman server start --asgi --port 8000 --workers 4",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
-      "expected_action": "allow",
-      "rule_id": "command.dataman.rule.init",
-      "expected_effective_segments": []
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dataman-server-start-asgi-safe",
+      "rule_id": "command.dataman.rule.init"
     },
     {
-      "id": "dataman-help-safe",
       "command": "dataman --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
-      "expected_action": "allow",
-      "rule_id": "command.dataman.rule.init",
-      "expected_effective_segments": []
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dataman-help-safe",
+      "rule_id": "command.dataman.rule.init"
     },
     {
-      "id": "dataman-create-help-safe",
       "command": "dataman create --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
-      "expected_action": "allow",
-      "rule_id": "command.dataman.rule.init",
-      "expected_effective_segments": []
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dataman-create-help-safe",
+      "rule_id": "command.dataman.rule.init"
     },
     {
-      "id": "dataman-users-help-safe",
       "command": "dataman users --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
-      "expected_action": "allow",
-      "rule_id": "command.dataman.rule.init",
-      "expected_effective_segments": []
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dataman-users-help-safe",
+      "rule_id": "command.dataman.rule.init"
     },
     {
-      "id": "dataman-logs-help-safe",
       "command": "dataman logs --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.dataman"
       ],
-      "disabled_permissions": [],
-      "expected_action": "allow",
-      "rule_id": "command.dataman.rule.init",
-      "expected_effective_segments": []
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "dataman-logs-help-safe",
+      "rule_id": "command.dataman.rule.init"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"
