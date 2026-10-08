@@ -107,6 +107,16 @@ fn validate_runtime_owner(identity: &ExpectedProcessIdentity<'_>) -> Result<(), 
     }
 }
 
+/// Confirm the peer validated before connecting is still the same process.
+///
+/// A matching start marker rules out PID reuse, and a running process cannot
+/// change its image, so hashing the runtime again would only add latency.
+/// On Windows that second hash can outlast the resident's 250 ms
+/// authentication window and make every request fail.
+fn revalidate_runtime_owner(identity: &ExpectedProcessIdentity<'_>) -> Result<(), String> {
+    crate::resident_state::validate_process_start_marker(identity.process_id, identity.start_marker)
+}
+
 fn connect_loopback_with_digest(
     endpoint: &str,
     timeout: Duration,
@@ -121,7 +131,7 @@ fn connect_loopback_with_digest(
     validate_runtime_owner(identity)?;
     let stream = TcpStream::connect_timeout(&address, timeout.min(AUTH_TIMEOUT))
         .map_err(|_| "native_client_connect_failed".to_owned())?;
-    validate_runtime_owner(identity)?;
+    revalidate_runtime_owner(identity)?;
     Ok(Box::new(stream))
 }
 
@@ -194,7 +204,7 @@ fn connect_unix_with_digest(
     if peer_process_id != identity.process_id {
         return Err("native_client_peer_identity_mismatch".to_owned());
     }
-    validate_runtime_owner(identity)?;
+    revalidate_runtime_owner(identity)?;
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|_| "native_client_timeout_failed".to_owned())?;
