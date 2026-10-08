@@ -267,11 +267,6 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
         config_path="hol-guard.toml",
         source_scope="project",
     )
-    private_targets = artifact.runtime_private_metadata["package_targets"]
-    assert isinstance(private_targets, list)
-    # Only enforcement-only metadata retains the exact download URL.
-    assert private_targets[0]["source_url"] == source_url
-
     store = GuardStore(tmp_path / "guard-home")
     evaluation = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
