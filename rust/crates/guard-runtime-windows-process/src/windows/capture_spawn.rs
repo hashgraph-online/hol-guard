@@ -24,16 +24,27 @@ fn bind_launch_directory(path: &Path) -> io::Result<PrivateDirectoryBinding> {
     })
 }
 
+/// Borrowed launch inputs; capture owns the process and pipe lifetime.
+pub struct CaptureCommand<'a> {
+    pub executable: &'a Path,
+    pub args: &'a [&'a OsStr],
+    pub cwd: &'a Path,
+    pub environment: &'a [(OsString, OsString)],
+}
+
 pub fn capture(
-    executable: &Path,
-    args: &[&OsStr],
-    cwd: &Path,
-    env: &[(OsString, OsString)],
+    command: CaptureCommand<'_>,
     input: &[u8],
     limit: usize,
     deadline: Instant,
     cancellation: &AtomicBool,
 ) -> io::Result<CapturedOutput> {
+    let CaptureCommand {
+        executable,
+        args,
+        cwd,
+        environment: env,
+    } = command;
     if cancellation.load(Ordering::Acquire) {
         return Err(io::Error::new(
             io::ErrorKind::Interrupted,

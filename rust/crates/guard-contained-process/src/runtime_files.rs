@@ -11,6 +11,8 @@ use std::time::Instant;
 mod elf;
 mod mach;
 mod pe;
+mod system;
+use system::{system_library, system_shared_cache};
 
 use elf::{elf, elf_interpreter};
 use mach::mach;
@@ -214,7 +216,7 @@ fn capture_impl(
             return Err(invalid());
         };
         bindings.extend(selectors);
-        if system_shared_cache(&path) {
+        if system_library(&path) {
             continue;
         }
         let name = Path::new(&import.name)
@@ -300,17 +302,6 @@ fn capture_impl(
         file_count: aliases.len() + 1,
     })
 }
-fn system_shared_cache(path: &Path) -> bool {
-    #[cfg(target_os = "macos")]
-    return path.starts_with("/usr/lib") || path.starts_with("/System/Library");
-    #[cfg(windows)]
-    return crate::windows::system_directory().is_ok_and(|root| path.starts_with(root));
-    #[cfg(not(any(target_os = "macos", windows)))]
-    {
-        let _ = path;
-        false
-    }
-}
 fn resolve(
     import: &Import,
     guard_home: Option<&Path>,
@@ -339,12 +330,27 @@ fn resolve(
             crate::runtime_resources::resolve(&candidate)
         };
         match resolved {
-            Ok(result) => {
+            Ok(mut result) => {
                 if crate::runtime_resources::secret(&result.0)
                     || guard_home.is_some_and(|root| result.0.starts_with(root))
                 {
                     return Err(invalid());
                 }
+                // Windows has no dyld-style diskless cache. A System32
+                // candidate must exist as a bound regular image before it can
+                // be omitted from the copied bundle.
+                #[cfg(windows)]
+                if system_library(&result.0) {
+                    let held = bound_fs::open_executable(&result.0)?;
+                    result
+                        .1
+                        .push(crate::runtime_resources::SourceBinding::capture(
+                            &result.0,
+                            &bound_fs::identity(&held)?,
+                        )?);
+                }
+                #[cfg(not(windows))]
+                let _ = &mut result;
                 return Ok(Some(result));
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}

@@ -76,6 +76,7 @@ pub struct Isolation {
 /// Inspection and launch use this same opened file and directory, never a
 /// second PATH lookup. The byte digest belongs to the pinned executable.
 pub struct PinnedCommand {
+    #[cfg(unix)]
     executable: File,
     executable_path: PathBuf,
     source: File,
@@ -133,9 +134,10 @@ impl PinnedCommand {
         let executable_file = image.file.try_clone()?;
         #[cfg(not(target_os = "macos"))]
         let _ = image_root;
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
         let executable_file = source.try_clone()?;
         Ok(Self {
+            #[cfg(unix)]
             executable: executable_file,
             executable_path,
             source,

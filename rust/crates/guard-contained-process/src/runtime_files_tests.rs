@@ -174,3 +174,44 @@ fn elf_declared_search_paths_select_the_dependency_instead_of_a_sibling() {
         "an explicitly declared ORIGIN still selects the sibling"
     );
 }
+
+#[test]
+fn missing_early_loader_candidate_does_not_hide_a_later_library() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let name = "guard-nonexistent-system-library-3751.dll";
+    std::fs::write(root.join(name), b"local library").unwrap();
+    #[cfg(windows)]
+    let first = crate::windows::system_directory().unwrap();
+    #[cfg(target_os = "macos")]
+    let first = PathBuf::from("/usr/lib/swift");
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let first = PathBuf::from("/usr/lib");
+    let import = Import {
+        name: name.into(),
+        search: vec![first, root.clone()],
+        optional: false,
+    };
+    let (selected, bindings) = resolve(&import, None).unwrap().unwrap();
+    assert_eq!(selected, root.join(name));
+    for binding in bindings {
+        binding.verify().unwrap();
+    }
+}
+
+#[test]
+fn nonexistent_system_library_is_not_a_cache_entry() {
+    #[cfg(windows)]
+    let path = crate::windows::system_directory()
+        .unwrap()
+        .join("guard-nonexistent-system-library-3751.dll");
+    #[cfg(not(windows))]
+    let path = PathBuf::from("/usr/lib/guard-nonexistent-system-library-3751.dylib");
+    assert!(!system_shared_cache(&path));
+    let import = Import {
+        name: path.to_string_lossy().into_owned(),
+        search: vec![],
+        optional: false,
+    };
+    assert!(resolve(&import, None).unwrap().is_none());
+}

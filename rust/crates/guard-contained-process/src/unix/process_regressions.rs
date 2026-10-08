@@ -420,4 +420,3 @@ fn stopped_drain_does_not_consume_ready_bytes() {
         assert!(!limited);
     }
 }
-

@@ -271,7 +271,7 @@ pub fn capture_owned_child(
 
 #[path = "capture_spawn.rs"]
 mod capture_spawn;
-pub use capture_spawn::capture;
+pub use capture_spawn::{capture, CaptureCommand};
 
 #[cfg(test)]
 #[path = "capture_tests.rs"]

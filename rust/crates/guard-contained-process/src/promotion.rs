@@ -12,6 +12,7 @@ fn same_object(left: &Identity, right: &Identity) -> bool {
         left.file_id == right.file_id
     }
 }
+#[cfg(unix)]
 fn matches(file: &ReadFile, expected: (&Identity, &str)) -> bool {
     same_object(&file.identity, expected.0) && file.digest == expected.1
 }
@@ -76,7 +77,7 @@ pub(super) fn replace(
         let operation =
             crate::windows::promote_transaction(&parent, name, &recovery, expected, &written);
         finish_recovery(&parent, &recovery_name, recovery)?;
-        return operation;
+        operation
     }
     #[cfg(unix)]
     {
@@ -231,7 +232,7 @@ pub(super) fn remove(root: &Directory, path: &Path, expected: (&Identity, &str))
     }
     #[cfg(windows)]
     {
-        return crate::windows::remove_bound_file(&parent, name, expected);
+        crate::windows::remove_bound_file(&parent, name, expected)
     }
     #[cfg(unix)]
     {
@@ -277,7 +278,7 @@ pub(super) fn remove_directory(
     }
     #[cfg(windows)]
     {
-        return crate::windows::remove_bound_directory(&parent, name, expected);
+        crate::windows::remove_bound_directory(&parent, name, expected)
     }
     #[cfg(unix)]
     {
