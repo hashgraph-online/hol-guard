@@ -53,8 +53,9 @@ For a command extension, contributors submit these files together in the same ch
 
 Extension builder CI adds a per-extension `contracts/extensions/trust/`
 binding for any missing ID as external/opt-in before installing dependencies
-and compiling Rust, then regenerates the shared `trust-class-map.v1.json`
-projection. Because each extension's trust binding is its own file, parallel
+and compiling Rust, then regenerates the ignored
+`contracts/extensions/build-trust-class-map.v1.json` projection.
+Because each extension's trust binding is its own file, parallel
 contributions do not collide on a shared map. Contributors do not need to edit
 trust state or pull unrelated main changes to refresh generated catalogs.
 Existing reviewed trust classifications are never promoted or changed by this
