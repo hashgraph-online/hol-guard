@@ -56,9 +56,15 @@ def registry_ready(version: str, wheel: Path) -> bool:
             return False
         raise
     digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    return metadata["info"]["version"] == version and any(
-        item["filename"].endswith(".whl") and item["digests"]["sha256"] == digest for item in metadata["urls"]
-    )
+    if metadata["info"]["version"] != version:
+        raise ValueError("PyPI version mismatch; withholding updater assets")
+    matches = [item for item in metadata["urls"] if item["filename"] == wheel.name]
+    if not matches:
+        # Uploads are sequential: another platform can arrive before this wheel.
+        return False
+    if len(matches) != 1 or matches[0]["digests"]["sha256"] != digest:
+        raise ValueError("PyPI wheel digest mismatch; withholding updater assets")
+    return True
 
 
 def wait(version: str, wheel: Path, timeout: float = 600) -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
 import shutil
@@ -14,10 +16,33 @@ import pytest
 from scripts.release import publish_core_inputs
 from scripts.release.prepared_native import transfer
 from scripts.release.ready_core_releases import ready_tags
-from scripts.release.wait_for_core_publication import publication_ready
+from scripts.release.wait_for_core_publication import publication_ready, registry_ready
 from tests.release_workflow_helpers import load_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("state", ["missing-platform", "wrong-digest", "wrong-version", "ready"])
+def test_registry_readiness_distinguishes_pending_uploads_from_corruption(tmp_path, monkeypatch, state):
+    wheel = tmp_path / "hol_guard-3.34.1-py3-none-macosx_11_0_arm64.whl"
+    wheel.write_bytes(b"attested wheel")
+    metadata = {
+        "info": {"version": "3.34.0" if state == "wrong-version" else "3.34.1"},
+        "urls": [
+            {
+                "filename": "other-platform.whl" if state == "missing-platform" else wheel.name,
+                "digests": {
+                    "sha256": "0" * 64 if state == "wrong-digest" else hashlib.sha256(wheel.read_bytes()).hexdigest()
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: io.BytesIO(json.dumps(metadata).encode()))
+    if state in {"wrong-digest", "wrong-version"}:
+        with pytest.raises(ValueError, match="mismatch"):
+            registry_ready("3.34.1", wheel)
+    else:
+        assert registry_ready("3.34.1", wheel) is (state == "ready")
 
 
 def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_path):
