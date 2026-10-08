@@ -88,6 +88,7 @@ def _matrix_ids() -> list[str]:
     return [entry["harness"] for entry in _HARNESS_COVERAGE_MATRIX]
 
 
+@pytest.mark.usefixtures("package_intent_native")
 @pytest.mark.parametrize("entry", _HARNESS_COVERAGE_MATRIX, ids=_matrix_ids())
 def test_phase07_harness_coverage_matrix_extracts_package_intent(
     entry: dict[str, str],

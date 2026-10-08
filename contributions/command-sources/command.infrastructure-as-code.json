@@ -1,0 +1,305 @@
+{
+  "extension": {
+    "action_classes": [
+      "infrastructure destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews infrastructure teardown through Terraform, OpenTofu, and Pulumi.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.infrastructure-as-code",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Infrastructure-as-code protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "infrastructure destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies infrastructure-as-code commands that destroy managed resources.",
+        "example_command": "terraform destroy",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Infrastructure teardown",
+        "permission_id": "command.infrastructure-as-code.permission.destroy",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Generate and review a destroy preview for the selected workspace or stack first."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://developer.hashicorp.com/terraform/cli/commands/destroy",
+      "https://opentofu.org/docs/cli/commands/destroy/",
+      "https://www.pulumi.com/docs/iac/cli/commands/pulumi_destroy/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "infrastructure destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies infrastructure-as-code commands that destroy managed resources.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "terraform",
+                  "tofu"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-chdir"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "destroy"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "terraform",
+                  "tofu"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-chdir"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "-destroy"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "apply"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "pulumi"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--cwd",
+                  "--stack",
+                  "-c",
+                  "-s"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "destroy"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.infrastructure-as-code.permission.destroy",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.infrastructure-as-code.destroy",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "terraform",
+                      "tofu"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-chdir"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "destroy"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "terraform",
+                      "tofu"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-chdir"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "-destroy"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "apply"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "pulumi"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--cwd",
+                      "--stack",
+                      "-c",
+                      "-s"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "destroy"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "pulumi"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--cwd",
+                  "--stack",
+                  "-c",
+                  "-s"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--preview-only"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "destroy"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Pulumi destroy preview",
+            "variant_id": "preview-only"
+          }
+        ],
+        "safer_alternatives": [
+          "Generate and review a destroy preview for the selected workspace or stack first."
+        ],
+        "severity": "critical",
+        "title": "Infrastructure teardown"
+      }
+    ],
+    "safer_alternatives": [
+      "Create and inspect a saved plan or preview before applying destructive changes.",
+      "Confirm the selected workspace, stack, account, and region before teardown."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

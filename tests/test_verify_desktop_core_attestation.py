@@ -120,3 +120,80 @@ def test_verify_rejects_team_identity_drift(tmp_path: Path, monkeypatch: pytest.
             target=TARGET,
             expected_team_id="OTHERTEAM",
         )
+
+
+def test_verify_linux_sidecar_uses_digest_only_native_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    linux_target = "x86_64-unknown-linux-gnu"
+    binary = tmp_path / "hol-guard-core-3.0.1-x86_64-unknown-linux-gnu"
+    binary.write_bytes(b"linux-core-binary")
+    manifest = tmp_path / f"{binary.name}.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": "hol-guard-core-update.v1",
+                "channel": "stable",
+                "version": VERSION,
+                "sourceCommit": SOURCE_COMMIT,
+                "sourceTag": SOURCE_TAG,
+                "target": linux_target,
+                "artifact": binary.name,
+                "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+                "size": binary.stat().st_size,
+                "bootstrapSchema": "guard-desktop-bootstrap.v1",
+                "minimumDesktopVersion": "1.0.0",
+                "publishedAt": "2026-09-01T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    marker = tmp_path / f"{binary.name}.attested.json"
+    marker.write_text(
+        json.dumps(
+            {
+                "schema": "hol-guard-core-attestation.v3",
+                "version": VERSION,
+                "sourceCommit": SOURCE_COMMIT,
+                "sourceTag": SOURCE_TAG,
+                "target": linux_target,
+                "appleSigningIdentity": "",
+                "appleTeamId": "",
+                "binarySha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+                "manifestSha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                "workflowRun": "run-123",
+                "attestedAt": "2026-09-01T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[tuple[Path, str | None]] = []
+
+    def fake_verify(path: Path, expected_team_id: str | None = None) -> None:
+        calls.append((path, expected_team_id))
+
+    monkeypatch.setattr(verifier, "_native_verifier", lambda: SimpleNamespace(verify=fake_verify))
+
+    evidence = verifier.verify(
+        binary,
+        manifest,
+        marker,
+        version=VERSION,
+        source_commit=SOURCE_COMMIT,
+        source_tag=SOURCE_TAG,
+        target=linux_target,
+        expected_team_id="",
+    )
+
+    assert evidence["post_sign_verified"] is True
+    assert evidence["attestation"]["team_id"] == ""
+    assert calls == [(binary, None)]
+    with pytest.raises(verifier.DesktopAttestationError, match="must not include an Apple team ID"):
+        verifier.verify(
+            binary,
+            manifest,
+            marker,
+            version=VERSION,
+            source_commit=SOURCE_COMMIT,
+            source_tag=SOURCE_TAG,
+            target=linux_target,
+            expected_team_id="TEAM1234",
+        )

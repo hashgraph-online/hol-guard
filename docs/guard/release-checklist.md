@@ -37,10 +37,20 @@ When running Guard scans against untrusted content in a container, keep the runt
 
 Guard uses two isolated release lines:
 
-- `main` remains the stable 2.x source. Stable manual publishes are accepted only from `main`; normal installation continues to select the latest 2.x release.
-- `release/3.0` is the long-lived 3.x alpha release branch until the 3.x compatibility gates are closed. It receives compatible 2.x fixes by regular forward merges from `main`, never by backporting unfinished 3.x behavior into `main`.
+- `main` is the stable 3.x source. Merge the Release Please pull request, or dispatch `Publish to PyPI` as a break-glass path, to publish from `main`.
+- `release/3.0` remains the long-lived 3.x alpha release branch. It receives compatible `main` fixes by regular forward merges, never by backporting unfinished alpha-only behavior into `main`.
 - PyPI 3.x alpha versions use public PEP 440 versions such as `3.0.0a1`. Package installers ignore these prereleases unless users opt in with an exact version or an explicit prerelease flag.
 - `plugin-scanner` remains on its stable release line during Guard 3.x alpha publishing. The alpha workflow removes its distributions before upload.
+
+### Publish a stable 3.x release from main
+
+1. Land the intended changes on `main` with conventional commits (`feat` for minor, `fix` for patch, `feat!` or `BREAKING CHANGE` for major).
+2. The `Release Please` workflow opens or updates a `chore(release): <version>` pull request with changelog and version metadata.
+3. Merge that pull request when the batch is ready. Merging it tags the release commit and dispatches `Publish to PyPI` for `release_channel=stable` and `release_train=main`.
+4. Confirm the dispatched publish builds native wheels, uploads to PyPI, and creates the GitHub release assets.
+5. Maintainers can still dispatch `Publish to PyPI` from `main`, or from the existing `v<version>` tag if `main` has moved, with the exact version and `expected_sha`.
+
+Normal pushes to `main` still build and verify packages without publishing.
 
 ### Publish a 3.x alpha
 
@@ -50,16 +60,12 @@ Guard uses two isolated release lines:
 4. For an explicitly authorized replay or fixed version, run the `Publish to PyPI` workflow from `release/3.0` with `release_channel=alpha`, `release_train=3.0`, a new `release_version` such as `3.0.0a1`, and `expected_sha` set to the authorized branch commit.
 5. Confirm the workflow's Linux suite, Windows suite, package checks, and PyPI trusted publish all pass.
 6. Verify the generated `alpha/v<VERSION>` GitHub prerelease and install the exact version in a clean environment.
-7. Record compatibility findings against the alpha without changing the default 2.x installer path.
+7. Record compatibility findings against the alpha without changing the default stable installer path.
 
 The workflow rejects alpha versions outside the 3.x line, rejects non-alpha prerelease types, rejects alpha publishes from any other branch, binds every tag and artifact to the exact branch commit, and prevents alpha artifacts from entering the stable repository-version synchronization flow.
 
-### Continue 2.x maintenance
+### Continue alpha maintenance
 
-1. Land compatible fixes on `main` and publish them through the existing stable path.
-2. Forward-merge compatible `main` fixes into `release/3.0`. Resolve behavior conflicts in favor of the fixed 2.x invariant while preserving the 3.x contract.
+1. Land compatible fixes on `main` and publish them through the stable Release Please path.
+2. Forward-merge compatible `main` fixes into `release/3.0`.
 3. Let both branch CI matrices pass before the next alpha.
-
-### Promote 3.x later
-
-Promotion is a separate decision. Do not merge the 3.x branch into `main` or publish `3.0.0` until compatibility, migration, telemetry, and rollback gates are explicitly approved. At promotion, merge the proven branch, publish the stable `3.0.0` version from `main`, and retain the latest 2.x tag as the rollback installation target.

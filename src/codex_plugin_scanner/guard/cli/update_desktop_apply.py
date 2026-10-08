@@ -30,6 +30,9 @@ _APPLY_FAILURE_MESSAGES = {
     "desktop_core_download_failed": (
         "This Core build is not available for Desktop yet. The installed version stays in place."
     ),
+    "desktop_core_asset_missing": (
+        "This Core build is not published for Desktop yet. The installed version stays in place."
+    ),
     "desktop_core_integrity_mismatch": (
         "The downloaded Core did not match its signed manifest. The installed version stays in place."
     ),

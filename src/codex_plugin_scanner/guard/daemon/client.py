@@ -5,13 +5,18 @@ from __future__ import annotations
 import http.client
 import io
 import json
+import math
+import socket
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
-from contextlib import suppress
+from contextlib import closing, suppress
+from http.client import HTTPConnection, HTTPException
 from pathlib import Path
+from threading import Timer
 from typing import Protocol, TypeGuard, cast
+from urllib.parse import urlsplit
 
 from .manager import (
     clear_guard_daemon_state,
@@ -20,6 +25,75 @@ from .manager import (
     load_guard_daemon_url,
     load_running_guard_daemon_identity,
 )
+
+_HEALTH_PROBE_DEADLINE_SECONDS = 1.0
+
+
+def _interrupt_health_socket(stream: socket.socket) -> None:
+    """Interrupt a blocked header/body read when the whole probe deadline expires."""
+    # A completed request may already have closed its socket.
+    with suppress(OSError):
+        stream.shutdown(socket.SHUT_RDWR)
+
+
+def read_guard_health_details(
+    daemon_url: str,
+    auth_token: str,
+    *,
+    deadline_monotonic: float | None = None,
+) -> dict[str, object] | None:
+    """Read bounded authenticated health details over direct, non-redirecting loopback IPC."""
+    try:
+        deadline = time.monotonic() + _HEALTH_PROBE_DEADLINE_SECONDS
+        if deadline_monotonic is not None:
+            if isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic):
+                return None
+            deadline = min(deadline, deadline_monotonic)
+        if time.monotonic() >= deadline:
+            return None
+        parsed = urlsplit(daemon_url)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname not in {"127.0.0.1", "::1"}
+            or parsed.port is None
+            or not 1 <= parsed.port <= 65_535
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return None
+        # HTTPConnection neither consults proxy environment variables nor follows
+        # redirects. Never forward the daemon token to a redirected authority.
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        with closing(HTTPConnection(parsed.hostname, parsed.port, timeout=remaining)) as connection:
+            connection.connect()
+            stream = connection.sock
+            remaining = deadline - time.monotonic()
+            if stream is None or remaining <= 0:
+                return None
+            interrupt = Timer(remaining, _interrupt_health_socket, args=(stream,))
+            interrupt.daemon = True
+            interrupt.start()
+            try:
+                connection.request("GET", "/v1/healthz/details", headers={"X-Guard-Token": auth_token})
+                response = connection.getresponse()
+                if response.status != 200:
+                    return None
+                content = response.read(65_537)
+            finally:
+                interrupt.cancel()
+        if time.monotonic() >= deadline:
+            return None
+        if len(content) > 65_536:
+            return None
+        payload = json.loads(content.decode("utf-8"))
+        return payload if isinstance(payload, dict) else None
+    except (OSError, ValueError, HTTPException):
+        return None
 
 
 class GuardDaemonRequestError(RuntimeError):
@@ -237,6 +311,9 @@ class GuardSurfaceDaemonClient:
 
     def preview_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/preview", payload)
+
+    def inspect_command(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._post("/v1/extension-controls/inspect", payload)
 
     def apply_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/apply", payload)

@@ -19,13 +19,15 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_hook_payload as guard_hook_payload_module
 from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode", "native_prompt_runtime")
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -99,6 +101,23 @@ class _CompletedProcess:
         self.stderr = stderr
 
 
+def _patch_harness_run(monkeypatch, fake_run):
+    """Mock only target harnesses, preserving native and interpreter probes."""
+    original = guard_runner_module.subprocess.run
+    harnesses = {"codex", "copilot", "opencode", "hermes", "gemini", "cursor-agent"}
+
+    def run(command, *args, **kwargs):
+        if isinstance(command, (list, tuple)) and command:
+            command_names = [Path(str(part)).name for part in command]
+            if command_names[0] in harnesses or (
+                command_names[0] in {"sh", "dash", "bash"} and len(command_names) > 1 and command_names[1] in harnesses
+            ):
+                return fake_run(command, *args, **kwargs)
+        return original(command, *args, **kwargs)
+
+    monkeypatch.setattr(guard_runner_module.subprocess, "run", run)
+
+
 def _capture_launch(monkeypatch) -> dict[str, object]:
     captured: dict[str, object] = {}
     probe_commands = {"pgrep", "ps", "tasklist", "wmic"}
@@ -112,7 +131,7 @@ def _capture_launch(monkeypatch) -> dict[str, object]:
             captured["env"] = dict(env or {})
         return _CompletedProcess(0)
 
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    _patch_harness_run(monkeypatch, _fake_run)
     return captured
 
 
@@ -186,7 +205,7 @@ def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
         captured_env.update(env or {})
         return _CompletedProcess(0)
 
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    _patch_harness_run(monkeypatch, _fake_run)
 
     rc = main(
         [
@@ -237,7 +256,7 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
         captured_command.extend(command)
         return _CompletedProcess(0)
 
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    _patch_harness_run(monkeypatch, _fake_run)
     monkeypatch.setattr("shutil.which", lambda command: None)
     monkeypatch.setattr(Path, "home", lambda: actual_home)
 
@@ -268,7 +287,12 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
     ]
 
 
-def test_guard_run_keeps_direct_env_prompt_terminal_when_sandbox_is_required(monkeypatch, tmp_path, capsys):
+def test_guard_run_keeps_direct_env_prompt_terminal_when_sandbox_is_required(
+    monkeypatch,
+    tmp_path,
+    capsys,
+    native_context_digest,
+):
     _trust_local_policy_rows(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -337,8 +361,10 @@ def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path,
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
+    _patch_harness_run(monkeypatch, _fake_run)
 
     rc = main(
         [
@@ -392,8 +418,10 @@ def test_guard_run_launches_opencode_prompt_through_interactive_tui(monkeypatch,
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
+    _patch_harness_run(monkeypatch, _fake_run)
 
     rc = main(
         [
@@ -452,8 +480,10 @@ def test_guard_run_launches_opencode_prompt_with_flags_through_interactive_tui(m
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
+    _patch_harness_run(monkeypatch, _fake_run)
 
     rc = main(
         [
@@ -516,8 +546,10 @@ def test_guard_run_keeps_attach_and_file_flags_out_of_prompt(monkeypatch, tmp_pa
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
+    _patch_harness_run(monkeypatch, _fake_run)
 
     rc = main(
         [
@@ -583,8 +615,10 @@ def test_guard_run_keeps_explicit_opencode_run_args_unchanged(monkeypatch, tmp_p
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
+    _patch_harness_run(monkeypatch, _fake_run)
 
     rc = main(
         [
@@ -647,8 +681,10 @@ def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
+    _patch_harness_run(monkeypatch, _fake_run)
     monkeypatch.setenv(
         "OPENCODE_CONFIG_CONTENT",
         json.dumps({"model": "gpt-4.1", "permission": {"network": {"*": "allow"}}}),
@@ -715,7 +751,9 @@ url = "https://workspace.example/mcp"
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
     with (home_dir / ".codex" / "config.toml").open("rb") as handle:
         payload = tomllib.load(handle)
     global_servers = payload["mcp_servers"]
@@ -758,8 +796,10 @@ def test_guard_run_launches_hermes_with_guard_overlay_paths(monkeypatch, tmp_pat
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
+    _patch_harness_run(monkeypatch, _fake_run)
 
     rc = main(
         [
@@ -842,7 +882,9 @@ def test_guard_run_opencode_blocks_new_plugin_when_unknown_artifacts_require_app
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
     _write_text(workspace_dir / ".opencode" / "plugins" / "env-read-plugin.mjs", "export default {};\n")
 
     second_rc = main(
@@ -970,7 +1012,9 @@ def test_guard_run_opencode_reapproves_changed_secret_plugin_option(monkeypatch,
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
+    install_output = capsys.readouterr()
+    assert install_output.out, install_output.err
+    json.loads(install_output.out)
     _write_json(
         home_dir / ".config" / "opencode" / "opencode.json",
         {"plugins": [["opencode-global-plugin", {"token": "beta"}]]},
@@ -1136,6 +1180,7 @@ def test_guard_prompt_artifact_terminal_sandbox_block_is_not_queued(monkeypatch,
     assert output.get("review_hint") is None
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -1173,6 +1218,7 @@ def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
     assert "branded approval question" in context
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

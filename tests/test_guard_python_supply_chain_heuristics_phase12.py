@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
@@ -18,6 +18,8 @@ from .guard_python_phase12_support import (
     package_fixture,
     write_text,
 )
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
 
 
 def test_evaluate_package_request_artifact_normalizes_pypi_names_for_bundle_matching(
@@ -434,9 +436,7 @@ def test_evaluate_package_request_artifact_resolves_new_python_targets_with_regi
         assert retry_timeout_seconds == 1
         return {"releases": {"2.30.9": [{}], "2.31.0": [{}]}}
 
-    monkeypatch.setattr(
-        supply_chain_package_eval_module, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry
-    )
+    monkeypatch.setattr(package_services, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry)
 
     artifact = artifact_from_command_fixture(command, workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)

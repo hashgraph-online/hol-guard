@@ -17,11 +17,13 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 from codex_plugin_scanner import install_integrity
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction_module
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as package_eval_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -83,7 +85,7 @@ def _fingerprint(public_key_pem: bytes) -> str:
 def _bundle_response(
     *, package_name: str, version: str, namespace: str | None = None, action: str = "block"
 ) -> dict[str, object]:
-    generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = generated_at + timedelta(hours=12)
     purl_name = f"{namespace}/{package_name}" if namespace is not None else package_name
     bundle = {
@@ -193,6 +195,7 @@ def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str)
         ("bunx @angular/cli@19.0.0", "cli", "19.0.0", "@angular"),
     ],
 )
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_blocks_js_exec_flows_before_subprocess(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -254,6 +257,7 @@ def test_guard_hook_blocks_js_exec_flows_before_subprocess(
     assert evidence[0]["category"] == "supply-chain"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_requires_review_for_repository_local_vitest_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -283,6 +287,9 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
     _write_codex_pre_tool_payload(payload_path, workspace_dir, command)
     store = GuardStore(home_dir)
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    token_path = home_dir / "daemon-auth-token"
+    token_path.write_text("synthetic-daemon-token", encoding="utf-8")
+    token_path.chmod(0o600)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(package_name="vitest", version="4.1.8", action="allow"),

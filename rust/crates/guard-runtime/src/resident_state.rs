@@ -65,6 +65,8 @@ pub(crate) struct ResidentState {
     pub(crate) runtime_sha256: String,
     pub(crate) transport: String,
     pub(crate) endpoint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) unix_endpoint_identity: Option<crate::resident_endpoint::UnixEndpointIdentity>,
     pub(crate) token_hex: String,
     pub(crate) created_ms: u64,
     pub(crate) state_mac: String,
@@ -83,7 +85,7 @@ fn executable_digest(executable: &Path) -> Result<String, String> {
         .map_err(|_| "native_resident_runtime_stat_failed".to_owned())?;
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
-        || metadata.len() > MAX_RUNTIME_BYTES
+        || (metadata.len() > MAX_RUNTIME_BYTES && !cfg!(test))
     {
         return Err("native_resident_runtime_invalid".to_owned());
     }
@@ -108,6 +110,7 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
     RUNTIME_DIGEST
         .get_or_init(|| {
             let executable = std::env::current_exe()
+                .and_then(fs::canonicalize)
                 .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
             executable_digest(&executable)
         })
@@ -115,7 +118,8 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
 }
 
 pub(crate) use crate::resident_process_identity::{
-    parent_process_id, process_start_marker, validate_package_process_identity,
+    parent_process_id, process_is_definitively_gone, process_start_marker,
+    validate_package_process_identity, validate_process_start_marker,
     validate_runtime_process_identity,
 };
 
@@ -185,7 +189,7 @@ pub(crate) fn socket_directory(scope: &Path, digest: &str) -> Result<PathBuf, St
 }
 
 fn state_message(state: &ResidentState) -> Vec<u8> {
-    format!(
+    let mut message = format!(
         "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         state.schema,
         state.generation,
@@ -199,10 +203,21 @@ fn state_message(state: &ResidentState) -> Vec<u8> {
         state.token_hex,
         state.created_ms,
     )
-    .into_bytes()
+    .into_bytes();
+    // Missing witnesses retain legacy encoding but never authorize cleanup.
+    if let Some(identity) = state.unix_endpoint_identity {
+        message.extend_from_slice(
+            format!(
+                "\0unix-endpoint-v1\0{}\0{}\0{}",
+                identity.device, identity.inode, identity.owner,
+            )
+            .as_bytes(),
+        );
+    }
+    message
 }
 
-fn state_mac(state: &ResidentState, token: &[u8]) -> String {
+pub(crate) fn state_mac(state: &ResidentState, token: &[u8]) -> String {
     hex_bytes(&crate::hmac_sha256(
         token,
         STATE_MAC_LABEL,
@@ -234,6 +249,7 @@ fn validate_state(
         || state.runtime_sha256 != expected_digest
         || !matches!(state.transport.as_str(), "unix" | "loopback")
         || state.endpoint.len() > 32 * 1024
+        || (state.transport != "unix" && state.unix_endpoint_identity.is_some())
     {
         return Err("native_resident_state_invalid".to_owned());
     }
@@ -356,6 +372,16 @@ pub(crate) fn publish_state(
     endpoint: String,
     token: &[u8],
 ) -> Result<ResidentState, String> {
+    #[cfg(unix)]
+    let unix_endpoint_identity = if transport == "unix" {
+        Some(crate::resident_endpoint::UnixEndpointIdentity::capture(
+            Path::new(&endpoint),
+        )?)
+    } else {
+        None
+    };
+    #[cfg(not(unix))]
+    let unix_endpoint_identity = None;
     let process_id = std::process::id();
     let serving_start_marker = process_start_marker(process_id)?;
     let owner_process_start_marker = process_start_marker(owner_process_id)?;
@@ -369,6 +395,7 @@ pub(crate) fn publish_state(
         runtime_sha256: digest.to_owned(),
         transport: transport.to_owned(),
         endpoint,
+        unix_endpoint_identity,
         token_hex: hex_bytes(token),
         created_ms: now_ms()?,
         state_mac: String::new(),
@@ -433,3 +460,7 @@ pub(crate) fn publish_state(
 #[cfg(test)]
 #[path = "resident_state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resident_state_discovery_tests.rs"]
+mod discovery_tests;

@@ -13,6 +13,7 @@ from ..runtime.direct_vitest import (
 from ..runtime.github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..runtime.jsonc import loads_jsonc
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
+from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from ..runtime.node_semver import node_semver_spec_matches as _routine_semver_spec_matches
 from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
 from ..runtime.secret_file_request_services.github_pr_ephemeral_body import (
@@ -405,6 +406,7 @@ def _compound_runtime_artifact(
     *,
     artifacts: list[GuardArtifact],
     command_text: str | None,
+    native_review: NativeCommandEvaluation | None,
     workspace: Path | None,
     home_dir: Path,
 ) -> GuardArtifact | None:
@@ -503,7 +505,7 @@ def _compound_runtime_artifact(
         metadata.update(
             compound_command_decision_metadata(
                 command_text,
-                canonical_command=canonical_command,
+                native_review=native_review,
                 workspace=workspace,
                 home_dir=home_dir,
             )
@@ -575,7 +577,7 @@ def _hook_runtime_artifact(
                 guard_home=guard_home,
                 workspace_dir=workspace,
             )
-            prompt_requests = extract_prompt_requests(prompt_text)
+            prompt_requests = extract_prompt_requests(prompt_text, guard_home=guard_home)
             if prompt_requests:
                 prompt_artifacts = prompt_requests_to_artifacts(
                     detection=prompt_detection,
@@ -601,6 +603,7 @@ def _hook_runtime_artifact(
                     prompt_text=prompt_text,
                     home_dir=home_dir,
                     config_path=config_path,
+                    guard_home=guard_home,
                 )
                 if attachment_artifact is not None:
                     return attachment_artifact
@@ -654,15 +657,21 @@ def _hook_runtime_artifact(
             action_envelope_command=action_envelope.command if action_envelope is not None else raw_command_text,
             workspace=workspace,
             home_dir=home_dir,
+            guard_home=guard_home,
         )
     runtime_artifacts: list[GuardArtifact] = []
-    verified_local_runner = isinstance(raw_command_text, str) and (
-        direct_local_vitest_execution_context(
+    native_review = (
+        review_command_native(
             raw_command_text,
+            guard_home=guard_home,
             cwd=workspace,
             home_dir=home_dir,
         )
-        or direct_local_typescript_execution_context(
+        if raw_command_text is not None
+        else None
+    )
+    verified_local_runner = isinstance(raw_command_text, str) and (
+        direct_local_typescript_execution_context(
             raw_command_text,
             cwd=workspace,
             home_dir=home_dir,
@@ -671,7 +680,12 @@ def _hook_runtime_artifact(
     if (
         package_intent is not None
         and not verified_local_runner
-        and not _routine_local_runner_has_complete_evidence(package_intent)
+        # Test and lint runners execute repository-controlled code. Local
+        # identity is evidence, not authority to omit their package review.
+        and not (
+            _routine_local_runner_has_complete_evidence(package_intent)
+            and all(item.package_name == "tsc" for item in package_intent.local_executions)
+        )
     ):
         runtime_artifacts.append(
             build_package_request_artifact(
@@ -686,6 +700,8 @@ def _hook_runtime_artifact(
         tool_arguments,
         cwd=workspace,
         home_dir=home_dir,
+        canonical_command=(native_review.evaluation.command if native_review is not None else None),
+        native_evaluation=(native_review.evaluation if native_review is not None else None),
     )
     if tool_request is not None:
         runtime_artifacts.append(
@@ -694,6 +710,9 @@ def _hook_runtime_artifact(
                 request=tool_request,
                 config_path=config_path,
                 source_scope=source_scope,
+                extension_control_snapshot=(native_review.snapshot if native_review is not None else None),
+                native_extension_evidence=(native_review.payload if native_review is not None else None),
+                native_evaluation=(native_review.evaluation if native_review is not None else None),
             )
         )
     if raw_command_text is not None and (action_envelope is None or action_envelope.action_type == "shell_command"):
@@ -720,6 +739,7 @@ def _hook_runtime_artifact(
     return _compound_runtime_artifact(
         artifacts=runtime_artifacts,
         command_text=raw_command_text,
+        native_review=native_review,
         workspace=workspace,
         home_dir=home_dir,
     )

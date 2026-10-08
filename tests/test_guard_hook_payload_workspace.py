@@ -76,6 +76,7 @@ def test_grok_and_zcode_payloads_keep_workspace_root_when_cwd_differs(tmp_path: 
     assert zcode["workspace_root"] == str(root)
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -89,7 +90,7 @@ def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "run_terminal_command",
-        "toolInput": {"command": "git diff --cached --check"},
+        "toolInput": {"command": "git rev-parse --show-toplevel"},
         "cwd": str(repository),
     }
 
@@ -98,7 +99,7 @@ def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(
             artifact_id=None,
             artifact_name=None,
             event_file=None,
-            harness="grok",
+            harness="cursor",
             json=True,
             policy_action=None,
             runtime_harness=None,

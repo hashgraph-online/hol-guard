@@ -7,423 +7,83 @@ one AI coding harness that HOL Guard supports.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import replace
+
+from .contract_agent_capabilities import AGENT_EVENT_CAPABILITIES
+from .contract_capability_values import _capability
+from .contract_hook_capabilities import HOOK_EVENT_CAPABILITIES
+from .contract_models import CAPABILITY_DECLARED_ACTIONS as CAPABILITY_DECLARED_ACTIONS
+from .contract_models import CapabilityLocalHosted as CapabilityLocalHosted
+from .contract_models import HarnessCapabilityReport as HarnessCapabilityReport
+from .contract_models import HarnessCoverageSummary as HarnessCoverageSummary
+from .contract_models import HarnessEventCapability as HarnessEventCapability
+from .contract_models import HarnessProtectionContract as HarnessProtectionContract
+from .contract_models import HarnessSetupContract as HarnessSetupContract
+from .contract_models import HarnessSetupStep as HarnessSetupStep
+from .contract_registry import _BASE_HARNESS_CONTRACTS
+from .contract_rendering import DISPLAY_NAMES as _DISPLAY_NAMES
+from .contract_rendering import render_harness_contracts
+
+_CAPABILITY_EVENTS_BY_HARNESS = {**HOOK_EVENT_CAPABILITIES, **AGENT_EVENT_CAPABILITIES}
 
 
-@dataclass(frozen=True, slots=True)
-class HarnessProtectionContract:
-    """Static protection profile for one AI coding harness.
+def _default_capability_events(contract: HarnessProtectionContract) -> tuple[HarnessEventCapability, ...]:
+    """Give legacy contracts a conservative row without inventing hooks."""
 
-    Attributes:
-        harness: Canonical harness identifier (matches adapter `harness` field).
-        install_aliases: All strings accepted by `hol-guard install <alias>`.
-        config_paths: Glob-style paths where the harness stores config
-            (relative to ``$HOME`` unless absolute).
-        event_surfaces: Hook event types the harness exposes
-            (e.g. "shell", "prompt", "mcp_tool", "file_read").
-        native_approval: True if the harness has a first-class native approval
-            prompt that Guard can intercept without a browser fallback.
-        browser_fallback: True if Guard falls back to a browser approval page
-            when native approval is unavailable.
-        resume_support: True if the harness can resume the original command
-            after an async approval completes.
-        known_blind_spots: Human-readable description of event types or
-            surfaces that Guard cannot currently observe for this harness.
-        smoke_command: Shell command an operator can run to confirm Guard is
-            active for this harness.
-    """
-
-    harness: str
-    install_aliases: tuple[str, ...]
-    config_paths: tuple[str, ...]
-    event_surfaces: tuple[str, ...]
-    native_approval: bool
-    browser_fallback: bool
-    resume_support: bool
-    known_blind_spots: str
-    smoke_command: str
-    surface_capabilities: tuple[str, ...] = ()
-    supported_actions: tuple[str, ...] = ()
-    docs_path: str | None = None
-    icon_label: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class HarnessSetupStep:
-    """Plain-language action for connecting or checking one harness."""
-
-    step_id: str
-    title: str
-    body: str
-    command: tuple[str, ...] = ()
-    writes_config: bool = False
-    requires_confirmation: bool = False
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "step_id": self.step_id,
-            "title": self.title,
-            "body": self.body,
-            "command": list(self.command),
-            "writes_config": self.writes_config,
-            "requires_confirmation": self.requires_confirmation,
-        }
+    if not contract.event_surfaces:
+        return (
+            _capability(
+                contract.harness,
+                "*",
+                "none",
+                "unsupported",
+                ("unavailable",),
+                "No event surface is declared for this adapter.",
+                "A concrete host event and transport must be added before protection is claimed.",
+                (contract.known_blind_spots,),
+                f"src/codex_plugin_scanner/guard/adapters/contracts.py:{contract.harness}.event_surfaces",
+            ),
+        )
+    rows: list[HarnessEventCapability] = []
+    for surface in contract.event_surfaces:
+        rows.append(
+            _capability(
+                contract.harness,
+                surface,
+                "adapter_declared",
+                "declared",
+                ("observe",),
+                "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+                "The host must expose the declared event and preserve the adapter's response boundary.",
+                (contract.known_blind_spots,),
+                f"src/codex_plugin_scanner/guard/adapters/contracts.py:{contract.harness}.event_surfaces",
+            )
+        )
+    if contract.harness == "opencode":
+        rows.append(
+            _capability(
+                "opencode",
+                "UserPromptSubmit",
+                "none",
+                "unsupported",
+                ("unavailable",),
+                "OpenCode's declared hooks do not surface prompt submission to Guard.",
+                "A host prompt hook must exist before prompt interception can be claimed.",
+                ("Prompt content is not available through the declared OpenCode hooks.",),
+                "src/codex_plugin_scanner/guard/adapters/contracts.py:opencode.known_blind_spots",
+            )
+        )
+    return tuple(rows)
 
 
-@dataclass(frozen=True, slots=True)
-class HarnessCoverageSummary:
-    """Summary of what Guard can and cannot observe for one harness."""
-
-    native_hooks: bool
-    browser_fallback: bool
-    mcp_proxy: bool
-    prompt_hooks: bool
-    blind_spots: tuple[str, ...]
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "native_hooks": self.native_hooks,
-            "browser_fallback": self.browser_fallback,
-            "mcp_proxy": self.mcp_proxy,
-            "prompt_hooks": self.prompt_hooks,
-            "blind_spots": list(self.blind_spots),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class HarnessSetupContract:
-    """Dashboard and CLI setup contract for one supported harness."""
-
-    harness: str
-    display_name: str
-    install_aliases: tuple[str, ...]
-    setup_steps: tuple[HarnessSetupStep, ...]
-    verify_steps: tuple[HarnessSetupStep, ...]
-    repair_steps: tuple[HarnessSetupStep, ...]
-    coverage: HarnessCoverageSummary
-    surface_capabilities: tuple[str, ...] = ()
-    supported_actions: tuple[str, ...] = ()
-    docs_path: str | None = None
-    icon_label: str | None = None
-
-    def to_dict(self) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "harness": self.harness,
-            "display_name": self.display_name,
-            "install_aliases": list(self.install_aliases),
-            "setup_steps": [step.to_dict() for step in self.setup_steps],
-            "verify_steps": [step.to_dict() for step in self.verify_steps],
-            "repair_steps": [step.to_dict() for step in self.repair_steps],
-            "coverage": self.coverage.to_dict(),
-        }
-        if self.surface_capabilities:
-            payload["surface_capabilities"] = list(self.surface_capabilities)
-        if self.supported_actions:
-            payload["supported_actions"] = list(self.supported_actions)
-        if self.docs_path is not None:
-            payload["docs_path"] = self.docs_path
-        if self.icon_label is not None:
-            payload["icon_label"] = self.icon_label
-        return payload
-
-
-_DISPLAY_NAMES = {
-    "codex": "Codex",
-    "claude-code": "Claude Code",
-    "opencode": "OpenCode",
-    "copilot": "Copilot",
-    "cursor": "Cursor",
-    "cline": "Cline",
-    "gemini": "Gemini",
-    "hermes": "Hermes",
-    "openclaw": "OpenClaw",
-    "antigravity": "Antigravity",
-    "kimi": "Kimi",
-    "grok": "Grok",
-    "pi": "Pi",
-    "omp": "Oh My Pi",
-    "zcode": "ZCode",
-}
-
-
-HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
-    HarnessProtectionContract(
-        harness="codex",
-        install_aliases=("codex",),
-        config_paths=("~/.codex/config.toml",),
-        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "tool_result"),
-        native_approval=True,
-        browser_fallback=True,
-        resume_support=True,
-        known_blind_spots=(
-            "Inline file edits applied directly by the model without a tool call are not visible to Guard."
-        ),
-        smoke_command="hol-guard install codex --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="claude-code",
-        install_aliases=("claude-code", "claude"),
-        config_paths=("~/.claude/settings.json", "~/.claude/settings.local.json"),
-        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "tool_result"),
-        native_approval=True,
-        browser_fallback=True,
-        resume_support=True,
-        known_blind_spots=(
-            "Background agent sessions that run without an active terminal do not surface hook events to Guard."
-        ),
-        smoke_command="hol-guard install claude --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="opencode",
-        install_aliases=("opencode",),
-        config_paths=("~/.config/opencode/config.json",),
-        event_surfaces=("shell", "mcp_tool"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard "
-            "unless OpenCode permission rules block them."
-        ),
-        smoke_command="hol-guard install opencode --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="copilot",
-        install_aliases=("copilot",),
-        config_paths=("~/.config/gh/hosts.yml",),
-        event_surfaces=("shell", "prompt"),
-        native_approval=True,
-        browser_fallback=True,
-        resume_support=True,
-        known_blind_spots=(
-            "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
-        ),
-        smoke_command="hol-guard install copilot --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="cursor",
-        install_aliases=("cursor",),
-        config_paths=("~/.cursor/mcp.json", "~/.cursor/hooks.json", ".cursor/hooks.json"),
-        event_surfaces=("shell", "mcp_tool", "file_read"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Shell commands issued through Cursor's built-in terminal bypass Guard unless the terminal runs inside "
-            "an agent session. Prompt submission is not surfaced through native Cursor hooks."
-        ),
-        smoke_command="hol-guard install cursor --dry-run",
-        surface_capabilities=("editor", "cli"),
-        supported_actions=(
-            "connect:editor",
-            "connect:cli",
-            "test:editor",
-            "test:cli",
-            "repair:editor",
-            "repair:cli",
-            "disconnect:editor",
-            "disconnect:cli",
-        ),
-        docs_path="docs/guard/cursor-local-cloud-contract.md",
-        icon_label="Cursor",
-    ),
-    HarnessProtectionContract(
-        harness="cline",
-        install_aliases=("cline", "cline-cli", "cline-vscode"),
-        config_paths=(
-            "~/.cline/hooks/",
-            "~/.cline/plugins/",
-            "~/.cline/data/settings/cline_mcp_settings.json",
-            "~/.cline/settings/cline_mcp_settings.json",
-            "~/Documents/Cline/Hooks/",
-            "~/Documents/Cline/Plugins/",
-        ),
-        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "file_write", "tool_result", "network_request"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Native Cline PostToolUse hooks are observation-only and cannot replace a result already returned to "
-            "the model; full post-tool output mediation requires the Guard-managed Cline plugin transport. "
-            "JetBrains protection is reported as unverified until a live pre-tool deny proof is observed."
-        ),
-        smoke_command="hol-guard apps test cline --json",
-        surface_capabilities=("auto", "hooks", "plugin", "cli", "all"),
-        supported_actions=(
-            "connect:auto",
-            "connect:hooks",
-            "connect:plugin",
-            "connect:cli",
-            "connect:all",
-            "test:auto",
-            "test:hooks",
-            "test:plugin",
-            "test:cli",
-            "test:all",
-            "repair:auto",
-            "repair:hooks",
-            "repair:plugin",
-            "repair:cli",
-            "repair:all",
-            "disconnect:auto",
-            "disconnect:hooks",
-            "disconnect:plugin",
-            "disconnect:cli",
-            "disconnect:all",
-        ),
-        docs_path="docs/guard/cline-local-protection-contract.md",
-        icon_label="Cline",
-    ),
-    HarnessProtectionContract(
-        harness="gemini",
-        install_aliases=("gemini",),
-        config_paths=("~/.gemini/settings.json",),
-        event_surfaces=("shell", "mcp_tool"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Prompt submission events and file read/write operations are not "
-            "currently observable through the Gemini hook surface."
-        ),
-        smoke_command="hol-guard install gemini --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="hermes",
-        install_aliases=("hermes",),
-        config_paths=(),
-        event_surfaces=("shell", "mcp_tool", "prompt"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Hermes desktop and ACP entry paths may not register shell hooks; "
-            "CLI and gateway honor hooks.pre_tool_call."
-        ),
-        smoke_command="hol-guard install hermes --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="openclaw",
-        install_aliases=("openclaw",),
-        config_paths=("~/.openclaw/config.json",),
-        event_surfaces=("mcp_tool",),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Shell commands and prompt events are not currently observable. "
-            "Guard only intercepts MCP tool calls via the proxy layer."
-        ),
-        smoke_command="hol-guard install openclaw --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="antigravity",
-        install_aliases=("antigravity",),
-        config_paths=(
-            "~/.config/antigravity/user/settings.json",
-            "~/.gemini/antigravity/mcp_config.json",
-            "~/.antigravity/extensions/extensions.json",
-        ),
-        event_surfaces=("mcp_tool", "prompt"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Shell commands are not currently observable through the Antigravity hook surface. "
-            "Guard intercepts extensions and MCP registrations via scan at launch time."
-        ),
-        smoke_command="hol-guard install antigravity --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="kimi",
-        install_aliases=("kimi", "kimi-code", "kimi-cli"),
-        config_paths=("~/.kimi-code/config.toml",),
-        event_surfaces=("shell", "prompt"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. "
-            "Hooks run in parallel, so separate requests may be reviewed concurrently."
-        ),
-        smoke_command="hol-guard install kimi --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="grok",
-        install_aliases=("grok", "grok-build", "grok-build-cli", "xai-grok"),
-        config_paths=(
-            "~/.grok/config.toml",
-            "~/.grok/managed_config.toml",
-            "~/.grok/hooks/",
-        ),
-        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "file_write"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=True,
-        known_blind_spots=(
-            "Grok UserPromptSubmit hooks are observe-only, so prompt screening cannot block the model from "
-            "seeing a prompt. Enforcement is the catch-all PreToolUse hook, including subagent and MCP tools. "
-            "--always-approve and bypassPermissions weaken Grok's own prompt policy, but the Guard hook still "
-            "returns a native deny when policy blocks a tool call."
-        ),
-        smoke_command="hol-guard install grok --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="pi",
-        install_aliases=("pi", "pi-agent", "pi-coding-agent"),
-        config_paths=(
-            "~/.pi/agent/settings.json",
-            ".pi/settings.json",
-            "~/.pi/agent/extensions/*.ts",
-            ".pi/extensions/*.ts",
-        ),
-        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "tool_result"),
-        native_approval=True,
-        browser_fallback=True,
-        resume_support=True,
-        known_blind_spots=(
-            "Pi package install and update flows happen outside the runtime extension bridge, so Guard observes the "
-            "configured package surfaces plus the prompt and tool events forwarded by the managed extension."
-        ),
-        smoke_command="hol-guard install pi --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="omp",
-        install_aliases=("omp", "oh-my-pi"),
-        config_paths=(
-            "~/.omp/agent/settings.json",
-            ".omp/settings.json",
-            "~/.omp/agent/extensions/*.ts",
-            ".omp/extensions/*.ts",
-        ),
-        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "tool_result"),
-        native_approval=True,
-        browser_fallback=True,
-        resume_support=True,
-        known_blind_spots=(
-            "Oh My Pi package install and update flows happen outside the runtime extension bridge, so Guard "
-            "observes the "
-            "configured package surfaces plus the prompt and tool events forwarded by the managed extension."
-        ),
-        smoke_command="hol-guard install omp --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="zcode",
-        install_aliases=("zcode", "zai", "z-code", "zai-zcode"),
-        config_paths=(
-            "~/.zcode/cli/config.json",
-            "~/.zcode/cli/plugins/",
-        ),
-        event_surfaces=("shell", "prompt", "mcp_tool", "file_read"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Inline edits applied directly by the model without a tool call are not visible to Guard, "
-            "and background sessions that run without an active terminal do not surface hook events."
-        ),
-        smoke_command="hol-guard install zcode --dry-run",
-    ),
+# Attach the event authority to the existing setup contracts without changing
+# their setup and table APIs.
+HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = tuple(
+    replace(
+        contract,
+        capability_events=_CAPABILITY_EVENTS_BY_HARNESS.get(contract.harness, _default_capability_events(contract)),
+    )
+    for contract in _BASE_HARNESS_CONTRACTS
 )
 
 _CONTRACT_BY_ALIAS: dict[str, HarnessProtectionContract] = {}
@@ -463,7 +123,11 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
         HarnessSetupStep(
             step_id="connect",
             title=f"Connect {display_name}",
-            body=f"Add Guard's local protection hooks for {display_name}.",
+            body=(
+                "Install native provider hooks on the Paseo daemon host."
+                if contract.harness == "paseo"
+                else f"Add Guard's local protection hooks for {display_name}."
+            ),
             command=("hol-guard", "apps", "connect", alias),
             writes_config=True,
         ),
@@ -517,18 +181,50 @@ def all_setup_contracts() -> tuple[HarnessSetupContract, ...]:
 
 def harness_contracts_table() -> str:
     """Return a Markdown table summarising all harness contracts."""
-    header = (
-        "| Harness | Install Aliases | Native Approval | Browser Fallback "
-        "| Resume | Event Surfaces |\n"
-        "|---------|-----------------|-----------------|------------------"
-        "|--------|----------------|\n"
+    return render_harness_contracts(HARNESS_CONTRACTS)
+
+
+def harness_capability_report(
+    *,
+    build_id: str = "unknown",
+    commit: str = "unknown",
+    requested_host: str | None = None,
+    host_version_scope: str | None = None,
+    os_arch: str | None = None,
+    local_hosted: str | None = None,
+) -> HarnessCapabilityReport:
+    """Return the additive versioned event report for all registered harnesses."""
+
+    from .capability_report import build_capability_report
+
+    return build_capability_report(
+        build_id=build_id,
+        commit=commit,
+        requested_host=requested_host,
+        host_version_scope=host_version_scope,
+        os_arch=os_arch,
+        local_hosted=local_hosted,
     )
-    rows: list[str] = []
-    for c in HARNESS_CONTRACTS:
-        aliases = ", ".join(f"`{a}`" for a in c.install_aliases)
-        surfaces = ", ".join(c.event_surfaces) if c.event_surfaces else "—"
-        rows.append(
-            f"| `{c.harness}` | {aliases} | {'✅' if c.native_approval else '❌'} "
-            f"| {'✅' if c.browser_fallback else '❌'} | {'✅' if c.resume_support else '❌'} | {surfaces} |"
-        )
-    return header + "\n".join(rows) + "\n"
+
+
+def capability_report_for(
+    harness: str,
+    *,
+    build_id: str = "unknown",
+    commit: str = "unknown",
+    host_version_scope: str | None = None,
+    os_arch: str | None = None,
+    local_hosted: str | None = None,
+) -> HarnessCapabilityReport:
+    """Return one event report, including an explicit row for unknown hosts."""
+
+    from .capability_report import capability_report_for as build_for_host
+
+    return build_for_host(
+        harness,
+        build_id=build_id,
+        commit=commit,
+        host_version_scope=host_version_scope,
+        os_arch=os_arch,
+        local_hosted=local_hosted,
+    )

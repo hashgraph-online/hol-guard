@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path, PurePath
+from typing import cast
 
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from .base import HarnessContext
+from .managed_mcp_upstream import (
+    MAX_PROXY_UNWRAP_LAYERS,
+    PROXY_LAUNCHER_ENV_KEYS,
+    proxy_argument_tail,
+    read_managed_mcp_upstream,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,9 +78,7 @@ _STABLE_SLASH_FLAG_TOKENS = frozenset(
         "/verbose",
     }
 )
-_PROXY_ENV_BLOCKLIST = frozenset(
-    {"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONBREAKPOINT", "__PYVENV_LAUNCHER__"}
-)
+_PROXY_ENV_BLOCKLIST = PROXY_LAUNCHER_ENV_KEYS
 
 
 def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
@@ -86,6 +91,21 @@ def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer
             continue
         managed.append(server)
     return tuple(managed)
+
+
+def observable_stdio_servers_with_proxy(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
+    """Include original servers recovered from Guard's managed proxy config.
+
+    Discovery only observes these connections; ``managed_stdio_servers`` must
+    continue excluding them so install never wraps a Guard proxy again.
+    """
+
+    servers: list[ManagedMcpServer] = []
+    for artifact in detection.artifacts:
+        server = _managed_stdio_server(artifact, include_guard_managed_proxy=True)
+        if server is not None:
+            servers.append(server)
+    return tuple(servers)
 
 
 def skipped_stdio_server_names(detection: HarnessDetection) -> tuple[str, ...]:
@@ -137,7 +157,7 @@ def proxy_cli_args(
         args.extend(["--workspace", workspace])
     for value in server.args:
         args.append(f"--arg={value}")
-    for key in sorted(server.env):
+    for key in sorted(proxy_process_env(server.env)):
         if key.strip():
             args.append(f"--server-env-key={key.strip()}")
     return args
@@ -198,21 +218,66 @@ def proxy_launcher_entry(
     return entry
 
 
-def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
+def _managed_stdio_server(
+    artifact: GuardArtifact, *, include_guard_managed_proxy: bool = False
+) -> ManagedMcpServer | None:
     if artifact.artifact_type != "mcp_server":
         return None
+    private_args = artifact.runtime_private_metadata.get("mcp_args")
+    if isinstance(private_args, tuple):
+        candidate_args = cast(tuple[object, ...], private_args)
+        if not all(isinstance(value, str) for value in candidate_args):
+            return None
+        artifact = replace(artifact, args=cast(tuple[str, ...], candidate_args))
     if is_verified_guard_mcp_companion(artifact.name, artifact.command, artifact.args):
         return None
-    if _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
+    if not include_guard_managed_proxy and _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
         return None
     if artifact.command is None or not artifact.name.strip():
         return None
-    if is_guard_proxy_command(artifact.command, artifact.args):
+    for _ in range(MAX_PROXY_UNWRAP_LAYERS):
+        if not is_guard_proxy_command(artifact.command, artifact.args):
+            break
+        if not include_guard_managed_proxy:
+            return None
+        upstream = read_managed_mcp_upstream(artifact, _GUARD_PROXY_COMMANDS)
+        if upstream is None:
+            return None
+        recovered = replace(
+            artifact,
+            command=upstream.command,
+            args=upstream.args,
+            source_scope=upstream.source_scope,
+            config_path=upstream.config_path,
+            runtime_private_metadata={
+                key: value
+                for key, value in artifact.runtime_private_metadata.items()
+                if key not in {"mcp_args", "mcp_env"}
+            },
+            metadata={**artifact.metadata, "env": upstream.env, "guard_managed_proxy": True},
+        )
+        # Construct only descriptive identity here. A recovered connection
+        # retains its config and environment; no permission state is copied.
+        described = ManagedMcpServer(
+            harness=recovered.harness,
+            name=recovered.name,
+            source_scope=recovered.source_scope,
+            config_path=recovered.config_path,
+            command=upstream.command,
+            args=upstream.args,
+            transport=recovered.transport or "stdio",
+            env=upstream.env,
+            enabled=True,
+        )
+        if stable_mcp_server_identifier(described) != upstream.server_id:
+            return None
+        artifact = recovered
+    if artifact.command is None or is_guard_proxy_command(artifact.command, artifact.args):
         return None
     transport = artifact.transport or "stdio"
     if transport not in {"stdio", "local"}:
         return None
-    env = _string_env(artifact.metadata.get("env"))
+    env = _string_env(artifact.runtime_private_metadata.get("mcp_env", artifact.metadata.get("env")))
     enabled = _bool_metadata(artifact.metadata.get("enabled"), default=True)
     return ManagedMcpServer(
         harness=artifact.harness,
@@ -300,14 +365,16 @@ def _hol_guard_command_name(command: str) -> str | None:
         if cmd_name.endswith(suffix):
             cmd_name = cmd_name[: -len(suffix)]
             break
-    return cmd_name if cmd_name == "hol-guard" else None
+    return cmd_name if cmd_name in {"hol-guard", "current-hol-guard"} else None
 
 
 def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
     if not isinstance(command, str):
         return False
     if _hol_guard_command_name(command) is not None:
-        return "guard" in args and any(value in _GUARD_PROXY_COMMANDS for value in args)
+        # Packaged launchers also receive generated Python-module argv from
+        # existing adapter installations. Recognize that exact prefix too.
+        return proxy_argument_tail(args, _GUARD_PROXY_COMMANDS) is not None
     if "codex_plugin_scanner.cli" not in args or "guard" not in args:
         return False
     return any(value in _GUARD_PROXY_COMMANDS for value in args)
@@ -320,6 +387,7 @@ __all__ = [
     "is_guard_proxy_command",
     "is_verified_guard_mcp_companion",
     "managed_stdio_servers",
+    "observable_stdio_servers_with_proxy",
     "proxy_cli_args",
     "proxy_launcher_entry",
     "proxy_process_env",

@@ -8,142 +8,32 @@ from .command_common_extension_helpers import help_variant as _help_variant
 from .command_common_extension_helpers import rule as _rule
 from .command_container_common_extensions import CONTAINER_COMMON_COMMAND_RULES
 from .command_domain_extension_specs import DOMAIN_COMMAND_EXTENSION_SPECS as DOMAIN_COMMAND_EXTENSION_SPECS
+from .command_infrastructure_matcher_support import docker_matcher as _docker
+from .command_infrastructure_matcher_support import helm_matcher as _helm
+from .command_infrastructure_matcher_support import kubectl_matcher as _kubectl
 from .command_kubernetes_common_extensions import KUBERNETES_COMMON_COMMAND_RULES
 from .command_rules import AnyMatcher
 
-_DOCKER_EXECUTABLES = frozenset({"docker", "docker.exe"})
-_KUBECTL_EXECUTABLES = frozenset({"kubectl", "kubectl.exe"})
-_HELM_EXECUTABLES = frozenset({"helm", "helm.exe"})
-_DOCKER_GLOBAL_OPTIONS = frozenset(
-    {
-        "--config",
-        "--context",
-        "-c",
-        "--host",
-        "-H",
-        "--log-level",
-        "-l",
-        "--tlscacert",
-        "--tlscert",
-        "--tlskey",
-    }
-)
-_DOCKER_GLOBAL_FLAGS = frozenset({"--debug", "-D", "--tls", "--tlsverify"})
-_KUBECTL_GLOBAL_OPTIONS = frozenset(
-    {
-        "--as",
-        "--as-group",
-        "--as-uid",
-        "--cache-dir",
-        "--certificate-authority",
-        "--client-certificate",
-        "--client-key",
-        "--cluster",
-        "--context",
-        "--kubeconfig",
-        "--namespace",
-        "-n",
-        "--password",
-        "--profile-output",
-        "--request-timeout",
-        "--server",
-        "-s",
-        "--tls-server-name",
-        "--token",
-        "--user",
-        "--username",
-        "-v",
-        "--v",
-    }
-)
-_KUBECTL_GLOBAL_FLAGS = frozenset(
-    {
-        "--disable-compression",
-        "--insecure-skip-tls-verify",
-        "--match-server-version",
-        "--warnings-as-errors",
-    }
-)
-_HELM_GLOBAL_OPTIONS = frozenset(
-    {
-        "--burst-limit",
-        "--kube-apiserver",
-        "--kube-as-group",
-        "--kube-as-user",
-        "--kube-ca-file",
-        "--kube-context",
-        "--kube-tls-server-name",
-        "--kube-token",
-        "--kubeconfig",
-        "--namespace",
-        "-n",
-        "--qps",
-        "--registry-config",
-        "--repository-cache",
-        "--repository-config",
-    }
-)
-_HELM_GLOBAL_FLAGS = frozenset({"--debug", "--kube-insecure-skip-tls-verify"})
 _TERRAFORM_GLOBAL_OPTIONS = frozenset({"-chdir"})
 _PULUMI_GLOBAL_OPTIONS = frozenset({"--cwd", "-c", "--stack", "-s"})
 
-_DOCKER_SYSTEM_PRUNE = _executable_matcher(
-    _DOCKER_EXECUTABLES,
-    "system",
-    "prune",
-    leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-    interspersed_flags=_DOCKER_GLOBAL_FLAGS,
-)
+_DOCKER_SYSTEM_PRUNE = _docker("system", "prune")
 _DOCKER_FORCE_REMOVE = AnyMatcher(
     matchers=tuple(
-        _executable_matcher(
-            _DOCKER_EXECUTABLES,
-            *subcommands,
-            required_flags=frozenset({flag}),
-            leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-            interspersed_flags=_DOCKER_GLOBAL_FLAGS,
-        )
+        _docker(*subcommands, required_flags=frozenset({flag}))
         for subcommands in (("rm",), ("container", "rm"))
         for flag in ("--force", "-f")
     )
 )
 _DOCKER_PRIVILEGED_RUN = AnyMatcher(
     matchers=(
-        _executable_matcher(
-            _DOCKER_EXECUTABLES,
-            "run",
-            required_flags=frozenset({"--privileged"}),
-            leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-            interspersed_flags=_DOCKER_GLOBAL_FLAGS,
-        ),
-        _executable_matcher(
-            _DOCKER_EXECUTABLES,
-            "container",
-            "run",
-            required_flags=frozenset({"--privileged"}),
-            leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-            interspersed_flags=_DOCKER_GLOBAL_FLAGS,
-        ),
+        _docker("run", required_flags=frozenset({"--privileged"})),
+        _docker("container", "run", required_flags=frozenset({"--privileged"})),
     )
 )
-_KUBECTL_DELETE = _executable_matcher(
-    _KUBECTL_EXECUTABLES,
-    "delete",
-    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
-    interspersed_flags=_KUBECTL_GLOBAL_FLAGS,
-)
-_KUBECTL_DRAIN = _executable_matcher(
-    _KUBECTL_EXECUTABLES,
-    "drain",
-    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
-    interspersed_flags=_KUBECTL_GLOBAL_FLAGS,
-)
-_HELM_UNINSTALL = _executable_matcher(
-    _HELM_EXECUTABLES,
-    "uninstall",
-    leading_options_with_values=_HELM_GLOBAL_OPTIONS,
-    interspersed_flags=_HELM_GLOBAL_FLAGS,
-)
+_KUBECTL_DELETE = _kubectl("delete")
+_KUBECTL_DRAIN = _kubectl("drain")
+_HELM_UNINSTALL = _helm("uninstall")
 _TERRAFORM_DESTROY = _executable_matcher(
     frozenset({"terraform", "tofu"}),
     "destroy",

@@ -16,8 +16,8 @@ from .version import __version__
 def _guard_cli(name: str):
     # Deferred: importing the Guard CLI eagerly pulls the whole Guard command
     # surface through the package __init__, which short-lived invocations
-    # must not pay for. The Guard package itself stays eager so spawned hook
-    # workers see the same import order as the daemon.
+    # must not pay for. Hook workers import their explicit hook modules before
+    # serving requests, preserving readiness semantics without package eagerness.
     from .guard import cli as guard_cli_module
 
     return getattr(guard_cli_module, name)
@@ -308,6 +308,7 @@ def _resolve_legacy_args(
         "protect",
         "preflight",
         "pytest-contained",
+        "execute-contained-test",
         "diff",
         "test-eval",
         "command",
@@ -402,12 +403,45 @@ def main(argv: list[str] | None = None) -> int:
         program_mode = "combined"
     if program_mode == "guard" and requested_argv[:1] == ["help"]:
         requested_argv = [*requested_argv[1:], "--help"]
-    if program_mode in {"guard", "hol-guard"} and requested_argv[:1] == ["--version"]:
-        # Fast path: answering a version probe must not build the full Guard
-        # command surface. Update flows spawn `--version` on every check, and
-        # hook wrappers probe it while a tool waits.
+    if requested_argv[:1] == ["--version"] and (
+        program_mode in {"guard", "hol-guard"}
+        or (program_name.startswith("hol-guard-") and program_name.endswith(".partial"))
+    ):
+        # Desktop stages Core as hol-guard-*.partial. Keep other executable
+        # names on their existing parser path, including scanner/combined CLIs.
         print(f"{program_name} {__version__}")
         return 0
+    if program_mode != "scanner":
+        from .guard.cli.daemon_serve import is_daemon_serve_fast_path_argv, run_daemon_serve_cli
+        from .guard.cli.desktop_bootstrap import (
+            is_desktop_bootstrap_fast_path_argv,
+            run_desktop_bootstrap_cli,
+        )
+
+        if program_mode in {"guard", "hol-guard"} and is_desktop_bootstrap_fast_path_argv(requested_argv):
+            # Fast path: Desktop warmup always invokes `desktop bootstrap --json`.
+            # Building the full Guard parser (MDM, cloud, policy, extensions)
+            # dominates that spawn; home overrides still use argparse.
+            try:
+                return run_desktop_bootstrap_cli()
+            except ValueError as exc:
+                print(str(exc), file=sys.stderr)
+                return 2
+            except Exception as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+        if is_daemon_serve_fast_path_argv(requested_argv):
+            # Fast path: Desktop and the isolated launcher start the
+            # approval-center with `daemon --serve`. The command hub must not
+            # delay that child past the Desktop bootstrap timeout.
+            try:
+                return run_daemon_serve_cli(requested_argv)
+            except ValueError as exc:
+                print(str(exc), file=sys.stderr)
+                return 2
+            except Exception as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
     parser = _build_parser(program_name, program_mode=program_mode)
     resolved_argv = _resolve_legacy_args(
         requested_argv,

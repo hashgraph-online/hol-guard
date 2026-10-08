@@ -1,0 +1,5250 @@
+{
+  "extension": {
+    "action_classes": [
+      "docker-sensitive command",
+      "Docker client config access"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews container lifecycle, cleanup, execution, network, and persistent-data operations that can expose credentials or mutate host state.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.container-runtime",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Container runtime protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of Docker builder or Buildx cache data.",
+        "example_command": "docker buildx prune -a",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container build-cache prune",
+        "permission_id": "command.container-runtime.permission.build-cache-prune",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect builder disk usage and prune only cache that is safe to rebuild."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies removal of Buildx builder instances and their local state.",
+        "example_command": "docker buildx rm old-builder",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Buildx builder removal",
+        "permission_id": "command.container-runtime.permission.buildx-builder-removal",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect active builders and switch away from the target builder before removal."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Compose cleanup that explicitly removes volumes or images in addition to services.",
+        "example_command": "docker compose down --volumes",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Compose persistent-data cleanup",
+        "permission_id": "command.container-runtime.permission.compose-destructive-cleanup",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Run ordinary Compose teardown first and remove volumes or images only after reviewing retained data."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies arbitrary command execution inside an existing running container.",
+        "example_command": "docker exec api sh -lc 'id'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container command execution",
+        "permission_id": "command.container-runtime.permission.container-exec",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Use a read-only inspection command and avoid exposing host or credential material."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies immediate signal delivery to running containers, including the default SIGKILL.",
+        "example_command": "docker kill api",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container kill",
+        "permission_id": "command.container-runtime.permission.container-kill",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Use a graceful stop with an appropriate timeout unless an immediate signal is required."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies bulk deletion of stopped containers.",
+        "example_command": "docker container prune",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Stopped-container prune",
+        "permission_id": "command.container-runtime.permission.container-prune",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List stopped containers and remove only reviewed container IDs."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies removal of named containers after they have been stopped.",
+        "example_command": "docker rm api",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container removal",
+        "permission_id": "command.container-runtime.permission.container-removal",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the named container and preserve any required logs or data before removal."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies stopping running containers, which can interrupt active workloads.",
+        "example_command": "docker stop api",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container stop",
+        "permission_id": "command.container-runtime.permission.container-stop",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Verify the exact container and its workload dependencies before stopping it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Docker client config access"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies reads of local container client authentication configuration.",
+        "example_command": "cat ~/.docker/config.json",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container credential access",
+        "permission_id": "command.container-runtime.permission.docker-config-access",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Pass only the specific credential material required by the operation."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies container operations that can expose credentials or mutate protected state.",
+        "example_command": "docker run -v ~/.aws:/root/.aws alpine",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Sensitive container operation",
+        "permission_id": "command.container-runtime.permission.docker-sensitive",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Use a pinned image, minimal privileges, and a preview where the command supports one."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies forced removal that can terminate a running container without a graceful stop.",
+        "example_command": "docker rm --force",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Forced container removal",
+        "permission_id": "command.container-runtime.permission.forced-container-removal",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Stop the named container gracefully, inspect it, then remove that exact container."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies bulk deletion of unused container images.",
+        "example_command": "docker image prune -a",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container image prune",
+        "permission_id": "command.container-runtime.permission.image-prune",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List dangling or unused images and remove reviewed image IDs explicitly."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of local container images by ID, tag, or alias command.",
+        "example_command": "docker image rm app:old",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container image removal",
+        "permission_id": "command.container-runtime.permission.image-removal",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List image references and remove only the exact reviewed image or tag."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies bulk deletion of unused Docker networks.",
+        "example_command": "docker network prune",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container network prune",
+        "permission_id": "command.container-runtime.permission.network-prune",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List unused networks and remove reviewed network names explicitly."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of Docker networks that can disconnect dependent workloads.",
+        "example_command": "docker network rm app-net",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container network removal",
+        "permission_id": "command.container-runtime.permission.network-removal",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect connected containers and remove only the exact unused network."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies command execution with extended privileges inside an existing container or service.",
+        "example_command": "docker exec --privileged api sh",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Privileged container command execution",
+        "permission_id": "command.container-runtime.permission.privileged-exec",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Run without --privileged and grant only the narrowly required capability."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies containers launched with broad host-level privileges.",
+        "example_command": "docker run --privileged",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Privileged container execution",
+        "permission_id": "command.container-runtime.permission.privileged-run",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Grant only the required capabilities and keep host devices and filesystems isolated."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of Swarm services, stacks, nodes, secrets, or configs.",
+        "example_command": "docker service rm api",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Swarm resource removal",
+        "permission_id": "command.container-runtime.permission.swarm-resource-removal",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect the exact Swarm object and dependent workloads before removing it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies broad cleanup of unused containers, networks, images, build cache, and optional volumes.",
+        "example_command": "docker system prune",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container system prune",
+        "permission_id": "command.container-runtime.permission.system-prune",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List the targeted container resources and prune one resource class at a time."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies bulk deletion of unused local volumes.",
+        "example_command": "docker volume prune -a",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container volume prune",
+        "permission_id": "command.container-runtime.permission.volume-prune",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List unused volumes and remove only reviewed names after confirming data retention."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies deletion of named local volumes and their persisted data.",
+        "example_command": "docker volume rm app-data",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Container volume removal",
+        "permission_id": "command.container-runtime.permission.volume-removal",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect volume consumers and back up required persistent data before deletion."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.docker.com/reference/cli/docker/system/prune/",
+      "https://docs.docker.com/reference/cli/docker/container/rm/",
+      "https://docs.docker.com/reference/cli/docker/container/exec/",
+      "https://docs.docker.com/reference/cli/docker/image/rm/",
+      "https://docs.docker.com/reference/cli/docker/volume/rm/",
+      "https://docs.docker.com/reference/cli/docker/network/rm/",
+      "https://docs.docker.com/reference/cli/docker/compose/down/",
+      "https://docs.docker.com/reference/cli/docker/container/run/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "network_egress",
+      "destructive_shell",
+      "local_secret_read",
+      "execution"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies container operations that can expose credentials or mutate protected state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.container-runtime.docker-sensitive.v1",
+        "permission_id": "command.container-runtime.permission.docker-sensitive",
+        "risk_classes": [
+          "network_egress",
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.docker-sensitive",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Use a pinned image, minimal privileges, and a preview where the command supports one."
+        ],
+        "severity": "high",
+        "title": "Sensitive container operation"
+      },
+      {
+        "action_classes": [
+          "Docker client config access"
+        ],
+        "default_mode": "review",
+        "description": "Identifies reads of local container client authentication configuration.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.container-runtime.docker-config-access.v1",
+        "permission_id": "command.container-runtime.permission.docker-config-access",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.container-runtime.docker-config-access",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Pass only the specific credential material required by the operation."
+        ],
+        "severity": "high",
+        "title": "Container credential access"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies broad cleanup of unused containers, networks, images, build cache, and optional volumes.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "docker",
+              "docker.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--debug",
+              "--tls",
+              "--tlsverify",
+              "-d"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--context",
+              "--host",
+              "--log-level",
+              "--tlscacert",
+              "--tlscert",
+              "--tlskey",
+              "-c",
+              "-h",
+              "-l"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "system",
+              "prune"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.system-prune",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.system-prune",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "system",
+                  "prune"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List the targeted container resources and prune one resource class at a time."
+        ],
+        "severity": "high",
+        "title": "Container system prune"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies forced removal that can terminate a running container without a graceful stop.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.forced-container-removal",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.forced-container-removal",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "-f"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "container",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "-f"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "container",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Stop the named container gracefully, inspect it, then remove that exact container."
+        ],
+        "severity": "high",
+        "title": "Forced container removal"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies containers launched with broad host-level privileges.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--privileged"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "run"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--privileged"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "run"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.privileged-run",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.container-runtime.privileged-run",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "--privileged"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "--privileged"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "container",
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Grant only the required capabilities and keep host devices and filesystems isolated."
+        ],
+        "severity": "critical",
+        "title": "Privileged container execution"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies removal of named containers after they have been stopped.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--force",
+                  "-f"
+                ],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--force",
+                  "-f"
+                ],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.container-removal",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.container-removal",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [
+                      "--force",
+                      "-f"
+                    ],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [
+                      "--force",
+                      "-f"
+                    ],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "container",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the named container and preserve any required logs or data before removal."
+        ],
+        "severity": "high",
+        "title": "Container removal"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies stopping running containers, which can interrupt active workloads.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "stop"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "stop"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.container-stop",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.container-stop",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stop"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "container",
+                      "stop"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Verify the exact container and its workload dependencies before stopping it."
+        ],
+        "severity": "high",
+        "title": "Container stop"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies immediate signal delivery to running containers, including the default SIGKILL.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "kill"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "kill"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.container-kill",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.container-kill",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "kill"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "container",
+                      "kill"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Use a graceful stop with an appropriate timeout unless an immediate signal is required."
+        ],
+        "severity": "critical",
+        "title": "Container kill"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies bulk deletion of stopped containers.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "docker",
+              "docker.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--debug",
+              "--tls",
+              "--tlsverify",
+              "-d"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--context",
+              "--host",
+              "--log-level",
+              "--tlscacert",
+              "--tlscert",
+              "--tlskey",
+              "-c",
+              "-h",
+              "-l"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "container",
+              "prune"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.container-prune",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.container-prune",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "prune"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List stopped containers and remove only reviewed container IDs."
+        ],
+        "severity": "high",
+        "title": "Stopped-container prune"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of local container images by ID, tag, or alias command.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rmi"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "image",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "image",
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.image-removal",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.image-removal",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rmi"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "image",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "image",
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List image references and remove only the exact reviewed image or tag."
+        ],
+        "severity": "high",
+        "title": "Container image removal"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies bulk deletion of unused container images.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "docker",
+              "docker.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--debug",
+              "--tls",
+              "--tlsverify",
+              "-d"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--context",
+              "--host",
+              "--log-level",
+              "--tlscacert",
+              "--tlscert",
+              "--tlskey",
+              "-c",
+              "-h",
+              "-l"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "image",
+              "prune"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.image-prune",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.image-prune",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "image",
+                  "prune"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List dangling or unused images and remove reviewed image IDs explicitly."
+        ],
+        "severity": "high",
+        "title": "Container image prune"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of named local volumes and their persisted data.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "volume",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "volume",
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.volume-removal",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.volume-removal",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "volume",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "volume",
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect volume consumers and back up required persistent data before deletion."
+        ],
+        "severity": "critical",
+        "title": "Container volume removal"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies bulk deletion of unused local volumes.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "docker",
+              "docker.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--debug",
+              "--tls",
+              "--tlsverify",
+              "-d"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--context",
+              "--host",
+              "--log-level",
+              "--tlscacert",
+              "--tlscert",
+              "--tlskey",
+              "-c",
+              "-h",
+              "-l"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "volume",
+              "prune"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.volume-prune",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.volume-prune",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "volume",
+                  "prune"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List unused volumes and remove only reviewed names after confirming data retention."
+        ],
+        "severity": "critical",
+        "title": "Container volume prune"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of Docker networks that can disconnect dependent workloads.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "network",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "network",
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.network-removal",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.container-runtime.network-removal",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "network",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "network",
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect connected containers and remove only the exact unused network."
+        ],
+        "severity": "high",
+        "title": "Container network removal"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies bulk deletion of unused Docker networks.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "docker",
+              "docker.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--debug",
+              "--tls",
+              "--tlsverify",
+              "-d"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--context",
+              "--host",
+              "--log-level",
+              "--tlscacert",
+              "--tlscert",
+              "--tlskey",
+              "-c",
+              "-h",
+              "-l"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "network",
+              "prune"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.network-prune",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.container-runtime.network-prune",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "network",
+                  "prune"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List unused networks and remove reviewed network names explicitly."
+        ],
+        "severity": "high",
+        "title": "Container network prune"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of Docker builder or Buildx cache data.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "builder",
+                  "prune"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "buildx",
+                  "prune"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.build-cache-prune",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.build-cache-prune",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "builder",
+                      "prune"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "buildx",
+                      "prune"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect builder disk usage and prune only cache that is safe to rebuild."
+        ],
+        "severity": "high",
+        "title": "Container build-cache prune"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies removal of Buildx builder instances and their local state.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "docker",
+              "docker.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--debug",
+              "--tls",
+              "--tlsverify",
+              "-d"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--context",
+              "--host",
+              "--log-level",
+              "--tlscacert",
+              "--tlscert",
+              "--tlskey",
+              "-c",
+              "-h",
+              "-l"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "buildx",
+              "rm"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.buildx-builder-removal",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.buildx-builder-removal",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "buildx",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect active builders and switch away from the target builder before removal."
+        ],
+        "severity": "high",
+        "title": "Buildx builder removal"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Compose cleanup that explicitly removes volumes or images in addition to services.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--all-resources",
+                  "--compatibility",
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [
+                  "--ansi",
+                  "--env-file",
+                  "--file",
+                  "--parallel",
+                  "--profile",
+                  "--progress",
+                  "--project-directory",
+                  "--project-name",
+                  "-f",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--volumes"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "compose",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--all-resources",
+                  "--compatibility",
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [
+                  "--ansi",
+                  "--env-file",
+                  "--file",
+                  "--parallel",
+                  "--profile",
+                  "--progress",
+                  "--project-directory",
+                  "--project-name",
+                  "-f",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "-v"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "compose",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--all-resources",
+                  "--compatibility",
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [
+                  "--ansi",
+                  "--env-file",
+                  "--file",
+                  "--parallel",
+                  "--profile",
+                  "--progress",
+                  "--project-directory",
+                  "--project-name",
+                  "-f",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--volumes"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "compose",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--all-resources",
+                  "--compatibility",
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [
+                  "--ansi",
+                  "--env-file",
+                  "--file",
+                  "--parallel",
+                  "--profile",
+                  "--progress",
+                  "--project-directory",
+                  "--project-name",
+                  "-f",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "-v"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "compose",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--all-resources",
+                  "--compatibility",
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [
+                  "--ansi",
+                  "--env-file",
+                  "--file",
+                  "--parallel",
+                  "--profile",
+                  "--progress",
+                  "--project-directory",
+                  "--project-name",
+                  "-f",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [
+                  "--rmi"
+                ],
+                "required_flags": [
+                  "--rmi"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [
+                  [
+                    "--rmi",
+                    [
+                      "all",
+                      "local"
+                    ]
+                  ]
+                ],
+                "subcommands": [
+                  "compose",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.compose-destructive-cleanup",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.compose-destructive-cleanup",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--all-resources",
+                      "--compatibility",
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ansi",
+                      "--env-file",
+                      "--file",
+                      "--parallel",
+                      "--profile",
+                      "--progress",
+                      "--project-directory",
+                      "--project-name",
+                      "-f",
+                      "-p"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "--volumes"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "compose",
+                      "down"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--all-resources",
+                      "--compatibility",
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ansi",
+                      "--env-file",
+                      "--file",
+                      "--parallel",
+                      "--profile",
+                      "--progress",
+                      "--project-directory",
+                      "--project-name",
+                      "-f",
+                      "-p"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "compose",
+                      "down"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--all-resources",
+                      "--compatibility",
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ansi",
+                      "--env-file",
+                      "--file",
+                      "--parallel",
+                      "--profile",
+                      "--progress",
+                      "--project-directory",
+                      "--project-name",
+                      "-f",
+                      "-p"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "--volumes"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "compose",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--all-resources",
+                      "--compatibility",
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ansi",
+                      "--env-file",
+                      "--file",
+                      "--parallel",
+                      "--profile",
+                      "--progress",
+                      "--project-directory",
+                      "--project-name",
+                      "-f",
+                      "-p"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "-v"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "compose",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--all-resources",
+                      "--compatibility",
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ansi",
+                      "--env-file",
+                      "--file",
+                      "--parallel",
+                      "--profile",
+                      "--progress",
+                      "--project-directory",
+                      "--project-name",
+                      "-f",
+                      "-p"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [
+                      "--rmi"
+                    ],
+                    "required_flags": [
+                      "--help",
+                      "--rmi"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [
+                      [
+                        "--rmi",
+                        [
+                          "all",
+                          "local"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "compose",
+                      "down"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run ordinary Compose teardown first and remove volumes or images only after reviewing retained data."
+        ],
+        "severity": "critical",
+        "title": "Compose persistent-data cleanup"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies arbitrary command execution inside an existing running container.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--privileged"
+                ],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [
+                  "--detach-keys",
+                  "--env",
+                  "--env-file",
+                  "--user",
+                  "--workdir",
+                  "-e",
+                  "-u",
+                  "-w"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "exec"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--privileged"
+                ],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [
+                  "--detach-keys",
+                  "--env",
+                  "--env-file",
+                  "--user",
+                  "--workdir",
+                  "-e",
+                  "-u",
+                  "-w"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "exec"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.container-exec",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.container-runtime.container-exec",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Use a read-only inspection command and avoid exposing host or credential material."
+        ],
+        "severity": "high",
+        "title": "Container command execution"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies command execution with extended privileges inside an existing container or service.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [
+                  "--detach-keys",
+                  "--env",
+                  "--env-file",
+                  "--user",
+                  "--workdir",
+                  "-e",
+                  "-u",
+                  "-w"
+                ],
+                "required_flags": [
+                  "--privileged"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "exec"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [
+                  "--detach-keys",
+                  "--env",
+                  "--env-file",
+                  "--user",
+                  "--workdir",
+                  "-e",
+                  "-u",
+                  "-w"
+                ],
+                "required_flags": [
+                  "--privileged"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "container",
+                  "exec"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--all-resources",
+                  "--compatibility",
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [
+                  "--ansi",
+                  "--env-file",
+                  "--file",
+                  "--parallel",
+                  "--profile",
+                  "--progress",
+                  "--project-directory",
+                  "--project-name",
+                  "-f",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [
+                  "--detach-keys",
+                  "--env",
+                  "--env-file",
+                  "--user",
+                  "--workdir",
+                  "-e",
+                  "-u",
+                  "-w"
+                ],
+                "required_flags": [
+                  "--privileged"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "compose",
+                  "exec"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.privileged-exec",
+        "risk_classes": [
+          "execution",
+          "destructive_shell"
+        ],
+        "rule_id": "command.container-runtime.privileged-exec",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run without --privileged and grant only the narrowly required capability."
+        ],
+        "severity": "critical",
+        "title": "Privileged container command execution"
+      },
+      {
+        "action_classes": [
+          "docker-sensitive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies deletion of Swarm services, stacks, nodes, secrets, or configs.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "config",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "config",
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "node",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "node",
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "secret",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "secret",
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "service",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "service",
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "stack",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "stack",
+                  "remove"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "docker",
+                  "docker.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--tls",
+                  "--tlsverify",
+                  "-d"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--context",
+                  "--host",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-c",
+                  "-h",
+                  "-l"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "stack",
+                  "down"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.container-runtime.permission.swarm-resource-removal",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.container-runtime.swarm-resource-removal",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "config",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "config",
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "node",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "node",
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "secret",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "secret",
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "service",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "service",
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stack",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stack",
+                      "remove"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "docker",
+                      "docker.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--tls",
+                      "--tlsverify",
+                      "-d"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "--context",
+                      "--host",
+                      "--log-level",
+                      "--tlscacert",
+                      "--tlscert",
+                      "--tlskey",
+                      "-c",
+                      "-h",
+                      "-l"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "stack",
+                      "down"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the exact Swarm object and dependent workloads before removing it."
+        ],
+        "severity": "critical",
+        "title": "Swarm resource removal"
+      }
+    ],
+    "safer_alternatives": [
+      "Use a pinned image and a read-only container filesystem where possible.",
+      "Pass only the specific secret or file required by the container.",
+      "List exact containers, images, volumes, networks, and builders before deleting or pruning them."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

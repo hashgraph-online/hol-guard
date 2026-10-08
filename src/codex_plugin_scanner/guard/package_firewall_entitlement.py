@@ -135,6 +135,16 @@ def _oauth_entitlement(credentials: dict[str, object] | None, *, now: datetime) 
             "tier": normalized_tier,
             "upgrade_cta": None,
         }
+    if normalized_tier in PACKAGE_FIREWALL_PAID_TIERS and (expires_at is None or expires_at <= now):
+        # A paid plan whose firewall claim is missing or past its validity is a
+        # stale record, not proof of an unpaid account. Reconnecting refreshes
+        # the entitlement; only a fresh claim may assert paid_guard_cloud_required.
+        return {
+            "allowed": False,
+            "reason": "guard_cloud_reconnect_required",
+            "tier": normalized_tier,
+            "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
+        }
     return {
         "allowed": False,
         "reason": "paid_guard_cloud_required",
@@ -291,6 +301,16 @@ def resolve_package_firewall_entitlement(
     if oauth is not None and oauth.get("reason") == "guard_cloud_reconnect_required":
         return oauth
     if bundle is not None:
+        oauth_plan = _optional_string(
+            oauth_payload.get("supply_chain_plan_id") if isinstance(oauth_payload, dict) else None
+        )
+        if oauth is not None and oauth.get("reason") == "paid_guard_cloud_required":
+            # The fresh OAuth claim is authoritative for both verdict and tier.
+            return oauth
+        if oauth_plan is not None and oauth_plan.lower() in PACKAGE_FIREWALL_PAID_TIERS:
+            # A paid-plan OAuth record contradicting the bundle's unpaid tier is a
+            # stale claim pair, not proof the account is unpaid. Reconnect re-syncs both.
+            return _reconnect_required_entitlement(bundle=bundle, oauth=oauth, oauth_payload=oauth_payload)
         return bundle
     if oauth is not None:
         return oauth

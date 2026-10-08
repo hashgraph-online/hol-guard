@@ -13,7 +13,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_route_receipt import (
     native_hook_route,
     record_native_hook_route,
@@ -21,6 +21,8 @@ from codex_plugin_scanner.guard.native_route_receipt import (
 )
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _native_allow(command: str) -> dict[str, Any]:
@@ -238,7 +240,7 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -272,7 +274,7 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -285,7 +287,7 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
         lambda: "off",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -293,18 +295,18 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
         lambda: NativeRuntimeStatus(mode="off", available=True, compatible=True, reason="off"),
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    with pytest.raises(HookWorkerUnsupported, match="native PreToolUse runtime is off"):
-        worker.review_http_payload(
-            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
-            params={},
-            default_harness="pi",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-        )
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        params={},
+        default_harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["reason_code"] == "native_hook_disabled"
 
 
-def test_hook_worker_uses_emergency_safe_floor_for_non_command_pretool_without_native_result(
+def test_hook_worker_denies_unreviewed_non_command_pretool_without_native_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -325,7 +327,7 @@ def test_hook_worker_uses_emergency_safe_floor_for_non_command_pretool_without_n
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -350,7 +352,7 @@ def test_hook_worker_pauses_secret_read_without_native_result(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -368,9 +370,11 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
+        # Claude permission dialogs have their own passthrough route; Codex
+        # permission events still reach the native fail-safe.
         payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
         params={},
-        default_harness="claude-code",
+        default_harness="codex",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
@@ -385,6 +389,4 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert grok_session["decision"] == "allow"
-    assert grok_session["policy_action"] == "allow"
-    assert grok_session["reason_code"] == "native_hook_event_unavailable"
+    assert grok_session == {}

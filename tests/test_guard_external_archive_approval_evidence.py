@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import shlex
@@ -11,20 +10,21 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_state import RuntimeArtifactHookState
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.local_supply_chain import (
     build_package_protect_payload,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
+from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
 
 def _hook_inputs(
@@ -58,31 +58,6 @@ def _hook_inputs(
         "source_scope": "project",
     }
     return artifact, config, context, store, workspace, payload
-
-
-def _evaluate_hook(
-    *,
-    artifact: GuardArtifact,
-    config: GuardConfig,
-    context: HarnessContext,
-    store: GuardStore,
-    workspace: Path,
-    payload: dict[str, object],
-    trusted_request_override_hash: str | None = None,
-) -> int | RuntimeArtifactHookState:
-    return _evaluate_runtime_artifact_hook(
-        argparse.Namespace(harness="codex", policy_action=None, json=True),
-        action_envelope=None,
-        config=config,
-        context=context,
-        data_flow_signals=(),
-        guard_home=store.guard_home,
-        payload=payload,
-        runtime_artifact=artifact,
-        runtime_workspace=workspace,
-        store=store,
-        trusted_request_override_hash=trusted_request_override_hash,
-    )
 
 
 def _save_exact_allow(store: GuardStore, *, artifact: GuardArtifact, artifact_hash: str) -> None:
@@ -138,8 +113,9 @@ def test_manifest_warning_does_not_suppress_approved_external_archive_inspection
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
+        del request_deadline, retain_download, guard_home
         scans.append(scanned_url)
         return (
             {
@@ -152,7 +128,7 @@ def test_manifest_warning_does_not_suppress_approved_external_archive_inspection
         )
 
     monkeypatch.setattr(evaluator, "_evaluation_targets", unsynced_targets)
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", clean_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
 
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
@@ -181,7 +157,7 @@ def test_mixed_registry_and_external_archive_request_fails_closed_without_networ
     def unexpected_scan(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("mixed request must fail before network inspection")
 
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", unexpected_scan)
+    monkeypatch.setattr(package_services, "_scan_external_tarball", unexpected_scan)
 
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
@@ -218,7 +194,7 @@ def test_retained_archive_is_cleaned_if_evidence_persistence_raises(
     )
 
     monkeypatch.setattr(
-        evaluator,
+        package_services,
         "_scan_external_tarball",
         lambda *_args, **_kwargs: (
             {
@@ -266,9 +242,11 @@ def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_pat
 
     assert secret not in repr(result.to_dict())
 
-
+@pytest.mark.parametrize("explicit_guard_home", (False, True))
 def test_external_archive_credentials_stay_private_across_artifact_and_receipt_surfaces(
     tmp_path: Path,
+    archive_package_intent_native: Path,
+    explicit_guard_home: bool,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -277,7 +255,11 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     password = "VERY_SECRET_PASSWORD"
     source_url = f"https://user:{password}@packages.example.com/demo.tgz?token={secret}"
     command = ["npm", "install", f"demo@{source_url}"]
-    intent = parse_package_intent(shlex.join(command), workspace=workspace)
+    intent = parse_package_intent(
+        shlex.join(command),
+        workspace=workspace,
+        guard_home=archive_package_intent_native if explicit_guard_home else None,
+    )
     assert intent is not None
     artifact = build_package_request_artifact(
         "guard-cli",
@@ -285,10 +267,6 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
         config_path="hol-guard.toml",
         source_scope="project",
     )
-    private_targets = artifact.runtime_private_metadata["package_targets"]
-    assert isinstance(private_targets, list)
-    assert private_targets[0]["source_url"] == source_url
-
     store = GuardStore(tmp_path / "guard-home")
     evaluation = evaluator.evaluate_package_request_artifact(
         artifact=artifact,

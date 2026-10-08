@@ -1,0 +1,37 @@
+name: Verify MCP release source
+
+on:
+  workflow_call:
+    outputs:
+      sha:
+        description: Immutable source SHA verified against the publishing run and release branch
+        value: ${{ jobs.verify.outputs.sha }}
+      branch:
+        description: Verified canonical release branch
+        value: ${{ jobs.verify.outputs.branch }}
+
+permissions: {}
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      branch: ${{ steps.source.outputs.branch }}
+    steps:
+      # workflow_run's github.sha is the trusted default-branch commit, not the upstream run's source.
+      - name: Check out trusted verification code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify canonical publishing run and source ancestry
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I -S scripts/ci/verify_release_workflow_run.py

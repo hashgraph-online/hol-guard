@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def test_daemon_start_preserves_deferred_hook_worker_backfill(
+def test_daemon_start_uses_full_initial_hook_worker_pool(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -35,25 +35,61 @@ def test_daemon_start_preserves_deferred_hook_worker_backfill(
     try:
         daemon.start()
         assert calls == [{}]
-        assert runner.stats()["ready"] == 1
+        stats = runner.stats()
+        assert stats["target"] > 1
+        assert runner.wait_for_capacity(minimum_workers=int(stats["target"]), timeout_seconds=15)
     finally:
         daemon.stop()
 
 
+@pytest.mark.parametrize("cleanup_failure", ["none", "publisher", "socket"])
 def test_stop_after_initial_worker_failure_does_not_shutdown_unstarted_serve_loop(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    cleanup_failure: str,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
+    hook_worker_close_calls = 0
+    real_hook_worker_close = daemon._server.hook_worker.close_contained
+
+    def record_hook_worker_close() -> bool:
+        nonlocal hook_worker_close_calls
+        hook_worker_close_calls += 1
+        contained = real_hook_worker_close()
+        return False if cleanup_failure == "publisher" and hook_worker_close_calls == 1 else contained
+
+    monkeypatch.setattr(daemon._server.hook_worker, "close_contained", record_hook_worker_close)
+    original_server_close = daemon._server.server_close
+    server_close_calls = 0
+
+    def close_with_optional_socket_failure() -> None:
+        nonlocal server_close_calls
+        server_close_calls += 1
+        if cleanup_failure == "socket" and server_close_calls == 1:
+            raise OSError("synthetic socket cleanup failure")
+        original_server_close()
+
+    monkeypatch.setattr(daemon._server, "server_close", close_with_optional_socket_failure)
     monkeypatch.setattr(
         daemon._server.hook_process_runner,
         "require_initial_capacity",
         lambda: (_ for _ in ()).throw(RuntimeError("injected initial worker failure")),
     )
 
-    with pytest.raises(RuntimeError, match="injected initial worker failure"):
+    with pytest.raises(RuntimeError, match="injected initial worker failure") as raised:
         daemon.start()
+    assert hook_worker_close_calls >= 1
+    if cleanup_failure != "none":
+        assert daemon._owner_lock is not None
+        assert daemon._is_quarantined()
+        with pytest.raises(RuntimeError, match="already active"):
+            _ = daemon_manager.acquire_guard_daemon_owner_lock(store.guard_home)
+    if cleanup_failure != "none" and hasattr(raised.value, "add_note"):
+        assert (
+            "Guard retained daemon ownership because partial-start containment was unconfirmed."
+            in raised.value.__notes__
+        )
 
     def reject_shutdown() -> None:
         raise AssertionError("shutdown must not wait on an unstarted serve loop")

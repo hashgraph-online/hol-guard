@@ -1,0 +1,51 @@
+name: generated-artifacts-guard
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  regen-owned-paths:
+    runs-on: ubuntu-24.04
+    # Only the regen workflow's own artifact PRs may touch generated paths;
+    # every other PR must leave them to post-merge regen. A fork cannot claim
+    # the exemption since it requires a same-repo regen/artifacts-* branch.
+    steps:
+      - name: Reject changes to regen-owned generated paths
+        if: ${{ !(github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'regen/artifacts-') && github.event.pull_request.user.login == vars.GUARD_AUTOMATION_LOGIN) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          owned='^contracts/extensions/(native-command-program|command-catalog|trust-class-map)\.v1\.json$'
+          owned+='|^contracts/extensions/(build-descriptors/|build-trust-class-map\.v1\.json$)'
+          # Legacy directory copies remain accepted until open PRs and readers
+          # have migrated. They no longer determine packaged metadata.
+          owned+='|^src/codex_plugin_scanner/guard/contracts/data/extensions/'
+          owned+='|^src/codex_plugin_scanner/guard/contracts/data/mcp_servers/'
+          # These projections are ignored build outputs. Permit their
+          # removal, but reject adding them back even from a contribution PR.
+          files=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
+            --jq '.[] | select((.status == "removed" and (.filename | test("^(contracts/extensions|src/codex_plugin_scanner/guard/contracts/data/extensions)/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$"))) | not) | .filename')
+          changed=$(printf '%s\n' "${files}" | grep -E "${owned}" || [ $? -eq 1 ])
+          if [ -n "${changed}" ]; then
+            printf '%s\n' "::error::This PR modifies paths owned by the extension-artifact-regen workflow. Generated artifacts are regenerated on main after merge — drop them from this diff:" "${changed}"
+            exit 1
+          fi
+      - name: Reject tracking ignored package projections
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          changed=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
+            --jq '.[] | select(.status != "removed") | select(.filename | test("^contracts/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$|^src/codex_plugin_scanner/guard/contracts/data/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$")) | .filename')
+          if [ -n "${changed}" ]; then
+            printf '%s\n' "::error::Package projections must remain untracked, including in regeneration PRs:" "${changed}"
+            exit 1
+          fi

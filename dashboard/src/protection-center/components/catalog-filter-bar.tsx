@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, type RefObject } from "react";
 import { HiMiniAdjustmentsHorizontal, HiMiniCheck, HiMiniChevronDown, HiMiniXMark } from "react-icons/hi2";
 
 import type { ExtensionCatalogItem, ExtensionTrustClass } from "../../extension-controls-api";
@@ -8,10 +8,12 @@ import {
   CATALOG_TRUST_FILTERS,
   catalogFilterChipAriaLabel,
   catalogFilterChipCount,
+  catalogFilterCountCopy,
   catalogFiltersActive,
   catalogKindLabel,
   catalogTrustLabel,
   EMPTY_CATALOG_FILTERS,
+  filterCatalogExtensions,
   populatedCatalogAreaOptions,
   toggleCatalogFilterValue,
   type CatalogFilterState,
@@ -139,21 +141,63 @@ function AreaFilterOption(props: {
 }
 
 /**
- * Compact catalog filter toolbar: one "Filters" trigger with removable active
- * tokens, opening a disclosure panel that groups trust, kind, and area toggles
- * with live counts. Collapsed by default so the catalog starts above the fold.
+ * Toolbar trigger for the catalog filter popover. Rendered beside the search
+ * input; the panel it controls is rendered by CatalogFilterBar.
+ */
+export function CatalogFilterTrigger(props: {
+  open: boolean;
+  activeCount: number;
+  panelId: string;
+  buttonRef?: RefObject<HTMLButtonElement | null>;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      ref={props.buttonRef}
+      aria-expanded={props.open}
+      aria-controls={props.panelId}
+      title="Filters (press f)"
+      onClick={props.onToggle}
+      className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[rgba(63,65,116,0.18)] bg-white px-3.5 text-sm font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none"
+    >
+      <HiMiniAdjustmentsHorizontal className="size-4" aria-hidden="true" />
+      Filters
+      {props.activeCount > 0 ? (
+        <span className="grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums">
+          {props.activeCount}
+        </span>
+      ) : null}
+      <HiMiniChevronDown
+        className={`size-4 transition-transform duration-200 motion-reduce:transition-none ${props.open ? "rotate-180" : ""}`}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+/**
+ * Active-filter tokens plus the filter popover panel. The panel overlays the
+ * catalog at sm+ (no layout shift) and expands in flow on small screens. The
+ * parent owns the open state so the trigger can live beside the search input.
  */
 export function CatalogFilterBar(props: {
   catalog: readonly ExtensionCatalogItem[];
   filters: CatalogFilterState;
   onChange: (next: CatalogFilterState) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  panelId: string;
+  /** Called after clearing so the parent can restore focus to the trigger: both clear buttons unmount themselves. */
+  onAfterClear?: () => void;
 }) {
-  const [panelOpen, setPanelOpen] = useState(false);
-  const panelId = useId();
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const areas = useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
   const filtering = catalogFiltersActive(props.filters);
   const activeCount = props.filters.trusts.length + props.filters.kinds.length + props.filters.areas.length;
+  const visibleCount = useMemo(
+    () => filterCatalogExtensions(props.catalog, props.filters).length,
+    [props.catalog, props.filters],
+  );
 
   const handleToggleTrust = useCallback((value: ExtensionTrustClass) => {
     props.onChange({
@@ -178,78 +222,51 @@ export function CatalogFilterBar(props: {
 
   const handleClear = useCallback(() => {
     props.onChange(EMPTY_CATALOG_FILTERS);
+    props.onAfterClear?.();
   }, [props]);
 
-  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
-    if (event.key !== "Escape" || !panelOpen) return;
-    event.stopPropagation();
-    setPanelOpen(false);
-    triggerRef.current?.focus();
-  }, [panelOpen]);
-
   return (
-    <div className="mt-3 scroll-mt-28" data-testid="catalog-filters" onKeyDown={handleKeyDown}>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          ref={triggerRef}
-          aria-expanded={panelOpen}
-          aria-controls={panelId}
-          onClick={() => setPanelOpen((open) => !open)}
-          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none"
-        >
-          <HiMiniAdjustmentsHorizontal className="size-4" aria-hidden="true" />
-          Filters
-          {activeCount > 0 ? (
-            <span className="grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums">
-              {activeCount}
-            </span>
-          ) : null}
-          <HiMiniChevronDown
-            className={`size-4 transition-transform duration-200 motion-reduce:transition-none ${panelOpen ? "rotate-180" : ""}`}
-            aria-hidden="true"
-          />
-        </button>
-        {props.filters.trusts.map((trust) => (
-          <ActiveFilterToken
-            key={`trust-${trust}`}
-            groupLabel="Trust"
-            valueLabel={catalogTrustLabel(trust)}
-            onRemove={() => handleToggleTrust(trust)}
-          />
-        ))}
-        {props.filters.kinds.map((kind) => (
-          <ActiveFilterToken
-            key={`kind-${kind}`}
-            groupLabel="Kind"
-            valueLabel={catalogKindLabel(kind)}
-            onRemove={() => handleToggleKind(kind)}
-          />
-        ))}
-        {props.filters.areas.map((areaId) => {
-          const area = areas.find((option) => option.id === areaId);
-          return (
+    <>
+      {filtering ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="catalog-filter-tokens">
+          {props.filters.trusts.map((trust) => (
             <ActiveFilterToken
-              key={`area-${areaId}`}
-              groupLabel="Area"
-              valueLabel={area?.label ?? areaId}
-              onRemove={() => handleToggleArea(areaId)}
+              key={`trust-${trust}`}
+              groupLabel="Trust"
+              valueLabel={catalogTrustLabel(trust)}
+              onRemove={() => handleToggleTrust(trust)}
             />
-          );
-        })}
-        {filtering ? (
+          ))}
+          {props.filters.kinds.map((kind) => (
+            <ActiveFilterToken
+              key={`kind-${kind}`}
+              groupLabel="Kind"
+              valueLabel={catalogKindLabel(kind)}
+              onRemove={() => handleToggleKind(kind)}
+            />
+          ))}
+          {props.filters.areas.map((areaId) => {
+            const area = areas.find((option) => option.id === areaId);
+            return (
+              <ActiveFilterToken
+                key={`area-${areaId}`}
+                groupLabel="Area"
+                valueLabel={area?.label ?? areaId}
+                onRemove={() => handleToggleArea(areaId)}
+              />
+            );
+          })}
           <button type="button" className="guard-extensions-chip" onClick={handleClear}>
             <HiMiniXMark className="size-4" aria-hidden="true" />
             Clear filters
           </button>
-        ) : (
-          <span className="hidden text-xs text-brand-dark/70 sm:inline">Narrow by trust, kind, or area.</span>
-        )}
-      </div>
+        </div>
+      ) : null}
       <div
-        id={panelId}
-        hidden={!panelOpen}
-        className="mt-3 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-sm sm:p-5"
+        id={props.panelId}
+        hidden={!props.open}
+        data-testid="catalog-filter-panel"
+        className="mt-2 max-h-[min(70vh,32rem)] overflow-y-auto overscroll-contain rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-[0_12px_32px_rgba(63,65,116,0.16)] sm:absolute sm:inset-x-0 sm:top-full sm:z-30 sm:mt-2 sm:p-5"
       >
         <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]">
           <CatalogFilterGroup legend="Trust">
@@ -289,7 +306,18 @@ export function CatalogFilterBar(props: {
             </div>
           </CatalogFilterGroup>
         </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[rgba(63,65,116,0.12)] pt-3">
+          <p className="text-xs text-brand-dark/65" data-testid="catalog-filter-count">
+            {catalogFilterCountCopy(visibleCount, props.catalog.length, filtering)}
+          </p>
+          {filtering ? (
+            <button type="button" className="guard-extensions-chip" onClick={handleClear}>
+              <HiMiniXMark className="size-4" aria-hidden="true" />
+              Clear all {activeCount} {activeCount === 1 ? "filter" : "filters"}
+            </button>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

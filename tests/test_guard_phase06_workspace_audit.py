@@ -374,6 +374,23 @@ def test_workspace_audit_inference_accepts_workspace_alias(
     assert resolved == workspace_dir.resolve()
 
 
+def test_workspace_audit_rejects_an_invalid_explicit_workspace_without_fallback(
+    tmp_path: Path,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}')
+
+    with pytest.raises(ValueError, match="workspace_dir_invalid"):
+        resolve_supply_chain_audit_workspace_dir(
+            workspace_dir_value=str(tmp_path / "missing-workspace"),
+            workspace_value=None,
+            allowed_roots=(tmp_path.resolve(),),
+            managed_workspace_dirs=(str(workspace_dir),),
+            reject_invalid_explicit=True,
+        )
+
+
 def test_workspace_audit_inference_uses_active_managed_install_workspace(
     tmp_path: Path,
 ) -> None:
@@ -661,6 +678,83 @@ def test_daemon_workspace_audit_requires_workspace_when_uninferable(
 
     assert status == 400
     assert payload["error"] == "workspace_dir_required"
+
+
+def test_daemon_workspace_audit_accepts_an_explicit_project_folder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"minimist":"^1.2.0"}}')
+    _write_text(
+        workspace_dir / "package-lock.json",
+        json.dumps(
+            {
+                "packages": {
+                    "": {"dependencies": {"minimist": "^1.2.0"}},
+                    "node_modules/minimist": {"version": "1.2.8"},
+                }
+            }
+        ),
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_premium_entitlement(store)
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_run_cloud_workspace_audit",
+        lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
+    )
+    monkeypatch.chdir(empty_dir)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/audit",
+                token=token,
+                payload={"workspace_dir": str(workspace_dir)},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["operation"] == "audit"
+
+
+def test_daemon_workspace_audit_rejects_invalid_explicit_folder_instead_of_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}')
+    monkeypatch.chdir(workspace_dir)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_premium_entitlement(store)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/audit",
+                token=token,
+                payload={"workspace_dir": str(tmp_path / "missing-workspace")},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "workspace_dir_invalid"
 
 
 def test_audit_receipt_metadata_includes_prioritized_package_findings() -> None:

@@ -2,25 +2,10 @@
 
 from __future__ import annotations
 
-from .command_common_extension_helpers import executable_matcher, help_variant, rule
+from .command_common_extension_helpers import help_variant, rule
+from .command_infrastructure_matcher_support import docker_matcher as _docker
 from .command_rules import AnyMatcher, ExecutableMatcher
 
-_DOCKER = frozenset({"docker", "docker.exe"})
-_DOCKER_GLOBAL_OPTIONS = frozenset(
-    {
-        "--config",
-        "--context",
-        "-c",
-        "--host",
-        "-H",
-        "--log-level",
-        "-l",
-        "--tlscacert",
-        "--tlscert",
-        "--tlskey",
-    }
-)
-_DOCKER_GLOBAL_FLAGS = frozenset({"--debug", "-D", "--tls", "--tlsverify"})
 _DOCKER_COMPOSE_OPTIONS = frozenset(
     {
         "--ansi",
@@ -38,26 +23,7 @@ _DOCKER_COMPOSE_OPTIONS = frozenset(
 _DOCKER_COMPOSE_FLAGS = frozenset({"--all-resources", "--compatibility"})
 _EXEC_OPTIONS = frozenset({"--detach-keys", "--env", "-e", "--env-file", "--user", "-u", "--workdir", "-w"})
 _EMPTY: frozenset[str] = frozenset()
-
-
-def _docker(
-    *subcommands: str,
-    required_flags: frozenset[str] = _EMPTY,
-    forbidden_flags: frozenset[str] = _EMPTY,
-    interspersed_options_with_values: frozenset[str] = _EMPTY,
-    interspersed_flags: frozenset[str] = _EMPTY,
-    options_with_values: frozenset[str] = _EMPTY,
-) -> ExecutableMatcher:
-    return executable_matcher(
-        _DOCKER,
-        *subcommands,
-        required_flags=required_flags,
-        forbidden_flags=forbidden_flags,
-        leading_options_with_values=_DOCKER_GLOBAL_OPTIONS,
-        interspersed_options_with_values=interspersed_options_with_values,
-        interspersed_flags=_DOCKER_GLOBAL_FLAGS | interspersed_flags,
-        options_with_values=options_with_values,
-    )
+_EMPTY_OPTION_VALUES: tuple[tuple[str, frozenset[str]], ...] = ()
 
 
 def _compose(
@@ -65,6 +31,7 @@ def _compose(
     required_flags: frozenset[str] = _EMPTY,
     forbidden_flags: frozenset[str] = _EMPTY,
     options_with_values: frozenset[str] = _EMPTY,
+    required_option_values: tuple[tuple[str, frozenset[str]], ...] = _EMPTY_OPTION_VALUES,
 ) -> ExecutableMatcher:
     return _docker(
         "compose",
@@ -74,6 +41,7 @@ def _compose(
         interspersed_options_with_values=_DOCKER_COMPOSE_OPTIONS,
         interspersed_flags=_DOCKER_COMPOSE_FLAGS,
         options_with_values=options_with_values,
+        required_option_values=required_option_values,
     )
 
 
@@ -105,6 +73,7 @@ _COMPOSE_DESTRUCTIVE_CLEANUP = AnyMatcher(
             "down",
             required_flags=frozenset({"--rmi"}),
             options_with_values=frozenset({"--rmi"}),
+            required_option_values=(("--rmi", frozenset({"all", "local"})),),
         ),
     )
 )

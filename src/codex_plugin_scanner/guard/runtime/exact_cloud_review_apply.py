@@ -14,10 +14,15 @@ from ..approval_scope_support import (
 )
 from ..review_contracts import (
     GuardReviewContractError,
+    build_local_review_request_claim,
+    compute_legacy_local_review_request_claim_hash,
+    local_review_request_claim_hash_matches,
+    remote_approval_uses_workspace_admin_mfa,
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
 from ..review_exact_capability_advertisement import validate_exact_review_envelope_authority as validate_exact_authority
+from ..review_native_claim_bindings import native_binding_values_match
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
     EXACT_CLOUD_REVIEW_OPERATION,
@@ -51,22 +56,29 @@ def apply_exact_cloud_review(
 
     current = _now(now)
     try:
-        verified_capability = _verified_capability(store, now=current.isoformat())
-    except ExactCloudReviewError as error:
-        raise _reject(store, error.code, now=current) from error
-    raw_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
-    if not isinstance(raw_capability, dict):
-        raise _reject(store, "cloud_review_capability_missing", now=current)
-    try:
-        _ = _oauth_state(store)
-    except ExactCloudReviewError as error:
-        raise _reject(store, error.code, now=current) from error
-    try:
         # Queue job timestamps are Cloud-controlled and must never admit an expired receipt.
         envelope = validated_remote_approval_envelope(remote_approval, store=store)
         oauth = _oauth_metadata(store)
     except GuardReviewContractError as error:
         raise _reject(store, str(error), now=current) from error
+    except ExactCloudReviewError as error:
+        raise _reject(store, error.code, now=current) from error
+    delegated_admin_mfa = remote_approval_uses_workspace_admin_mfa(envelope)
+    raw_capability: dict[str, object] | None = None
+    verified_capability: dict[str, object] | None = None
+    if not delegated_admin_mfa:
+        try:
+            verified_capability = _verified_capability(store, now=current.isoformat())
+        except ExactCloudReviewError as error:
+            raise _reject(store, error.code, now=current) from error
+        loaded_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
+        if not isinstance(loaded_capability, dict):
+            raise _reject(store, "cloud_review_capability_missing", now=current)
+        raw_capability = loaded_capability
+    try:
+        _ = _oauth_state(store)
+    except ExactCloudReviewError as error:
+        raise _reject(store, error.code, now=current) from error
     receipt_expires_at = _text(envelope.get("expiresAt"))
     envelope_expires_at = parse_utc_timestamp(receipt_expires_at)
     if receipt_expires_at is None or envelope_expires_at is None or envelope_expires_at <= current:
@@ -79,6 +91,9 @@ def apply_exact_cloud_review(
         raise _reject(store, "remote_exact_replayed", now=current)
     request = store.get_approval_request(request_id)
     if not isinstance(request, dict) or request.get("status") != "pending":
+        raise _reject(store, "remote_exact_request_not_pending", now=current)
+    raw_request = store.get_raw_approval_request_snapshot(request_id)
+    if not isinstance(raw_request, dict) or raw_request.get("status") != "pending":
         raise _reject(store, "remote_exact_request_not_pending", now=current)
     if not _request_is_current(request, now=current):
         raise _reject(store, "remote_exact_request_not_pending", now=current)
@@ -94,17 +109,27 @@ def apply_exact_cloud_review(
         raise _reject(store, "remote_exact_not_permitted", now=current)
     if envelope.get("scope") != "artifact":
         raise _reject(store, "remote_exact_scope_not_exact", now=current)
-    contract = request_scope_contract(request)
     try:
+        claim_request = _frozen_claim_request(store, request_id, envelope, request, raw_request, oauth)
+        contract = request_scope_contract(claim_request)
         scope = resolve_request_scope_selection(
-            request,
+            claim_request,
             action=action,
             requested_scope="artifact",
             contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
             contract_digest=contract.digest,
         ).applied_scope
-        validate_exact_authority(envelope, oauth, capability_id=_capability_digest(verified_capability))
-        validate_remote_approval_request_binding(envelope=envelope, request_row=request, oauth=oauth, store=store)
+        if not delegated_admin_mfa:
+            if verified_capability is None:
+                raise _reject(store, "cloud_review_capability_missing", now=current)
+            validate_exact_authority(envelope, oauth, capability_id=_capability_digest(verified_capability))
+        validate_remote_approval_request_binding(
+            envelope=envelope,
+            request_row=request,
+            claim_request_row=claim_request,
+            oauth=oauth,
+            store=store,
+        )
     except IneligibleApprovalScopeError as error:
         raise _reject(store, "remote_exact_not_permitted", now=current) from error
     except GuardReviewContractError as error:
@@ -114,8 +139,9 @@ def apply_exact_cloud_review(
         receipt_id=receipt_id,
         resolution_action=action,
         resolution_scope=scope,
-        reason="Guard Cloud signed exact review",
+        reason=("Guard Cloud signed team-admin review" if delegated_admin_mfa else "Guard Cloud signed exact review"),
         expected_capability=raw_capability,
+        skip_exact_capability=delegated_admin_mfa,
         expected_oauth_binding={
             "deviceId": oauth.device_id,
             "dpopThumbprint": oauth.dpop_thumbprint,
@@ -126,6 +152,7 @@ def apply_exact_cloud_review(
             "workspaceId": oauth.workspace_id,
         },
         expected_request=request,
+        expected_raw_request=raw_request,
         receipt_expires_at=receipt_expires_at,
     )
     return _resolution_from_result(
@@ -136,6 +163,70 @@ def apply_exact_cloud_review(
         request_id=request_id,
         fallback_time=current,
     )
+
+
+def _frozen_claim_request(
+    store: GuardStore,
+    request_id: str,
+    envelope: dict[str, object],
+    live_request: dict[str, object],
+    raw_live_request: dict[str, object],
+    oauth,
+) -> dict[str, object]:
+    """Match the signed claim against the authenticated immutable outbox snapshot."""
+
+    get_snapshots = getattr(store, "list_review_event_snapshots", None)
+    allow_legacy = envelope.get("nativeBindingVersion") is None
+    live_claim_request = live_request if allow_legacy else raw_live_request
+    if not callable(get_snapshots):
+        if allow_legacy:
+            raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+        return live_claim_request
+    try:
+        snapshots = get_snapshots(request_id)
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        if allow_legacy:
+            raise GuardReviewContractError("remote_approval_claim_hash_mismatch") from error
+        return live_claim_request
+    if not isinstance(snapshots, list) or not snapshots:
+        if allow_legacy:
+            raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+        return live_claim_request
+    source_claim_hash = envelope.get("sourceClaimHash")
+    matching_snapshots: list[tuple[dict[str, object], dict[str, object]]] = []
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict):
+            continue
+        try:
+            claim = build_local_review_request_claim(request_row=snapshot, oauth=oauth, store=store)
+        except GuardReviewContractError:
+            continue
+        if local_review_request_claim_hash_matches(claim, source_claim_hash, allow_legacy=allow_legacy):
+            matching_snapshots.append((snapshot, claim))
+    if not matching_snapshots:
+        if allow_legacy:
+            raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+        return live_claim_request
+    if allow_legacy and any(
+        not native_binding_values_match(matching_snapshots[0][1], candidate[1]) for candidate in matching_snapshots[1:]
+    ):
+        raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+    snapshot, claim = matching_snapshots[0]
+    try:
+        live_claim = build_local_review_request_claim(request_row=live_claim_request, oauth=oauth, store=store)
+    except GuardReviewContractError as error:
+        raise GuardReviewContractError("remote_approval_claim_hash_mismatch") from error
+    live_hash_matches = local_review_request_claim_hash_matches(
+        live_claim, source_claim_hash, allow_legacy=allow_legacy
+    )
+    legacy_projection_matches = compute_legacy_local_review_request_claim_hash(
+        live_claim
+    ) == compute_legacy_local_review_request_claim_hash(claim)
+    if (
+        not live_hash_matches and (not allow_legacy or not legacy_projection_matches)
+    ) or not native_binding_values_match(claim, live_claim):
+        raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+    return snapshot
 
 
 def _resolution_from_result(
@@ -188,4 +279,6 @@ def _binding_error_code(code: str) -> str:
         return "remote_exact_capability_mismatch"
     if code == "remote_approval_reviewer_not_authorized":
         return "remote_exact_reviewer_not_authorized"
+    if code == "remote_approval_step_up_required":
+        return "remote_exact_step_up_required"
     return code

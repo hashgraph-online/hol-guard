@@ -3,13 +3,13 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import {
   resolveEnvelopeDisplayText,
+  resolveActionEnvelopeDetailText,
+  friendlyMcpToolName,
   resolveStoppedCommandText,
   resolveTerminalLabel,
   displayArtifactName,
   EMPTY_QUEUE_TITLE,
   STALE_REQUEST_COPY,
-  QUEUE_CONNECTION_ERROR_HEADLINE,
-  QUEUE_CONNECTION_ERROR_INSTRUCTION,
   buildRecommendation,
   buildRetryAfterApprovalCopy,
   buildPauseLine,
@@ -19,10 +19,12 @@ import {
   buildCodexResumeUx,
   resolveApprovalShareUrl,
   resolveRequestWorkingDirectory,
+  watchObservedPolicyAction,
+  watchProtectedOutcome,
 } from "./approval-center-utils";
-import type { GuardActionEnvelope, GuardApprovalRequest, GuardCodexResumeResult } from "./guard-types";
+import type { GuardAction, GuardActionEnvelope, GuardApprovalRequest, GuardCodexResumeResult } from "./guard-types";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PrimaryActionCard } from "./review-states";
+import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
 import { ReviewDecisionCard } from "./review-decision-card";
 
 function assert(condition: boolean, message: string): void {
@@ -251,6 +253,78 @@ assert(
   resolveTerminalLabel(mcpRequest) === "MCP server / tool",
   "T482: resolveTerminalLabel returns 'MCP server / tool' for mcp_tool action type"
 );
+const qualifiedComposio = "mcp__codex_apps__composio__composio_search_tools";
+assert(friendlyMcpToolName(qualifiedComposio) === "Composio · Search Tools",
+  "review shows the connector and action without requiring qualified-name parsing");
+assert(displayArtifactName({ ...mcpRequest, artifact_type: "tool_call", artifact_name: qualifiedComposio })
+  === "Composio · Search Tools", "queue uses a friendly connector-action title");
+assert(resolveActionEnvelopeDetailText({ ...BASE_ENVELOPE, action_type: "mcp_tool",
+  tool_name: qualifiedComposio, mcp_tool: qualifiedComposio }) === "Composio · Search Tools",
+"review action uses a friendly label while retaining the bound underlying artifact");
+assert(friendlyMcpToolName("mcp__unsafe__../../send") === null,
+  "malformed qualified names stay uninterpreted");
+assert(friendlyMcpToolName("mcp__evil__github__delete_repo") === "Evil · Github Delete Repo",
+  "a nested tool name keeps the real server visible");
+assert(friendlyMcpToolName("mcp__github__issues__list") === "Github · Issues List",
+  "nested tools remain readable without impersonating another server");
+assert(friendlyMcpToolName("mcp__codex_apps__composio__search__tools") === "Composio · Search Tools",
+  "Codex app labels retain all action segments");
+
+const queuedBrowserTool: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "chrome-devtools:evaluate_script",
+  changed_fields: ["runtime_tool_call", "runtime_browser_tool_call"],
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "chrome-devtools evaluate_script current page"
+  }
+};
+assert(
+  resolveTerminalLabel(queuedBrowserTool) === "Browser tool",
+  "queued browser MCP tool calls are labeled as browser tools, not shell commands"
+);
+
+const queuedClickWithoutBrowserField: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "chrome-devtools:click",
+  changed_fields: ["runtime_tool_call", "browser interaction on page element"],
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "chrome-devtools click page element"
+  }
+};
+assert(
+  resolveTerminalLabel(queuedClickWithoutBrowserField) === "Browser tool",
+  "chrome-devtools click reviews are labeled as browser tools even without runtime_browser_tool_call"
+);
+
+const queuedMcpTool: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "filesystem:read_file",
+  changed_fields: ["runtime_tool_call"],
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "shell_command" }
+};
+assert(
+  resolveTerminalLabel(queuedMcpTool) === "MCP tool",
+  "queued MCP tool calls are labeled as MCP tools, not shell commands"
+);
+
+const nativeToolCall: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "bash",
+  changed_fields: ["first_seen"],
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "shell_command", command: "git status" }
+};
+assert(
+  resolveTerminalLabel(nativeToolCall) === "Command",
+  "native pre-tool reviews keep their envelope command label"
+);
 
 const packageRequest: GuardApprovalRequest = {
   ...BASE_REQUEST,
@@ -275,25 +349,10 @@ assert(
   "P45: pending requests without an envelope use a neutral command label"
 );
 
-assert(
-  EMPTY_QUEUE_TITLE === "Review queue is clear",
-  'C5: Empty queue reports that the review queue is clear'
-);
-
-assert(
-  !EMPTY_QUEUE_TITLE.toLowerCase().includes("blocked"),
-  "P45: Empty review queue does not relabel pending decisions as blocks"
-);
-
-assert(
-  STALE_REQUEST_COPY === "This request was already decided.",
-  'C6: Stale request shows "already decided" copy; STALE_REQUEST_COPY constant is correct'
-);
-
-assert(
-  STALE_REQUEST_COPY.toLowerCase().includes("already decided"),
-  'C6: Stale request copy contains "already decided"; not approve/block buttons'
-);
+assert(EMPTY_QUEUE_TITLE === "Review queue is clear", "C5: Empty queue reports that the review queue is clear");
+assert(!EMPTY_QUEUE_TITLE.toLowerCase().includes("blocked"), "P45: Empty review queue does not relabel pending decisions as blocks");
+assert(STALE_REQUEST_COPY === "This request was already decided.", "C6: Stale request shows already decided copy");
+assert(STALE_REQUEST_COPY.toLowerCase().includes("already decided"), "C6: Stale request copy contains already decided");
 
 assert(
   scopeLabel("artifact") === "This retry only",
@@ -322,6 +381,18 @@ const watchOnlyRequest: GuardApprovalRequest = {
   ] as unknown as NonNullable<GuardApprovalRequest["scanner_evidence"]>,
 };
 assert(isWatchOnlyObservation(watchOnlyRequest), "Watch-only findings are identified from trusted queue evidence");
+const explicitWatchOnlyRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  watch_only_observation: true,
+};
+assert(
+  isWatchOnlyObservation(explicitWatchOnlyRequest),
+  "Watch-only findings use the explicit Core classification without scanner metadata",
+);
+assert(
+  !isWatchOnlyObservation({ ...watchOnlyRequest, watch_only_observation: false }),
+  "An explicit actionable classification takes precedence over a legacy scanner marker",
+);
 assert(
   buildPauseLine(watchOnlyRequest).startsWith("Would have stopped."),
   "Watch-only findings never claim the action was paused",
@@ -344,7 +415,7 @@ assert(
 );
 const watchOnlyDecisionMarkup = renderToStaticMarkup(
   createElement(ReviewDecisionCard, {
-    detail: { item: watchOnlyRequest, diff: null, receipt: null, policy: [] },
+    detail: { item: explicitWatchOnlyRequest, diff: null, receipt: null, policy: [] },
     onResolve: () => undefined,
     onGoHome: () => undefined,
     approvalGate: null,
@@ -354,8 +425,51 @@ assert(
   watchOnlyDecisionMarkup.includes("Watch-only finding")
     && watchOnlyDecisionMarkup.includes("Would have stopped")
     && watchOnlyDecisionMarkup.includes("Keep allowing")
-    && watchOnlyDecisionMarkup.includes("Stop this next time"),
+    && watchOnlyDecisionMarkup.includes("Stop this next time")
+    && watchOnlyDecisionMarkup.includes("What Watch observed")
+    && !watchOnlyDecisionMarkup.includes("What was stopped")
+    && !watchOnlyDecisionMarkup.includes("Why paused")
+    && watchOnlyDecisionMarkup.includes("What Protected mode would do"),
   "Watch-only decision card renders its observation state without crashing",
+);
+assert(
+  buildWhatWouldHappen(explicitWatchOnlyRequest)?.includes("Watch allowed this action to continue") === true,
+  "Watch-only consequence copy describes an allowed observation instead of a paused action",
+);
+assert(
+  watchObservedPolicyAction(watchOnlyRequest) === "require-reapproval",
+  "Watch-only copy reads the observed policy action from scanner evidence",
+);
+for (const [action, expected] of [
+  ["block", "would have blocked it"],
+  ["sandbox-required", "would have required a sandbox"],
+  ["review", "would have sent it for review"],
+] as const satisfies ReadonlyArray<readonly [GuardAction, string]>) {
+  const actionRequest = {
+    ...watchOnlyRequest,
+    scanner_evidence: [
+      {
+        source: "observe_mode_inbox",
+        observed_policy_action: action,
+        queued_policy_action: "require-reapproval",
+        authoritative_action: "allow",
+      },
+    ],
+  } as GuardApprovalRequest;
+  assert(
+    watchProtectedOutcome(actionRequest).includes(expected),
+    `Watch Protected outcome preserves the observed ${action} action`,
+  );
+}
+const watchOnlyActionMarkup = renderToStaticMarkup(
+  createElement(PrimaryActionCard, { item: explicitWatchOnlyRequest }),
+);
+assert(
+  watchOnlyActionMarkup.includes("What Watch observed")
+    && watchOnlyActionMarkup.includes("Would have stopped")
+    && !watchOnlyActionMarkup.includes("What was stopped")
+    && !watchOnlyActionMarkup.includes("Needs fresh approval"),
+  "Watch-only action details are labeled as observed rather than stopped",
 );
 
 const sandboxRequest: GuardApprovalRequest = { ...BASE_REQUEST, policy_action: "sandbox-required" };
@@ -372,26 +486,11 @@ assert(
   requestResolutionBlockReason(inconsistentRequest)?.includes("cannot be approved") === true,
   "P45: inconsistent stored authority has explicit non-resolvable UI copy",
 );
-
-assert(
-  QUEUE_CONNECTION_ERROR_HEADLINE.toLowerCase().includes("daemon"),
-  "C10: Connection error headline mentions the daemon so users know what to start"
-);
-
-assert(
-  QUEUE_CONNECTION_ERROR_HEADLINE.toLowerCase().includes("approval link"),
-  "C10: Connection error headline explains approval links require the daemon to be running"
-);
-
-assert(
-  QUEUE_CONNECTION_ERROR_INSTRUCTION.toLowerCase().includes("reload"),
-  "C11: Connection error instruction tells users to reload after starting Guard"
-);
-
-assert(
-  QUEUE_CONNECTION_ERROR_INSTRUCTION.toLowerCase().includes("start"),
-  "C11: Connection error instruction tells users to start Guard on this machine"
-);
+const supersededRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST, status: "expired", superseded_by_request_id: "fresh-review",
+};
+assert(requestResolutionBlockReason(supersededRequest)?.includes("superseded by a fresh review") === true,
+  "expired requests expose the fresh review link rather than hiding it");
 
 assert(
   scopeLabel("workspace") === "Same action in this project",

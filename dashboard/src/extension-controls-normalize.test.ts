@@ -157,8 +157,53 @@ const mcpCatalog = normalizeExtensionCatalog({
   }],
 });
 assert.equal(mcpCatalog.extensions[0]?.surface, "mcp");
-assert.equal(mcpCatalog.extensions[0]?.mcp_launch?.package, "@modelcontextprotocol/server-filesystem");
+const packageLaunch = mcpCatalog.extensions[0]?.mcp_launch;
+assert.equal(packageLaunch?.kind, "package-launcher");
+if (packageLaunch?.kind === "package-launcher") {
+  assert.equal(packageLaunch.package, "@modelcontextprotocol/server-filesystem");
+}
 assert.equal(mcpCatalog.extensions[0]?.mcp_tools?.[1]?.state, "block");
+const directMcpCatalog = normalizeExtensionCatalog({
+  ...mcpCatalog,
+  extensions: [{ ...mcpCatalog.extensions[0], mcp_launch: { kind: "direct-command", command: "decided-mcp" } }],
+});
+assert.deepEqual(directMcpCatalog.extensions[0]?.mcp_launch, { kind: "direct-command", command: "decided-mcp" });
+for (const launch of [{ kind: "unknown", command: "decided-mcp" }, { kind: "direct-command", command: null }]) {
+  assert.throws(() => normalizeExtensionCatalog({
+    ...mcpCatalog, extensions: [{ ...mcpCatalog.extensions[0], mcp_launch: launch }],
+  }), /Invalid extension-control response/);
+}
+const remoteMcpCatalog = normalizeExtensionCatalog({
+  ...catalog(),
+  extensions: [{
+    ...catalog().extensions[0],
+    extension_id: "command.mcp-instapods",
+    name: "InstaPods MCP",
+    aliases: [],
+    surface: "mcp",
+    mcp_launch: {
+      kind: "remote-http",
+      url: "https://app.instapods.com/api/mcp",
+      serverNames: ["instapods"],
+    },
+    mcp_tools: [{ name: "delete_pod", state: "review" }],
+    rules: [],
+    rule_count: 0,
+    permissions: [{
+      ...permission(),
+      permission_id: "command.mcp-instapods.permission.mcp-instapods-tool",
+      extension_id: "command.mcp-instapods",
+      rule_ids: [],
+    }],
+  }],
+});
+const remoteLaunch = remoteMcpCatalog.extensions[0]?.mcp_launch;
+assert.equal(remoteLaunch?.kind, "remote-http");
+if (remoteLaunch?.kind === "remote-http") {
+  assert.equal(remoteLaunch.url, "https://app.instapods.com/api/mcp");
+  assert.deepEqual(remoteLaunch.serverNames, ["instapods"]);
+}
+assert.equal(remoteMcpCatalog.extensions[0]?.mcp_tools?.[0]?.state, "review");
 const droppedLaunch = normalizeExtensionCatalog({
   ...catalog(),
   extensions: [{
@@ -172,6 +217,17 @@ assert.equal(droppedLaunch.extensions[0]?.mcp_launch, undefined);
 assert.equal(droppedLaunch.extensions[0]?.mcp_tools, undefined);
 assert.equal(normalizeEffectiveExtensionControls(effective()).controls[0]?.state, "disabled");
 assert.equal(normalizeEffectiveExtensionControls(effective()).projection?.revision, 7);
+const terminalCommands = normalizeEffectiveExtensionControls({
+  ...effective(),
+  terminal_commands: {
+    shell: "powershell",
+    enroll: "& 'C:\\custom install\\hol-guard.exe' command controls enroll",
+    recover_authority: "& 'C:\\custom install\\hol-guard.exe' command controls recover-authority",
+  },
+});
+assert.equal(terminalCommands.terminal_commands?.enroll, "& 'C:\\custom install\\hol-guard.exe' command controls enroll");
+assert.equal(terminalCommands.terminal_commands?.recover_authority, "& 'C:\\custom install\\hol-guard.exe' command controls recover-authority");
+assert.equal(terminalCommands.terminal_commands?.shell, "powershell");
 const managedEffective = normalizeEffectiveExtensionControls({
   ...effective(),
   managed_controls: {

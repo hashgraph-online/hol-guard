@@ -14,6 +14,10 @@ use std::io;
 use std::path::Path;
 
 #[cfg(windows)]
+mod known_folders;
+#[cfg(windows)]
+mod secure_storage;
+#[cfg(windows)]
 mod windows;
 
 #[cfg(windows)]
@@ -22,9 +26,19 @@ pub use windows::ManagedChild;
 #[cfg(windows)]
 pub use windows::{
     bind_directory, bind_private_directory, create_private_directory, create_private_file,
-    delete_private_file_handle, open_private_directory, open_private_file, process_start_marker,
-    remove_file_if_same, terminate_process, terminate_process_verified, wait_for_process_exit,
-    PrivateDirectoryBinding,
+    delete_private_file_handle, handle_file_id, is_single_link_file, open_bound_regular_file,
+    open_private_directory, open_private_file, path_is_within, process_start_marker,
+    regular_file_id, remove_file_if_same, terminate_process, terminate_process_verified,
+    wait_for_process_exit, FileId, PrivateDirectoryBinding,
+};
+
+#[cfg(windows)]
+pub use known_folders::trusted_install_roots;
+
+#[cfg(windows)]
+pub use secure_storage::{
+    credential_delete, credential_read, credential_write, dpapi_protect, dpapi_unprotect,
+    secure_zero,
 };
 
 #[cfg(windows)]

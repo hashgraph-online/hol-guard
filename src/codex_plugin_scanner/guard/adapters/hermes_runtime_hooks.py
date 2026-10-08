@@ -19,7 +19,6 @@ from .hermes_file_inspection import HERMES_CONFIG_MAX_BYTES, inspect_hermes_conf
 
 _PRETOOL_EVENT = "pre_tool_call"
 _GUARD_HOOK_ID = "hol-guard-pretool"
-_GUARD_HOOK_MARKERS = ("__guard-bounded-hook", "bounded_cli_hook_bridge")
 _ALLOWLIST_NAME = "shell-hooks-allowlist.json"
 _BLOCK_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 _LAUNCH_REVIEW_ONLY_LABEL = "launch-review only"
@@ -45,8 +44,33 @@ def is_guard_pretool_entry(entry: object, *, expected_command: str | None = None
     return isinstance(expected_command, str) and bool(expected_command) and command == expected_command
 
 
-def _legacy_guard_pretool_command(command: object) -> bool:
-    return isinstance(command, str) and all(marker in command for marker in _GUARD_HOOK_MARKERS)
+def _legacy_guard_pretool_command(command: object, *, expected_command: str | None = None) -> bool:
+    if not isinstance(command, str) or not command.strip():
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if "__guard-bounded-hook" in tokens:
+        return True
+    try:
+        inline_index = tokens.index("-c")
+    except ValueError:
+        inline_index = -1
+    if inline_index >= 0 and inline_index + 1 < len(tokens) and "bounded_cli_hook_bridge" in tokens[inline_index + 1]:
+        return True
+    if len(tokens) != 3 or tokens[1] != "-I" or expected_command is None:
+        return False
+    try:
+        expected_tokens = shlex.split(expected_command)
+    except ValueError:
+        return False
+    if len(expected_tokens) != 3 or expected_tokens[1] != "-I":
+        return False
+    try:
+        return Path(tokens[2]).resolve() == Path(expected_tokens[2]).resolve()
+    except OSError:
+        return False
 
 
 def guard_pretool_hook_entry(*, command: Sequence[str], timeout_seconds: int) -> dict[str, object]:
@@ -118,7 +142,8 @@ def merge_guard_pretool_hook(
     removed: list[str] = []
     for entry in _pretool_entries(hooks):
         if is_guard_pretool_entry(entry, expected_command=expected) or (
-            isinstance(entry, Mapping) and _legacy_guard_pretool_command(entry.get("command"))
+            isinstance(entry, Mapping)
+            and _legacy_guard_pretool_command(entry.get("command"), expected_command=expected)
         ):
             old_command = entry.get("command") if isinstance(entry, Mapping) else None
             if isinstance(old_command, str) and old_command.strip():

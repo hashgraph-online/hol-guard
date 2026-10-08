@@ -46,6 +46,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     disable_exact_cloud_review,
     enable_exact_cloud_review,
     exact_cloud_review_operations,
+    exact_cloud_review_status,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import (
@@ -127,20 +128,14 @@ def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_pa
     assert store.get_sync_payload("guard_review_memory_registry") is None
     resolved_at = resolution.resolved_request["resolved_at"]
     assert isinstance(resolved_at, str)
-    authority_lookup = store.resolve_policy_decision_lookup(
-        harness=target.harness,
-        artifact_id=target.artifact_id,
-        artifact_hash=target.artifact_hash,
-        workspace=target.workspace,
-        publisher=target.publisher,
-        now=resolved_at,
-        consume_one_shot=False,
-    )
-    authority = authority_lookup["decision"]
+    assert target_row is not None
+    authority = store.peek_exact_cloud_local_once_approval(request_id=target.request_id, now=resolved_at)
     assert authority is not None
     assert authority["request_id"] == target.request_id
     assert authority["source"] == "approval-gate-once"
-    assert store.claim_approval_reuse_decision(authority, now=resolved_at) is True
+    assert authority["authority_kind"] == "exact-cloud"
+    assert isinstance(authority["approval_id"], str)
+    assert store.claim_local_once_approval(authority["approval_id"], claimed_at=resolved_at) is False
     assert (
         store.peek_local_once_approval(
             harness=target.harness,
@@ -283,7 +278,8 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
         exit_code=0,
     )
     assert unchanged is base_payload
-    assert exact_cloud_review_operations(store) == ()
+    assert exact_cloud_review_status(store)["enabled"] is False
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
     failed_connect = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
         args=argparse.Namespace(enable_cloud_review=True),
@@ -296,7 +292,7 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
         "enabled": False,
         "reason": "connect_not_completed",
     }
-    assert exact_cloud_review_operations(store) == ()
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
     connected = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
         args=argparse.Namespace(enable_cloud_review=True),
@@ -372,11 +368,15 @@ def test_cloud_review_enable_failure_does_not_requeue_pending_requests(
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 2
     assert payload["error"] == "cloud_review_grant_binding_missing"
-    assert exact_cloud_review_operations(store) == ()
+    assert exact_cloud_review_status(store)["enabled"] is False
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
     with store._connect() as connection:
-        event_types = [row[0] for row in connection.execute(
-            "select event_type from guard_review_outbox_events order by stream_sequence"
-        ).fetchall()]
+        event_types = [
+            row[0]
+            for row in connection.execute(
+                "select event_type from guard_review_outbox_events order by stream_sequence"
+            ).fetchall()
+        ]
     assert event_types == ["review.request.created"]
 
 
@@ -564,6 +564,13 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     )
     assert request_claim["deviceId"] == oauth_state["device_id"]
     assert request_claim["machineId"] == oauth_state["machine_id"]
+    persisted_request = store.get_raw_approval_request_snapshot(request.request_id)
+    assert isinstance(persisted_request, dict)
+    persisted_claim = build_local_review_request_claim(
+        request_row=persisted_request,
+        oauth=_oauth_metadata(store),
+        store=store,
+    )
     assert command_queue_oauth_target(store) == (oauth_state["device_id"], oauth_state["workspace_id"])
     job = _job(
         store,
@@ -571,7 +578,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
             store,
             request.request_id,
             receipt_id="exact-receipt-queue",
-            source_claim=request_claim,
+            source_claim=persisted_claim,
         ),
     )
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,6 +28,8 @@ from tests.test_guard_js_supply_chain_phase11 import (
     _write_text,
 )
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
 
 
 def test_lockfile_parser_rejects_invalid_utf8_bytes() -> None:
@@ -181,7 +184,7 @@ def test_recursive_package_lock_deadline_raises_instead_of_returning_partial_ent
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ticks = iter((0.0, 1.0))
-    monkeypatch.setattr(evaluator_module.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(evaluator_module, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
     lockfile_text = json.dumps(
         {
             "dependencies": {

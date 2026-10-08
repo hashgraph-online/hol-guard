@@ -23,6 +23,7 @@ def executable_matcher(
     interspersed_options_with_values: frozenset[str] = _EMPTY,
     interspersed_flags: frozenset[str] = _EMPTY,
     options_with_values: frozenset[str] = _EMPTY,
+    required_option_values: tuple[tuple[str, frozenset[str]], ...] = (),
 ) -> ExecutableMatcher:
     """Build an executable matcher with explicit option grammar."""
 
@@ -36,6 +37,7 @@ def executable_matcher(
         interspersed_options_with_values=interspersed_options_with_values,
         interspersed_flags=interspersed_flags,
         options_with_values=options_with_values,
+        required_option_values=required_option_values,
     )
 
 

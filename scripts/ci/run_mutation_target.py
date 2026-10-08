@@ -26,6 +26,9 @@ def prepare_workspace(root: Path, target: MutationTarget, workspace: Path) -> Pa
     workspace.mkdir(parents=True, exist_ok=True)
     for name in ("src", "tests"):
         (workspace / name).symlink_to(root / name, target_is_directory=True)
+    contract_path = workspace / "docs" / "guard" / "contracts" / "guard-cloud-review.md"
+    contract_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(root / "docs" / "guard" / "contracts" / "guard-cloud-review.md", contract_path)
     config_path = workspace / "pyproject.toml"
     config_path.write_text(render_mutmut_config(target), encoding="utf-8")
     return config_path

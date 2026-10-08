@@ -16,9 +16,9 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -276,11 +276,13 @@ def test_codex_install_fails_closed_if_native_hook_reconciliation_is_unavailable
         "heredoc-command-substitution",
     ),
 )
+@pytest.mark.usefixtures("native_hook_force")
 def test_native_pretool_checks_complete_command_before_shell_mutation_can_run(
     command_template,
     tmp_path,
     capsys,
     monkeypatch,
+    native_hook_force: Path,
 ):
     bash_path = shutil.which("bash")
     if bash_path is None:
@@ -338,10 +340,12 @@ def test_native_pretool_checks_complete_command_before_shell_mutation_can_run(
     assert len(GuardStore(home_dir).list_approval_requests(limit=10)) <= 1
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_native_pretool_keeps_ordinary_safe_command_prompt_free(
     tmp_path,
     capsys,
     monkeypatch,
+    native_hook_force: Path,
 ):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

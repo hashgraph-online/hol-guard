@@ -24,6 +24,8 @@ _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _HEALTH_PROBE_ATTEMPTS = 2
 _HEALTH_PROBE_TOTAL_TIMEOUT_SECONDS = 1.0
 _HEALTH_PROBE_ATTEMPT_TIMEOUT_SECONDS = _HEALTH_PROBE_TOTAL_TIMEOUT_SECONDS / _HEALTH_PROBE_ATTEMPTS
+_STRESS_REQUEST_ATTEMPTS = 5
+_HEALTH_READY_TIMEOUT_SECONDS = 15.0
 
 
 @dataclass
@@ -138,20 +140,62 @@ def stress_request(endpoint: str, auth_token: str) -> float:
         headers={"Content-Type": "application/json", "X-Guard-Token": auth_token},
         method="POST",
     )
-    started = time.monotonic()
-    with cast(HTTPResponse, urllib.request.urlopen(request, timeout=6)) as response:
-        body = response.read(_MAX_RESPONSE_BYTES + 1)
-    if len(body) > _MAX_RESPONSE_BYTES:
-        raise RuntimeError("Hook response exceeded the bounded stress limit.")
-    payload = cast(object, json.loads(body.decode("utf-8")))
-    if not isinstance(payload, dict):
-        raise RuntimeError("Hook response was not an object.")
-    return (time.monotonic() - started) * 1000
+    last_error: BaseException | None = None
+    for attempt in range(_STRESS_REQUEST_ATTEMPTS):
+        started = time.monotonic()
+        try:
+            with cast(HTTPResponse, urllib.request.urlopen(request, timeout=6)) as response:
+                body = response.read(_MAX_RESPONSE_BYTES + 1)
+            if len(body) > _MAX_RESPONSE_BYTES:
+                raise RuntimeError("Hook response exceeded the bounded stress limit.")
+            if not body:
+                last_error = RuntimeError("Hook response was empty.")
+                time.sleep(0.05)
+                continue
+            payload = cast(object, json.loads(body.decode("utf-8")))
+            if not isinstance(payload, dict):
+                raise RuntimeError("Hook response was not an object.")
+            return (time.monotonic() - started) * 1000
+        except urllib.error.HTTPError as exc:
+            if exc.code == 503 and attempt + 1 < _STRESS_REQUEST_ATTEMPTS:
+                last_error = exc
+                time.sleep(0.1 * (attempt + 1))
+                continue
+            raise
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            time.sleep(0.05)
+        except urllib.error.URLError as exc:
+            if isinstance(exc.reason, ConnectionRefusedError):
+                raise
+            last_error = exc
+            time.sleep(0.05)
+        except (
+            BrokenPipeError,
+            ConnectionAbortedError,
+            ConnectionResetError,
+            TimeoutError,
+            http.client.IncompleteRead,
+            http.client.RemoteDisconnected,
+        ) as exc:
+            last_error = exc
+            time.sleep(0.05)
+    assert last_error is not None
+    raise last_error
 
 
 def stress_warmup(endpoint: str, auth_token: str, count: int) -> None:
-    """Run a bounded request wave before the measured stress batches."""
+    """Prime once, then run ``count`` concurrent requests (``count + 1`` total).
 
+    The cold prime retains stress_request's bounded retries. The wave also uses
+    that request helper and preserves the existing six-second future waits.
+    """
+
+    if count <= 0:
+        raise ValueError("Warm-up count must be positive.")
+    # Liveness does not imply that the first native policy/worker is initialized.
+    # One successful synthetic request must precede the burst; failures still raise.
+    stress_request(endpoint, auth_token)
     with ThreadPoolExecutor(max_workers=count) as executor:
         futures = [executor.submit(stress_request, endpoint, auth_token) for _ in range(count)]
         for future in futures:
@@ -224,6 +268,17 @@ def health_is_ready(daemon_url: str) -> bool:
     """Return true when the daemon published an authoritative healthy payload."""
 
     return health_probe_status(daemon_url) == "ready"
+
+
+def wait_until_health_ready(daemon_url: str, *, timeout_seconds: float = _HEALTH_READY_TIMEOUT_SECONDS) -> None:
+    """Block until `/healthz` is ready, or raise before warmup."""
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if health_is_ready(daemon_url):
+            return
+        time.sleep(0.05)
+    raise RuntimeError("Stress daemon did not become healthy before warmup.")
 
 
 def pid_is_running(pid: int) -> bool:
@@ -316,5 +371,6 @@ __all__ = [
     "stress_warmup",
     "update_pid_stability",
     "wait_for_process_resources",
+    "wait_until_health_ready",
     "worker_capacity",
 ]

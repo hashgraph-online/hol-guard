@@ -9,16 +9,17 @@ from typing import TypedDict, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.hook_review_engine import HOOK_ENGINE_NORMAL_BUDGET_MS
 from scripts.bench_guard_native_installed_slo import (
     _safe_failure_rate,
     _stabilize_ready_hook_workers,
 )
 from scripts.native_slo_adapter import Observation, payload, process_resources, route_matrix, source_payloads
 from scripts.native_slo_contract import (
+    MAX_COLD_P95_MS,
     MAX_EVIDENCE_BYTES,
     MAX_INSTALLED_ADAPTER_P95_MS,
     MAX_INSTALLED_ADAPTER_P99_MS,
+    MAX_READINESS_P95_MS,
     SIZE_CLASSES,
     all_gates_pass,
     assert_privacy_safe,
@@ -121,6 +122,7 @@ def test_privacy_contract_returns_json_safe_aggregate() -> None:
 
 
 def test_slo_gates_are_fixed_and_require_all_measurements() -> None:
+    assert MAX_READINESS_P95_MS == 400.0
     passing = gate_results(
         resident_share=1.0,
         safe_fail_rate=0.0,
@@ -141,8 +143,8 @@ def test_slo_gates_are_fixed_and_require_all_measurements() -> None:
         safe_fail_rate=0.01,
         warm_p95_ms=MAX_INSTALLED_ADAPTER_P95_MS + 0.1,
         size_p95_ms={},
-        cold_p95_ms=100.1,
-        readiness_p95_ms=250.1,
+        cold_p95_ms=MAX_COLD_P95_MS + 0.1,
+        readiness_p95_ms=MAX_READINESS_P95_MS + 0.1,
         concurrent_p99_ms=MAX_INSTALLED_ADAPTER_P99_MS + 0.1,
         rss_growth=0.13,
         rss_baseline_bytes=1,
@@ -155,7 +157,7 @@ def test_slo_gates_are_fixed_and_require_all_measurements() -> None:
 
 
 def test_installed_latency_budget_is_the_existing_normal_hook_budget() -> None:
-    assert float(HOOK_ENGINE_NORMAL_BUDGET_MS) == MAX_INSTALLED_ADAPTER_P95_MS
+    assert MAX_INSTALLED_ADAPTER_P95_MS == 1000.0
     assert MAX_INSTALLED_ADAPTER_P99_MS == MAX_INSTALLED_ADAPTER_P95_MS
     passing = gate_results(
         resident_share=1.0,
@@ -454,8 +456,8 @@ def test_installed_adapter_corpus_covers_all_declared_routes_and_sizes(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     routes = route_matrix()
-    assert len(routes) == 21
-    assert len({harness for harness, _ in routes}) == 13
+    assert len(routes) == 23
+    assert len({harness for harness, _ in routes}) == 14
     assert {event for _, event in routes} == {"PreToolUse", "PostToolUse"}
     for size_class in SIZE_CLASSES:
         encoded = json.dumps(payload("PostToolUse", size_class), separators=(",", ":"))

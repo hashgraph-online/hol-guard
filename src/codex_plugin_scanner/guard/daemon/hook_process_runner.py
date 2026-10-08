@@ -98,6 +98,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         self._decisions: dict[str, int] = {}
         self._reason_codes: dict[str, int] = {}
         self._routes: dict[str, int] = {}
+        self._last_startup_failure_code: str | None = None
 
     def start(self, *, defer_backfill: bool = False) -> None:
         nonblocking_deferred_start = defer_backfill and self._adaptive_capacity is not None
@@ -112,6 +113,8 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
             self._recovery_event.clear()
             self._generation += 1
             generation = self._generation
+            with self._metrics_lock:
+                self._last_startup_failure_code = None
             startup_floor_target = min(1, self._initial_target) if defer_backfill else self._initial_target
             self._capacity_target = startup_floor_target
             self._startup_floor_target = startup_floor_target if nonblocking_deferred_start else 0
@@ -192,7 +195,6 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         deadline: float | None = None,
         claim_saved_approval: bool = True,
         claimed_saved_allow_hash: str | None = None,
-        claimed_trusted_request_override: bool = False,
         claimed_approval_request_id: str | None = None,
         _transient_not_ready_retries: int = _HOOK_PROCESS_TRANSIENT_NOT_READY_RETRIES,
     ) -> HookProcessReview:
@@ -216,7 +218,6 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
             hook_env=hook_env,
             claim_saved_approval=claim_saved_approval,
             claimed_saved_allow_hash=claimed_saved_allow_hash,
-            claimed_trusted_request_override=claimed_trusted_request_override,
             claimed_approval_request_id=claimed_approval_request_id,
             deadline=review_deadline,
         )
@@ -314,7 +315,6 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
                     deadline=review_deadline,
                     claim_saved_approval=claim_saved_approval,
                     claimed_saved_allow_hash=claimed_saved_allow_hash,
-                    claimed_trusted_request_override=claimed_trusted_request_override,
                     claimed_approval_request_id=claimed_approval_request_id,
                     _transient_not_ready_retries=_transient_not_ready_retries - 1,
                 )
@@ -322,7 +322,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         typed_response = as_string_object_dict(response)
         if typed_response is None:
             return HookProcessReview(None, "daemon_hook_process_invalid_json")
-        self._record_response_metrics(typed_response)
+        self._record_response_metrics(typed_response, envelope_reason_code=reason_code)
         self._record_route_metric(typed_result.get("route"))
         if time.monotonic() >= review_deadline:
             return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")
@@ -361,6 +361,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
                 "timeouts": self._timeouts,
                 "failures": self._failures,
                 "restarts": self._restarts,
+                "last_startup_failure": self._last_startup_failure_code,
                 "decisions": dict(self._decisions),
                 "reason_codes": dict(self._reason_codes),
                 "routes": dict(self._routes),

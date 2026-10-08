@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "action_id": "native-review-fixture",
+  "harness": "omp",
+  "event_name": "PreToolUse",
+  "action_type": "config_change",
+  "workspace": null,
+  "workspace_hash": null,
+  "tool_name": "eval",
+  "command": null,
+  "prompt_excerpt": null,
+  "prompt_text": null,
+  "target_paths": [],
+  "network_hosts": [],
+  "mcp_server": null,
+  "mcp_tool": null,
+  "package_manager": null,
+  "package_name": null,
+  "command_category": null,
+  "package_intent_kind": null,
+  "package_targets": [],
+  "script_name": null,
+  "raw_payload_redacted": {
+    "tool_name": "eval",
+    "tool_input": {"code": "1 + 1"},
+    "hook_event_name": "PreToolUse"
+  },
+  "pre_execution_result": "review"
+}

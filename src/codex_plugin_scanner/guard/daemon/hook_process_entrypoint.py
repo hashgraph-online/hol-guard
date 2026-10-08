@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib
-import json
+import math
 import multiprocessing
 import os
 import signal
@@ -14,20 +14,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
-from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
-from ..native_mode import python_oracle_surface_enabled
 from ..native_route_receipt import native_hook_route, record_native_hook_route, reset_native_hook_route
 from ..sqlite_profile import sqlite_error_is_busy_locked
 from .hook_process_protocol import (
-    applied_hook_environment,
     as_string_object_dict,
-    capture_hook_command,
     is_pair,
 )
 from .hook_process_request import (
     ResidentHookRequest,
     coerce_resident_hook_request,
-    compatibility_hook_args,
     resident_hook_store_and_context,
 )
 
@@ -39,7 +34,67 @@ if TYPE_CHECKING:
     from .hook_worker import HookWorker
 
 _HOOK_SQLITE_TIMEOUT_ENV = "HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS"
+_HOOK_EVALUATOR_READY_TIMEOUT_ENV = "HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS"
+# The daemon-side worker-ready budget.  The worker inherits the daemon's
+# environment through multiprocessing "spawn", so it can derive its inner
+# evaluator budget from the same operator override instead of needing a second
+# knob set to a consistent value.
+_HOOK_WORKER_READY_TIMEOUT_ENV = "HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS"
 _HOOK_EVALUATOR_READY_TIMEOUT_SECONDS = 12.0
+_HOOK_EVALUATOR_READY_TIMEOUT_MAX_SECONDS = 120.0
+# Slack the worker keeps between its inner evaluator poll and the outer
+# daemon->worker deadline so the "ready" reply can cross back before the daemon
+# declares the worker dead.
+_EVALUATOR_TO_WORKER_READY_MARGIN_SECONDS = 3.0
+_HOOK_EVALUATOR_BOOTSTRAP_MODULES = (
+    "codex_plugin_scanner.guard.adapters.base",
+    "codex_plugin_scanner.guard.config",
+    "codex_plugin_scanner.guard.daemon.hook_worker",
+    "codex_plugin_scanner.guard.store",
+)
+
+
+def _parse_timeout_env(raw: str | None, default: float) -> float | None:
+    """Parse an env timeout to a positive float, or None to use ``default``."""
+    if raw is None:
+        return None
+    try:
+        parsed = float(raw.strip())
+    except ValueError:
+        return None
+    if not math.isfinite(parsed) or parsed <= 0:
+        return None
+    return parsed
+
+
+def _hook_evaluator_ready_timeout_seconds() -> float:
+    """Return the worker-side evaluator-ready budget.
+
+    The spawned hook worker polls this long for its isolated evaluator child to
+    report ``ready``.  On slow hosts (QEMU guests, cold CI, low-memory machines)
+    the evaluator's heavy import graph can exceed the 12 s default and the
+    worker would otherwise report ``worker_failed`` even though the evaluator is
+    healthy.  This is a *nested* budget: it must stay below the daemon->worker
+    ``HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS`` deadline or the daemon kills
+    a healthy worker mid-wait.  It therefore defaults to ``outer - margin`` when
+    the operator raised the outer budget (inherited through the spawn env), and
+    can still be raised independently via
+    ``HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS``.  Bounded by a floor and
+    a hard cap so a misconfiguration cannot wedge startup.
+    """
+    outer = _parse_timeout_env(os.environ.get(_HOOK_WORKER_READY_TIMEOUT_ENV), _HOOK_EVALUATOR_READY_TIMEOUT_SECONDS)
+    derived_floor = _HOOK_EVALUATOR_READY_TIMEOUT_SECONDS
+    if outer is not None:
+        derived_floor = max(
+            derived_floor,
+            outer - _EVALUATOR_TO_WORKER_READY_MARGIN_SECONDS,
+        )
+    explicit = _parse_timeout_env(os.environ.get(_HOOK_EVALUATOR_READY_TIMEOUT_ENV), derived_floor)
+    if explicit is None:
+        explicit = derived_floor
+    return min(_HOOK_EVALUATOR_READY_TIMEOUT_MAX_SECONDS, max(_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS, explicit))
+
+
 _TRANSIENT_HOOK_STORAGE_TIMEOUTS = frozenset(
     {
         "Timed out waiting for Guard storage access.",
@@ -59,13 +114,13 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
     if os.name == "nt":
         windows_job = assign_current_process_to_windows_hook_job()
         if windows_job is None:
-            connection.send(("isolation_failed", None))
+            connection.send(("isolation_failed", {"reason_code": "hook_process_isolation_failed"}))
             return
     else:
         try:
             os.setsid()
         except OSError:
-            connection.send(("isolation_failed", None))
+            connection.send(("isolation_failed", {"reason_code": "hook_process_isolation_failed"}))
             return
     connection.send(
         (
@@ -89,15 +144,20 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
     except BaseException:
         guardian_connection.close()
         evaluator_connection.close()
-        connection.send(("worker_failed", None))
+        connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_spawn_failed"}))
         _hold_containment_anchor()
     evaluator_connection.close()
     try:
-        if not guardian_connection.poll(_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS) or guardian_connection.recv() != (
-            "ready",
-            None,
-        ):
-            connection.send(("worker_failed", None))
+        if not guardian_connection.poll(_hook_evaluator_ready_timeout_seconds()):
+            connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_ready_timeout"}))
+            _hold_containment_anchor()
+        try:
+            evaluator_ready = guardian_connection.recv()
+        except (EOFError, OSError):
+            connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_pipe_failed"}))
+            _hold_containment_anchor()
+        if evaluator_ready != ("ready", None):
+            connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_ready_protocol"}))
             _hold_containment_anchor()
         connection.send(("ready", None))
         while True:
@@ -115,7 +175,7 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
                 guardian_connection.send(raw_message)
                 response = guardian_connection.recv()
             except (BrokenPipeError, EOFError, OSError):
-                connection.send(("worker_failed", None))
+                connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_pipe_failed"}))
                 _hold_containment_anchor()
             connection.send(response)
     finally:
@@ -136,14 +196,9 @@ def _terminate_guardian_group() -> None:
 
 def _hook_evaluator_main(connection: Connection, configured_guard_home: str | None) -> None:
     os.environ[_HOOK_SQLITE_TIMEOUT_ENV] = "250"
-    for module_name in (
-        "codex_plugin_scanner.guard.adapters.base",
-        "codex_plugin_scanner.guard.cli.commands_hook",
-        "codex_plugin_scanner.guard.cli.commands_support_connect",
-        "codex_plugin_scanner.guard.config",
-        "codex_plugin_scanner.guard.daemon.hook_worker",
-        "codex_plugin_scanner.guard.store",
-    ):
+    # Resident hooks never call the CLI hook/connect entrypoints. Warming their
+    # unrelated management graph delays isolation readiness without proving it.
+    for module_name in _HOOK_EVALUATOR_BOOTSTRAP_MODULES:
         _ = importlib.import_module(module_name)
     stores: dict[str, GuardStore] = {}
     hook_workers: dict[str, HookWorker] = {}
@@ -259,10 +314,7 @@ def _run_resident_hook_request(
     hook_workers: dict[str, HookWorker],
     configured_guard_home: str | None,
 ) -> dict[str, object]:
-    from ..cli.commands_hook import _run_guard_hook_command
-    from ..cli.commands_support_connect import _synced_policy_payload
-    from ..config import load_guard_config, overlay_synced_guard_policy
-    from .hook_worker import HookWorker, HookWorkerUnsupported, runtime_hook_event_name
+    from .hook_worker import HookWorker, runtime_hook_event_name
 
     parsed = coerce_resident_hook_request(request)
     if parsed is None:
@@ -271,81 +323,46 @@ def _run_resident_hook_request(
     if configured_guard_home is not None and parsed.guard_home != Path(configured_guard_home):
         return {"payload": None, "reason_code": "daemon_hook_process_guard_home_mismatch"}
     store_key = str(parsed.guard_home)
-    store, context = resident_hook_store_and_context(parsed, stores)
+    store, _context = resident_hook_store_and_context(parsed, stores)
     event_name = runtime_hook_event_name(parsed.payload)
-    if (
-        _native_mode_requires_rust()
-        or event_name in {"PreToolUse", "PostToolUse"}
-        or not python_oracle_surface_enabled()
-    ):
-        worker = hook_workers.get(store_key)
-        if worker is None:
-            worker = HookWorker(store=store, wait_for_native_policy=False)
-            hook_workers[store_key] = worker
-        try:
-            worker_payload = worker.review_http_payload(
-                payload=parsed.payload,
-                params={"runtime-harness": [parsed.harness]},
-                default_harness=parsed.harness,
-                home_dir=parsed.home_dir,
-                guard_home=parsed.guard_home,
-                workspace=parsed.workspace,
-                deadline=parsed.deadline,
-            )
-        except HookWorkerUnsupported:
-            if _native_mode_requires_rust() or not python_oracle_surface_enabled():
-                return _native_worker_fail_safe_result(
-                    parsed,
-                    event_name=event_name,
-                    reason_code="native_hook_worker_unsupported",
-                )
-        except Exception:
-            if _native_mode_requires_rust() or not python_oracle_surface_enabled():
-                return _native_worker_fail_safe_result(
-                    parsed,
-                    event_name=event_name,
-                    reason_code="native_hook_worker_exception",
-                )
-            raise
-        else:
-            response: dict[str, object] = {
-                "payload": worker_payload,
-                "reason_code": None,
-                "route": _current_decision_route(),
-            }
-            receipt = getattr(worker, "last_native_decision_receipt", None)
-            if isinstance(receipt, dict):
-                response["receipt"] = receipt
-            return response
-    with applied_hook_environment(request):
-        config = overlay_synced_guard_policy(
-            load_guard_config(parsed.guard_home, workspace=parsed.workspace),
-            _synced_policy_payload(store),
+    worker = hook_workers.get(store_key)
+    if worker is None:
+        # HTTP admission already waits for the daemon-owned workspace ACK.
+        # Isolated workers consume that authenticated binding instead of
+        # racing another publisher inside the tool's review deadline.
+        worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
+        hook_workers[store_key] = worker
+    try:
+        worker_payload = worker.review_http_payload(
+            payload=parsed.payload,
+            params={"runtime-harness": [parsed.harness]},
+            default_harness=parsed.harness,
+            home_dir=parsed.home_dir,
+            guard_home=parsed.guard_home,
+            workspace=parsed.workspace,
+            deadline=parsed.deadline,
+            claim_saved_approval=parsed.claim_saved_approval,
+            claimed_saved_allow_hash=parsed.claimed_saved_allow_hash,
+            claimed_approval_request_id=parsed.claimed_approval_request_id,
         )
-        args = compatibility_hook_args(parsed)
-        response = capture_hook_command(
-            lambda output: _run_guard_hook_command(
-                args,
-                guard_home=parsed.guard_home,
-                workspace=parsed.workspace,
-                context=context,
-                store=store,
-                config=config,
-                input_text=json.dumps(parsed.payload, separators=(",", ":")),
-                output_stream=output,
-                _claim_saved_approval=parsed.claim_saved_approval,
-                _claimed_saved_allow_hash=parsed.claimed_saved_allow_hash,
-                _claimed_trusted_request_override=parsed.claimed_trusted_request_override,
-                _claimed_approval_request_id=parsed.claimed_approval_request_id,
-            )
+    except Exception:
+        return _native_worker_fail_safe_result(
+            parsed,
+            event_name=event_name,
+            reason_code="native_hook_worker_exception",
         )
-        response["route"] = _current_decision_route()
-        return response
+    response: dict[str, object] = {
+        "payload": worker_payload,
+        "reason_code": None,
+        "route": _current_decision_route(),
+    }
+    receipt = getattr(worker, "last_native_decision_receipt", None)
+    if isinstance(receipt, dict):
+        response["receipt"] = receipt
+    return response
 
 
 def _current_decision_route() -> str:
-    if python_oracle_surface_enabled() and not _native_mode_requires_rust():
-        return "python_semantic"
     return native_hook_route() or "native_fail_safe"
 
 

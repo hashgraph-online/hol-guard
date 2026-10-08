@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import socket
-import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,8 +15,20 @@ from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from codex_plugin_scanner.guard.extension_builder.io import canonical_json, sha256
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit, diff_kits, load_kit, write_kit
 from codex_plugin_scanner.guard.extension_builder.models import make_discovery as normalized_discovery
+from codex_plugin_scanner.guard.extension_builder.render_native import contribution_path
 from codex_plugin_scanner.guard.extension_builder.review import default_review
-from tests.extension_builder_support import cli_document, make_discovery, make_kit, metadata
+from tests.extension_builder_support import (
+    cli_document,
+    make_discovery,
+    make_kit,
+    metadata,
+    use_built_native_source_compiler,
+)
+
+
+@pytest.fixture(autouse=True)
+def _native_source_compiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_built_native_source_compiler(monkeypatch)
 
 
 @pytest.mark.parametrize("kind", ["cli", "mcp"])
@@ -28,7 +38,8 @@ def test_kit_round_trip_is_byte_identical_and_off(tmp_path: Path, kind: str) -> 
     write_kit(kit, output)
     assert load_kit(output) == kit
     assert build_kit(kit.discovery, kit.review).files == kit.files
-    contribution = next(content for path, content in kit.files if path.startswith("artifacts/contributions/"))
+    expected_contribution = f"artifacts/{contribution_path(kit.discovery.metadata)}"
+    contribution = next(content for path, content in kit.files if path == expected_contribution)
     payload = json.loads(contribution)
     assert payload["trustClass"] == "external"
     assert payload["activation"] == "opt-in"
@@ -66,7 +77,7 @@ def test_missing_output_parent_does_not_create_a_tree(tmp_path: Path) -> None:
     assert not (tmp_path / "missing").exists()
 
 
-@pytest.mark.parametrize("mutation", ["extra", "missing", "manifest", "detector", "review"])
+@pytest.mark.parametrize("mutation", ["extra", "missing", "manifest", "source", "review"])
 def test_kit_tampering_is_rejected(tmp_path: Path, mutation: str) -> None:
     kit = make_kit(tmp_path)
     output = tmp_path / "kit"
@@ -79,14 +90,12 @@ def test_kit_tampering_is_rejected(tmp_path: Path, mutation: str) -> None:
         manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
         manifest["builderVersion"] = "99.0.0"
         (output / "manifest.json").write_text(canonical_json(manifest), encoding="utf-8")
-    elif mutation == "detector":
-        detector = next(path for path in output.rglob("*.py") if path.name.endswith("extensions.py"))
-        detector.write_text(
-            detector.read_text(encoding="utf-8") + "\nraise AssertionError('must not execute')\n", encoding="utf-8"
-        )
-        # Even a coordinated hash edit cannot make arbitrary code a compiler output.
+    elif mutation == "source":
+        source = next(path for path in output.rglob("command.builder-demo.json"))
+        source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        # Even a coordinated hash edit cannot make changed data a compiler output.
         manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
-        manifest["files"][detector.relative_to(output).as_posix()] = sha256(detector.read_bytes())
+        manifest["files"][source.relative_to(output).as_posix()] = sha256(source.read_bytes())
         (output / "manifest.json").write_text(canonical_json(manifest), encoding="utf-8")
     else:
         (output / "review.json").write_text(
@@ -170,17 +179,12 @@ def test_explicit_display_metadata_is_quoted_not_executed(tmp_path: Path) -> Non
         discovery.limitations,
     )
     kit = build_kit(discovery, default_review(discovery))
-    code = next(content for name, content in kit.files if name.endswith("extensions.py"))
-    tree = ast.parse(code)
-    assert any(isinstance(node, ast.Constant) and node.value == hostile_name for node in ast.walk(tree))
-    assert not any(
-        isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "__import__"
-        for node in ast.walk(tree)
-    )
-    assert f'extension_id="{discovery.metadata.catalog_id}"' in code
+    source = json.loads(next(content for name, content in kit.files if "/command-sources/" in name))
+    assert source["extension"]["name"] == hostile_name
+    assert all(not name.endswith(".py") for name, _ in kit.files)
 
 
-def test_generation_and_validation_have_no_network_or_subprocess_discovery(
+def test_generation_and_validation_have_no_network_or_target_execution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     kit = make_kit(tmp_path)
@@ -190,7 +194,6 @@ def test_generation_and_validation_have_no_network_or_subprocess_discovery(
 
     monkeypatch.setattr(socket, "create_connection", forbidden)
     monkeypatch.setattr(requests.Session, "request", forbidden)
-    monkeypatch.setattr(subprocess, "Popen", forbidden)
     output = tmp_path / "kit"
     write_kit(kit, output)
     assert load_kit(output) == kit

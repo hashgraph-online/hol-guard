@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 from ..action_lattice import coerce_guard_action
 from ..models import GuardAction
+from ..native_context import is_unbound_context_digest
 from ..proxy._env import _build_scrubbed_env
 from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -125,15 +126,20 @@ def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str
     return f"{reason} Approve it in HOL Guard, then retry."
 
 def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:
-    approval_center_url = response_payload.get("approval_center_url")
-    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
+    review_url = _preferred_approval_review_url(response_payload, harness=harness)
+    if review_url is None:
+        from ..approval_hook_copy import approval_review_url_from_payload
+
+        review_url = approval_review_url_from_payload(response_payload)
+    if review_url is None:
         return None
-    review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
     canonical_harness = _canonical_harness_name(harness)
     harness_label = {
         "claude-code": "Claude Code",
         "codex": "Codex",
         "copilot": "Copilot",
+        "cursor": "Cursor",
+        "devin": "Devin",
         "guard-cli": "package install",
         "opencode": "OpenCode",
         "kimi": "Kimi",
@@ -297,6 +303,9 @@ def _runtime_stored_policy_decision(
     callers that use this helper outside the authoritative runtime path.
     """
 
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     runtime_exact_match_context = _runtime_artifact_exact_match_context(artifact)
     ignored_local_integrity: Mapping[str, object] | None = None
     if isinstance(decision_lookup, Mapping):
@@ -728,7 +737,10 @@ def _runtime_hook_executable_identity(
         "values_hash": provided_env_values_hash if missing_value_keys else computed_env_values_hash,
         "provided_values_hash_matches": (
             provided_env_values_hash == computed_env_values_hash
-            if provided_env_values_hash is not None and computed_env_values_hash is not None
+            if provided_env_values_hash is not None
+            and computed_env_values_hash is not None
+            and not is_unbound_context_digest(provided_env_values_hash)
+            and not is_unbound_context_digest(computed_env_values_hash)
             else None
         ),
         "status": (
