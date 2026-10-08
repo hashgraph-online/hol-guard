@@ -15,6 +15,7 @@ from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_n
 pytest_plugins = [
     "tests.bundle_first_cloud",
     "tests.approval_mode_fixtures",
+    "tests.approval_reuse_fixtures",
     "tests.native_runtime_fixtures",
 ]
 
