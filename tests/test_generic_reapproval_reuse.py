@@ -42,13 +42,15 @@ def _grant_exact_request(store, request, workspace, *, retained):
         )
 
 
-@pytest.mark.parametrize("remember", [False, True])
+@pytest.mark.parametrize("remember, unrelated_write", [(False, False), (True, False), (True, True)])
 @pytest.mark.parametrize("live_revalidation", [False, True])
 def test_exact_generic_approval_satisfies_reapproval(
     tmp_path,
     native_mcp_probe,
     capsys,
+    monkeypatch,
     remember,
+    unrelated_write,
     live_revalidation,
 ):
     context = _context(tmp_path)
@@ -96,6 +98,25 @@ def test_exact_generic_approval_satisfies_reapproval(
     assert result == 1
     request = store.list_approval_requests()[0]
     _grant_exact_request(store, request, context.workspace_dir, retained=remember)
+    if unrelated_write:
+        claim = store.claim_approval_reuse_decision
+
+        def write_other_grant_after_claim(decision):
+            accepted = claim(decision)
+            store.upsert_policy(
+                PolicyDecision(
+                    harness="generic-test",
+                    scope="artifact",
+                    action="block",
+                    artifact_id="unrelated-artifact",
+                    artifact_hash="unrelated-hash",
+                    source="cli",
+                ),
+                "2026-07-17T00:00:00+00:00",
+            )
+            return accepted
+
+        monkeypatch.setattr(store, "claim_approval_reuse_decision", write_other_grant_after_claim)
     result, response = evaluate()
     assert result == 0, json.dumps(response, sort_keys=True)
     assert response["policy_action"] == "allow"

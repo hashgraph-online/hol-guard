@@ -1030,9 +1030,18 @@ def run_native_generic_payload(
         )
         if ignored_integrity is not None:
             claimed_validation_reason = "approval_reuse_integrity_failure"
+        # Native lookup re-authenticates the row. Unrelated authority writes
+        # advance global revision and integrity ledger counters, not the grant.
         if _claimed_saved_approval is None or (
             store.approval_reuse_claim_disposition(_claimed_saved_approval) != "consumed"
-            and stored_policy_decision != _claimed_saved_approval
+            and (
+                stored_policy_decision is None
+                or any(
+                    stored_policy_decision.get(key) != value
+                    for key, value in _claimed_saved_approval.items()
+                    if key not in {"_approval_authority_revision", "integrity_generation"}
+                )
+            )
         ):
             claimed_validation_reason = APPROVAL_REUSE_CLAIM_FAILED
 
