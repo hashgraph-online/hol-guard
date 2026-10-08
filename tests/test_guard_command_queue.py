@@ -301,7 +301,7 @@ def _signed_decision_memory_bundle(
                 "scope": rule_scope,
                 "sourceReceiptIds": ["receipt-1"],
                 "target": {
-                    "machineIds": [oauth.installation_id],
+                    "machineIds": [oauth.machine_id],
                     "workspaceIds": [oauth.workspace_id],
                 },
             }

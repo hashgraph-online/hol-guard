@@ -403,7 +403,8 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
                 reason="local_approval_required",
             )
         else:
-            if not is_native_workspace_review_job(item):
+            native_binding = authorized.identity.get("nativeDeliveryBinding")
+            if native_binding is None and not is_native_workspace_review_job(item):
                 mark_command_job_consumed(store, authorized)
             audit_command_decision(
                 store,
@@ -411,9 +412,16 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
                 job=item,
                 reason="capability_and_job_valid",
             )
+            execution_item = item
+            if isinstance(native_binding, dict):
+                # Derived only after authorization; never trust a payload-supplied binding.
+                execution_item = {
+                    **item,
+                    "payload": {**item["payload"], "nativeDeliveryBinding": native_binding},
+                }
             try:
                 _LOGGER.info("Guard command leased.")
-                execution = _execute_job(item, context, store)
+                execution = _execute_job(execution_item, context, store)
             except Exception as error:
                 _LOGGER.warning(
                     "Guard command execution failed: error=%s",

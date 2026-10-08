@@ -56,6 +56,19 @@ runtime never contains or generates the root private key.
 3. The trusted installer runs `hol-guard-runtime
    enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD`.
 
+Stop the managed resident before these installer commands: enrollment requires
+the exclusive state-directory transition lock. Preparation preserves existing
+device/installation bindings and returns the next generation for an active V4
+credential. The root-signed replacement must name the previous key. Revoked or
+missing protected authority is not repaired by a Cloud retry.
+
+On macOS, native Keychain reads and writes never request a system authorization
+dialog. The process retains its noninteractive setting across concurrent
+workers. Inaccessible protected state returns
+`native_approval_secure_state_unavailable`; it is not treated as an absent
+credential, a successful approval, or permission to create replacement state.
+
+
 The V4 resident issues the browser challenge and verifies the returned
 assertion itself. It checks the exact challenge, origin, RP ID, credential
 `id`/`rawId`, `public-key` type, authenticator `UP` and `UV` flags, signature,
@@ -66,9 +79,35 @@ without verifying or assigning approval semantics. A missing release root,
 invalid record, stale generation, revoked authority, missing secure state,
 counter replay, or failed ceremony produces a safe failure.
 
-Approval challenges and artifacts are additionally bound to the managed
-resident's random per-boot epoch and a live in-memory challenge entry. The
-entry records only bounded identifiers/digests and expires with the challenge;
-it is atomically claimed and consumed. Restart invalidates every prior
-artifact. Python may display the opaque challenge and forward the opaque
-artifact, but only Rust can validate or consume the approval receipt.
+Direct local approval challenges and artifacts remain bound to the managed
+resident's random per-boot epoch and a live, expiring in-memory challenge entry.
+Restart invalidates those direct artifacts. Python may display and forward an
+opaque artifact, but only Rust can validate or consume the approval receipt.
+
+## Exact Cloud Review recovery
+
+Native Cloud consent is separate from a browser decision. Enabling requires the
+configured native password and, when configured, a fresh TOTP. Disable requires
+no factors and revokes unconsumed authority. It does not erase historical
+consumption receipts.
+
+The native journal retains the actual hook origin, original challenge, exact
+source-claim hash, saved decision receipt, and validated installation. It may
+restore that exact installed authority after restart, never a reusable
+allowance. A durable preparation marker precedes consumption; if no genuine
+positive receipt follows it, the request stays `recovery_required`. Query,
+retry, elapsed time, or an SDK marker cannot clear that ambiguity.
+
+`approval_renew_v4` and `approval_renewal_query_v4` bind fresh metadata to the
+original request, saved decision, source hash, and original nonce digest.
+Authenticated key-generation lineage under the same trusted enrollment root
+may select the current credential without changing the original signed claim.
+The new assertion still requires native verification of its actual signature,
+UP, UV, origin, RP, and counter. Runtime, policy, rule, device, installation,
+and action identity remain fenced; arbitrary trust-root or identity drift is
+not accepted. Revoked, blocked, consumed, or ambiguous authority cannot renew.
+
+Installation is waiting-for-hook, not application. Only the matching actual
+hook can consume the allowance. Its durable receipt can be reconciled into the
+SDK observation outbox without replaying the action; harness continuation is
+reported separately.

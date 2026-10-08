@@ -1,6 +1,13 @@
 use super::*;
 use crate::policy_store;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RequestOperation {
+    ConsumeContext,
+    ConsumeOwned,
+    QueryConsumption,
+}
+
 /// Verify one decision against the request snapshot selected by `request_id`.
 /// The selector is not a binding input: all request and action material comes
 /// from the private snapshot loaded by the resident.
@@ -12,6 +19,24 @@ pub(crate) fn verify_and_claim_request(
     let bytes = canonical_json_bytes(decision)
         .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
     claim_request(policy_store, request_id, &bytes, false).map(|(verified, _)| verified)
+}
+
+pub(crate) fn query_request_consumption(
+    policy_store: &policy_store::PolicySnapshotStore,
+    request_id: &str,
+    decision: &Value,
+) -> Result<VerifiedWorkspaceReviewDecision, String> {
+    let bytes = canonical_json_bytes(decision)
+        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
+    claim_request_with_clock_and(
+        policy_store,
+        request_id,
+        &bytes,
+        RequestOperation::QueryConsumption,
+        now_ms,
+        |_, _| Ok(()),
+    )
+    .map(|(verified, _, ())| verified)
 }
 
 /// Private native-worker boundary. No serializable grant or mutable retry:
@@ -78,7 +103,7 @@ pub(crate) fn claim_owned_business_request_with_clock<T>(
         policy_store,
         request_id,
         decision,
-        true,
+        RequestOperation::ConsumeOwned,
         || clock.borrow_mut()(),
         |input, claim_observed_at_ms| {
             let observed_time_ms = clock.borrow_mut()()?;
@@ -145,7 +170,11 @@ fn claim_request_with_clock(
         policy_store,
         request_id,
         decision,
-        owned_dispatch,
+        if owned_dispatch {
+            RequestOperation::ConsumeOwned
+        } else {
+            RequestOperation::ConsumeContext
+        },
         clock,
         |_, _| Ok(()),
     )
@@ -156,7 +185,7 @@ fn claim_request_with_clock_and<T>(
     policy_store: &policy_store::PolicySnapshotStore,
     request_id: &str,
     decision: &[u8],
-    owned_dispatch: bool,
+    operation: RequestOperation,
     mut clock: impl FnMut() -> Result<u64, String>,
     after_claim: impl FnOnce(
         &Option<guard_command::business_input::PreparedBusinessInputV1>,
@@ -171,6 +200,7 @@ fn claim_request_with_clock_and<T>(
     String,
 > {
     let state_base = policy_store.state_base();
+    let owned_dispatch = operation == RequestOperation::ConsumeOwned;
     policy_store::approval_enrollment::with_transition_lock(state_base, || {
         // The request snapshot supplies only action material. Workspace and
         // scope come from the current native policy store and state path, so
@@ -190,11 +220,18 @@ fn claim_request_with_clock_and<T>(
         if owned_dispatch && (request.business_input.is_none() || envelope.decision != "allow") {
             return Err("native_workspace_review_business_dispatch_invalid".to_owned());
         }
-        let authority =
-            policy_store::workspace_review_authority::read_installed_record_without_time(
-                state_base,
-            )?
-            .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
+        let (authority, query_state) = if operation == RequestOperation::QueryConsumption {
+            let time = clock()?;
+            let (authority, state) = read_query_authority(state_base, time)?;
+            (authority, Some((time, state)))
+        } else {
+            let authority =
+                policy_store::workspace_review_authority::read_installed_record_without_time(
+                    state_base,
+                )?
+                .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
+            (authority, None)
+        };
         ensure_current_native_workspace_review_provenance(
             &authority,
             &workspace_binding,
@@ -233,6 +270,8 @@ fn claim_request_with_clock_and<T>(
             }
             verified.observed_at_ms = release_time_ms;
             verified
+        } else if let Some((time, state)) = query_state.as_ref() {
+            query_consumption_verified(state_base, &envelope, &context, *time, &authority, state)?
         } else {
             verify_and_claim_bytes_at(state_base, decision, &context, clock()?)?
         };

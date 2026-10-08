@@ -42,6 +42,11 @@ pub(crate) fn write_test_record(
     state_base: &Path,
     record: &ApprovalAuthorityV4,
 ) -> Result<(), String> {
+    super::super::approval_enrollment::write_test_enrollment_bindings(
+        state_base,
+        &record.device_binding,
+        &record.installation_binding,
+    )?;
     let bytes = test_record_bytes(record)?;
     let path = state_base.join(AUTHORITY_FILE_NAME);
     write_fixture_file(&path, &bytes)?;
@@ -64,6 +69,8 @@ pub(crate) fn write_test_record(
         device_binding: signed.device_binding.clone(),
         installation_binding: signed.installation_binding.clone(),
         enrollment_generation: signed.enrollment_generation,
+        previous_key_id: signed.previous_key_id,
+        enrollment_lineage: Arc::new(Vec::new()),
         status: signed.status,
         path,
         fingerprint: String::new(),
@@ -158,6 +165,8 @@ fn write_provisional_state(state_base: &Path, bytes: &[u8], sign_count: u32) {
         device_binding: signed.device_binding.clone(),
         installation_binding: signed.installation_binding.clone(),
         enrollment_generation: signed.enrollment_generation,
+        previous_key_id: signed.previous_key_id,
+        enrollment_lineage: Arc::new(Vec::new()),
         status: signed.status.clone(),
         path: state_base.join(AUTHORITY_FILE_NAME),
         fingerprint: String::new(),

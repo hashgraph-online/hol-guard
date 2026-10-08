@@ -158,7 +158,7 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
         start_marker: &state.process_start_marker,
         digest: Some(&state.runtime_sha256),
     };
-    if crate::resident_client::send_request_for_digest(
+    let request_landed = crate::resident_client::send_request_for_digest(
         &state.transport,
         &state.endpoint,
         &token,
@@ -166,13 +166,14 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
         deadline.saturating_duration_since(Instant::now()),
         &identity,
     )
-    .is_ok()
-    {
-        containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
+    .is_ok();
+    if !request_landed && containment::retire_dead_generations(&scope, &digest)? {
         let _ = restart_budget::clear(&scope);
         return Ok(());
     }
-    Err("native_resident_stop_unavailable".to_owned())
+    containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
+    let _ = restart_budget::clear(&scope);
+    Ok(())
 }
 
 pub(crate) fn serve_managed(
@@ -352,3 +353,7 @@ use client_stream::{
 #[cfg(test)]
 #[path = "managed_resident_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "managed_resident_dead_generation_tests.rs"]
+mod dead_generation_tests;

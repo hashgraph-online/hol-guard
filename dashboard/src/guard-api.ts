@@ -2251,6 +2251,14 @@ export type CloudReviewSettingsStatus = {
   delivery_state: string;
   approval_gate: import("./guard-types").GuardApprovalGatePublicConfig;
   activation_error?: string | null;
+  cloud_review_recovery: {
+    cloudReview: boolean;
+    localCli: boolean;
+    reason: string;
+    repair: string;
+    summary: string;
+  } | null;
+  cloud_review_recovery_repair: { status: string; reason: string | null };
 };
 
 export async function fetchCloudReviewSettings(): Promise<CloudReviewSettingsStatus> {

@@ -345,6 +345,19 @@ const SECURE_STATE_INVALID: &str = "native_approval_secure_state_invalid";
 const SECURE_STATE_UNAVAILABLE: &str = "native_approval_secure_state_unavailable";
 
 #[cfg(target_os = "macos")]
+fn require_noninteractive_keychain() -> Result<(), String> {
+    use security_framework::os::macos::keychain::{KeychainUserInteractionLock, SecKeychain};
+    use std::sync::LazyLock;
+    // Retain the process-wide guard: dropping per-call guards would re-enable UI
+    // while another native worker is still using Keychain.
+    static UI: LazyLock<Result<KeychainUserInteractionLock, ()>> =
+        LazyLock::new(|| SecKeychain::disable_user_interaction().map_err(|_| ()));
+    UI.as_ref()
+        .map(|_| ())
+        .map_err(|_| "native_approval_secure_state_unavailable".to_owned())
+}
+
+#[cfg(target_os = "macos")]
 pub(super) fn read_platform_secret(account: &str) -> Result<Option<String>, String> {
     read_platform_secret_with_limit(account, MAX_SECRET_TEXT_BYTES)
 }
@@ -356,6 +369,7 @@ pub(super) fn read_platform_secret_with_limit(
 ) -> Result<Option<String>, String> {
     use security_framework::passwords::generic_password;
 
+    require_noninteractive_keychain()?;
     let value = match generic_password(
         security_framework::passwords::PasswordOptions::new_generic_password(SERVICE_NAME, account),
     ) {
@@ -386,6 +400,7 @@ pub(super) fn write_platform_secret_with_limit(
 ) -> Result<(), String> {
     use security_framework::passwords::set_generic_password;
 
+    require_noninteractive_keychain()?;
     if value.len() > max_bytes {
         return Err("native_approval_secure_state_invalid".to_owned());
     }

@@ -40,7 +40,10 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     default = 'rustup default "$toolchain"'
     clippy = "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
 
-    assert job["timeout-minutes"] == 20
+    producer_minutes = (
+        workflow["jobs"]["coverage-plan"]["timeout-minutes"] + workflow["jobs"]["coverage"]["timeout-minutes"]
+    )
+    assert job["timeout-minutes"] == producer_minutes + 15
     assert "needs" not in job
     assert steps[0]["id"] == "token-presence"
     assert job["permissions"] == {"contents": "read", "actions": "read"}

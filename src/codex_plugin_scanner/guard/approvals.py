@@ -674,6 +674,20 @@ def evaluation_has_terminal_policy_action(evaluation: Mapping[str, object]) -> b
     return False
 
 
+def _raise_temporary_mcp_resolution_error(
+    result: Mapping[str, object], *, request_id: str, fallback: str | None
+) -> None:
+    error = result.get("error")
+    if error == "already_resolved":
+        raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
+    if error == "not_found":
+        raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
+    if isinstance(error, str) and error:
+        raise ValueError(error)
+    if fallback is not None:
+        raise ValueError(fallback)
+
+
 @_serialize_approval_resolution
 def apply_approval_resolution(
     *,
@@ -817,6 +831,7 @@ def apply_approval_resolution(
     )
     persisted_rule = persist_policy is True or (persist_policy is None and scope != "artifact")
     local_once_fallback = False
+    native_policy_written = False
     if persisted_rule:
         store.ensure_policy_integrity_ready_for_write(
             harness=decision.harness if decision.harness != "*" else None,
@@ -824,6 +839,7 @@ def apply_approval_resolution(
             now=resolved_at,
         )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
+        native_policy_written = True
         if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
@@ -847,6 +863,7 @@ def apply_approval_resolution(
             resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
+        native_policy_written = True
         if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
@@ -892,6 +909,23 @@ def apply_approval_resolution(
             approval_gate_grant=resolved_gate_grant,
             now=resolved_at,
         )
+        preview, _preview_ids = store.apply_temporary_mcp_grant_resolution(
+            request_id=request_id,
+            decisions=[temporary_decision],
+            selection=temporary_mcp_selection,
+            reason=reason,
+            resolved_at=resolved_at,
+            approval_gate_grant=resolved_gate_grant,
+            commit_resolution=False,
+        )
+        if preview.get("policy_written") is not True:
+            _raise_temporary_mcp_resolution_error(
+                preview,
+                request_id=request_id,
+                fallback="temporary_mcp_grant_not_written",
+            )
+        if not _await_saved_approval_native_snapshot(store):
+            raise ValueError("native_policy_snapshot_unacknowledged")
         temporary_mcp_result, temporary_mcp_resolved_ids = store.apply_temporary_mcp_grant_resolution(
             request_id=request_id,
             decisions=[temporary_decision],
@@ -901,13 +935,11 @@ def apply_approval_resolution(
             approval_gate_grant=resolved_gate_grant,
         )
         if temporary_mcp_result.get("resolved") is not True:
-            error = temporary_mcp_result.get("error")
-            if error == "already_resolved":
-                raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
-            if error == "not_found":
-                raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
-            if isinstance(error, str) and error:
-                raise ValueError(error)
+            _raise_temporary_mcp_resolution_error(
+                temporary_mcp_result,
+                request_id=request_id,
+                fallback=None,
+            )
     if local_tool_selection is not None:
         local_tool_decision = local_tool_grant_decision(
             harness=str(request["harness"]),
@@ -924,6 +956,13 @@ def apply_approval_resolution(
             resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
+        native_policy_written = True
+
+    # The waiting hook observes this resolution and then revalidates the
+    # original action against the acknowledged native snapshot. Keep the
+    # request pending until that snapshot is current.
+    if native_policy_written and not _await_saved_approval_native_snapshot(store):
+        raise ValueError("native_policy_snapshot_unacknowledged")
 
     resolution_harness = None if scope == "global" else str(request["harness"])
     resolve_matching_scope_requests = (
@@ -1929,6 +1968,23 @@ def _approval_once_policy_expires_at(resolved_at: str) -> str:
     return (parsed + _APPROVAL_ONCE_POLICY_TTL).isoformat()
 
 
+_LOCAL_APPROVAL_NATIVE_PUBLICATION_TIMEOUT_SECONDS = 8.0
+
+
+def _await_saved_approval_native_snapshot(store: GuardStore) -> bool:
+    """Publish the saved decision before a waiting hook can observe it."""
+
+    from .native_policy_snapshot import await_registered_native_policy_publication
+
+    published = await_registered_native_policy_publication(
+        Path(store.guard_home),
+        timeout_seconds=_LOCAL_APPROVAL_NATIVE_PUBLICATION_TIMEOUT_SECONDS,
+    )
+    if not published:
+        _LOGGER.warning("Native policy snapshot was not acknowledged before resolving the approval")
+    return published
+
+
 def _record_local_once_approval(
     store: GuardStore,
     *,
@@ -1949,6 +2005,49 @@ def _record_local_once_approval(
         expires_at=decision.expires_at or _approval_once_policy_expires_at(created_at),
     )
     return approval_id is not None
+
+
+def _read_cloud_review_recovery_health(store: GuardStore) -> dict[str, object] | None:
+    from .sqlite_cloud_review_recovery import read_cloud_review_recovery_health
+
+    return read_cloud_review_recovery_health(store)
+
+
+def _read_cloud_review_recovery_repair(store: GuardStore) -> dict[str, object]:
+    """Read a repair that was already recorded. Failure leaves the recovery sentence in place."""
+
+    try:
+        from .sqlite_cloud_review_recovery import read_cloud_review_recovery_repair
+
+        return read_cloud_review_recovery_repair(store)
+    except Exception as repair_error:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Guard could not read the current-binding Cloud repair: %s",
+            type(repair_error).__name__,
+        )
+        return {"status": "unavailable", "reason": "repair_check_failed"}
+
+
+def _runtime_cloud_state_detail_with_recovery(
+    cloud_state: str,
+    *,
+    recovery_detail: str,
+    oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
+    connect_retry_refresh_race: bool = False,
+    shared_proof_recorded: bool = False,
+) -> str:
+    if recovery_detail and not oauth_repair_required and not connect_retry_required:
+        return recovery_detail
+    return _runtime_cloud_state_detail(
+        cloud_state,
+        oauth_repair_required=oauth_repair_required,
+        connect_retry_required=connect_retry_required,
+        connect_retry_refresh_race=connect_retry_refresh_race,
+        shared_proof_recorded=shared_proof_recorded,
+    )
 
 
 def _build_runtime_cloud_context(
@@ -1983,6 +2082,12 @@ def _build_runtime_cloud_context(
         connect_retry_required=connect_retry_required,
     )
     dashboard_url, inbox_url, fleet_url, connect_url = _resolve_guard_urls(sync_url)
+    recovery_health = _read_cloud_review_recovery_health(store)
+    repair_status = _read_cloud_review_recovery_repair(store)
+    recovery_summary = recovery_health.get("summary") if recovery_health is not None else ""
+    recovery_detail = "" if repair_status.get("status") == "completed" else recovery_summary
+    if not isinstance(recovery_detail, str):
+        recovery_detail = ""
     sync_health = _build_cloud_sync_health(
         store,
         cloud_profile is not None,
@@ -2008,19 +2113,26 @@ def _build_runtime_cloud_context(
         "cloud_workspace_id": cloud_workspace_id,
         "cloud_state": cloud_state,
         "cloud_state_label": _runtime_cloud_state_label(cloud_state),
-        "cloud_state_detail": _runtime_cloud_state_detail(
+        "cloud_state_detail": _runtime_cloud_state_detail_with_recovery(
             cloud_state,
+            recovery_detail=recovery_detail if isinstance(recovery_detail, str) else "",
             oauth_repair_required=oauth_repair_required,
             connect_retry_required=connect_retry_required,
             connect_retry_refresh_race=connect_retry_refresh_race,
             shared_proof_recorded=bool(sync_summary) or remote_payload_active,
         ),
+        "cloud_review_recovery": recovery_health,
+        "cloud_review_recovery_repair": {
+            "reason": repair_status.get("reason"),
+            "status": repair_status.get("status"),
+        },
         "cloud_sync_health": sync_health,
         "cloud_pairing_state": {
             "state": cloud_state,
             "label": _runtime_cloud_state_label(cloud_state),
-            "detail": _runtime_cloud_state_detail(
+            "detail": _runtime_cloud_state_detail_with_recovery(
                 cloud_state,
+                recovery_detail=recovery_detail if isinstance(recovery_detail, str) else "",
                 oauth_repair_required=oauth_repair_required,
                 connect_retry_required=connect_retry_required,
                 connect_retry_refresh_race=connect_retry_refresh_race,

@@ -20137,46 +20137,49 @@ function ApprovalProofFieldInputs(props) {
     if (!props.requireGate && props.approvalGate.enabled === false) return null;
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalGateSetupNotice, {});
   }
-  if (!props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
+  if (!props.requirePassword && !props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
   }
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: passwordFieldId, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        ref: props.passwordRef,
-        id: passwordFieldId,
-        type: "password",
-        autoComplete: "current-password",
-        name: "password",
-        enterKeyHint: "done",
-        value: props.approvalPassword,
-        onChange: props.onApprovalPasswordChange,
-        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-      }
-    )
-  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: totpFieldId, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        id: totpFieldId,
-        type: "text",
-        inputMode: "numeric",
-        pattern: "[0-9]*",
-        maxLength: 6,
-        autoComplete: "one-time-code",
-        name: "one-time-code",
-        enterKeyHint: "done",
-        autoFocus: true,
-        "aria-required": "true",
-        value: props.approvalTotpCode,
-        onChange: handleTotpChange,
-        className: "mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-      }
-    )
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    needsPassword || props.requirePassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: passwordFieldId, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          ref: props.passwordRef,
+          id: passwordFieldId,
+          type: "password",
+          autoComplete: "current-password",
+          name: "password",
+          enterKeyHint: "done",
+          value: props.approvalPassword,
+          onChange: props.onApprovalPasswordChange,
+          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      )
+    ] }) : null,
+    !needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", htmlFor: totpFieldId, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          id: totpFieldId,
+          type: "text",
+          inputMode: "numeric",
+          pattern: "[0-9]*",
+          maxLength: 6,
+          autoComplete: "one-time-code",
+          name: "one-time-code",
+          enterKeyHint: "done",
+          autoFocus: !needsPassword && !props.requirePassword,
+          "aria-required": "true",
+          value: props.approvalTotpCode,
+          onChange: handleTotpChange,
+          className: "mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+        }
+      )
+    ] }) : null
   ] }) });
 }
 function ApprovalProofInline(props) {
@@ -32853,29 +32856,29 @@ export {
   waitForCloudConnection as a7,
   activeFailedHarnesses as a8,
   resetRepairOutcomeTracker as a9,
-  clearReviewQueue as aA,
-  revokeApprovalGateCooldown as aB,
-  disableApprovalGateTotp as aC,
-  importSettings as aD,
-  resetSettings as aE,
-  enrollApprovalGateTotp as aF,
-  verifyApprovalGateTotp as aG,
-  clearEvidence as aH,
-  exportDiagnostics as aI,
-  repairApprovalCenter as aJ,
-  exportSettings as aK,
-  setupDesktopNotifications as aL,
-  WorkspacePageHeader as aM,
-  HiMiniMagnifyingGlass as aN,
-  humanizeList as aO,
-  isProtectionPosture as aP,
-  deriveProtectionPosture as aQ,
-  Tag as aR,
-  approvalGateCooldownLabel as aS,
-  fetchLocalCliApi as aT,
-  HiMiniNoSymbol as aU,
-  useResolvedApprovalGate as aV,
-  HiMiniInformationCircle as aW,
+  revokeApprovalGateCooldown as aA,
+  disableApprovalGateTotp as aB,
+  importSettings as aC,
+  resetSettings as aD,
+  enrollApprovalGateTotp as aE,
+  verifyApprovalGateTotp as aF,
+  clearEvidence as aG,
+  exportDiagnostics as aH,
+  repairApprovalCenter as aI,
+  exportSettings as aJ,
+  setupDesktopNotifications as aK,
+  WorkspacePageHeader as aL,
+  HiMiniMagnifyingGlass as aM,
+  humanizeList as aN,
+  isProtectionPosture as aO,
+  deriveProtectionPosture as aP,
+  Tag as aQ,
+  approvalGateCooldownLabel as aR,
+  fetchLocalCliApi as aS,
+  HiMiniNoSymbol as aT,
+  useResolvedApprovalGate as aU,
+  HiMiniInformationCircle as aV,
+  buildApprovalProofCredentials as aW,
   GenIcon as aX,
   HiMiniGlobeAlt as aY,
   HiMiniCube as aZ,
@@ -32900,12 +32903,12 @@ export {
   HiMiniArrowPath as ar,
   ApprovalProofFieldInputs as as,
   isApprovalProofSubmitDisabled as at,
-  buildApprovalProofCredentials as au,
-  changeCloudReviewSettings as av,
-  resolveProtectionLevelCopy as aw,
-  fetchSettings as ax,
-  fetchRuntimeSnapshot as ay,
-  clearPolicy as az,
+  changeCloudReviewSettings as au,
+  resolveProtectionLevelCopy as av,
+  fetchSettings as aw,
+  fetchRuntimeSnapshot as ax,
+  clearPolicy as ay,
+  clearReviewQueue as az,
   HiMiniCommandLine as b,
   __vitePreload as b$,
   FaWindows as b0,

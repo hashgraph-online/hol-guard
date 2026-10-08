@@ -21,6 +21,7 @@ from ..review_contracts import (
 )
 from ..store import GuardStore
 from ..synced_policy import validated_synced_policy_bundle
+from .cloud_review_request_purpose import canonical_request_kind
 from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from .env_wrapper import parse_env_wrapper
 
@@ -266,7 +267,7 @@ def _local_request_snapshot_items_for_status(
         snapshot_item: dict[str, object] = {
             "claim": claim,
             "localRequestId": request_id,
-            "requestKind": str(item.get("harness") or "guard-review"),
+            "requestKind": canonical_request_kind(item) or str(item.get("harness") or "guard-review"),
             "requestPayload": _cloud_safe_local_request_payload(
                 item,
                 redaction_level=redaction_level,

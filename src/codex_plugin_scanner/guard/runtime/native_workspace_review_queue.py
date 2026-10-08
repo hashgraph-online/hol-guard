@@ -147,16 +147,13 @@ def execute_native_workspace_review_command(
     guard_home = getattr(store, "guard_home", None)
     if not isinstance(guard_home, Path):
         raise ValueError("native_workspace_review_not_enrolled")
-    try:
-        applied = apply_native_workspace_review_decision(
-            store,
-            guard_home,
-            command.local_request_id,
-            command.envelope,
-            resolved_at=generated_at,
-        )
-    except NativeWorkspaceReviewError as error:
-        raise ValueError(error.code) from error
+    applied = apply_native_workspace_review_decision(
+        store,
+        guard_home,
+        command.local_request_id,
+        command.envelope,
+        resolved_at=generated_at,
+    )
     resolution_action = applied.get("resolution_action")
     if resolution_action not in {"allow", "block"}:
         raise ValueError("native_workspace_review_response_invalid")

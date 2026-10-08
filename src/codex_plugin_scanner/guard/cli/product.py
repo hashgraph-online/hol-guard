@@ -368,18 +368,50 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         oauth_repair_required=oauth_repair_required,
         connect_retry_required=connect_retry_required,
     )
+    cloud_state_detail = _cloud_state_detail(
+        cloud_state,
+        connect_url,
+        dashboard_url,
+        oauth_repair_required=oauth_repair_required,
+        connect_retry_required=connect_retry_required,
+        connect_retry_refresh_race=connect_retry_refresh_race,
+        shared_proof_recorded=bool(sync_summary) or remote_payload_active,
+    )
+    recovery_health, recovery_repair = _cloud_review_recovery_surface(store)
+    recovery_summary = recovery_health.get("summary") if isinstance(recovery_health, dict) else ""
+    from ..runtime.cloud_review_sync import _load_sync_state, classify_cloud_review_worker
+
+    cloud_review_worker = classify_cloud_review_worker(
+        _load_sync_state(store),
+        sync_configured=bool(
+            cloud_profile is not None and cloud_profile.get("workspace_id") and cloud_profile.get("sync_url")
+        ),
+    )
+    recovery_applied = (
+        recovery_repair.get("status") != "completed"
+        and isinstance(recovery_summary, str)
+        and bool(recovery_summary)
+        and not oauth_repair_required
+        and not connect_retry_required
+    )
+    if recovery_applied:
+        cloud_state_detail = recovery_summary
+    elif not oauth_repair_required and not connect_retry_required:
+        if cloud_review_worker == "dead":
+            cloud_state_detail = "Cloud Review delivery is paused because the sync worker stopped."
+        elif cloud_review_worker == "missing":
+            cloud_state_detail = "Cloud Review delivery has not started on this device."
+        elif cloud_review_worker == "unknown":
+            cloud_state_detail = "Cloud Review delivery status is not confirmed."
+        elif cloud_review_worker == "failing":
+            cloud_state_detail = "Decision saved. Guard is retrying delivery."
     return {
         "cloud_state": cloud_state,
         "cloud_state_label": _cloud_state_label(cloud_state),
-        "cloud_state_detail": _cloud_state_detail(
-            cloud_state,
-            connect_url,
-            dashboard_url,
-            oauth_repair_required=oauth_repair_required,
-            connect_retry_required=connect_retry_required,
-            connect_retry_refresh_race=connect_retry_refresh_race,
-            shared_proof_recorded=bool(sync_summary) or remote_payload_active,
-        ),
+        "cloud_state_detail": cloud_state_detail,
+        "cloud_review_recovery": recovery_health,
+        "cloud_review_recovery_repair": recovery_repair,
+        "cloud_review_worker": cloud_review_worker,
         "sync_url": sync_url,
         "dashboard_url": dashboard_url,
         "inbox_url": inbox_url,
@@ -572,6 +604,28 @@ def _resolve_guard_urls(sync_url: str | None) -> tuple[str, str, str, str]:
         f"{origin}/guard/inbox",
         f"{origin}/guard/protect",
     )
+
+
+def _cloud_review_recovery_surface(store: GuardStore) -> tuple[dict[str, object] | None, dict[str, object]]:
+    """Read the persisted recovery record. This does not create consent or authority."""
+
+    from ..sqlite_cloud_review_recovery import (
+        read_cloud_review_recovery_health,
+        read_cloud_review_recovery_repair,
+    )
+
+    try:
+        health = read_cloud_review_recovery_health(store)
+        repair = read_cloud_review_recovery_repair(store)
+    except Exception as repair_error:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Guard could not read Cloud Review recovery status: %s",
+            type(repair_error).__name__,
+        )
+        return None, {"status": "unavailable", "reason": "repair_check_failed"}
+    return health, {"status": repair.get("status"), "reason": repair.get("reason")}
 
 
 def _cloud_state_label(cloud_state: str) -> str:

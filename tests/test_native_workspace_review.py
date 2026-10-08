@@ -79,7 +79,11 @@ def _status() -> SimpleNamespace:
         available=True,
         compatible=True,
         identity=SimpleNamespace(path=Path("/native/hol-guard-runtime")),
-        capabilities=SimpleNamespace(features=("resident-protocol-v2", "native-workspace-review-decision-v1")),
+        capabilities=SimpleNamespace(features=(
+            "resident-protocol-v2",
+            "native-workspace-review-decision-v1",
+            "native-workspace-review-consumption-query-v1",
+        )),
     )
 
 
@@ -253,6 +257,363 @@ def test_apply_reconciles_native_claim_into_local_queue(
     assert result["decision"] == "allow"
     assert result["resolution_action"] == "allow"
     assert store.request["status"] == "resolved"
+
+
+def _verified_body(*, digest: str, replayed: bool) -> bytes:
+    return json.dumps(
+        {
+            "status": "replayed" if replayed else "verified",
+            "replayed": replayed,
+            "request_id": "request-1",
+            "decision": "allow",
+            "claim_id": "a" * 64,
+            "envelope_digest": "b" * 64,
+            "request_snapshot_digest": digest,
+        }
+    ).encode("utf-8")
+
+
+def _bind_native_client(monkeypatch: pytest.MonkeyPatch, responder) -> None:
+    from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
+    monkeypatch.setattr(native, "native_resident_client_failure_context", lambda: None)
+
+    monkeypatch.setattr(native, "native_runtime_status", _status)
+    monkeypatch.setattr(native, "_isolated_environment", lambda: {})
+
+    def request(**kwargs: object) -> bytes | None:
+        encoded = responder(kwargs)
+        if encoded is None:
+            code = kwargs.get("failure_code")
+            if isinstance(code, str):
+                record_native_resident_client_failure_code(code)
+        return encoded
+
+    monkeypatch.setattr(native, "native_resident_client_request", request)
+
+
+@pytest.mark.parametrize(
+    ("code", "retryable", "certainty"),
+    [
+        ("native_overloaded", True, "pre_commit"),
+        ("native_overloaded", False, "unknown"),
+        ("future_native_error", True, "unknown"),
+    ],
+)
+def test_only_authenticated_dispatch_overload_proves_precommit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: str, retryable: bool, certainty: str
+) -> None:
+    store = _Store(_request())
+    _bind_native_client(
+        monkeypatch, lambda _kwargs: json.dumps({"error": code, "retryable": retryable}).encode()
+    )
+    with pytest.raises(native.NativeWorkspaceReviewError) as failure:
+        native.apply_native_workspace_review_decision(store, tmp_path, "request-1", {"signed": "envelope"})
+    assert failure.value.call_stage == "read"
+    assert failure.value.commit_certainty == certainty
+    assert store.request["status"] == "pending"
+
+
+
+
+def test_structured_overload_does_not_apply_or_resend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
+
+    store = _Store(_request())
+    store.guard_home = tmp_path
+    payloads: list[bytes] = []
+
+    def responder(kwargs: dict[str, object]) -> bytes | None:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        payloads.append(payload)
+        kwargs["failure_code"] = "native_overloaded"
+        return json.dumps({"error": "native_overloaded", "retryable": True}).encode("utf-8")
+
+    _bind_native_client(monkeypatch, responder)
+    result = execute_guard_command_job(
+        {
+            "operation": "guard.review.resolveExact",
+            "payload": {
+                "envelope": {"signed": "native-envelope"},
+                "localRequestId": "request-1",
+                "receiptId": "receipt-1",
+            },
+        },
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-10-04T05:00:00+00:00",
+    )
+    assert result["failureCode"] == "native_overloaded"
+    assert "status" not in result
+    assert store.request["status"] == "pending"
+    assert len(payloads) == 1
+
+
+def test_stream_loss_reconciles_the_consumed_decision_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _Store(_request())
+    resolutions: list[bool] = []
+    original_resolve = store.resolve_native_workspace_review_request
+
+    def resolve(request_id: str, **kwargs: object) -> dict[str, object]:
+        resolutions.append(kwargs.get("native_replayed") is True)
+        return original_resolve(request_id, **kwargs)
+
+    store.resolve_native_workspace_review_request = resolve  # type: ignore[method-assign]
+
+    consumptions = 0
+
+    def responder(kwargs: dict[str, object]) -> bytes | None:
+        nonlocal consumptions
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        operation = json.loads(payload)["operation"]
+        if operation == "workspace_review_decision":
+            consumptions += 1
+            kwargs["failure_code"] = "native_client_stream_write_failed"
+            return None
+        guard_home = kwargs["guard_home"]
+        assert isinstance(guard_home, Path)
+        if consumptions == 0:
+            return json.dumps({"status": "unknown"}).encode()
+        return _verified_body(digest=_staged_digest(guard_home, "request-1"), replayed=True)
+
+    _bind_native_client(monkeypatch, responder)
+    result = native.apply_native_workspace_review_decision(
+        store,
+        tmp_path,
+        "request-1",
+        {"signed": "native-envelope"},
+    )
+    assert result["status"] == "replayed"
+    assert result["native_replayed"] is True
+    assert store.request["status"] == "resolved"
+    assert resolutions == [True]
+    assert consumptions == 1
+
+@pytest.mark.parametrize("query_status", ["unknown", "verified", "malformed"])
+def test_unconfirmed_consumption_never_resends_or_applies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, query_status: str
+) -> None:
+    store = _Store(_request())
+    consumptions = 0
+
+    def responder(kwargs: dict[str, object]) -> bytes | None:
+        nonlocal consumptions
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        operation = json.loads(payload)["operation"]
+        if operation == "workspace_review_decision":
+            consumptions += 1
+            kwargs["failure_code"] = "native_frame_read_failed"
+            return None
+        if query_status == "unknown":
+            return json.dumps({"status": "unknown"}).encode()
+        if query_status == "malformed":
+            return b"not-a-native-response"
+        guard_home = kwargs["guard_home"]
+        assert isinstance(guard_home, Path)
+        return _verified_body(digest=_staged_digest(guard_home, "request-1"), replayed=False)
+
+    _bind_native_client(monkeypatch, responder)
+    with pytest.raises(native.NativeWorkspaceReviewError, match="native_frame_read_failed") as error:
+        native.apply_native_workspace_review_decision(
+            store, tmp_path, "request-1", {"signed": "native-envelope"}
+        )
+    assert error.value.commit_certainty == "unknown"
+    assert store.request["status"] == "pending"
+    assert consumptions == 1
+
+
+def test_old_runtime_cannot_reconcile_by_consuming_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _Store(_request())
+    consumptions = 0
+    queries = 0
+
+    def responder(kwargs: dict[str, object]) -> bytes | None:
+        nonlocal consumptions, queries
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        if json.loads(payload)["operation"] == "workspace_review_decision":
+            consumptions += 1
+        else:
+            queries += 1
+        kwargs["failure_code"] = "native_frame_read_failed"
+        return None
+
+    _bind_native_client(monkeypatch, responder)
+    old_status = _status()
+    old_status.capabilities.features = ("resident-protocol-v2", "native-workspace-review-decision-v1")
+    monkeypatch.setattr(native, "native_runtime_status", lambda: old_status)
+    with pytest.raises(native.NativeWorkspaceReviewError, match="native_frame_read_failed"):
+        native.apply_native_workspace_review_decision(
+            store, tmp_path, "request-1", {"signed": "native-envelope"}
+        )
+    assert store.request["status"] == "pending"
+    assert consumptions == 1
+    assert queries == 0
+
+
+
+@pytest.mark.parametrize("replayed", [False, True])
+def test_post_consumption_reverify_failure_cannot_be_reported_as_precommit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replayed: bool
+) -> None:
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
+
+    store = _Store(_request())
+    store.guard_home = tmp_path
+    native.stage_workspace_review_request(store, tmp_path, "request-1")
+    digest = _staged_digest(tmp_path, "request-1")
+    store.request.update(status="resolved", resolution_action="allow")
+    store.sync_payloads[native.NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "request-1"] = {
+        "request_id": "request-1",
+        "request_snapshot_digest": digest,
+    }
+    if replayed:
+        store.resolve_native_workspace_review_request = (  # type: ignore[method-assign]
+            lambda *_args, **_kwargs: {"resolved": False, "error": "native_workspace_review_apply_failed"}
+        )
+    def consumed_response(_kwargs: dict[str, object]) -> bytes:
+        return _verified_body(digest=digest, replayed=replayed)
+
+    _bind_native_client(monkeypatch, consumed_response)
+    result = execute_guard_command_job(
+        {
+            "operation": "guard.review.resolveExact",
+            "payload": {
+                "envelope": {"signed": "native-envelope"},
+                "localRequestId": "request-1",
+                "receiptId": "receipt-1",
+            },
+        },
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-10-04T05:00:00+00:00",
+    )
+    assert result["failureCode"] == (
+        "native_workspace_review_apply_failed" if replayed else "native_workspace_review_decision_replay"
+    )
+    assert result["callStage"] == "verify"
+    assert result["commitCertainty"] == "committed"
+    assert store.request["status"] == "resolved"
+
+
+def test_unconfirmed_query_security_rejection_does_not_apply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _Store(_request())
+    calls = 0
+
+    def responder(kwargs: dict[str, object]) -> bytes | None:
+        nonlocal calls
+        calls += 1
+        kwargs["failure_code"] = "native_client_stream_write_failed" if calls == 1 else "native_client_auth_rejected"
+        return None
+
+    _bind_native_client(monkeypatch, responder)
+    with pytest.raises(native.NativeWorkspaceReviewError, match="native_client_auth_rejected"):
+        native.apply_native_workspace_review_decision(
+            store,
+            tmp_path,
+            "request-1",
+            {"signed": "native-envelope"},
+        )
+    assert store.request["status"] == "pending"
+
+
+def test_repeated_stream_loss_keeps_the_original_unknown_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _Store(_request())
+    calls = 0
+
+    def responder(kwargs: dict[str, object]) -> bytes | None:
+        nonlocal calls
+        calls += 1
+        kwargs["failure_code"] = "native_frame_write_failed"
+        return None
+
+    _bind_native_client(monkeypatch, responder)
+    with pytest.raises(native.NativeWorkspaceReviewError, match="native_frame_write_failed"):
+        native.apply_native_workspace_review_decision(
+            store,
+            tmp_path,
+            "request-1",
+            {"signed": "native-envelope"},
+        )
+    assert store.request["status"] == "pending"
+
+
+def test_expired_native_proof_does_not_apply_or_resend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
+
+    store = _Store(_request())
+    store.guard_home = tmp_path
+    payloads: list[bytes] = []
+
+    def responder(kwargs: dict[str, object]) -> bytes | None:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        payloads.append(payload)
+        return json.dumps({"error": "native_workspace_review_decision_expired", "retryable": False}).encode("utf-8")
+
+    _bind_native_client(monkeypatch, responder)
+    result = execute_guard_command_job(
+        {
+            "operation": "guard.review.resolveExact",
+            "payload": {
+                "envelope": {"signed": "native-envelope"},
+                "localRequestId": "request-1",
+                "receiptId": "receipt-1",
+            },
+        },
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-10-04T05:00:00+00:00",
+    )
+    assert result["failureCode"] == "native_workspace_review_decision_expired"
+    assert "status" not in result
+    assert store.request["status"] == "pending"
+    assert len(payloads) == 1
+
+
+def test_second_grant_replay_error_does_not_apply_or_resend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
+
+    store = _Store(_request())
+    store.guard_home = tmp_path
+    payloads: list[bytes] = []
+
+    def responder(kwargs: dict[str, object]) -> bytes | None:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        payloads.append(payload)
+        return json.dumps({"error": "native_workspace_review_decision_replay"}).encode("utf-8")
+
+    _bind_native_client(monkeypatch, responder)
+    result = execute_guard_command_job(
+        {
+            "operation": "guard.review.resolveExact",
+            "payload": {
+                "envelope": {"signed": "native-envelope"},
+                "localRequestId": "request-1",
+                "receiptId": "receipt-1",
+            },
+        },
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-10-04T05:00:00+00:00",
+    )
+    assert result["failureCode"] == "native_workspace_review_decision_replay"
+    assert "status" not in result
+    assert store.request["status"] == "pending"
+    assert len(payloads) == 1
 
 
 def test_signed_deny_is_block_to_real_waiter_and_grok_harness(

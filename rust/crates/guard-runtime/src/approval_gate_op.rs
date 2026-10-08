@@ -40,8 +40,9 @@ fn gate_factor_generation(state: &Value) -> i64 {
 /// `OnceLock` initialises once per resident process; `Mutex` inside
 /// `ApprovalGateGrants` supplies the `_APPROVAL_GATE_LOCK` discipline.
 static APPROVAL_GATE_GRANTS: OnceLock<ApprovalGateGrants> = OnceLock::new();
+pub(crate) static PRIVILEGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn grants() -> &'static ApprovalGateGrants {
+pub(crate) fn grants() -> &'static ApprovalGateGrants {
     APPROVAL_GATE_GRANTS.get_or_init(ApprovalGateGrants::new)
 }
 
@@ -163,6 +164,13 @@ fn request_digest(request: &ApprovalGateRequestV1) -> Result<String, &'static st
 }
 
 fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV1> {
+    let _privilege_lock = PRIVILEGE_LOCK.lock().map_err(|_| {
+        err(
+            "native_approval_gate_unavailable",
+            "Approval gate lock is unavailable.",
+            503,
+        )
+    })?;
     if request.schema != APPROVAL_GATE_REQUEST_SCHEMA {
         return Err(err(
             "native_approval_gate_schema_mismatch",

@@ -6,6 +6,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from codex_plugin_scanner.guard.approval_gate import public_config, update_settings
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_contracts import (
@@ -24,6 +25,9 @@ from tests.guard_review_signing_helpers import (
     review_verification_keys,
     sign_review_payload,
 )
+
+NATIVE_CLOUD_REVIEW_TEST_PASSWORD = "cloud-review-native-test-pass"
+
 
 
 def connected_exact_review_store(
@@ -62,6 +66,15 @@ def connected_exact_review_store(
         review_trusted_keyring_payload(workspace_id="workspace-1"),
         now,
     )
+    if not public_config(store.guard_home).configured:
+        update_settings(
+            store.guard_home,
+            {
+                "enabled": True,
+                "new_password": NATIVE_CLOUD_REVIEW_TEST_PASSWORD,
+                "confirm_password": NATIVE_CLOUD_REVIEW_TEST_PASSWORD,
+            },
+        )
     return store
 
 

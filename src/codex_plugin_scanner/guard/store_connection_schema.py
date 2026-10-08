@@ -438,6 +438,20 @@ class StoreConnectionSchemaMixin:
                     # These independent stores recover atomically within their own
                     # authority boundary; a CLI failure must not discard Review.
                     self._last_sqlite_recovery_details = {"cloud_review": cloud_restored, "local_cli": cli_restored}
+                    try:
+                        from .sqlite_cloud_review_recovery import persist_cloud_review_recovery_health
+
+                        persist_cloud_review_recovery_health(
+                            self,
+                            cloud_review=cloud_restored,
+                            local_cli=cli_restored,
+                            now=quarantined_at.isoformat(),
+                        )
+                    except Exception as health_error:
+                        _store_logger.warning(
+                            "Guard could not record cloud review recovery health: %s",
+                            type(health_error).__name__,
+                        )
                     if cloud_restored or cli_restored:
                         self._last_sqlite_recovery = "reinitialized_salvaged"
                     else:

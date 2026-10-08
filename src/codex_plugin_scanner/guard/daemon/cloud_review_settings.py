@@ -6,12 +6,16 @@ import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timezone
 
-from ..approval_gate import input_from_mapping, public_config, require_high_risk
+from ..approval_gate import input_from_mapping, public_config
 from ..runtime.exact_cloud_review import (
     ExactCloudReviewError,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
     exact_cloud_review_status,
+)
+from ..sqlite_cloud_review_recovery import (
+    read_cloud_review_recovery_health,
+    read_cloud_review_recovery_repair,
 )
 from ..store import GuardStore
 
@@ -40,6 +44,8 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     sync = sync if isinstance(sync, dict) else {}
     recovery = store.get_sync_payload(_RECOVERY_KEY)
     recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
+    recovery_health = read_cloud_review_recovery_health(store)
+    recovery_repair = read_cloud_review_recovery_repair(store)
     return {
         "enabled": status.get("enabled") is True,
         "connected": profile is not None and binding is not None,
@@ -57,6 +63,11 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
             else None
         ),
         "delivery_state": sync.get("state", "idle"),
+        "cloud_review_recovery": recovery_health,
+        "cloud_review_recovery_repair": {
+            "status": recovery_repair.get("status"),
+            "reason": recovery_repair.get("reason"),
+        },
         "approval_gate": public_config(store.guard_home).to_dict(),
     }
 
@@ -74,14 +85,6 @@ def change_cloud_review_settings(
         raise CloudReviewSettingsError("confirmation_required", "Confirm this Cloud Review change.")
     if type(payload.get("include_held_requests", False)) is not bool:
         raise CloudReviewSettingsError("invalid_recovery_scope", "Choose whether to include held requests.")
-    _ = require_high_risk(
-        store.guard_home,
-        purpose="protection_lifecycle",
-        approval_gate_input=input_from_mapping(payload),
-        action=f"cloud-review.{action}",
-        scope="local-protection",
-        subject="exact-cloud-review",
-    )
     requeued = 0
     adopted = 0
     activation_error = None
@@ -97,7 +100,13 @@ def change_cloud_review_settings(
                 raise CloudReviewSettingsError(
                     "connection_changed", "The connected workspace changed. Refresh before confirming."
                 )
-            _ = enable_exact_cloud_review(store, issuer="local-dashboard")
+            factors = input_from_mapping(payload)
+            _ = enable_exact_cloud_review(
+                store,
+                issuer="local-dashboard",
+                password=factors.password if factors is not None else None,
+                totp_code=factors.totp_code if factors is not None else None,
+            )
             store.set_sync_payload(
                 _RECOVERY_KEY,
                 {"binding": binding, "error": "pending_request_requeue_failed"},

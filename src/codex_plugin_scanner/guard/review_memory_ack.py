@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 from .review_contracts import GuardReviewOAuthMetadata
 
@@ -15,11 +16,14 @@ def build_decision_memory_ack(
     *,
     bundle: dict[str, object],
     oauth: GuardReviewOAuthMetadata,
+    machine_installation_id: str,
     status: str,
     applied_rule_count: int,
     reason: str | None = None,
     rejected_rule_ids: list[str] | None = None,
 ) -> dict[str, object]:
+    if str(UUID(machine_installation_id)) != machine_installation_id:
+        raise ValueError("decision_memory_transport_owner_invalid")
     return {
         "acknowledgedAt": _now().isoformat(),
         "appliedRuleCount": max(0, applied_rule_count),
@@ -28,7 +32,7 @@ def build_decision_memory_ack(
         "contractVersion": _DECISION_MEMORY_ACK_CONTRACT_VERSION,
         "deviceId": oauth.device_id,
         "machineId": oauth.machine_id,
-        "machineInstallationId": oauth.installation_id,
+        "machineInstallationId": machine_installation_id,
         "policyVersion": bundle.get("policyVersion"),
         "reason": reason,
         "rejectedRuleIds": rejected_rule_ids or [],

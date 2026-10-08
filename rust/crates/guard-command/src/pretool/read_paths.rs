@@ -1,21 +1,59 @@
+const SENSITIVE_SYSTEM_ROOTS: [&str; 7] = [
+    "/etc",
+    "/dev",
+    "/proc",
+    "/sys",
+    "/var",
+    "/private/etc",
+    "/private/var",
+];
+
+fn sensitive_system_root_prefix(lowered: &str) -> Option<&'static str> {
+    SENSITIVE_SYSTEM_ROOTS
+        .iter()
+        .copied()
+        .filter(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
+        .max_by_key(|prefix| prefix.len())
+}
+
+fn matches_sensitive_system_root(lowered: &str) -> bool {
+    sensitive_system_root_prefix(lowered).is_some()
+}
+
+/// A verified project may live under `/var` or `/private/var` on macOS, where
+/// `$TMPDIR` canonicalizes from `/var/folders` to `/private/var/folders`.
+/// Containment there is not permission to read that root, its first child
+/// (`/var/tmp`, `/private/var/folders`), or `/etc`, `/dev`, `/proc`, `/sys`,
+/// or `/private/etc`.
+fn inside_verified_project_scope(canonical: &std::path::Path, root: Option<&str>) -> bool {
+    let Some(root) = root else {
+        return false;
+    };
+    let Ok(scope) = std::fs::canonicalize(root) else {
+        return false;
+    };
+    if !scope.is_dir() || (canonical != scope && !canonical.starts_with(&scope)) {
+        return false;
+    }
+    let rendered = scope.to_string_lossy().replace('\\', "/");
+    let lowered = rendered.to_ascii_lowercase();
+    let Some(prefix) = sensitive_system_root_prefix(&lowered) else {
+        return true;
+    };
+    if !matches!(prefix, "/var" | "/private/var") || lowered == prefix {
+        return false;
+    }
+    let rest = lowered[prefix.len()..].trim_start_matches('/');
+    rest.split('/').filter(|part| !part.is_empty()).count() >= 2
+}
+
 pub(super) fn safe_read_target(argument: &str) -> bool {
     let Some(normalized) = lexical_read_path(argument) else {
         return false;
     };
     let lowered = normalized.to_ascii_lowercase();
-    const ROOTS: [&str; 7] = [
-        "/etc",
-        "/dev",
-        "/proc",
-        "/sys",
-        "/var",
-        "/private/etc",
-        "/private/var",
-    ];
     if lowered.starts_with('/')
-        || ROOTS
-            .iter()
-            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
+        || matches_sensitive_system_root(&lowered)
         || lowered.starts_with('~')
         || super::sensitive_command(argument)
         || super::sensitive_command(&normalized)
@@ -432,19 +470,11 @@ fn resolved_path_allowed_for_operation(
 ) -> bool {
     let rendered = canonical.to_string_lossy().replace('\\', "/");
     let lowered = rendered.to_ascii_lowercase();
-    const ROOTS: [&str; 7] = [
-        "/etc",
-        "/dev",
-        "/proc",
-        "/sys",
-        "/var",
-        "/private/etc",
-        "/private/var",
-    ];
-    if (!verified_temporary
-        && ROOTS
-            .iter()
-            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
+    let under_sensitive_root = !verified_temporary && matches_sensitive_system_root(&lowered);
+    let inside_verified_project = under_sensitive_root
+        && (inside_verified_project_scope(canonical, cwd)
+            || inside_verified_project_scope(canonical, home_dir));
+    if (under_sensitive_root && !inside_verified_project)
         || foreign_user_home(canonical, home_dir, cwd)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
         || guard_secure_fs::credential_named_path(canonical)

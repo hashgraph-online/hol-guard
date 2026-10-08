@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from ..action_lattice import coerce_guard_action
 from ..package_firewall_entitlement import resolve_package_firewall_entitlement
+from ..secrets.public_rule_catalog import public_output_family_label
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -319,11 +320,11 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
         and isinstance(request_signals, list)
         and "tool output contains credential-looking material" in request_signals
     ):
-        secret_source = artifact.metadata.get("secret_source_family")
-        if isinstance(secret_source, str) and secret_source.strip():
+        source_label = public_output_family_label(artifact.metadata.get("secret_source_family"))
+        if source_label is not None:
             return (
                 "HOL Guard blocked this tool output because it contains sensitive content from "
-                f"{secret_source.strip()}. The command already ran; review the flagged output "
+                f"{source_label}. The command already ran; review the flagged output "
                 "in the approval center before trusting it."
             )
         request_summary = artifact.metadata.get("runtime_request_summary")

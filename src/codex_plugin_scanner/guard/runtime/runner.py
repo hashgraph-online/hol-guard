@@ -2285,6 +2285,7 @@ def sync_receipts(
     auth_refresh_retried = False
     persisted_command_detail_backfill_marker = command_detail_backfill_marker
     for receipt_batch in _iter_receipt_sync_batches(receipts):
+        before_send = _receipt_disclosure_before_send(store, receipt_batch, redaction_level)
         body = json.dumps(
             {
                 "receipts": _cloud_sync_receipts_payload(
@@ -2308,6 +2309,7 @@ def sync_receipts(
                 request=request,
                 timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
                 retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+                before_send=before_send,
             )
         except urllib.error.HTTPError as error:
             if error.code == 401:
@@ -2329,6 +2331,7 @@ def sync_receipts(
                             request=request,
                             timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
                             retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+                            before_send=before_send,
                         )
                     except urllib.error.HTTPError as retry_error:
                         if retry_error.code == 401:
@@ -3188,6 +3191,17 @@ def sync_supply_chain_bundle(
     return summary
 
 
+def _held_native_activity_event(event: dict[str, object]) -> bool:
+    """Keep a native activity event queued when projection itself failed."""
+
+    payload = event.get("payload")
+    if not isinstance(payload, dict):
+        return False
+    inner = payload.get("payload")
+    candidate = inner if isinstance(inner, dict) else payload
+    return candidate.get("receiptKind") == "native_policy_decision"
+
+
 def sync_guard_events(
     store: GuardStore,
     *,
@@ -3201,8 +3215,24 @@ def sync_guard_events(
     total_events = 0
     total_accepted = 0
     synced_at = _now()
+    projection_eligibility = None
+    try:
+        from .native_activity_projection import (
+            project_native_policy_activity,
+            sendable_guard_cloud_events,
+        )
+
+        projection_eligibility = project_native_policy_activity(store).eligibility
+    except Exception as error:
+        store.set_sync_payload(
+            "native_activity_projection_error",
+            {"errorType": type(error).__name__},
+            synced_at,
+        )
+        sendable_guard_cloud_events = None
+    after: tuple[str, str] | None = None
     while True:
-        pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
+        pending_events = store.list_guard_events_v1(uploaded=False, limit=200, after=after)
         if not pending_events:
             if (
                 total_events == 0
@@ -3212,7 +3242,25 @@ def sync_guard_events(
             ):
                 return previous_summary
             break
-        body = json.dumps({"events": [event["payload"] for event in pending_events]}).encode("utf-8")
+        ready_events = (
+            sendable_guard_cloud_events(
+                store,
+                pending_events,
+                eligibility=projection_eligibility,
+            )
+            if sendable_guard_cloud_events is not None
+            else [event for event in pending_events if not _held_native_activity_event(event)]
+        )
+        if not ready_events:
+            if len(pending_events) < 200:
+                break
+            last = pending_events[-1]
+            cursor = (str(last["occurred_at"]), str(last["event_id"]))
+            if cursor == after:
+                break
+            after = cursor
+            continue
+        body = json.dumps({"events": [event["payload"] for event in ready_events]}).encode("utf-8")
         request = _guard_sync_request(
             resolved_auth_context,
             request_url=sync_url,
@@ -3291,10 +3339,27 @@ def sync_guard_events(
         completed_ids = _completed_guard_event_ids(payload)
         synced_at = _sync_timestamp(payload)
         uploaded = store.mark_guard_events_v1_uploaded(completed_ids, synced_at)
-        total_events += len(pending_events)
+        total_events += len(ready_events)
         total_accepted += uploaded
         if uploaded == 0 or len(pending_events) < 200:
             break
+        completed = set(completed_ids)
+        ready_ids = {str(event["event_id"]) for event in ready_events}
+        last_done: dict[str, object] | None = None
+        for event in pending_events:
+            event_id = str(event["event_id"])
+            if event_id not in ready_ids or event_id in completed:
+                last_done = event
+                continue
+            break
+        # A full page that still starts with an omitted ready event cannot
+        # advance. Posting it again in this sync would repeat the same request.
+        if last_done is None:
+            break
+        cursor = (str(last_done["occurred_at"]), str(last_done["event_id"]))
+        if cursor == after:
+            break
+        after = cursor
     summary: dict[str, object] = {"synced_at": synced_at, "events": total_events, "accepted": total_accepted}
     store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
     return summary
@@ -5018,6 +5083,7 @@ def _urlopen_with_sync_retries(
     retry_timeout_seconds: int,
     parse_json_response: bool,
     nonce_fast_path: bool,
+    before_send: Callable[[urllib.request.Request], None] | None = None,
 ) -> object:
     """Drive one Guard Cloud request through the shared sync retry policies.
 
@@ -5035,6 +5101,8 @@ def _urlopen_with_sync_retries(
     gateway_retry_count = 0
     while True:
         try:
+            if before_send is not None:
+                before_send(current_request)
             with managed_urlopen(current_request, timeout=current_timeout_seconds) as response:
                 if parse_json_response:
                     return json.loads(response.read().decode("utf-8"))
@@ -5101,6 +5169,7 @@ def _urlopen_json_with_timeout_retry(
     request: urllib.request.Request,
     timeout_seconds: int,
     retry_timeout_seconds: int,
+    before_send: Callable[[urllib.request.Request], None] | None = None,
 ) -> dict[str, object]:
     payload = _urlopen_with_sync_retries(
         request=request,
@@ -5108,6 +5177,7 @@ def _urlopen_json_with_timeout_retry(
         retry_timeout_seconds=retry_timeout_seconds,
         parse_json_response=True,
         nonce_fast_path=False,
+        before_send=before_send,
     )
     if not isinstance(payload, dict):
         raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
@@ -5943,6 +6013,44 @@ def _cloud_sync_receipt_action_command(envelope: dict[str, object], *, redaction
             return " ".join([sanitized_tool_name, *targets])
         return sanitized_tool_name
     return None
+
+
+def _receipt_disclosure_before_send(
+    store: GuardStore,
+    receipts: list[dict[str, object]],
+    redaction_level: str,
+) -> Callable[[urllib.request.Request], None]:
+    """Re-authorize optional raw source at the final network attempt."""
+
+    from ..memory_decision_outbox import policy_memory_source_for_receipt
+
+    rows = {row.get("receipt_id"): row for row in receipts}
+
+    def prepare(request: urllib.request.Request) -> None:
+        body = json.loads(request.data or b"{}")
+        authorization = request.get_header("Authorization", "")
+        access_token = authorization.removeprefix("DPoP ") if authorization.startswith("DPoP ") else None
+        for outgoing in body.get("receipts", []):
+            outgoing.pop("policyMemorySource", None)
+            for field in ("envelopeRedacted", "envelope_redacted", "metadata"):
+                prior = outgoing.get(field)
+                if isinstance(prior, dict):
+                    prior.pop("policyMemorySource", None)
+            receipt = rows.get(str(outgoing.get("receiptId") or ""))
+            if receipt is None:
+                continue
+            source = policy_memory_source_for_receipt(
+                store, receipt, redaction_level=redaction_level, access_token=access_token
+            )
+            if source is not None:
+                envelope = outgoing.get("envelopeRedacted")
+                if not isinstance(envelope, dict):
+                    envelope = {}
+                    outgoing["envelopeRedacted"] = envelope
+                envelope["policyMemorySource"] = source
+        request.data = json.dumps(body).encode("utf-8")
+
+    return prepare
 
 
 def _cloud_sync_receipt_payload(

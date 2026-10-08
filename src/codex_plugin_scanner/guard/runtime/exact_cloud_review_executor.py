@@ -8,6 +8,7 @@ from typing import cast
 from ..store import GuardStore
 from .exact_cloud_review import ExactCloudReviewError
 from .exact_cloud_review_apply import apply_exact_cloud_review
+from .native_cloud_review_executor import execute_native_cloud_review_delivery, is_native_cloud_review_payload
 from .native_workspace_review_queue import (
     execute_native_workspace_review_command,
     native_workspace_review_payload,
@@ -23,6 +24,11 @@ def execute_exact_cloud_review_operation(
     generated_at: str,
     resume_after_approval: ResumeAfterApproval,
 ) -> dict[str, object]:
+    if is_native_cloud_review_payload(payload):
+        return {
+            "data": execute_native_cloud_review_delivery(store, payload, generated_at=generated_at),
+            "generatedAt": generated_at,
+        }
     native_command = native_workspace_review_payload(payload)
     if native_command is not None:
         return {

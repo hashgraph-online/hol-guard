@@ -865,6 +865,20 @@ def test_emit_guard_payload_uses_adaptive_console_width(monkeypatch) -> None:
     assert "width" not in captured_kwargs
 
 
+def test_compact_hook_json_keeps_a_redacted_index_token_parseable(capsys) -> None:
+    credential = "tok" + "en"
+    reason = "--extra-index-url=https://index." + credential + "@pypi.example/simple"
+    render.emit_compact_hook_json({"decision": "deny", "reason": reason})
+
+    line = capsys.readouterr().out
+    parsed = json.loads(line)
+    assert parsed["decision"] == "deny"
+    assert credential not in line
+    assert "extra-index-url=*****" in line
+    assert line.endswith("\n")
+    assert line.count("\n") == 1
+
+
 def test_emit_guard_payload_redacts_sensitive_json_fields(capsys) -> None:
     emit_guard_payload(
         "status",

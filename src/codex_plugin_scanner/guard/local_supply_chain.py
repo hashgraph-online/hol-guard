@@ -2985,6 +2985,91 @@ def compose_current_package_policy_action(
     return most_restrictive_guard_action(*actions, unknown_action="block")
 
 
+_EXTERNAL_ARCHIVE_APPROVAL_GATE_CODES = frozenset(
+    {
+        "external_archive_network_unauthorized",
+        "external_tarball_source",
+    }
+)
+
+
+def _canonical_external_archive_gate_reason() -> dict[str, object]:
+    return {
+        "code": "external_tarball_source",
+        "message": "External tarball source requires review before any archive download.",
+        "severity": "medium",
+        "source": "guard-local",
+    }
+
+
+def _reasons_are_external_archive_approval_gate(reasons: object) -> bool:
+    if not isinstance(reasons, (list, tuple)) or not reasons:
+        return False
+    return all(
+        isinstance(reason, Mapping) and reason.get("code") in _EXTERNAL_ARCHIVE_APPROVAL_GATE_CODES
+        for reason in reasons
+    )
+
+
+def _approval_policy_context_for_external_archive_gate(context: dict[str, object]) -> dict[str, object]:
+    """Bind one approval to one archive request across the two gate encodings.
+
+    Native evaluation before download reports ``require-reapproval`` and
+    ``external_archive_network_unauthorized``, and its package omits source
+    identity fields. The inspection a saved allow authorizes reports
+    ``review`` and ``external_tarball_source`` for a clean archive. The
+    archive URL stays in the approval identity, so this encoding delta is not
+    a policy change. A block, advisory, or any other reason is left untouched.
+    """
+
+    if context.get("current_action") not in {"review", "require-reapproval"}:
+        return context
+    feed = context.get("feed")
+    if not isinstance(feed, dict) or feed.get("decision") != "ask":
+        return context
+    if feed.get("matched_advisory_ids"):
+        return context
+    if feed.get("policy_action") not in {"review", "require-reapproval"}:
+        return context
+    if not _reasons_are_external_archive_approval_gate(feed.get("reasons")):
+        return context
+    packages = feed.get("packages")
+    if not isinstance(packages, (list, tuple)) or not packages:
+        return context
+    normalized_packages: list[dict[str, object]] = []
+    for package in packages:
+        if not isinstance(package, Mapping):
+            return context
+        if package.get("decision") not in {None, "ask"}:
+            return context
+        if not _reasons_are_external_archive_approval_gate(package.get("reasons")):
+            return context
+        normalized = {
+            str(key): value
+            for key, value in package.items()
+            if key not in {"sourceIdentity", "sourceRepository", "sourceRevisionKind"}
+        }
+        normalized["decision"] = "ask"
+        normalized["reasons"] = [_canonical_external_archive_gate_reason()]
+        normalized_packages.append(normalized)
+    configuration = context.get("configuration")
+    additional = context.get("additional")
+    config_holds_action = isinstance(configuration, Mapping) and configuration.get("available") is True
+    additional_holds_action = isinstance(additional, Mapping) and additional.get("available") is True
+    current_action = "review" if not config_holds_action and not additional_holds_action else context["current_action"]
+    return {
+        **context,
+        "current_action": current_action,
+        "feed": {
+            **feed,
+            "decision": "ask",
+            "policy_action": "review",
+            "reasons": [_canonical_external_archive_gate_reason()],
+            "packages": normalized_packages,
+        },
+    }
+
+
 def _package_current_policy_context(
     *,
     artifact: GuardArtifact,
@@ -2994,18 +3079,20 @@ def _package_current_policy_context(
     additional_current_action: object | None = None,
     additional_policy_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    return {
-        "configuration": _package_config_policy_context(artifact=artifact, config=config),
-        "current_action": compose_current_package_policy_action(
-            artifact=artifact,
-            evaluation=evaluation,
-            config=config,
-            additional_current_action=additional_current_action,
-        ),
-        "additional": additional_policy_context if additional_policy_context is not None else {"available": False},
-        "feed": _package_policy_gate_context(store, artifact, evaluation),
-        "version": 1,
-    }
+    return _approval_policy_context_for_external_archive_gate(
+        {
+            "configuration": _package_config_policy_context(artifact=artifact, config=config),
+            "current_action": compose_current_package_policy_action(
+                artifact=artifact,
+                evaluation=evaluation,
+                config=config,
+                additional_current_action=additional_current_action,
+            ),
+            "additional": additional_policy_context if additional_policy_context is not None else {"available": False},
+            "feed": _package_policy_gate_context(store, artifact, evaluation),
+            "version": 1,
+        }
+    )
 
 
 def _package_request_artifact_hash(

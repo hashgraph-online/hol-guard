@@ -348,6 +348,33 @@ pub(super) fn wait_for_generation_containment(
     }
 }
 
+/// Remove generation files whose recorded process is already gone.
+///
+/// A stopper can be killed after the resident exits and before it unlinks the
+/// generation file. A later stop then fails to connect and must not leave that
+/// file in place. A live process keeps its file.
+pub(super) fn retire_dead_generations(scope: &Path, digest: &str) -> Result<bool, String> {
+    let states = discover_states(scope, digest)?;
+    for state in &states {
+        let identity = state_process_identity(state);
+        if process_is_alive(&identity)? {
+            continue;
+        }
+        let Ok(token) = token_from_state(state) else {
+            continue;
+        };
+        super::resident_state_retirement::retire_state(
+            scope,
+            state.generation,
+            state.process_id,
+            &state.process_start_marker,
+            digest,
+            &token,
+        );
+    }
+    Ok(discover_states(scope, digest)?.is_empty())
+}
+
 pub(super) fn wait_for_stop_containment(
     scope: &Path,
     digest: &str,

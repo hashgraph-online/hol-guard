@@ -4009,6 +4009,274 @@ clearer UX and an implementation plan with technical references.
         assert rc == 1
         assert output["approval_requests"]
 
+    def _run_codex_hook_with_stubbed_edge(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+        *,
+        event: dict[str, object],
+        edge,
+    ) -> tuple[int, dict[str, object]]:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        link_a = workspace_dir / "a"
+        link_b = workspace_dir / "b"
+        try:
+            link_a.symlink_to(link_b)
+            link_b.symlink_to(link_a)
+        except (NotImplementedError, OSError):
+            pytest.skip("filesystem does not support symlinks in this test environment")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        monkeypatch.setattr(
+            guard_commands_module,
+            "schedule_guard_daemon_ensure",
+            lambda _guard_home, **_kwargs: "http://127.0.0.1:4455",
+        )
+
+        def _edge(self, **_kwargs):
+            outcome = edge()
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.daemon.hook_worker.HookWorker.review_native_edge_decision",
+            _edge,
+        )
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        return rc, output
+
+    def test_codex_post_tool_missing_edge_still_blocks_symlink_loop_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        rc, output = self._run_codex_hook_with_stubbed_edge(
+            monkeypatch,
+            tmp_path,
+            capsys,
+            event={
+                "event": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rg TOKEN a/file.ts"},
+                "tool_response": {"stdout": "a/file.ts:1:auth_token=canary"},
+                "source_scope": "project",
+            },
+            edge=lambda: {
+                "event_name": "PostToolUse",
+                "harness": "codex",
+                "result": None,
+                "receipt": None,
+                "recording_only": False,
+                "failure_reason_code": "native_post_tool_unavailable",
+            },
+        )
+
+        assert rc == 1
+        assert output["approval_requests"]
+
+    def test_codex_post_tool_symlink_loop_runtime_error_still_blocks_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        rc, output = self._run_codex_hook_with_stubbed_edge(
+            monkeypatch,
+            tmp_path,
+            capsys,
+            event={
+                "event": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rg TOKEN a/file.ts"},
+                "tool_response": {"stdout": "a/file.ts:1:auth_token=canary"},
+                "source_scope": "project",
+            },
+            edge=lambda: RuntimeError("Symlink loop from path"),
+        )
+
+        assert rc == 1
+        assert output["approval_requests"]
+        assert output.get("reason_code") != "native_hook_worker_exception"
+
+    def test_codex_post_tool_unrelated_runtime_error_still_blocks_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        rc, output = self._run_codex_hook_with_stubbed_edge(
+            monkeypatch,
+            tmp_path,
+            capsys,
+            event={
+                "event": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rg TOKEN a/file.ts"},
+                "tool_response": {"stdout": "a/file.ts:1:auth_token=canary"},
+                "source_scope": "project",
+            },
+            edge=lambda: RuntimeError("worker bug"),
+        )
+
+        assert rc == 1
+        assert output["approval_requests"]
+        assert output.get("reason_code") != "native_hook_worker_exception"
+
+    def test_codex_post_tool_unrelated_runtime_error_on_clean_output_stays_worker_exception(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        rc, output = self._run_codex_hook_with_stubbed_edge(
+            monkeypatch,
+            tmp_path,
+            capsys,
+            event={
+                "event": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hello"},
+                "tool_response": {"stdout": "hello"},
+                "source_scope": "project",
+            },
+            edge=lambda: RuntimeError("worker bug"),
+        )
+
+        assert rc == 0
+        assert output["reason_code"] == "native_hook_worker_exception"
+        assert not output.get("approval_requests")
+
+    def test_codex_post_tool_missing_edge_continues_clean_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        rc, output = self._run_codex_hook_with_stubbed_edge(
+            monkeypatch,
+            tmp_path,
+            capsys,
+            event={
+                "event": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hello"},
+                "tool_response": {"stdout": "hello"},
+                "source_scope": "project",
+            },
+            edge=lambda: {
+                "event_name": "PostToolUse",
+                "harness": "codex",
+                "result": None,
+                "receipt": None,
+                "recording_only": False,
+                "failure_reason_code": "native_post_tool_unavailable",
+            },
+        )
+
+        assert rc == 0
+        assert output["reason_code"] == "native_post_tool_unavailable"
+        assert output["continue"] is True
+        assert not output.get("approval_requests")
+
+    def test_codex_post_tool_watch_only_missing_edge_does_not_queue_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        rc, output = self._run_codex_hook_with_stubbed_edge(
+            monkeypatch,
+            tmp_path,
+            capsys,
+            event={
+                "event": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rg TOKEN a/file.ts"},
+                "tool_response": {"stdout": "a/file.ts:1:auth_token=canary"},
+                "source_scope": "project",
+            },
+            edge=lambda: {
+                "event_name": "PostToolUse",
+                "harness": "codex",
+                "result": None,
+                "receipt": None,
+                "recording_only": True,
+                "failure_reason_code": "native_post_tool_unavailable",
+            },
+        )
+
+        assert rc == 0
+        assert output["reason_code"] == "native_post_tool_unavailable"
+        assert not output.get("approval_requests")
+
+    def test_codex_post_tool_symlink_loop_watch_only_does_not_queue_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.cli.commands_hook_native_pipeline.recording_only_from_acked_snapshot",
+            lambda _store: True,
+        )
+        rc, output = self._run_codex_hook_with_stubbed_edge(
+            monkeypatch,
+            tmp_path,
+            capsys,
+            event={
+                "event": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rg TOKEN a/file.ts"},
+                "tool_response": {"stdout": "a/file.ts:1:auth_token=canary"},
+                "source_scope": "project",
+            },
+            edge=lambda: RuntimeError("Symlink loop from path"),
+        )
+
+        assert rc == 0
+        assert output["reason_code"] == "native_post_tool_unavailable"
+        assert not output.get("approval_requests")
+
+    def test_codex_pre_tool_runtime_error_stays_a_worker_exception(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        rc, output = self._run_codex_hook_with_stubbed_edge(
+            monkeypatch,
+            tmp_path,
+            capsys,
+            event={
+                "event": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hello"},
+                "source_scope": "project",
+            },
+            edge=lambda: RuntimeError("Symlink loop from path"),
+        )
+
+        assert rc == 0
+        assert output["reason_code"] == "native_hook_worker_exception"
+        assert not output.get("approval_requests")
+
     def test_sync_runtime_session_treats_missing_runtime_endpoint_as_non_fatal(
         self,
         monkeypatch,

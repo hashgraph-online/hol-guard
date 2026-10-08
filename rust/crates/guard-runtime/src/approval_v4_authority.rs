@@ -20,6 +20,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+#[path = "approval_v4_lineage.rs"]
+pub(super) mod lineage;
+pub(crate) use lineage::{challenge_matches_authority, verify_renewal_authority};
+#[path = "approval_v4_install.rs"]
+mod install;
+pub(crate) use install::install_record;
+
 pub(super) const AUTHORITY_FILE_NAME: &str = "approval-authority-v4.json";
 const AUTHORITY_MAX_BYTES: u64 = 32 * 1024;
 #[derive(Debug, Clone)]
@@ -33,6 +40,8 @@ pub(crate) struct ApprovalV4Authority {
     pub(crate) device_binding: String,
     pub(crate) installation_binding: String,
     pub(crate) enrollment_generation: u64,
+    previous_key_id: Option<String>,
+    enrollment_lineage: Arc<Vec<lineage::EnrollmentAncestor>>,
     pub(crate) status: String,
     pub(crate) path: PathBuf,
     pub(crate) fingerprint: String,
@@ -160,22 +169,22 @@ fn validate_record(record: &ApprovalAuthorityV4) -> Result<(Vec<u8>, Vec<u8>), S
 }
 
 fn secure_state_value(authority: &ApprovalV4Authority, sign_count: u32) -> Result<String, String> {
-    let state = SecureState {
-        schema: SECURE_STATE_SCHEMA.to_owned(),
-        version: SECURE_STATE_VERSION,
-        record_digest: authority.record_digest.clone(),
-        enrollment_generation: authority.enrollment_generation,
-        key_id: authority.key_id.clone(),
-        rp_id: authority.rp_id.clone(),
-        origin: authority.origin.clone(),
-        credential_id: hex::encode(&authority.credential_id),
-        cose_public_key: hex::encode(&authority.cose_public_key),
-        algorithm: authority.algorithm,
-        sign_count,
-    };
-    let value = serde_json::to_value(state)
-        .map_err(|_| "native_approval_v4_secure_state_invalid".to_owned())?;
-    let bytes = canonical_json_bytes(&value)
+    let state = serde_json::json!({
+        "schema": SECURE_STATE_SCHEMA,
+        "version": SECURE_STATE_VERSION,
+        "record_digest": authority.record_digest,
+        "enrollment_generation": authority.enrollment_generation,
+        "key_id": authority.key_id,
+        "rp_id": authority.rp_id,
+        "origin": authority.origin,
+        "credential_id": hex::encode(&authority.credential_id),
+        "cose_public_key": hex::encode(&authority.cose_public_key),
+        "algorithm": authority.algorithm,
+        "status": authority.status,
+        "enrollment_lineage": authority.enrollment_lineage.as_ref(),
+        "sign_count": sign_count,
+    });
+    let bytes = canonical_json_bytes(&state)
         .map_err(|_| "native_approval_v4_secure_state_invalid".to_owned())?;
     Ok(String::from_utf8(bytes).expect("canonical JSON is UTF-8"))
 }
@@ -196,7 +205,10 @@ fn read_secure_state_record(state_base: &Path) -> Result<Option<SecureState>, St
     Ok(Some(state))
 }
 
-fn read_secure_state(state_base: &Path, authority: &ApprovalV4Authority) -> Result<u32, String> {
+fn read_secure_state(
+    state_base: &Path,
+    authority: &ApprovalV4Authority,
+) -> Result<SecureState, String> {
     let state = read_secure_state_record(state_base)?
         .ok_or_else(|| "native_approval_v4_secure_state_unavailable".to_owned())?;
     if state.schema != SECURE_STATE_SCHEMA
@@ -208,11 +220,12 @@ fn read_secure_state(state_base: &Path, authority: &ApprovalV4Authority) -> Resu
         || state.origin != authority.origin
         || state.credential_id != hex::encode(&authority.credential_id)
         || state.cose_public_key != hex::encode(&authority.cose_public_key)
+        || state.status != authority.status
         || state.algorithm != authority.algorithm
     {
         return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
     }
-    Ok(state.sign_count)
+    Ok(state)
 }
 
 fn read_record(
@@ -243,7 +256,7 @@ pub(crate) fn load(state_base: &Path) -> Result<Option<ApprovalV4Authority>, Str
     super::approval_enrollment::with_transition_lock(state_base, || load_locked(state_base))
 }
 
-fn load_locked(state_base: &Path) -> Result<Option<ApprovalV4Authority>, String> {
+pub(super) fn load_locked(state_base: &Path) -> Result<Option<ApprovalV4Authority>, String> {
     let path = state_base.join(AUTHORITY_FILE_NAME);
     let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
     let Some((record, bytes)) = read_record(&path, &private_root)? else {
@@ -251,7 +264,7 @@ fn load_locked(state_base: &Path) -> Result<Option<ApprovalV4Authority>, String>
     };
     let (credential_id, cose_public_key) = validate_record(&record)?;
     let record_digest = guard_policy_snapshot::digest_bytes(&bytes);
-    let authority = ApprovalV4Authority {
+    let mut authority = ApprovalV4Authority {
         credential_id,
         cose_public_key,
         algorithm: record.algorithm,
@@ -261,6 +274,8 @@ fn load_locked(state_base: &Path) -> Result<Option<ApprovalV4Authority>, String>
         device_binding: record.device_binding,
         installation_binding: record.installation_binding,
         enrollment_generation: record.enrollment_generation,
+        previous_key_id: record.previous_key_id,
+        enrollment_lineage: Arc::new(Vec::new()),
         status: record.status,
         path: path.clone(),
         fingerprint: super::policy_store_authority::authority_fingerprint(&path)
@@ -270,166 +285,16 @@ fn load_locked(state_base: &Path) -> Result<Option<ApprovalV4Authority>, String>
         sign_count: Arc::new(Mutex::new(0)),
         assertions: Arc::new(Mutex::new(HashMap::new())),
     };
-    let counter = read_secure_state(state_base, &authority)?;
+    let state = read_secure_state(state_base, &authority)?;
     *authority
         .sign_count
         .lock()
-        .map_err(|_| "native_approval_v4_secure_state_unavailable".to_owned())? = counter;
+        .map_err(|_| "native_approval_v4_secure_state_unavailable".to_owned())? = state.sign_count;
+    authority.enrollment_lineage = Arc::new(state.enrollment_lineage);
     if authority.status == "revoked" {
         return Err("native_approval_v4_authority_revoked".to_owned());
     }
     Ok(Some(authority))
-}
-
-pub(crate) fn install_record(state_base: &Path, record_path: &Path) -> Result<(), String> {
-    super::approval_enrollment::with_transition_lock(state_base, || {
-        super::validate_private_directory(state_base)?;
-        let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
-        let Some((candidate, bytes)) = read_record(record_path, &private_root)? else {
-            return Err("native_approval_v4_authority_missing".to_owned());
-        };
-        let target = state_base.join(AUTHORITY_FILE_NAME);
-        let current = read_record(&target, &private_root)?;
-        let (candidate_credential_id, candidate_cose) = validate_record(&candidate)?;
-        let candidate_digest = guard_policy_snapshot::digest_bytes(&bytes);
-        if let Some((current, current_bytes)) = current.as_ref() {
-            if *current_bytes == bytes {
-                let (credential_id, cose_public_key) = validate_record(current)?;
-                let state = read_secure_state_record(state_base)?
-                    .ok_or_else(|| "native_approval_v4_secure_state_unavailable".to_owned())?;
-                if !secure_state_matches_record(
-                    &state,
-                    current,
-                    &guard_policy_snapshot::digest_bytes(current_bytes),
-                    &credential_id,
-                    &cose_public_key,
-                ) {
-                    return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
-                }
-                return Ok(());
-            }
-            if current.status == "revoked" {
-                return Err("native_approval_v4_authority_revoked".to_owned());
-            }
-            if candidate.enrollment_generation <= current.enrollment_generation
-                || (candidate.status == "active"
-                    && candidate.previous_key_id.as_deref() != Some(current.key_id.as_str()))
-                || (candidate.status == "revoked"
-                    && (candidate.key_id != current.key_id || candidate.previous_key_id.is_some()))
-            {
-                return Err("native_approval_v4_authority_generation_rollback".to_owned());
-            }
-            if candidate.device_binding != current.device_binding
-                || candidate.installation_binding != current.installation_binding
-                || candidate.rp_id != current.rp_id
-                || candidate.origin != current.origin
-            {
-                return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
-            }
-            if candidate.status == "revoked"
-                && (candidate.credential_id != current.credential_id
-                    || candidate.cose_public_key != current.cose_public_key
-                    || candidate.algorithm != current.algorithm)
-            {
-                return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
-            }
-        }
-        if let Some(existing) = super::approval_enrollment::load_unlocked(state_base)? {
-            if existing.device_binding != candidate.device_binding
-                || existing.installation_binding != candidate.installation_binding
-            {
-                return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
-            }
-            if existing.status == "revoked" {
-                return Err("native_approval_v4_authority_revoked".to_owned());
-            }
-        }
-        let existing_secure_state = read_secure_state_record(state_base)?;
-        if current.is_none()
-            && existing_secure_state.is_none()
-            && (candidate.enrollment_generation != 1 || candidate.status != "active")
-        {
-            return Err("native_approval_v4_authority_generation_rollback".to_owned());
-        }
-        // Write the counter record before the public authority file so an
-        // explicit enrollment attempt can recover an interrupted replacement.
-        let initial_counter = match existing_secure_state.as_ref() {
-            Some(state)
-                if secure_state_matches_record(
-                    state,
-                    &candidate,
-                    &candidate_digest,
-                    &candidate_credential_id,
-                    &candidate_cose,
-                ) =>
-            {
-                state.sign_count
-            }
-            _ => match current.as_ref() {
-                Some((current, current_bytes)) => {
-                    let (current_credential_id, current_cose) = validate_record(current)?;
-                    let state = existing_secure_state
-                        .as_ref()
-                        .ok_or_else(|| "native_approval_v4_secure_state_unavailable".to_owned())?;
-                    if !secure_state_matches_record(
-                        state,
-                        current,
-                        &guard_policy_snapshot::digest_bytes(current_bytes),
-                        &current_credential_id,
-                        &current_cose,
-                    ) {
-                        return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
-                    }
-                    0
-                }
-                None => match existing_secure_state.as_ref() {
-                    Some(state) => {
-                        if !secure_state_matches_record(
-                            state,
-                            &candidate,
-                            &candidate_digest,
-                            &candidate_credential_id,
-                            &candidate_cose,
-                        ) {
-                            return Err(
-                                "native_approval_v4_authority_generation_rollback".to_owned()
-                            );
-                        }
-                        state.sign_count
-                    }
-                    None => 0,
-                },
-            },
-        };
-        let authority = ApprovalV4Authority {
-            credential_id: candidate_credential_id,
-            cose_public_key: candidate_cose,
-            algorithm: candidate.algorithm,
-            rp_id: candidate.rp_id.clone(),
-            origin: candidate.origin.clone(),
-            key_id: candidate.key_id.clone(),
-            device_binding: candidate.device_binding.clone(),
-            installation_binding: candidate.installation_binding.clone(),
-            enrollment_generation: candidate.enrollment_generation,
-            status: candidate.status.clone(),
-            path: target.clone(),
-            fingerprint: String::new(),
-            record_digest: candidate_digest,
-            state_base: state_base.to_owned(),
-            sign_count: Arc::new(Mutex::new(initial_counter)),
-            assertions: Arc::new(Mutex::new(HashMap::new())),
-        };
-        let state = secure_state_value(&authority, initial_counter)?;
-        super::approval_v4_secure_state::store(state_base, &state)?;
-        super::policy_store_persistence::persist_private_bytes(
-            &target,
-            &bytes,
-            AUTHORITY_MAX_BYTES,
-            "approval_authority_v4",
-            &private_root,
-        )?;
-        Ok(())
-    })
 }
 
 pub(crate) use super::approval_v4_enrollment::prepare_enrollment;
@@ -459,6 +324,23 @@ pub(crate) fn advance_sign_count(
         *counter = candidate;
     }
     Ok(())
+}
+
+pub(crate) fn with_verified_authority<T, F>(
+    authority: &ApprovalV4Authority,
+    operation: F,
+) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    super::approval_enrollment::with_transition_lock(&authority.state_base, || {
+        let current = load_locked(&authority.state_base)?
+            .ok_or_else(|| "native_approval_v4_authority_missing".to_owned())?;
+        if current.status != "active" || current.fingerprint != authority.fingerprint {
+            return Err("native_approval_v4_authority_changed".to_owned());
+        }
+        operation()
+    })
 }
 
 pub(crate) use super::approval_v4_assertion_state::{

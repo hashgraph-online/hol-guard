@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 import uuid
 from io import StringIO
@@ -315,6 +316,86 @@ def test_legacy_channel_uses_real_configured_hook_and_persisted_rust_receipts(tm
     finally:
         daemon.stop()
         assert close_native_residents(context.guard_home, deadline_monotonic=time.monotonic() + 5)
+
+
+def _legacy_observation_without_daemon(tmp_path, monkeypatch):
+    with monkeypatch.context() as role_patch:
+        paths = codex_adapter._hook_packaged_file_paths
+        role_patch.setattr(
+            codex_adapter,
+            "_hook_packaged_file_paths",
+            lambda: tuple((role, path) for role, path in paths() if role not in {"hook_probe", "native_receipt"}),
+        )
+        context, workspace, store = installed_context(tmp_path)
+    load_or_create_installation_correlation_key(context.guard_home)
+    identity = NativeRuntimeIdentity(tmp_path / "fixture-native", 1, 1, "d" * 64)
+
+    def launch(argv, *, input_text, **kwargs):
+        payload = json.loads(input_text)
+        command = payload["tool_input"]["command"]
+        if command == "pwd":
+            stdout = json.dumps({"continue": True, "hookSpecificOutput": {"permissionDecision": "allow"}})
+        else:
+            stdout = json.dumps({"hookSpecificOutput": {"permissionDecision": "deny"}})
+        return BoundedHookProcessResult(0, stdout, False, False, stderr="")
+
+    monkeypatch.setattr(observer, "run_isolated_hook_process", launch)
+    return context, workspace, store, identity
+
+
+def test_legacy_probe_retries_a_locked_receipt_read(tmp_path, monkeypatch):
+    context, workspace, store, identity = _legacy_observation_without_daemon(tmp_path, monkeypatch)
+    reads = {"count": 0}
+
+    def read_receipt(store_arg, *, correlation, since, deadline_monotonic):
+        reads["count"] += 1
+        if reads["count"] in {1, 3}:
+            raise sqlite3.OperationalError("database is locked")
+        decision = "allow" if reads["count"] == 2 else "deny"
+        return _receipt(
+            harness="codex",
+            event_name="PreToolUse",
+            decision=decision,
+            policy_action="allow" if decision == "allow" else "block",
+            request_digest=("a" if decision == "allow" else "e") * 64,
+            runtime_identity=identity.sha256,
+            policy_generation=4,
+            policy_digest="b" * 64,
+        )
+
+    monkeypatch.setattr(observer, "read_legacy_codex_probe_receipt", read_receipt)
+    proof = observe(context, workspace, identity, time.monotonic() + 5, receipt_store=store)
+    assert reads["count"] == 4
+    assert proof.allow_receipt["decision"] == "allow"
+    assert proof.deny_receipt["decision"] == "deny"
+
+
+def test_legacy_probe_does_not_retry_corrupt_storage(tmp_path, monkeypatch):
+    context, workspace, store, identity = _legacy_observation_without_daemon(tmp_path, monkeypatch)
+    reads = {"count": 0}
+
+    def read_receipt(store_arg, *, correlation, since, deadline_monotonic):
+        reads["count"] += 1
+        raise sqlite3.DatabaseError("database disk image is malformed")
+
+    monkeypatch.setattr(observer, "read_legacy_codex_probe_receipt", read_receipt)
+    with pytest.raises(TransitionError, match="legacy_probe_storage_unavailable"):
+        observe(context, workspace, identity, time.monotonic() + 2, receipt_store=store)
+    assert reads["count"] == 1
+
+
+def test_legacy_probe_waits_out_a_lock_until_the_admission_deadline(tmp_path, monkeypatch):
+    context, workspace, store, identity = _legacy_observation_without_daemon(tmp_path, monkeypatch)
+    reads = {"count": 0}
+
+    def read_receipt(store_arg, *, correlation, since, deadline_monotonic):
+        reads["count"] += 1
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(observer, "read_legacy_codex_probe_receipt", read_receipt)
+    with pytest.raises(TransitionError, match="admission_deadline_expired"):
+        observe(context, workspace, identity, time.monotonic() + 1.2, receipt_store=store)
+    assert reads["count"] > 1
 
 
 @pytest.mark.parametrize(

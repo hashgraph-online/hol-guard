@@ -8,6 +8,7 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-fixtures")
         .join(format!("fixture-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("project")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     let project = root.join("project");

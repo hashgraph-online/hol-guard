@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -15,7 +16,10 @@ from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
     _action_envelope_json,
     _hook_action_envelope,
 )
-from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalidate_codex_live_allow
+from codex_plugin_scanner.guard.codex_live_decision_revalidation import (
+    revalidate_codex_live_allow,
+    review_live_codex_decision,
+)
 from codex_plugin_scanner.guard.daemon.hook_process_entrypoint import (
     _run_resident_hook_request,  # pyright: ignore[reportPrivateUsage]
 )
@@ -310,3 +314,126 @@ def test_first_exact_live_allow_revalidates_through_resident_worker(
         )
         is not None
     )
+
+
+def _review_call(
+    worker: object,
+    tmp_path: Path,
+    *,
+    claimed_saved_allow_hash: str | None = "approval-context-hash",
+    claimed_approval_request_id: str | None = "request-replay",
+) -> Mapping[str, object] | None:
+    return review_live_codex_decision(
+        worker,
+        hook_payload={"hook_event_name": "PreToolUse", "tool_name": "Read"},
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        claimed_saved_allow_hash=claimed_saved_allow_hash,
+        claimed_approval_request_id=claimed_approval_request_id,
+        deadline=123.0,
+    )
+
+
+def test_review_live_codex_decision_forwards_the_unconsumed_claim(tmp_path: Path) -> None:
+    observed: list[dict[str, object]] = []
+    allow = {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+
+    class _Worker:
+        def review_http_payload(self, **kwargs: object) -> dict[str, object]:
+            observed.append(dict(kwargs))
+            return allow
+
+    reviewed = _review_call(_Worker(), tmp_path)
+
+    assert reviewed == allow
+    assert observed == [
+        {
+            "payload": {"hook_event_name": "PreToolUse", "tool_name": "Read"},
+            "params": {"runtime-harness": ["codex"]},
+            "default_harness": "codex",
+            "home_dir": tmp_path / "home",
+            "guard_home": tmp_path / "guard-home",
+            "workspace": tmp_path / "workspace",
+            "deadline": 123.0,
+            "claim_saved_approval": False,
+            "claimed_saved_allow_hash": "approval-context-hash",
+            "claimed_approval_request_id": "request-replay",
+        }
+    ]
+
+
+@pytest.mark.parametrize("error", [TimeoutError(), OSError(), RuntimeError(), ValueError()])
+def test_review_live_codex_decision_returns_none_when_the_worker_fails(
+    tmp_path: Path,
+    error: Exception,
+) -> None:
+    class _Worker:
+        def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
+            raise error
+
+    assert _review_call(_Worker(), tmp_path) is None
+
+
+def test_review_live_codex_decision_rejects_a_non_mapping(tmp_path: Path) -> None:
+    class _Worker:
+        def review_http_payload(self, **_kwargs: object) -> str:
+            return "deny"
+
+    assert _review_call(_Worker(), tmp_path) is None
+
+
+def test_review_live_codex_decision_returns_none_without_a_review_method(tmp_path: Path) -> None:
+    assert _review_call(object(), tmp_path) is None
+
+
+def test_daemon_revalidation_uses_the_in_process_worker(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.daemon.server import (  # noqa: PLC0415
+        _GuardDaemonHandler,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    request, hook_payload, home_dir = _fixture(tmp_path)
+    observed: list[dict[str, object]] = []
+    guard_home = tmp_path / "guard-home"
+
+    class _Worker:
+        def review_http_payload(self, **kwargs: object) -> dict[str, object]:
+            observed.append(dict(kwargs))
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+
+    class _Store:
+        def __init__(self) -> None:
+            self.guard_home = guard_home
+
+    class _Daemon:
+        def __init__(self) -> None:
+            self.hook_worker = _Worker()
+            self.home_dir = home_dir
+            self.store = _Store()
+
+    daemon = _Daemon()
+
+    class _Handler:
+        def _daemon_server(self) -> _Daemon:
+            return daemon
+
+    started = time.monotonic()
+    authorized = _GuardDaemonHandler._revalidate_codex_live_allow(  # pyright: ignore[reportPrivateUsage]
+        _Handler(),  # type: ignore[arg-type]
+        request,
+        {"hook_input": json.dumps(hook_payload)},
+        claimed_saved_allow_hash="approval-context-hash",
+        claimed_approval_request_id="request-replay",
+    )
+    finished = time.monotonic()
+
+    assert authorized is True
+    assert len(observed) == 1
+    assert observed[0]["claim_saved_approval"] is False
+    assert observed[0]["claimed_saved_allow_hash"] == "approval-context-hash"
+    assert observed[0]["claimed_approval_request_id"] == "request-replay"
+    assert observed[0]["guard_home"] == guard_home
+    assert observed[0]["payload"] == hook_payload
+    deadline = observed[0]["deadline"]
+    assert isinstance(deadline, float)
+    assert started + 8.0 <= deadline <= finished + 8.0

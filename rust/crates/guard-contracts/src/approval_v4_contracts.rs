@@ -188,6 +188,49 @@ pub struct ApprovalArtifactV4 {
     pub webauthn: WebAuthnAssertionV4,
 }
 
+impl ApprovalArtifactV4 {
+    pub fn from_challenge(challenge: ApprovalChallengeV4, assertion: WebAuthnAssertionV4) -> Self {
+        Self {
+            schema: "guard-native-approval-artifact.v4".into(),
+            version: challenge.version,
+            request_id: challenge.request_id,
+            request_digest: challenge.request_digest,
+            action_digest: challenge.action_digest,
+            action_type: challenge.action_type,
+            operation: challenge.operation,
+            intrinsic_action: challenge.intrinsic_action,
+            minimum_action: challenge.minimum_action,
+            floor_class: challenge.floor_class,
+            approval_eligible: challenge.approval_eligible,
+            policy_generation: challenge.policy_generation,
+            policy_digest: challenge.policy_digest,
+            rule_digest: challenge.rule_digest,
+            runtime_identity: challenge.runtime_identity,
+            runtime_protocol_version: challenge.runtime_protocol_version,
+            runtime_package: challenge.runtime_package,
+            runtime_version: challenge.runtime_version,
+            runtime_binary_identity: challenge.runtime_binary_identity,
+            harness: challenge.harness,
+            workspace_binding: challenge.workspace_binding,
+            device_binding: challenge.device_binding,
+            installation_binding: challenge.installation_binding,
+            publisher_binding: challenge.publisher_binding,
+            artifact_binding: challenge.artifact_binding,
+            scope_contract_version: challenge.scope_contract_version,
+            scope_contract_digest: challenge.scope_contract_digest,
+            scope_binding: challenge.scope_binding,
+            resident_epoch: challenge.resident_epoch,
+            nonce: challenge.nonce,
+            issued_at_ms: challenge.issued_at_ms,
+            expires_at_ms: challenge.expires_at_ms,
+            requested_action: challenge.requested_action,
+            approved_action: "allow".into(),
+            signing_key_id: challenge.signing_key_id,
+            webauthn: assertion,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ApprovalReceiptV4 {

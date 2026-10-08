@@ -10,6 +10,11 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery as delivery
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
 from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import recover_rejected_review_events
+from codex_plugin_scanner.guard.sqlite_cloud_review_recovery import (
+    RECOVERY_HEALTH_STATE_KEY,
+    persist_cloud_review_recovery_health,
+    read_cloud_review_recovery_health,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
 
@@ -101,6 +106,66 @@ def test_canonical_upload_drains_real_immutable_outbox(monkeypatch: pytest.Monke
     assert isinstance(outbox, dict) and outbox["depth"] == 0
 
 
+def _auth_for(store: object) -> dict[str, object]:
+    binding = store.get_review_event_oauth_binding()
+    assert isinstance(binding, dict)
+    return {"oauth_source": "default", "sync_url": "https://guard.example", **binding}
+
+
+def test_idle_review_sync_keeps_incomplete_recovery(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    persist_cloud_review_recovery_health(
+        store,
+        cloud_review=False,
+        local_cli=False,
+        now="2026-10-04T05:00:00+00:00",
+    )
+    result = cloud_review_sync.sync_cloud_review_events_once(store, _auth_for(store))
+    assert result["synced"] == 0
+    health = read_cloud_review_recovery_health(store)
+    assert health is not None and health["reason"] == "recovery_incomplete"
+    assert store.get_sync_payload(RECOVERY_HEALTH_STATE_KEY) == health
+
+
+def test_accepted_review_batch_clears_incomplete_recovery(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    persist_cloud_review_recovery_health(
+        store,
+        cloud_review=False,
+        local_cli=False,
+        now="2026-10-04T05:00:00+00:00",
+    )
+    store.add_approval_request(review_request("request-recovered"), "2026-08-24T14:00:00+00:00")
+
+    def accept_batch(
+        _auth: dict[str, object],
+        *,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        del path
+        events = payload["events"]
+        assert isinstance(events, list) and len(events) == 1
+        event = events[0]
+        assert isinstance(event, dict)
+        return {
+            "protocolVersion": 2,
+            "acknowledgedThrough": event["localStreamSequence"],
+            "accepted": 1,
+            "rejected": 0,
+            "results": [{"eventId": event["eventId"], "status": "accepted"}],
+        }
+
+    monkeypatch.setattr(delivery, "_post_json", accept_batch)
+    result = cloud_review_sync.sync_cloud_review_events_once(store, _auth_for(store))
+    assert result["synced"] == 1
+    health = read_cloud_review_recovery_health(store)
+    assert health is not None
+    assert health["reason"] == "cloud_review_restored"
+    assert health["localCli"] is False
+    assert health["summary"] == ""
+
+
 def test_canonical_upload_uses_frozen_batch_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
@@ -170,9 +235,19 @@ def test_snapshot_collision_recovers_then_uploads_without_changing_event_or_deci
     monkeypatch.setattr(delivery, "_post_json", respond)
     auth: dict[str, object] = {"oauth_source": "default", "sync_url": "https://guard.example", **binding}
     first = cloud_review_sync.sync_cloud_review_events_once(store, auth)
-    assert first["synced"] == 1
+    assert first["synced"] == 0
+    assert len(captured) == 1
+    assert captured[0]["localStreamSequence"] == 2
+    with store._connect() as connection:
+        retained = connection.execute(
+            "select stream_sequence, acknowledged_at, binding_status from guard_review_outbox_events"
+        ).fetchone()
+    assert retained is not None
+    assert int(retained["stream_sequence"]) == 530
+    assert retained["acknowledged_at"] is None
+    assert retained["binding_status"] == "ready"
     second = cloud_review_sync.sync_cloud_review_events_once(store, auth)
-    assert second["synced"] == 0
+    assert second["synced"] == 1
     assert len(captured) == 2
     assert [event["localStreamSequence"] for event in captured] == [2, 530]
     for key in ("eventId", "eventPayloadJson", "payloadHash", "localRequestId", "localEventSequence"):

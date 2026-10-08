@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ...version import __version__
 from ..adapters.base import HarnessContext
+from ..native_runtime import native_runtime_status
 from ..store import GuardStore
 from .command_capability import (
     CommandCapabilityError,
@@ -162,6 +163,15 @@ def command_queue_lease_payload(
     }
     if schema_versions:
         capabilities["schemaVersions"] = schema_versions
+    if "guard.review.syncPolicyMemory" in operations:
+        native = native_runtime_status()
+        if (
+            native.available
+            and native.compatible
+            and native.capabilities is not None
+            and "guard.exact-command.v1" in native.capabilities.features
+        ):
+            capabilities["features"] = ["guard.exact-command.v1"]
     exact_only = operations == (EXACT_CLOUD_REVIEW_OPERATION,)
     payload: dict[str, object] = {
         "workspaceId": workspace_id,

@@ -425,6 +425,92 @@ fn verify_and_claim_at_mode(
     Ok(verified)
 }
 
+fn read_query_authority(
+    state_base: &Path,
+    time: u64,
+) -> Result<
+    (
+        VerifiedWorkspaceReviewAuthority,
+        super::workspace_review_secure_state::WorkspaceReviewSecureStateV1,
+    ),
+    String,
+> {
+    let state = super::workspace_review_secure_state::load(state_base)?
+        .ok_or_else(|| "native_workspace_review_secure_state_unavailable".to_owned())?;
+    if time < state.last_observed_time_ms {
+        return Err("native_workspace_review_clock_rollback".to_owned());
+    }
+    let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
+    let (value, bytes) = super::policy_store_persistence::read_private_json(
+        &state_base.join(super::workspace_review_authority::AUTHORITY_FILE_NAME),
+        guard_contracts::NATIVE_WORKSPACE_REVIEW_MAX_AUTHORITY_BYTES as u64,
+        "workspace_review_authority",
+        &private_root,
+    )
+    .map_err(|_| "native_workspace_review_authority_invalid".to_owned())?
+    .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
+    if canonical_json_bytes(&value)
+        .map_err(|_| "native_workspace_review_authority_invalid".to_owned())?
+        != bytes
+    {
+        return Err("native_workspace_review_authority_noncanonical".to_owned());
+    }
+    let record = serde_json::from_value(value)
+        .map_err(|_| "native_workspace_review_authority_invalid".to_owned())?;
+    let authority = super::workspace_review_authority::verify_record(&record, time)?;
+    if !state.matches_authority(&authority) || state.pending_authority_record.is_some() {
+        return Err("native_workspace_review_authority_provenance_mismatch".to_owned());
+    }
+    let enrollment = super::approval_enrollment::load_unlocked(state_base)?
+        .ok_or_else(|| "native_workspace_review_enrollment_required".to_owned())?;
+    if enrollment.status == "revoked" || authority.status != "active" {
+        return Err("native_workspace_review_authority_revoked".to_owned());
+    }
+    if enrollment.device_binding != authority.device_binding
+        || enrollment.installation_binding != authority.installation_binding
+    {
+        return Err("native_workspace_review_authority_provenance_mismatch".to_owned());
+    }
+    Ok((authority, state))
+}
+
+#[cfg(test)]
+fn query_consumption_at(
+    state_base: &Path,
+    envelope: &WorkspaceReviewDecisionEnvelopeV1,
+    context: &WorkspaceReviewDecisionContext<'_>,
+    time: u64,
+) -> Result<VerifiedWorkspaceReviewDecision, String> {
+    let (authority, state) = read_query_authority(state_base, time)?;
+    query_consumption_verified(state_base, envelope, context, time, &authority, &state)
+}
+
+fn query_consumption_verified(
+    state_base: &Path,
+    envelope: &WorkspaceReviewDecisionEnvelopeV1,
+    context: &WorkspaceReviewDecisionContext<'_>,
+    time: u64,
+    authority: &VerifiedWorkspaceReviewAuthority,
+    state: &super::workspace_review_secure_state::WorkspaceReviewSecureStateV1,
+) -> Result<VerifiedWorkspaceReviewDecision, String> {
+    let (mut verified, _) = verify_envelope_mode(
+        envelope,
+        authority,
+        context,
+        time,
+        NATIVE_WORKSPACE_REVIEW_DECISION_DELIVERY_RETRY_ONLY,
+    )?;
+    if verified.decision != "allow" {
+        return Err("native_workspace_review_decision_declined".to_owned());
+    }
+    let semantic = semantic_decision_digest(envelope)?;
+    if !claim_semantics::query_consumed_claim(state_base, state, &verified, &semantic)? {
+        return Err("native_workspace_review_consumption_unconfirmed".to_owned());
+    }
+    verified.replayed = true;
+    Ok(verified)
+}
+
 pub(crate) fn current_native_workspace_review_bindings(
     state_base: &Path,
     scope_digest: &str,
@@ -460,6 +546,7 @@ mod request_claim;
 pub(crate) use request_claim::claim_owned_business_request_at_for_test;
 #[cfg(test)]
 pub(crate) use request_claim::claim_owned_business_request_with_clock;
+pub(crate) use request_claim::query_request_consumption;
 pub(crate) use request_claim::verify_and_claim_request;
 #[allow(unused_imports)] // Private worker routing is not enabled yet.
 pub(crate) use request_claim::{claim_owned_business_request, claim_owned_business_request_with};

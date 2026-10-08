@@ -19,6 +19,10 @@ mod negative_tests {
     include!("approval_v4_negative_tests.rs");
 }
 
+mod cloud_review_tests {
+    include!("approval_v4_cloud_review_tests.rs");
+}
+
 fn cose_ed25519(public_key: &[u8]) -> Vec<u8> {
     let mut value = vec![0xa4, 0x01, 0x01, 0x03, 0x27, 0x20, 0x06, 0x21, 0x58, 0x20];
     value.extend_from_slice(public_key);

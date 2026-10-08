@@ -361,8 +361,7 @@ def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(
         lambda **_kwargs: None,
     )
     monkeypatch.setattr(
-        commands_hook_native_authority,
-        "_emit",
+        "codex_plugin_scanner.guard.cli.commands_support_interaction._emit",
         lambda _kind, payload, _json: emitted.append(payload),
     )
     guard_home = tmp_path / "guard-home"

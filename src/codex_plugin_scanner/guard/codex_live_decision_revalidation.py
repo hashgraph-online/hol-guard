@@ -97,4 +97,47 @@ def revalidate_codex_live_allow(
     }
 
 
-__all__ = ["FreshHookReviewer", "revalidate_codex_live_allow"]
+def review_live_codex_decision(
+    worker: object,
+    *,
+    hook_payload: dict[str, object],
+    workspace: Path | None,
+    home_dir: Path,
+    guard_home: Path,
+    claimed_saved_allow_hash: str | None,
+    claimed_approval_request_id: str | None,
+    deadline: float,
+) -> Mapping[str, object] | None:
+    """Revalidate on the daemon worker that already published native policy.
+
+    The isolated hook process reads extension-control authority under the
+    exclusive lease. That read waits out the live-decision budget while the
+    daemon publisher holds the lease, so the waiting hook keeps its deny
+    after Cloud has applied the decision. This worker already has the
+    acknowledged snapshot.
+    """
+
+    review = getattr(worker, "review_http_payload", None)
+    if not callable(review):
+        return None
+    try:
+        reviewed = review(
+            payload=hook_payload,
+            params={"runtime-harness": ["codex"]},
+            default_harness="codex",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+            deadline=deadline,
+            claim_saved_approval=False,
+            claimed_saved_allow_hash=claimed_saved_allow_hash,
+            claimed_approval_request_id=claimed_approval_request_id,
+        )
+    except (OSError, TimeoutError, RuntimeError, ValueError):
+        return None
+    if not isinstance(reviewed, Mapping):
+        return None
+    return reviewed
+
+
+__all__ = ["FreshHookReviewer", "revalidate_codex_live_allow", "review_live_codex_decision"]

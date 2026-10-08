@@ -24,7 +24,7 @@ from .codex_hook_launch_runtime import (
 )
 from .fork_safety import forget_in_child
 from .native_approval_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
-from .native_resident_stream import _PersistentNativeClient, _StreamFailure
+from .native_resident_stream import _LAST_CALL_CONTEXT, _PersistentNativeClient, _StreamFailure
 
 # Retain the old runner name as a test seam. Production always leaves this
 # binding untouched and uses the persistent Rust client below.
@@ -50,6 +50,11 @@ forget_in_child(_RESIDENTS)
 def native_resident_client_failure_code() -> str | None:
     """Return the current context's privacy-safe native failure code."""
     return _LAST_FAILURE_CODE.get()
+
+
+def native_resident_client_failure_context() -> tuple[str, str] | None:
+    """Return observed IPC stage and commit certainty for the current request."""
+    return _LAST_CALL_CONTEXT.get()
 
 
 def record_native_resident_client_failure_code(code: str | None) -> None:
@@ -526,6 +531,7 @@ def native_resident_client_request(
 ) -> bytes | None:
     """Send bounded bytes through a persistent Rust client stream."""
     _LAST_FAILURE_CODE.set(None)
+    _LAST_CALL_CONTEXT.set(("connect", "pre_commit"))
     if not payload or (deadline_monotonic is None and (timeout_seconds is None or timeout_seconds <= 0)):
         _LAST_FAILURE_CODE.set("native_client_request_invalid")
         return None
@@ -533,6 +539,8 @@ def native_resident_client_request(
         _LAST_FAILURE_CODE.set("native_client_request_invalid")
         return None
     if run_isolated_hook_process is not _legacy_run_isolated_hook_process:
+        # The isolated legacy seam does not expose how much input was delivered.
+        _LAST_CALL_CONTEXT.set(("read", "unknown"))
         return _legacy_native_resident_client_request(
             executable=executable,
             guard_home=guard_home,
@@ -564,6 +572,7 @@ __all__ = [
     "close_native_resident_clients",
     "close_native_residents",
     "native_resident_client_failure_code",
+    "native_resident_client_failure_context",
     "native_resident_client_ready",
     "native_resident_client_request",
     "native_resident_client_transport",

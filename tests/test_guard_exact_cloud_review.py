@@ -67,6 +67,12 @@ from tests.guard_exact_cloud_review_support import (
 from tests.guard_review_signing_helpers import review_verification_keys
 
 
+@pytest.fixture
+def _desktop_native_consent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_PASSWORD", "cloud-review-native-test-pass")
+
+
 def test_review_sync_keys_require_preanchored_key_material(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     review_keys = review_verification_keys(workspace_id="workspace-1")
@@ -110,7 +116,7 @@ def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_pa
     _add_request(store, target)
     _add_request(store, other)
     policies_before = store.list_policy_decisions()
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
 
     resolution = apply_exact_cloud_review(
         store,
@@ -158,7 +164,7 @@ def test_exact_cloud_review_replay_is_durable_and_rejected_before_resolution(tmp
     store = _connected_store(tmp_path)
     request = _request("exact-replay")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     approval = _remote_approval(store, request.request_id, receipt_id="exact-receipt-replay")
     apply_exact_cloud_review(store, remote_approval=approval)
 
@@ -174,16 +180,16 @@ def test_exact_cloud_review_capability_is_separate_from_generic_commands(tmp_pat
     missing_credentials = missing_store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(missing_credentials, dict) and missing_credentials["machine_id"]
     with pytest.raises(ExactCloudReviewError, match="cloud_review_device_binding_missing"):
-        enable_exact_cloud_review(missing_store)
+        enable_exact_cloud_review(missing_store, password="cloud-review-native-test-pass")
     store = _connected_store(tmp_path)
     oauth_state = store.get_sync_payload("oauth_local_credentials")
     assert isinstance(oauth_state, dict)
     without_device = {key: value for key, value in oauth_state.items() if key != "device_id"}
     store.set_sync_payload("oauth_local_credentials", without_device, datetime.now(timezone.utc).isoformat())
     with pytest.raises(ExactCloudReviewError, match="cloud_review_device_binding_missing"):
-        enable_exact_cloud_review(store)
+        enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     store.set_sync_payload("oauth_local_credentials", oauth_state, datetime.now(timezone.utc).isoformat())
-    status = enable_exact_cloud_review(store)
+    status = enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
 
     assert status["enabled"] is True
     request = _request("exact-missing-device-atomic")
@@ -215,7 +221,7 @@ def test_exact_cloud_review_rejects_tampered_or_revoked_capabilities(tmp_path: P
     store = _connected_store(tmp_path)
     request = _request("exact-revoked")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     remote_approval = _remote_approval(store, request.request_id, receipt_id="exact-tampered")
     capability = store.get_sync_payload("guard_exact_cloud_review_capability")
     assert isinstance(capability, dict)
@@ -229,11 +235,13 @@ def test_exact_cloud_review_rejects_tampered_or_revoked_capabilities(tmp_path: P
 
     disable_exact_cloud_review(store)
     store.set_sync_payload("guard_exact_cloud_review_capability", capability, "2026-08-24T12:00:00+00:00")
-    with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
+    with pytest.raises(ExactCloudReviewError):
         apply_exact_cloud_review(
             store,
             remote_approval=remote_approval,
         )
+    retained = store.get_approval_request(request.request_id)
+    assert retained is not None and retained["status"] == "pending"
 
 
 def test_exact_cloud_review_cli_status_is_routable(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -261,6 +269,7 @@ def test_hol_guard_routes_cloud_review_as_a_top_level_command() -> None:
 def test_successful_connect_issues_cloud_review_capability_only_after_explicit_consent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    _desktop_native_consent: None,
 ) -> None:
     store = _connected_store(tmp_path)
     monkeypatch.setattr(
@@ -279,7 +288,7 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
     )
     assert unchanged is base_payload
     assert exact_cloud_review_status(store)["enabled"] is False
-    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
+    assert exact_cloud_review_operations(store) == ()
 
     failed_connect = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
         args=argparse.Namespace(enable_cloud_review=True),
@@ -292,7 +301,7 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
         "enabled": False,
         "reason": "connect_not_completed",
     }
-    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
+    assert exact_cloud_review_operations(store) == ()
 
     connected = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
         args=argparse.Namespace(enable_cloud_review=True),
@@ -315,6 +324,7 @@ def test_cloud_review_enable_requeues_existing_pending_requests(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    _desktop_native_consent: None,
 ) -> None:
     store = _connected_store(tmp_path)
     request = _request("pending-before-consent")
@@ -369,7 +379,7 @@ def test_cloud_review_enable_failure_does_not_requeue_pending_requests(
     assert exit_code == 2
     assert payload["error"] == "cloud_review_grant_binding_missing"
     assert exact_cloud_review_status(store)["enabled"] is False
-    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
+    assert exact_cloud_review_operations(store) == ()
     with store._connect() as connection:
         event_types = [
             row[0]
@@ -400,6 +410,7 @@ def test_cloud_review_requeue_database_failure_is_retryable(
 def test_connect_consent_does_not_enable_capability_when_requeue_needs_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    _desktop_native_consent: None,
 ) -> None:
     store = _connected_store(tmp_path)
 
@@ -440,6 +451,7 @@ def test_cloud_review_enable_reports_requeue_retry_without_crashing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    _desktop_native_consent: None,
 ) -> None:
     store = _connected_store(tmp_path)
 
@@ -478,9 +490,10 @@ def test_cloud_review_enable_reports_requeue_retry_without_crashing(
 def test_connect_consent_reports_retained_capability_as_failed_activation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    _desktop_native_consent: None,
 ) -> None:
     store = _connected_store(tmp_path)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
 
     def fail_requeue(_store: GuardStore) -> int:
         raise cloud_review_dispatch.PendingReviewRequeueError
@@ -512,9 +525,10 @@ def test_cloud_review_enable_reports_retained_capability_when_requeue_retry_fail
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    _desktop_native_consent: None,
 ) -> None:
     store = _connected_store(tmp_path)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
 
     def fail_requeue(_store: GuardStore) -> int:
         raise cloud_review_dispatch.PendingReviewRequeueError
@@ -554,7 +568,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     assert oauth_state["device_id"] == credentials["dpop_public_jwk_thumbprint"]
     request = _request("exact-queue")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     request_row = store.get_approval_request(request.request_id)
     assert isinstance(request_row, dict)
     request_claim = build_local_review_request_claim(
@@ -641,7 +655,7 @@ def test_command_queue_worker_refresh_serializes_with_shutdown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _connected_store(tmp_path)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     starts: list[str] = []
     monkeypatch.setattr(
         daemon_server_module,

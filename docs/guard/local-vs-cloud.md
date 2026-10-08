@@ -131,6 +131,41 @@ and expire. State-changing jobs remain paused for one-job local approval. Use
 without disconnecting Cloud sync. See the full
 [Cloud command capability contract](./cloud-command-capability.md).
 
+### Cloud Review recovery in the local dashboard
+
+Settings → Cloud Review reports persisted local-data and Cloud recovery
+independently. The read-only `/v1/cloud-review` response includes
+`cloud_review_recovery` (`cloudReview`, `localCli`, `reason`, `repair`, `summary`)
+and `cloud_review_recovery_repair` (`status`, `reason`). A missing recovery
+record is `null`; it is not evidence of a completed recovery.
+
+If local recovery failed, **Open Data & repair** opens the maintenance settings.
+If local protection recovered but Cloud recovery failed, the dashboard offers
+**Restore this device's Cloud connection** when authenticated device binding is
+required. It does not claim both layers recovered or offer Cloud Review
+authorization while Cloud recovery remains incomplete.
+
+Restoring a connection does not grant Cloud Review consent. Enabling or restoring
+that consent requires a separate local password/TOTP confirmation, displayed
+inline in Cloud Review settings. Cancel or Escape clears the confirmation form
+and returns focus to its trigger without changing consent. Confirmation input
+is not saved in the URL or browser storage.
+
+Protocol-v2 failed exact-review results report observed native `callStage`
+(`connect`, `write`, `read`, `verify`) and `commitCertainty`
+(`pre_commit`, `unknown`, `committed`, `security_rejected`) when available.
+Failure before sending a request is distinct from losing a response after
+delivery. Failed or interrupted writes remain unknown; a verified native
+consumption followed by failed local application remains committed.
+Authenticated structured overload is pre-commit, not evidence of a denied
+business decision. An invalid success-result contract remains unknown.
+
+Portal preserves these fields in retry evidence and must not downgrade unknown
+or committed outcomes to a safe retry from a failure-code string. The fields
+do not themselves prove native execution or implement consumption
+reconciliation; a client-provided `reconciledUnconsumed` boolean is not proof.
+
+
 ## Guard Cloud for teams
 
 Team plans add shared ownership, managed Control Sets, routing, RBAC, billing,

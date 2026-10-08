@@ -629,7 +629,7 @@ pub(crate) fn verify_or_raise_locked(
         strict,
         used_cooldown,
         cooldown_expires_at,
-        accepted_counter.is_none(),
+        gate_input.password.is_some(),
         accepted_counter.is_some(),
         now,
     )

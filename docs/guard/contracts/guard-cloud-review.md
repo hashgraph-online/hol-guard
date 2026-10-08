@@ -49,7 +49,7 @@ This contract defines the active protocol 2 review boundary and its Local Guard 
 - `not-applicable-application-requires-not-applicable-delivery`: `if_equals_then_equals`.
 - `not-applicable-delivery-requires-not-applicable-application`: `if_equals_then_equals`.
 - `applied-continuation-requires-applied-application`: `if_in_then_equals`.
-- `not-applicable-continuation-requires-not-applicable-application`: `if_equals_then_equals`.
+- `not-applicable-continuation-requires-not-applicable-application`: `if_equals_then_in`.
 - `failed-continuation-requires-compatible-application`: `if_equals_then_in`.
 - `blocked-continuation-requires-block-decision`: `if_equals_then_equals`.
 
@@ -74,7 +74,7 @@ It must be attached to `localRequest`, `reviewRequest`, `decisionReceipt`, `deli
 
 ### deliveryStatus
 
-`none`, `queued`, `queued_offline`, `leased`, `applying`, `applied`, `rejected`, `failed`, `cancelled`, `not_applicable`
+`none`, `pending_auth`, `queued`, `queued_offline`, `leased`, `applying`, `applied`, `rejected`, `failed`, `cancelled`, `not_applicable`
 
 ### applicationStatus
 

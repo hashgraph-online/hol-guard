@@ -907,7 +907,9 @@ def test_ensure_guard_daemon_retires_authenticated_state_without_identity_before
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
     monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda _home, **_kwargs: "http://127.0.0.1:4782")
+    monkeypatch.setattr(
+        daemon_manager_module, "_adopt_existing_guard_daemon", lambda _home, **_kwargs: "http://127.0.0.1:4782"
+    )
     monkeypatch.setattr(daemon_manager_module, "_retire_duplicate_guard_daemons", lambda *_args, **_kwargs: None)
 
     assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"

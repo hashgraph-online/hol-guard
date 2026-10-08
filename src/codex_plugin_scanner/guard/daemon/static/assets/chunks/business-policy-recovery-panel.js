@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, as as ApprovalProofFieldInputs, A as ActionButton, at as isApprovalProofSubmitDisabled, au as buildApprovalProofCredentials } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, as as ApprovalProofFieldInputs, A as ActionButton, at as isApprovalProofSubmitDisabled, aW as buildApprovalProofCredentials } from "../guard-dashboard.js";
 function BusinessPolicyRecoveryPanel(props) {
   const [password, setPassword] = reactExports.useState("");
   const [totp, setTotp] = reactExports.useState("");

@@ -704,6 +704,36 @@ def test_installed_daemon_cleanup_preserves_finish_failure_after_stop_timeout(
     assert isinstance(caught.value.__cause__, ProbeError)
 
 
+def test_native_cleanup_stop_outlasts_resident_budget(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard import native_resident_client
+
+    native = tmp_path / "guard-home" / "native-runtime" / "resident-v3-0123456789abcdef"
+    native.mkdir(parents=True)
+    state = native / "generation-00000000000000000001.json"
+    state.write_text("{}", encoding="utf-8")
+    seen: list[float] = []
+
+    def stop_native_resident(**kwargs: object) -> bool:
+        seen.append(float(kwargs["timeout_seconds"]))
+        state.unlink()
+        return True
+
+    monkeypatch.setattr(native_resident_client, "close_native_residents", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(native_resident_client, "stop_native_resident", stop_native_resident)
+    monkeypatch.setattr(probe.time, "sleep", lambda _seconds: None)
+
+    class Identity:
+        path = Path("/bin/false")
+
+    probe._cleanup_native(Identity(), tmp_path / "guard-home")
+
+    assert seen == [probe._NATIVE_STOP_TIMEOUT_SECONDS]
+    assert probe._NATIVE_STOP_TIMEOUT_SECONDS > 2.0
+    assert not state.exists()
+
+
 def test_native_cleanup_retries_transient_resident_close(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard import native_resident_client
 

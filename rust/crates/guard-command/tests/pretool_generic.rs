@@ -51,6 +51,52 @@ fn grok_dual_event_labels_preserve_protected_and_conflicting_inputs() {
 }
 
 #[test]
+fn grok_same_command_aliases_are_not_ambiguous_and_conflicts_stay_blocked() {
+    let equivalent = evaluate_pre_tool_envelope(
+        "grok",
+        "PreToolUse",
+        &json!({
+            "hookEventName": "pre_tool_use",
+            "hook_event_name": "PreToolUse",
+            "toolName": "run_terminal_command",
+            "name": "run_terminal_command",
+            "toolInput": {"command": "pwd", "cmd": "pwd", "commands": ["pwd"]}
+        }),
+    );
+    assert_eq!(equivalent.minimum_action, "allow");
+    assert_ne!(equivalent.reason_code, "native_pre_tool_ambiguous_payload");
+
+    let argv = evaluate_pre_tool_envelope(
+        "grok",
+        "PreToolUse",
+        &json!({
+            "hookEventName": "PreToolUse",
+            "hook_event_name": "pre_tool_use",
+            "toolName": "run_terminal_command",
+            "toolInput": {"command": ["git", "status"]}
+        }),
+    );
+    assert_eq!(argv.minimum_action, "block");
+    assert_eq!(argv.reason_code, "native_pre_tool_ambiguous_payload");
+
+    let described_name = evaluate_pre_tool_envelope(
+        "grok",
+        "PreToolUse",
+        &json!({
+            "hookEventName": "PreToolUse",
+            "toolName": "run_terminal_command",
+            "name": "print the working directory",
+            "toolInput": {"command": "pwd"}
+        }),
+    );
+    assert_eq!(described_name.minimum_action, "block");
+    assert_eq!(
+        described_name.reason_code,
+        "native_pre_tool_ambiguous_payload"
+    );
+}
+
+#[test]
 fn bounds_reject_oversized_payload() {
     let oversized = generic(json!({"prompt": "x".repeat(MAX_COMMAND_BYTES + 1)}));
     assert_eq!(oversized.minimum_action, "block");

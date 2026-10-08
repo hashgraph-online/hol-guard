@@ -59,6 +59,49 @@ class SloProgressStage:
 
 
 _OBSERVATION_PROGRESS_STAGES = frozenset({"warm", "size_250k", "size_1m", "size_5m", "concurrent_16", "concurrent_64"})
+_INTEL_LATENCY_GATES = frozenset(
+    {
+        "1m_latency",
+        "250k_latency",
+        "5m_latency",
+        "cold_latency",
+        "concurrency",
+        "readiness",
+        "recovery_latency",
+        "warm_latency",
+    }
+)
+_INTEL_RECOVERY_STAGES = frozenset({"recovery", "recovery_precondition", "recovery_stop"})
+
+
+def intel_macos_slo_attempt_retryable(payload: Mapping[str, object]) -> bool:
+    """Retry one Intel attempt after a latency miss or an incomplete recovery abort."""
+
+    failure = payload.get("failure")
+    if (
+        isinstance(failure, dict)
+        and failure.get("category") == "benchmark_contract"
+        and failure.get("stage") in _INTEL_RECOVERY_STAGES
+        and payload.get("evaluation") == "incomplete"
+    ):
+        return True
+    gates = payload.get("gates")
+    if not isinstance(gates, dict) or not gates or any(type(value) is not bool for value in gates.values()):
+        return False
+    failed = {key for key, value in gates.items() if value is False}
+    if not failed or not failed <= _INTEL_LATENCY_GATES:
+        return False
+    if any(value is not True for key, value in gates.items() if key not in _INTEL_LATENCY_GATES):
+        return False
+    concurrency = payload.get("concurrency")
+    sixteen = concurrency.get("sixteen") if isinstance(concurrency, dict) else None
+    return (
+        payload.get("errors_16") == 0
+        and payload.get("errors_64") == 0
+        and isinstance(sixteen, dict)
+        and sixteen.get("errors") == 0
+        and sixteen.get("overloaded") == 0
+    )
 
 
 def classify_benchmark_error(error: BaseException) -> str:
@@ -496,4 +539,5 @@ __all__ = [
     "SloProgressStage",
     "classify_benchmark_error",
     "incomplete_slo_result",
+    "intel_macos_slo_attempt_retryable",
 ]

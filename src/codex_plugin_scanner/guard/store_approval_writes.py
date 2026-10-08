@@ -13,6 +13,7 @@ from .continuation_snapshot import (
 )
 from .decision_boundaries import CanonicalApprovalSurfaces, canonical_approval_surfaces
 from .models import GuardApprovalRequest
+from .runtime.native_cloud_review_origin import frozen_native_approval_origin, has_native_approval_origin_marker
 from .store_approvals import (
     _begin_immediate,
     _normalized_identity_key,
@@ -92,6 +93,8 @@ def _add_approval_request_in_transaction(
         )
         request_id = None
     if request_id is not None:
+        if _preserve_native_origin_snapshot(connection, request, request_id=request_id, queue_group_id=queue_group_id):
+            return request_id
         _update_request(
             connection,
             request,
@@ -115,6 +118,42 @@ def _add_approval_request_in_transaction(
         now=now,
     )
     return request.request_id
+
+
+def _preserve_native_origin_snapshot(
+    connection: sqlite3.Connection,
+    request: GuardApprovalRequest,
+    *,
+    request_id: str,
+    queue_group_id: str,
+) -> bool:
+    row = connection.execute(
+        """select request_id, harness, policy_action, watch_only_observation,
+                  queue_group_id, action_envelope_json
+           from approval_requests where request_id = ?""",
+        (request_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    current = dict(row)
+    incoming: dict[str, object] = {
+        "request_id": request.request_id,
+        "harness": request.harness,
+        "policy_action": request.policy_action,
+        "watch_only_observation": _scanner_evidence_is_watch_only(request.scanner_evidence),
+        "queue_group_id": queue_group_id,
+        "action_envelope_json": request.action_envelope_json,
+    }
+    if not has_native_approval_origin_marker(current, include_unavailable=False) and not has_native_approval_origin_marker(
+        incoming, include_unavailable=False
+    ):
+        return False
+    origin = frozen_native_approval_origin(current)
+    if origin is None or origin != frozen_native_approval_origin(incoming) or request_id != request.request_id:
+        raise ValueError("native_cloud_review_original_snapshot_conflict")
+    # Repeated and concurrent delivery of one native pause must not rewrite its
+    # business/source claim, pending purpose, timestamps, or original challenge.
+    return True
 
 
 def _expire_inconsistent_group_requests(

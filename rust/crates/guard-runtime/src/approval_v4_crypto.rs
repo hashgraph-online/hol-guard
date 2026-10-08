@@ -27,7 +27,7 @@ pub(super) struct VerifiedAssertion {
     pub(super) assertion_digest: [u8; 32],
 }
 
-pub(super) fn encode_base64url(bytes: &[u8]) -> String {
+pub(crate) fn encode_base64url(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut output = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {

@@ -6,6 +6,8 @@ candidate bytes, and scan results have no data-flow path to this output.
 
 from __future__ import annotations
 
+import json
+
 PUBLIC_RULES_JSON = """{
   "detector_version": "guard-secrets-v1:1d8dc93ef4fc2a04",
   "rules": [
@@ -180,4 +182,56 @@ PUBLIC_RULES_TEXT = """HOL Guard Secrets detector guard-secrets-v1:1d8dc93ef4fc2
 
 """
 
-__all__ = ["PUBLIC_RULES_JSON", "PUBLIC_RULES_TEXT"]
+__all__ = ["PUBLIC_RULES_JSON", "PUBLIC_RULES_TEXT", "public_output_family_label"]
+
+_ADDITIONAL_PUBLIC_FAMILY_LABELS = frozenset(
+    {
+        "environment variables",
+        "Kubernetes Secret resource",
+        "Kubernetes service-account token",
+        "Kubernetes secret volume",
+        "Kubernetes pod environment",
+        "local .env file",
+        "npm registry credentials",
+        "Python package credentials",
+        "netrc credentials",
+        "Git credential store",
+        "AWS shared credentials file",
+        "AWS shared config file",
+        "Docker client config",
+        "Kubernetes config",
+        "SSH private key",
+        "SSH client config",
+        "GnuPG key material",
+        "Terraform variable secrets",
+        "wallet/private-key file",
+    }
+)
+_OTHER_LOCAL_SECRET_FILES = " and other local secret files"
+
+
+def _public_family_labels() -> frozenset[str]:
+    payload = json.loads(PUBLIC_RULES_JSON)
+    rules = payload.get("rules")
+    families = {rule["family"] for rule in rules if isinstance(rule, dict) and isinstance(rule.get("family"), str)}
+    return frozenset(families | _ADDITIONAL_PUBLIC_FAMILY_LABELS)
+
+
+_PUBLIC_FAMILY_LABELS = _public_family_labels()
+
+
+def public_output_family_label(value: object) -> str | None:
+    """Return a catalogued source label. Caller-supplied text is not repeated."""
+
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    for label in _PUBLIC_FAMILY_LABELS:
+        if candidate == label:
+            return label
+    if candidate.endswith(_OTHER_LOCAL_SECRET_FILES):
+        head = candidate[: -len(_OTHER_LOCAL_SECRET_FILES)]
+        for label in _PUBLIC_FAMILY_LABELS:
+            if head == label:
+                return f"{label}{_OTHER_LOCAL_SECRET_FILES}"
+    return None

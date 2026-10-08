@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import cast
 
@@ -296,23 +297,58 @@ class StoreCloudEventsMixin:
             )
             return sequence
 
+    def _review_memory_oauth_rebind(
+        self, state_key: str, payload: Mapping[str, object] | Sequence[object] | None
+    ) -> bool:
+        if state_key != self._oauth_local_credentials_state_key:
+            return False
+        if not self.get_sync_payload("guard_review_memory_registry"):
+            return False
+        existing = self.get_sync_payload(state_key)
+        if not isinstance(existing, dict) or not isinstance(payload, Mapping):
+            return True
+        fields = (
+            "issuer",
+            "client_id",
+            "grant_id",
+            "machine_id",
+            "device_id",
+            "installation_id",
+            "workspace_id",
+            "dpop_public_jwk_thumbprint",
+        )
+        return any(existing.get(field) != payload.get(field) for field in fields)
+
+    def _notify_review_memory_rebind(self) -> None:
+        from .native_policy_snapshot import notify_native_policy_mutation
+
+        notify_native_policy_mutation(self.guard_home)
+
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
         oauth_changed = state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
             _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
         )
         if oauth_changed:
             self._clear_oauth_secret_payload_cache()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values (?, ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (state_key, json.dumps(payload), now),
-            )
+        memory_rebind = self._review_memory_oauth_rebind(state_key, payload)
+        with self._extension_control_authority_lock() if memory_rebind else nullcontext():
+            if memory_rebind:
+                self._invalidate_native_extension_control_policy()
+            with self._connect() as connection:
+                if memory_rebind:
+                    self._clear_review_policy_memory_locked(connection)
+                connection.execute(
+                    """
+                    insert into sync_state (state_key, payload_json, updated_at)
+                    values (?, ?, ?)
+                    on conflict(state_key) do update set
+                      payload_json = excluded.payload_json,
+                      updated_at = excluded.updated_at
+                    """,
+                    (state_key, json.dumps(payload), now),
+                )
+        if memory_rebind:
+            self._notify_review_memory_rebind()
         if oauth_changed:
             from .review_event_wake import review_event_wake_signal
 
@@ -363,22 +399,39 @@ class StoreCloudEventsMixin:
     def delete_sync_payload(self, state_key: str) -> None:
         if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
             self._clear_oauth_secret_payload_cache()
-        with self._connect() as connection:
-            connection.execute(
-                "delete from sync_state where state_key = ?",
-                (state_key,),
-            )
+        memory_rebind = self._review_memory_oauth_rebind(state_key, None)
+        with self._extension_control_authority_lock() if memory_rebind else nullcontext():
+            if memory_rebind:
+                self._invalidate_native_extension_control_policy()
+            with self._connect() as connection:
+                if memory_rebind:
+                    self._clear_review_policy_memory_locked(connection)
+                connection.execute(
+                    "delete from sync_state where state_key = ?",
+                    (state_key,),
+                )
+        if memory_rebind:
+            self._notify_review_memory_rebind()
 
     def delete_sync_payloads(self, state_keys: list[str]) -> int:
         if not state_keys:
             return 0
         placeholders = ",".join("?" for _ in state_keys)
-        with self._connect() as connection:
-            cursor = connection.execute(
-                f"delete from sync_state where state_key in ({placeholders})",
-                tuple(state_keys),
-            )
-            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+        memory_rebind = any(self._review_memory_oauth_rebind(state_key, None) for state_key in state_keys)
+        with self._extension_control_authority_lock() if memory_rebind else nullcontext():
+            if memory_rebind:
+                self._invalidate_native_extension_control_policy()
+            with self._connect() as connection:
+                if memory_rebind:
+                    self._clear_review_policy_memory_locked(connection)
+                cursor = connection.execute(
+                    f"delete from sync_state where state_key in ({placeholders})",
+                    tuple(state_keys),
+                )
+                count = int(cursor.rowcount if cursor.rowcount is not None else 0)
+        if memory_rebind:
+            self._notify_review_memory_rebind()
+        return count
 
     def add_guard_event_v1(self, event: GuardEventV1) -> None:
         with self._connect() as connection:
@@ -391,7 +444,7 @@ class StoreCloudEventsMixin:
             (event.idempotency_key,),
         ).fetchone()
         if existing is None:
-            pending_count = self._count_guard_events_v1_in_connection(connection, uploaded=False)
+            pending_count = self._count_guard_event_upload_capacity(connection)
             if pending_count >= self._guard_event_queue_limit:
                 capacity_row = connection.execute(
                     "select payload_json from sync_state where state_key = ?",
@@ -453,16 +506,29 @@ class StoreCloudEventsMixin:
             ),
         )
 
-    def list_guard_events_v1(self, *, uploaded: bool | None = None, limit: int = 200) -> list[dict[str, object]]:
+    def list_guard_events_v1(
+        self,
+        *,
+        uploaded: bool | None = None,
+        limit: int = 200,
+        after: tuple[str, str] | None = None,
+    ) -> list[dict[str, object]]:
         query = """
             select event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at
             from guard_cloud_events
         """
         params: list[object] = []
+        filters: list[str] = []
         if uploaded is True:
-            query += " where uploaded_at is not null"
+            filters.append("uploaded_at is not null")
         elif uploaded is False:
-            query += " where uploaded_at is null"
+            filters.append("uploaded_at is null")
+        if after is not None:
+            occurred_at, event_id = after
+            filters.append("(occurred_at > ? or (occurred_at = ? and event_id > ?))")
+            params.extend((occurred_at, occurred_at, event_id))
+        if filters:
+            query += " where " + " and ".join(filters)
         query += " order by occurred_at asc, event_id asc limit ?"
         params.append(limit)
         with self._connect() as connection:
@@ -503,6 +569,35 @@ class StoreCloudEventsMixin:
         row = connection.execute(query).fetchone()
         return int(row["count"]) if row is not None else 0
 
+    def _count_guard_event_upload_capacity(self, connection: sqlite3.Connection) -> int:
+        """Count events that can still be uploaded.
+
+        A native activity row quarantined after a binding change stays stored and
+        unacknowledged. It must not take a slot from an event the current binding
+        can still send.
+        """
+
+        ledger = connection.execute(
+            "select 1 from sqlite_master where type = 'table' and name = ?",
+            ("native_activity_projection_ledger",),
+        ).fetchone()
+        if ledger is None:
+            return self._count_guard_events_v1_in_connection(connection, uploaded=False)
+        row = connection.execute(
+            """
+            select count(*) as count
+            from guard_cloud_events as event
+            where event.uploaded_at is null
+              and not exists (
+                select 1
+                from native_activity_projection_ledger as ledger
+                where ledger.idempotency_key = event.idempotency_key
+                  and ledger.state = 'quarantined'
+              )
+            """
+        ).fetchone()
+        return int(row["count"]) if row is not None else 0
+
     def mark_guard_events_v1_uploaded(self, event_ids: list[str], uploaded_at: str) -> int:
         clean_ids = [event_id for event_id in event_ids if event_id.strip()]
         if not clean_ids:
@@ -513,10 +608,7 @@ class StoreCloudEventsMixin:
                 f"update guard_cloud_events set uploaded_at = ? where event_id in ({placeholders})",
                 (uploaded_at, *clean_ids),
             )
-            pending_count = self._count_guard_events_v1_in_connection(
-                connection,
-                uploaded=False,
-            )
+            pending_count = self._count_guard_event_upload_capacity(connection)
             if pending_count < self._guard_event_queue_limit:
                 capacity_row = connection.execute(
                     "select payload_json from sync_state where state_key = ?",

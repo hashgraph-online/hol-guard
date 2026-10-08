@@ -98,7 +98,10 @@ from ..cloud_exception_requests import (
 )
 from ..codex_binding_capture_writer import start_codex_binding_capture_writer
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
-from ..codex_live_decision_revalidation import revalidate_codex_live_allow
+from ..codex_live_decision_revalidation import (
+    revalidate_codex_live_allow,
+    review_live_codex_decision,
+)
 from ..codex_resume import get_request_resume_status, retry_request_resume
 from ..config import (
     VALID_RECEIPT_REDACTION_LEVELS,
@@ -450,6 +453,10 @@ _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS = 3.0
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
 _RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS = 2.75
 _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS = WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
+# The waiting hook revalidates through one resident evaluation. The 1.45s
+# admission slice expires before that evaluation returns under load, and the
+# hook then keeps the original deny after Cloud has already applied the decision.
+_RUNTIME_LIVE_DECISION_REVIEW_TIMEOUT_SECONDS = 8.0
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS = 5.0
 _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
@@ -6164,19 +6171,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             home_dir=home_dir,
             claimed_saved_allow_hash=claimed_saved_allow_hash,
             claimed_approval_request_id=claimed_approval_request_id,
-            reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: (
-                daemon_server.hook_process_runner.review(
-                    payload=hook_payload,
-                    harness="codex",
-                    home_dir=home_dir,
-                    guard_home=daemon_server.store.guard_home,
-                    workspace=workspace,
-                    hook_env={},
-                    deadline=time.monotonic() + _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS,
-                    claim_saved_approval=False,
-                    claimed_saved_allow_hash=claimed_hash,
-                    claimed_approval_request_id=claimed_request_id,
-                ).payload
+            reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: review_live_codex_decision(
+                daemon_server.hook_worker,
+                hook_payload=hook_payload,
+                workspace=workspace,
+                home_dir=home_dir,
+                guard_home=daemon_server.store.guard_home,
+                claimed_saved_allow_hash=claimed_hash,
+                claimed_approval_request_id=claimed_request_id,
+                deadline=time.monotonic() + _RUNTIME_LIVE_DECISION_REVIEW_TIMEOUT_SECONDS,
             ),
         )
 

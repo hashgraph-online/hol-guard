@@ -15,10 +15,11 @@ ready.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from collections.abc import Mapping
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .edge_events import build_memory_decision_event_envelope
 from .memory_decision_event import (
@@ -27,6 +28,11 @@ from .memory_decision_event import (
     event_to_cloud_payload,
 )
 from .receipts.manager import build_receipt
+
+if TYPE_CHECKING:
+    from .store import GuardStore
+
+NATIVE_MEMORY_SOURCE_BINDING_FIELD = "native_memory_source_binding"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -171,7 +177,10 @@ def _ensure_source_receipt_id(
     add_receipt = getattr(store, "add_receipt", None)
     if not callable(add_receipt):
         return None
-    raw_command = _request_string(request, "raw_command_text", "review_command")
+    raw_value = request.get("raw_command_text")
+    raw_command = (
+        raw_value if isinstance(raw_value, str) and raw_value.strip() else _request_string(request, "review_command")
+    )
     artifact_id = _request_string(request, "artifact_id") or f"approval-request:{request_id}"
     artifact_identity = raw_command or artifact_id
     artifact_hash = _request_string(request, "artifact_hash") or (
@@ -201,6 +210,156 @@ def _ensure_source_receipt_id(
         extra={"decision_action": decision_action, "scope": scope},
     )
     return receipt.receipt_id
+
+
+def native_memory_source_binding(store: GuardStore) -> dict[str, object] | None:
+    """Current source-disclosure authority, separate from a retained decision."""
+
+    from .config import load_guard_config
+    from .native_cloud_review_consent import native_cloud_review_consent
+    from .review_oauth_binding import guard_review_oauth_metadata
+    from .runtime.command_capability import command_capability_status
+    from .runtime.exact_cloud_review import exact_cloud_review_status
+
+    try:
+        if load_guard_config(store.guard_home, create_home=False).receipt_redaction_level != "none":
+            return None
+        capability = command_capability_status(store)
+        if (
+            capability["enabled"] is not True
+            or capability["capability_valid"] is not True
+            or "guard.review.syncPolicyMemory" not in capability["operations"]
+        ):
+            return None
+        if exact_cloud_review_status(store).get("enabled") is not True:
+            return None
+        consent = native_cloud_review_consent(store.guard_home, "read")
+        oauth = guard_review_oauth_metadata(store, require_device_dpop_binding=True)
+        if consent["status"] != "enabled" or oauth.grant_id is None:
+            return None
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    return {
+        "schema": "guard.policy-memory-source-binding.v1",
+        "workspace_id": oauth.workspace_id,
+        "machine_id": oauth.machine_id,
+        "local_installation_id": oauth.installation_id,
+        "device_id": oauth.device_id,
+        "grant_id": oauth.grant_id,
+        "dpop_thumbprint": oauth.dpop_thumbprint,
+        "consent_revision": consent["revision"],
+        "revocation_epoch": consent["revocation_epoch"],
+    }
+
+
+def policy_memory_source_for_receipt(
+    store: GuardStore,
+    receipt: Mapping[str, object],
+    *,
+    redaction_level: str,
+    access_token: str | None,
+) -> dict[str, object] | None:
+    """Disclose only an explicitly retained, native-bound workspace decision.
+
+    Called again at each actual send, including backlog and OAuth/DPoP retries.
+    Neither an ordinary allow-once nor a copied display string is source proof.
+    """
+
+    from .runtime.native_cloud_review_origin import frozen_native_approval_origin
+    from .runtime.native_cloud_review_v4 import get_native_approval_origin
+
+    if (
+        redaction_level != "none"
+        or receipt.get("approval_source") != "memory_decision"
+        or receipt.get("source_scope") != "workspace"
+    ):
+        return None
+    request_id = receipt.get("approval_request_id")
+    command = receipt.get("raw_command_text")
+    if not isinstance(request_id, str) or not isinstance(command, str) or not command:
+        return None
+    try:
+        command_bytes = command.encode("utf-8")
+    except UnicodeError:
+        return None
+    if len(command.encode("utf-16-le")) > 16_384 or "\0" in command or not command.strip():
+        return None
+    artifact_id = receipt.get("artifact_id")
+    harness = receipt.get("harness")
+    if (
+        not isinstance(artifact_id, str)
+        or not 1 <= len(artifact_id) <= 512
+        or not isinstance(harness, str)
+        or not 1 <= len(harness) <= 128
+    ):
+        return None
+    binding = native_memory_source_binding(store)
+    credentials = store.get_oauth_local_credentials(allow_primary=False)
+    if (
+        binding is None
+        or not isinstance(credentials, dict)
+        or credentials.get("token_type") != "DPoP"
+        or not isinstance(access_token, str)
+        or credentials.get("access_token") != access_token
+    ):
+        return None
+    try:
+        request = store.get_approval_request(request_id)
+        if (
+            not isinstance(request, dict)
+            or request.get("status") != "resolved"
+            or request.get("resolution_action") not in {"allow", "block"}
+            or request.get("resolution_scope") != "workspace"
+            or request.get("raw_command_text") != command
+            or request.get("artifact_id") != artifact_id
+            or request.get("harness") != harness
+        ):
+            return None
+        frozen_origin = frozen_native_approval_origin(request)
+        command_digest = hashlib.sha256(command_bytes).hexdigest()
+        if frozen_origin is None or frozen_origin.get("command_sha256") != command_digest:
+            return None
+        if (
+            frozen_origin.get("consent_revision") != binding["consent_revision"]
+            or frozen_origin.get("revocation_epoch") != binding["revocation_epoch"]
+        ):
+            return None
+        # Only authenticated immutable snapshots can carry the captured target.
+        # A pruned/tombstoned/rebound snapshot has no disclosure fallback.
+        snapshots = store.list_review_event_snapshots(request_id)
+        matches = False
+        for snapshot in snapshots:
+            if (
+                snapshot.get("raw_command_text") != command
+                or snapshot.get("artifact_id") != artifact_id
+                or snapshot.get("harness") != harness
+                or frozen_native_approval_origin(snapshot) != frozen_origin
+            ):
+                continue
+            envelope = snapshot.get("action_envelope_json")
+            if isinstance(envelope, str):
+                envelope = json.loads(envelope)
+            if isinstance(envelope, dict) and envelope.get(NATIVE_MEMORY_SOURCE_BINDING_FIELD) == binding:
+                matches = True
+                break
+        if not matches:
+            return None
+        current_origin = get_native_approval_origin(store.guard_home, request_id)
+        if current_origin != frozen_origin:
+            return None
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+    return {
+        "contractVersion": "guard.policy-memory-source.v1",
+        "artifactId": artifact_id,
+        "commandText": command,
+        "harnessId": harness,
+        "complete": True,
+        "redaction": "none",
+        "installationId": binding["machine_id"],
+        "localRequestId": request_id,
+        "workspaceId": binding["workspace_id"],
+    }
 
 
 def _request_string(request: Mapping[str, object], *keys: str) -> str | None:

@@ -1350,10 +1350,14 @@ class StorePolicyMixin:
     def _replace_remote_policy_rows_locked(
         connection: sqlite3.Connection,
         rows: Sequence[tuple[object, ...]],
+        *,
+        sources: tuple[str, ...] = _REMOTE_POLICY_SOURCE_PARAMS,
     ) -> None:
+        if not sources or any(source not in _REMOTE_POLICY_SOURCE_PARAMS for source in sources):
+            raise ValueError("invalid_remote_policy_sources")
         connection.execute(
-            f"delete from policy_decisions where source in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}",
-            _REMOTE_POLICY_SOURCE_PARAMS,
+            f"delete from policy_decisions where source in ({','.join('?' for _ in sources)})",
+            sources,
         )
         connection.executemany(
             """

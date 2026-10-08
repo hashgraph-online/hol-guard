@@ -354,8 +354,6 @@ def test_fixture_uses_only_synthetic_data_and_detects_deletion(tmp_path):
         create_fixture(tmp_path / "fresh")
 
 
-
-
 def test_provider_rejects_credentials_redirect_style_urls_and_plaintext_remote_hosts():
     """Reject unsafe provider URLs while allowing explicit loopback use and detecting canaries."""
     for url in ["http://example.com/v1", "https://user:password@example.com/v1", "https://example.com/v1?key=x"]:

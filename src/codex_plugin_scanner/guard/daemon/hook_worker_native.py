@@ -126,6 +126,19 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 
+def _persist_native_application(store: GuardStore, edge: Mapping[str, object]) -> None:
+    """Persist genuine core output locally; delivery never runs on the hook path."""
+    observation = edge.get("native_application_v4")
+    if not isinstance(observation, Mapping):
+        return
+    from ..runtime.native_cloud_review_application import record_native_application_observation
+
+    # The native secure journal already owns positive evidence. A failed local
+    # handoff must not replay consumption; read-only recovery retries projection.
+    with suppress(Exception):
+        record_native_application_observation(store, observation)
+
+
 class _HookWorkerNativeHost(Protocol):
     store: GuardStore
     capture_writer: CodexBindingCaptureWriter | None
@@ -594,6 +607,7 @@ class HookWorkerNativeMixin:
             )
         raw_receipt = edge.get("receipt")
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
+        _persist_native_application(self.store, edge)
         if accepted_receipt is not None and capture_receipts is not None and native_harness == "codex":
             capture_receipts.append(accepted_receipt)
         if native_event == "UserPromptSubmit":
@@ -818,6 +832,7 @@ class HookWorkerNativeMixin:
         if not isinstance(native_result, Mapping):
             return unavailable("native_hook_edge_invalid_response")
         receipt = self._record_native_decision_receipt(edge.get("receipt"))
+        _persist_native_application(self.store, edge)
         native_event = str(edge["event_name"])
         native_harness = str(edge["harness"])
         native_result = self._apply_structured_mediation(

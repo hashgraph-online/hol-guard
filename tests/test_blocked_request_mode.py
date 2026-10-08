@@ -8,6 +8,7 @@ from codex_plugin_scanner.guard.blocked_request_mode import safe_alternative_rea
 from codex_plugin_scanner.guard.cli.commands_support_prompts import _runtime_artifact_native_reason
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, update_guard_settings
 from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.secrets.public_rule_catalog import public_output_family_label
 
 
 def test_prompt_mode_defaults_and_round_trip(tmp_path: Path) -> None:
@@ -55,3 +56,46 @@ def test_terminal_cli_response_preserves_safe_alternative_guidance() -> None:
     )
     assert reason == guidance
     assert "Wait for approval" not in reason
+
+
+def _tool_output_artifact(secret_source_family: str) -> GuardArtifact:
+    return GuardArtifact(
+        artifact_id="tool-output",
+        name="Tool output",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="config.json",
+        metadata={
+            "runtime_request_signals": ["tool output contains credential-looking material"],
+            "secret_source_family": secret_source_family,
+        },
+    )
+
+
+def test_public_output_family_label_keeps_catalogued_text_only() -> None:
+    assert public_output_family_label("local .env file and other local secret files") == (
+        "local .env file and other local secret files"
+    )
+    leaked = "sk-" + "testtoken12345678"
+    assert public_output_family_label(leaked) is None
+    assert public_output_family_label(f"{leaked} and other local secret files") is None
+
+
+def test_native_reason_names_a_catalogued_source_family() -> None:
+    reason = _runtime_artifact_native_reason(
+        _tool_output_artifact("Kubernetes pod environment"),
+        {"policy_action": "block"},
+    )
+    assert "Kubernetes pod environment" in reason
+    assert reason.startswith("HOL Guard blocked this tool output because it contains sensitive content from ")
+
+
+def test_native_reason_does_not_echo_an_uncatalogued_source_family() -> None:
+    leaked = "sk-" + "testtoken12345678"
+    reason = _runtime_artifact_native_reason(
+        _tool_output_artifact(leaked),
+        {"policy_action": "block"},
+    )
+    assert leaked not in reason
+    assert "sensitive content" in reason

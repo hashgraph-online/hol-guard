@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import random
 import threading
@@ -16,12 +17,28 @@ from ..review_event_wake import ReviewEventWake, ReviewEventWakeSignal, review_e
 from ..store import GuardStore
 from .cloud_review_retry_recovery import prepare_retry_identity_replay
 from .native_workspace_review_replay import prepare_native_workspace_review_replay
+from .native_cloud_review_observation_recovery import recover_native_applications_once
 
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SAFETY_POLL_SECONDS = 30.0
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 DEFAULT_ERROR_BACKOFF_BASE_SECONDS = 1.0
+
+
+def configured_cloud_review_poll_seconds() -> float:
+    """Return the durable poll interval. A missing or unusable value stays at the default."""
+
+    raw = os.environ.get("GUARD_CLOUD_REVIEW_POLL_INTERVAL", "")
+    if not raw.strip():
+        return DEFAULT_SAFETY_POLL_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_SAFETY_POLL_SECONDS
+    if value <= 0 or math.isnan(value) or math.isinf(value):
+        return DEFAULT_SAFETY_POLL_SECONDS
+    return value
 
 
 @dataclass
@@ -52,9 +69,7 @@ def start_cloud_sync_sync_worker(
 
     stop_event = threading.Event()
     wake_signal = review_event_wake_signal(store.path)
-    safety_poll = poll_interval or float(
-        os.environ.get("GUARD_CLOUD_REVIEW_POLL_INTERVAL", str(DEFAULT_SAFETY_POLL_SECONDS))
-    )
+    safety_poll = poll_interval or configured_cloud_review_poll_seconds()
     maximum_backoff = error_backoff or float(
         os.environ.get("GUARD_CLOUD_REVIEW_ERROR_BACKOFF", str(DEFAULT_ERROR_BACKOFF_SECONDS))
     )
@@ -143,6 +158,10 @@ def _cloud_sync_sync_loop(
     prepared_binding: dict[str, str] | None = None
     queue_refresh_pending = False
     while not stop_event.is_set():
+        try:
+            sync.record_cloud_review_worker_heartbeat(store, poll_seconds=poll_interval)
+        except Exception:
+            _LOGGER.warning("Cloud Review worker heartbeat could not be recorded", exc_info=True)
         observed_generation = wake_signal.generation()
         result: dict[str, object] = {}
         try:
@@ -167,7 +186,9 @@ def _cloud_sync_sync_loop(
                 _ = prepare_native_workspace_review_replay(
                     store, binding=binding, force_probe=binding_changed or authority_changed
                 )
+            native_recovery = recover_native_applications_once(store)
             result = sync.sync_cloud_review_events_once(store, auth_context)
+            result["nativeObservationRecovery"] = native_recovery
             error_streak = 0
             with suppress(OSError, PermissionError, RuntimeError, ValueError):
                 if user_health_report_due(store.guard_home):

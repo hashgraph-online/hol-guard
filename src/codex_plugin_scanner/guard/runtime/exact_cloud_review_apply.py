@@ -23,6 +23,7 @@ from ..review_contracts import (
 )
 from ..review_exact_capability_advertisement import validate_exact_review_envelope_authority as validate_exact_authority
 from ..review_native_claim_bindings import native_binding_values_match
+from .cloud_review_request_purpose import explicit_watch_only
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
     EXACT_CLOUD_REVIEW_OPERATION,
@@ -95,6 +96,8 @@ def apply_exact_cloud_review(
     raw_request = store.get_raw_approval_request_snapshot(request_id)
     if not isinstance(raw_request, dict) or raw_request.get("status") != "pending":
         raise _reject(store, "remote_exact_request_not_pending", now=current)
+    if explicit_watch_only(request) or explicit_watch_only(raw_request):
+        raise _reject(store, "watch_only_not_actionable", now=current)
     if not _request_is_current(request, now=current):
         raise _reject(store, "remote_exact_request_not_pending", now=current)
     if expected_harness is not None and request.get("harness") != expected_harness:

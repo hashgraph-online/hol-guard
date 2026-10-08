@@ -146,7 +146,13 @@ def _validate_snapshot_policy_v3(root: Mapping[str, object]) -> Mapping[str, obj
     raw = root.get("effective_policy")
     optional = frozenset(
         field
-        for field in ("mcp_tool_actions", "mcp_provider_actions", "mcp_provider_catalog_hash")
+        for field in (
+            "mcp_tool_actions",
+            "mcp_provider_actions",
+            "mcp_provider_catalog_hash",
+            "cloud_workspace_id",
+            "exact_command_actions",
+        )
         if isinstance(raw, Mapping) and field in raw
     )
     effective = _require_snapshot_mapping_fields_v3(raw, _EFFECTIVE_POLICY_FIELDS | optional)
@@ -191,6 +197,8 @@ def _validate_snapshot_policy_v3(root: Mapping[str, object]) -> Mapping[str, obj
     _provider_action_map(effective.get("mcp_provider_actions"))
     if "mcp_provider_catalog_hash" in effective and not _valid_digest_v3(effective["mcp_provider_catalog_hash"]):
         raise NativePolicySnapshotError("native_provider_catalog_hash_invalid")
+    if "cloud_workspace_id" in effective or "exact_command_actions" in effective:
+        effective_native_policy_v3(effective)
     return effective
 
 

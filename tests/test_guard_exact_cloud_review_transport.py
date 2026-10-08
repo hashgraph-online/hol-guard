@@ -71,7 +71,7 @@ def _exact_job(tmp_path: Path):
     store = connected_exact_review_store(tmp_path)
     request = _request("exact-transport")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     job = _job(
         store,
         _remote_approval(store, request.request_id, receipt_id="exact-transport-receipt"),
@@ -290,7 +290,7 @@ def test_exact_apply_uses_frozen_browser_claim_when_live_display_is_reformatted(
         decision_v2_json={"approval_scopes": ["artifact"]},
     )
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     oauth = _oauth_metadata(store)
     snapshots = store.list_review_event_snapshots(request.request_id)
     assert snapshots

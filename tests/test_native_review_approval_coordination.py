@@ -607,3 +607,38 @@ def test_environment_and_command_lists_never_reuse_python_side_approval(
     second = worker.review_http_payload(**kwargs)
     assert second["policy_action"] == "review"
     assert second.get("approval_reuse_status") != "accepted"
+
+
+def test_exact_cloud_review_rejects_a_watch_only_request(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
+        ExactCloudReviewError,
+        apply_exact_cloud_review,
+        enable_exact_cloud_review,
+    )
+    from tests.guard_exact_cloud_review_support import (
+        add_review_request,
+        connected_exact_review_store,
+        remote_approval,
+        review_request,
+    )
+
+    store = connected_exact_review_store(tmp_path)
+    request = review_request("watch-only-target")
+    add_review_request(store, request)
+    with store._connect() as connection:
+        connection.execute(
+            "update approval_requests set watch_only_observation = 1 where request_id = ?",
+            (request.request_id,),
+        )
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
+
+    with pytest.raises(ExactCloudReviewError, match="watch_only_not_actionable"):
+        apply_exact_cloud_review(
+            store,
+            remote_approval=remote_approval(store, request.request_id, receipt_id="watch-only-receipt"),
+            expected_harness="codex",
+        )
+
+    stored = store.get_approval_request(request.request_id)
+    assert stored is not None
+    assert stored["status"] == "pending"

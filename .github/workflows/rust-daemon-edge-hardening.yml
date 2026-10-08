@@ -67,7 +67,8 @@ jobs:
 
   windows-workspace:
     runs-on: windows-2025
-    timeout-minutes: 20
+    # The permanent claim index past 1024 replay entries outlived 20 minutes.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:

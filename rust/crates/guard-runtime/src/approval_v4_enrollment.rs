@@ -116,13 +116,14 @@ fn valid_port(value: &str, default_port: u16) -> bool {
             .is_ok_and(|port| port != 0 && port != default_port)
 }
 
-fn prepare_bindings(state_base: &Path) -> Result<(String, String), String> {
-    super::approval_enrollment::with_transition_lock(state_base, || {
-        if let Some(existing) = super::approval_enrollment::load_unlocked(state_base)? {
-            return Ok((existing.device_binding, existing.installation_binding));
+fn prepare_bindings_unlocked(state_base: &Path) -> Result<(String, String), String> {
+    if let Some(existing) = super::approval_enrollment::load_unlocked(state_base)? {
+        if existing.status == "revoked" {
+            return Err("native_approval_authority_revoked".into());
         }
-        super::approval_enrollment::prepare_enrollment_unlocked(state_base)
-    })
+        return Ok((existing.device_binding, existing.installation_binding));
+    }
+    super::approval_enrollment::prepare_enrollment_unlocked(state_base)
 }
 
 pub(crate) fn prepare_enrollment(
@@ -134,19 +135,45 @@ pub(crate) fn prepare_enrollment(
     if !valid_rp_id(rp_id) || !valid_origin(origin) || !origin_matches_rp_id(origin, rp_id) {
         return Err("native_approval_v4_enrollment_invalid".to_owned());
     }
-    let (device_binding, installation_binding) = prepare_bindings(state_base)?;
-    let request = ApprovalEnrollmentRequestV4 {
-        schema: NATIVE_APPROVAL_ENROLLMENT_REQUEST_V4_SCHEMA.to_owned(),
-        version: 4,
-        rp_id: rp_id.to_owned(),
-        origin: origin.to_owned(),
-        device_binding,
-        installation_binding,
-        enrollment_generation: 1,
-    };
-    let value = serde_json::to_value(request)
-        .map_err(|_| "native_approval_v4_enrollment_invalid".to_owned())?;
-    canonical_json_bytes(&value).map_err(|_| "native_approval_v4_enrollment_invalid".to_owned())
+    super::approval_enrollment::with_transition_lock(state_base, || {
+        let current = super::approval_v4_authority::load_locked(state_base)?;
+        let enrollment_generation = match current.as_ref() {
+            Some(authority) => {
+                if authority.rp_id != rp_id || authority.origin != origin {
+                    return Err("native_approval_v4_authority_provenance_mismatch".into());
+                }
+                authority
+                    .enrollment_generation
+                    .checked_add(1)
+                    .ok_or("native_approval_v4_authority_generation_rollback")?
+            }
+            None => {
+                if super::approval_v4_secure_state::load(state_base)?.is_some() {
+                    return Err("native_approval_v4_authority_provenance_mismatch".into());
+                }
+                1
+            }
+        };
+        let (device_binding, installation_binding) = prepare_bindings_unlocked(state_base)?;
+        if current.as_ref().is_some_and(|authority| {
+            authority.device_binding != device_binding
+                || authority.installation_binding != installation_binding
+        }) {
+            return Err("native_approval_v4_authority_provenance_mismatch".into());
+        }
+        let request = ApprovalEnrollmentRequestV4 {
+            schema: NATIVE_APPROVAL_ENROLLMENT_REQUEST_V4_SCHEMA.to_owned(),
+            version: 4,
+            rp_id: rp_id.to_owned(),
+            origin: origin.to_owned(),
+            device_binding,
+            installation_binding,
+            enrollment_generation,
+        };
+        let value = serde_json::to_value(request)
+            .map_err(|_| "native_approval_v4_enrollment_invalid".to_owned())?;
+        canonical_json_bytes(&value).map_err(|_| "native_approval_v4_enrollment_invalid".to_owned())
+    })
 }
 
 #[cfg(test)]

@@ -230,6 +230,7 @@ def append_request_snapshot_event(
     event_type: str,
     occurred_at: str,
     continuation_result: Mapping[str, object] | None = None,
+    native_application_result: Mapping[str, object] | None = None,
     request_snapshot: Mapping[str, object] | None = None,
     native_replay: bool = False,
 ) -> int:
@@ -262,6 +263,7 @@ def append_request_snapshot_event(
         occurred_at=occurred_at,
         continuation_result=continuation_result,
         native_replay=native_replay,
+        native_application_result=native_application_result,
     )
     connection.execute(
         """

@@ -19,7 +19,7 @@ def exact_job_store(tmp_path: Path, *, request_id: str) -> tuple[GuardStore, dic
     store = connected_exact_review_store(tmp_path)
     request = review_request(request_id)
     add_review_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     job = exact_review_job(
         store,
         remote_approval(store, request_id, receipt_id=f"{request_id}-receipt"),

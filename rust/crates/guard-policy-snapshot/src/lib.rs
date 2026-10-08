@@ -110,6 +110,18 @@ pub struct ScopeContractV3 {
     pub workspace_binding: String,
 }
 
+/// Exact reusable command rules admitted for one enrolled Cloud workspace.
+/// A Cloud workspace identifier is never interpreted as a filesystem path.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExactCommandPolicyV1 {
+    pub harness: String,
+    pub command_sha256: String,
+    pub cloud_workspace_id: String,
+    pub action: String,
+    pub expires_at: String,
+}
+
 /// Effective policy fields consumed by all supported hook action classes.
 /// Maps are bounded and keys remain opaque identifiers; raw request content is
 /// never copied into a snapshot.
@@ -134,6 +146,10 @@ pub struct EffectiveNativePolicyV3 {
     pub mcp_provider_actions: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_provider_catalog_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_workspace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exact_command_actions: Vec<ExactCommandPolicyV1>,
     pub sandbox_analysis: String,
     pub receipt_redaction_level: String,
 }
@@ -391,6 +407,7 @@ fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), Sna
             .mcp_provider_catalog_hash
             .as_ref()
             .is_some_and(|digest| !valid_hex(digest, 64))
+        || !validate_exact_command_actions(policy)
         || policy.harness_risk_actions.len() > POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES
         || !policy.harness_risk_actions.iter().all(|(key, value)| {
             valid_selector_key(key)
@@ -411,4 +428,27 @@ fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), Sna
         }
     }
     Ok(())
+}
+
+fn validate_exact_command_actions(policy: &EffectiveNativePolicyV3) -> bool {
+    if policy.exact_command_actions.len() > POLICY_SNAPSHOT_MAX_MAP_ENTRIES {
+        return false;
+    }
+    if policy.exact_command_actions.is_empty() {
+        return policy.cloud_workspace_id.is_none();
+    }
+    let Some(workspace) = policy.cloud_workspace_id.as_deref() else {
+        return false;
+    };
+    valid_selector_key(workspace)
+        && policy.exact_command_actions.iter().all(|rule| {
+            valid_selector_key(&rule.harness)
+                && rule.cloud_workspace_id == workspace
+                && valid_hex(&rule.command_sha256, 64)
+                && matches!(
+                    rule.action.as_str(),
+                    "allow" | "block" | "review" | "require-reapproval"
+                )
+                && guard_contracts::canonical_policy_timestamp_nanos(&rule.expires_at).is_some()
+        })
 }

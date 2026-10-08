@@ -319,7 +319,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     release_notes = next(step for step in release_main_steps if step.get("name") == "Generate release notes")
     assert 'notes_script=".release-tooling/scripts/ci/generate_release_notes.py"' in release_notes["run"]
     assert 'notes_script="scripts/ci/generate_release_notes.py"' in release_notes["run"]
-    assert 'deferred_args+=(--pypi-deferred)' in release_notes["run"]
+    assert "deferred_args+=(--pypi-deferred)" in release_notes["run"]
     assert 'python3 "$notes_script"' in release_notes["run"]
     for job_name in ("publish-main-testpypi",):
         steps = jobs[job_name]["steps"]

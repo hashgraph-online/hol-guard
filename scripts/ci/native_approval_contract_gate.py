@@ -21,6 +21,7 @@ from typing import Final
 
 ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-contracts/src/approval_contracts.rs"),
+    Path("rust/crates/guard-contracts/src/approval_contracts_errors.rs"),
     Path("rust/crates/guard-contracts/src/approval_v4_contracts.rs"),
     Path("rust/crates/guard-runtime/src/approval.rs"),
     Path("rust/crates/guard-runtime/src/approval_authority.rs"),
@@ -29,9 +30,16 @@ ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-runtime/src/approval_enrollment.rs"),
     Path("rust/crates/guard-runtime/src/approval_enrollment_platform.rs"),
     Path("rust/crates/guard-runtime/src/approval_replay_memory.rs"),
+    Path("rust/crates/guard-runtime/src/approval_replay_memory_tests.rs"),
     Path("rust/crates/guard-runtime/src/approval_v4.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_challenge.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_cloud_review_tests.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_cloud_review_recovery_tests.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_cloud_review_generation_tests.rs"),
     Path("rust/crates/guard-runtime/src/approval_v4_assertion_state.rs"),
     Path("rust/crates/guard-runtime/src/approval_v4_authority.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_lineage.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_install.rs"),
     Path("rust/crates/guard-runtime/src/approval_v4_authority_tests.rs"),
     Path("rust/crates/guard-runtime/src/approval_v4_crypto.rs"),
     Path("rust/crates/guard-runtime/src/approval_v4_enrollment.rs"),
@@ -43,9 +51,14 @@ ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-runtime/src/edge.rs"),
     Path("rust/crates/guard-runtime/src/edge_tests.rs"),
     Path("rust/crates/guard-runtime/src/managed_resident.rs"),
+    Path("rust/crates/guard-runtime/src/native_cloud_review_consent.rs"),
+    Path("rust/crates/guard-runtime/src/native_cloud_review_v4.rs"),
+    Path("rust/crates/guard-runtime/src/native_cloud_review_v4_authority.rs"),
+    Path("rust/crates/guard-runtime/src/native_cloud_review_v4_application.rs"),
     Path("rust/crates/guard-runtime/src/managed_resident_tests.rs"),
     Path("rust/crates/guard-runtime/src/policy_enforcement.rs"),
     Path("rust/crates/guard-runtime/src/policy_enforcement_tests.rs"),
+    Path("rust/crates/guard-runtime/src/policy_enforcement_exact_memory_tests.rs"),
     Path("rust/crates/guard-runtime/src/policy_store.rs"),
     Path("rust/crates/guard-runtime/src/policy_store_approval.rs"),
     Path("rust/crates/guard-runtime/src/policy_store_authority.rs"),
@@ -57,6 +70,7 @@ PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_protocol.py")
 V4_PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_v4_protocol.py")
 ERRORS = Path("src/codex_plugin_scanner/guard/native_approval_errors.py")
 APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_contracts.rs")
+APPROVAL_ERRORS = Path("rust/crates/guard-contracts/src/approval_contracts_errors.rs")
 V4_APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_v4_contracts.rs")
 AUTHORITY = Path("rust/crates/guard-runtime/src/approval_authority.rs")
 RUNTIME_APPROVAL = Path("rust/crates/guard-runtime/src/approval.rs")
@@ -187,7 +201,7 @@ def _error_codes(text: str, marker: str) -> frozenset[str]:
         end = text.find("\n_APPROVAL_HEX64", start)
     if end < 0:
         raise RuntimeError(f"approval error list is unterminated: {marker}")
-    return frozenset(re.findall(r'"(native_[a-z0-9_]+|snapshot_expired)"', text[start:end]))
+    return frozenset(re.findall(r'"(native_[a-z0-9_]+|approval_gate_[a-z0-9_]+|snapshot_expired)"', text[start:end]))
 
 
 def _uses_canonical_approval_error_import(text: str) -> bool:
@@ -262,6 +276,7 @@ def _check_authority_fence(root: Path) -> None:
 
 def _check_contracts(root: Path) -> None:
     rust_contract = _read(root / APPROVAL_CONTRACT)
+    rust_errors = _read(root / APPROVAL_ERRORS)
     rust_v4_contract = _read(root / V4_APPROVAL_CONTRACT)
     decoder = _read(root / DECODER)
     protocol = _read(root / PROTOCOL)
@@ -282,7 +297,7 @@ def _check_contracts(root: Path) -> None:
         raise RuntimeError("Python challenge decoder does not bind the resident epoch")
     if not _uses_canonical_approval_error_import(decoder):
         raise RuntimeError("Python response decoder does not use the canonical approval error vocabulary")
-    if _error_codes(rust_contract, "NATIVE_APPROVAL_ERROR_CODES") != _python_key_set(
+    if _error_codes(rust_errors, "NATIVE_APPROVAL_ERROR_CODES") != _python_key_set(
         errors, "NATIVE_APPROVAL_ERROR_CODES"
     ):
         raise RuntimeError("native and Python approval error allowlists differ")

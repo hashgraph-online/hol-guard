@@ -110,6 +110,17 @@ impl PolicySnapshotStore {
         self.approval_replay_memory.epoch()
     }
 
+    pub(crate) fn restore_native_approval_claim(
+        &self,
+        durable: &super::native_cloud_review_v4::DurableInstalledApproval,
+        nonce_digest: &str,
+        binding: &crate::approval::ApprovalReplayBinding,
+        now: u64,
+    ) -> Result<(), String> {
+        self.approval_replay_memory
+            .restore_claimed(durable, nonce_digest, binding, now)
+    }
+
     pub(crate) fn register_approval_challenge(
         &self,
         nonce_digest: &str,

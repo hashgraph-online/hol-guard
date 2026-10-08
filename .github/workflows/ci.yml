@@ -308,9 +308,9 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
-    # Includes checkout/setup plus the instrumented shard. Five minutes can
-    # cancel a healthy shard before it produces the coverage artifact Sonar needs.
-    timeout-minutes: 10
+    # Includes checkout/setup plus the instrumented shard. Ten minutes
+    # cancelled a healthy shard after its tests passed, before upload finished.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -428,7 +428,9 @@ jobs:
     # authoritative instrumented main run and stays off the contributor path.
     if: vars.SONAR_CI_ENABLED == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Clippy and the scan share this job with the coverage wait.
+    # The producers can run for twenty minutes before that scan starts.
+    timeout-minutes: 35
     permissions:
       contents: read
       actions: read

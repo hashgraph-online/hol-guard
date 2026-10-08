@@ -419,3 +419,15 @@ def decode_native_approval_v4_result(
     ):
         return None
     return dict(decoded)
+
+
+def decode_native_approval_v4_receipt(
+    payload: object, *, phase: NativeApprovalPhase,
+) -> dict[str, object] | None:
+    """Bound native-emitted receipt transport, not independently attest it."""
+    if phase not in {"validated", "consumed"} or type(payload) is not dict:
+        return None
+    decoded = cast(dict[str, object], payload)
+    if not _receipt_v4_is_valid(decoded, phase=phase) or not _within_approval_bound(decoded):
+        return None
+    return dict(decoded)

@@ -151,7 +151,7 @@ def test_execution_intent_evidence_is_optional_and_not_decision_identity() -> No
 
 
 def test_sealed_receipt_is_detached_without_raw_input_leakage(tmp_path: Path) -> None:
-    receipt = _receipt(origin_authentication="f" * 64)
+    receipt = _receipt(origin_authentication="f" * 64, execution_intent_digest="e" * 64)
     tool_input = {"command": "cat .env", "token": "private-token-value"}
     payload = {
         "tool_name": "Shell",
@@ -165,6 +165,7 @@ def test_sealed_receipt_is_detached_without_raw_input_leakage(tmp_path: Path) ->
         native_receipt=receipt,
     )
     assert envelope is not None
+    assert envelope.get("execution_intent_digest") == "e" * 64
     detached = envelope.get("native_origin_receipt")
     assert isinstance(detached, dict)
     assert detached == receipt
@@ -192,6 +193,7 @@ def test_sealed_receipt_is_detached_without_raw_input_leakage(tmp_path: Path) ->
     )
     assert legacy is not None
     assert "native_origin_receipt" not in legacy
+    assert "execution_intent_digest" not in legacy
 
     malformed = _receipt(origin_authentication="b" * 63)
     malformed_envelope = _native_review_action_envelope(

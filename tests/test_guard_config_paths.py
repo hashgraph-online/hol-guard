@@ -67,7 +67,22 @@ def _create_sqlite_guard_db(path: Path) -> None:
 def test_resolve_guard_home_defaults_to_hol_guard_directory(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     monkeypatch.setattr(Path, "home", lambda: home_dir)
+    monkeypatch.delenv("HOL_GUARD_HOME", raising=False)
 
+    assert resolve_guard_home() == home_dir / ".hol-guard"
+
+
+def test_resolve_guard_home_shares_the_desktop_env_home(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    desktop_home = tmp_path / "desktop-guard"
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    monkeypatch.setenv("HOL_GUARD_HOME", str(desktop_home))
+
+    assert resolve_guard_home() == desktop_home.resolve()
+    explicit = tmp_path / "explicit-guard"
+    assert resolve_guard_home(str(explicit)) == explicit.resolve()
+
+    monkeypatch.setenv("HOL_GUARD_HOME", "  ")
     assert resolve_guard_home() == home_dir / ".hol-guard"
 
 

@@ -23,6 +23,8 @@ pub(super) fn policy() -> EffectiveNativePolicyV3 {
         mcp_tool_actions: BTreeMap::new(),
         mcp_provider_actions: BTreeMap::new(),
         mcp_provider_catalog_hash: None,
+        cloud_workspace_id: None,
+        exact_command_actions: Vec::new(),
         sandbox_analysis: "off".into(),
         receipt_redaction_level: "full".into(),
     }

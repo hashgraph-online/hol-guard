@@ -51,7 +51,10 @@ def test_disabled_cli_evidence_failure_never_changes_denial(
     monkeypatch.setattr(cli, "_native_mode_requires_rust", lambda: False)
     monkeypatch.setattr(cli, "native_mode_is_fail_safe_disabled", lambda: True)
     responses = []
-    monkeypatch.setattr(cli, "_emit", lambda _name, value, _json: responses.append(value))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_interaction._emit",
+        lambda _name, value, _json: responses.append(value),
+    )
     status = cli.route_native_hook(
         Mock(harness="opencode", json=True),
         config=None,
@@ -132,7 +135,10 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
         monkeypatch.setattr(cli, "HookWorker", lambda **_kwargs: worker)
         monkeypatch.setattr(cli, "_native_mode_requires_rust", lambda: failure != "cli_disabled")
         responses = []
-        monkeypatch.setattr(cli, "_emit", lambda _name, value, _json: responses.append(value))
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.cli.commands_support_interaction._emit",
+            lambda _name, value, _json: responses.append(value),
+        )
         if failure == "worker_exception":
             response = cli.try_native_hook_authority(
                 payload=payload,

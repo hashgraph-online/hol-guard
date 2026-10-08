@@ -163,7 +163,7 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
     if (
         not isinstance(result, dict)
         or not set(result).issuperset(_PRE_TOOL_RESULT_KEYS)
-        or set(result) - _PRE_TOOL_RESULT_KEYS - {"command_extensions", "prompt_risk_classes"}
+        or set(result) - _PRE_TOOL_RESULT_KEYS - {"command_extensions", "prompt_risk_classes", "native_approval_consumption"}
     ):
         return False
     if "prompt_risk_classes" in result and (
@@ -190,7 +190,19 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
         return False
     decision = result["decision"]
     minimum_action = result["minimum_action"]
-    if result["explicitly_benign"] != (decision == "allow" and minimum_action == "allow"):
+    consumed = result.get("native_approval_consumption")
+    if consumed is not None:
+        from .native_approval_v4_protocol import decode_native_approval_v4_result
+
+        observed = decode_native_approval_v4_result(consumed, phase="consumed")
+        if observed is None:
+            return False
+        receipt = observed["receipt"]
+        if (receipt["harness"] != harness or decision != "allow"
+            or minimum_action != "allow" or result["explicitly_benign"] is not False
+            or result["reason_code"] != "native_approval_v4_consumed"):
+            return False
+    elif result["explicitly_benign"] != (decision == "allow" and minimum_action == "allow"):
         return False
     # `warn` is an allow-with-warning floor. All stronger actions remain
     # denying floors; this keeps the Python edge purely mechanical.
@@ -217,7 +229,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "result",
         "receipt",
     }
-    allowed = required | {"request_id"}
+    allowed = required | {"request_id", "native_application_v4"}
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
         return None
     event_name = payload.get("event_name")
@@ -246,6 +258,16 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
     receipt = payload.get("receipt")
     if not receipt_matches_edge(payload, receipt):
         return None
+    application = payload.get("native_application_v4")
+    consumed = payload["result"].get("native_approval_consumption")
+    if application is not None or consumed is not None:
+        from .runtime.native_cloud_review_v4 import decode_native_application_observation
+
+        observed = decode_native_application_observation(application)
+        if (observed is None or observed["phase"] != "consumed" or not isinstance(consumed, Mapping)
+            or observed["receipt"] != consumed.get("receipt")
+            or observed["request_id"] != payload["receipt"].get("request_id")):
+            return None
     return payload
 
 

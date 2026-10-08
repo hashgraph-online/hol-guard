@@ -1,6 +1,19 @@
-use super::{normalized_harness, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS};
-use guard_policy_snapshot::EffectiveNativePolicyV3;
+use super::{
+    action_rank, normalized_harness, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS,
+};
+use guard_policy_snapshot::{EffectiveNativePolicyV3, ExactCommandPolicyV1};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+type ExactCommandActions = BTreeMap<String, BTreeMap<[u8; 32], Vec<CompiledExactCommandAction>>>;
+
+#[derive(Debug)]
+struct CompiledExactCommandAction {
+    action: &'static str,
+    expires_at_nanos: i128,
+}
 
 /// Generation-owned indexes. The signed policy is retained unchanged; only
 /// derived selector keys are canonicalized here, before snapshot publication.
@@ -8,6 +21,8 @@ use std::collections::BTreeMap;
 pub(crate) struct CompiledEffectivePolicy {
     pub(super) harness_actions: BTreeMap<String, String>,
     pub(super) harness_risk_actions: BTreeMap<String, BTreeMap<String, String>>,
+    cloud_workspace_id: Option<String>,
+    exact_command_actions: ExactCommandActions,
 }
 
 impl CompiledEffectivePolicy {
@@ -16,8 +31,96 @@ impl CompiledEffectivePolicy {
         Ok(Self {
             harness_actions: canonical_map(&policy.harness_actions)?,
             harness_risk_actions: canonical_map(&policy.harness_risk_actions)?,
+            cloud_workspace_id: policy.cloud_workspace_id.clone(),
+            exact_command_actions: compile_exact_command_actions(policy)?,
         })
     }
+
+    pub(super) fn exact_command_action(
+        &self,
+        payload: &Value,
+        harness: &str,
+        cloud_workspace_id: Option<&str>,
+    ) -> Result<Option<&'static str>, String> {
+        let Some(actions) = self.exact_command_actions.get(harness) else {
+            return Ok(None);
+        };
+        if cloud_workspace_id != self.cloud_workspace_id.as_deref() {
+            return Err("native_policy_cloud_workspace_mismatch".into());
+        }
+        let context = guard_command::pretool::generic::extract_untrusted_command_context(payload)?;
+        let Some(command) = context.command else {
+            return Ok(None);
+        };
+        let digest: [u8; 32] = Sha256::digest(command.as_bytes()).into();
+        let Some(matches) = actions.get(&digest) else {
+            return Ok(None);
+        };
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|duration| i128::try_from(duration.as_nanos()).ok())
+            .ok_or_else(|| "native_policy_clock_unavailable".to_owned())?;
+        Ok(matches
+            .iter()
+            .filter(|rule| now < rule.expires_at_nanos)
+            .max_by_key(|rule| action_rank(rule.action))
+            .map(|rule| rule.action))
+    }
+}
+
+fn compile_exact_command_actions(
+    policy: &EffectiveNativePolicyV3,
+) -> Result<ExactCommandActions, String> {
+    if policy.exact_command_actions.len() > guard_policy_snapshot::POLICY_SNAPSHOT_MAX_MAP_ENTRIES
+        || (policy.exact_command_actions.is_empty() != policy.cloud_workspace_id.is_none())
+    {
+        return Err("native_policy_exact_command_invalid".into());
+    }
+    let mut compiled: ExactCommandActions = BTreeMap::new();
+    for rule in &policy.exact_command_actions {
+        validate_exact_command_rule(rule, policy.cloud_workspace_id.as_deref())?;
+        let mut digest = [0_u8; 32];
+        hex::decode_to_slice(&rule.command_sha256, &mut digest)
+            .map_err(|_| "native_policy_exact_command_invalid".to_owned())?;
+        let action = match rule.action.as_str() {
+            "allow" => "allow",
+            "block" => "block",
+            "review" => "review",
+            "require-reapproval" => "require-reapproval",
+            _ => return Err("native_policy_exact_command_invalid".into()),
+        };
+        let expires_at_nanos = guard_contracts::canonical_policy_timestamp_nanos(&rule.expires_at)
+            .ok_or_else(|| "native_policy_exact_command_invalid".to_owned())?;
+        compiled
+            .entry(normalized_harness(&rule.harness))
+            .or_default()
+            .entry(digest)
+            .or_default()
+            .push(CompiledExactCommandAction {
+                action,
+                expires_at_nanos,
+            });
+    }
+    Ok(compiled)
+}
+
+fn validate_exact_command_rule(
+    rule: &ExactCommandPolicyV1,
+    cloud_workspace_id: Option<&str>,
+) -> Result<(), String> {
+    if !valid_selector_key(&rule.harness, true)
+        || !valid_selector_key(&rule.cloud_workspace_id, false)
+        || Some(rule.cloud_workspace_id.as_str()) != cloud_workspace_id
+        || rule.command_sha256.len() != 64
+        || !rule
+            .command_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("native_policy_exact_command_invalid".into());
+    }
+    Ok(())
 }
 
 fn canonical_map<T: Clone + PartialEq>(

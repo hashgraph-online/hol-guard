@@ -662,39 +662,15 @@ jobs:
             return "$status"
           }
           retryable_intel_latency_miss() {
-            .venv/bin/python - "$1" <<'PY_CHECK'
+            PYTHONPATH="$PWD" .venv/bin/python - "$1" <<'PY_CHECK'
           import json
           import sys
           from pathlib import Path
 
+          from scripts.native_slo_progress import intel_macos_slo_attempt_retryable
+
           payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          gates = payload.get("gates")
-          concurrency = payload.get("concurrency")
-          sixteen = concurrency.get("sixteen") if isinstance(concurrency, dict) else None
-          latency_gates = {
-              "1m_latency",
-              "250k_latency",
-              "5m_latency",
-              "cold_latency",
-              "concurrency",
-              "readiness",
-              "recovery_latency",
-              "warm_latency",
-          }
-          failed_gates = {key for key, value in gates.items() if value is False} if isinstance(gates, dict) else set()
-          retryable = (
-              isinstance(gates, dict)
-              and all(type(value) is bool for value in gates.values())
-              and bool(failed_gates)
-              and failed_gates <= latency_gates
-              and all(value is True for key, value in gates.items() if key not in latency_gates)
-              and payload.get("errors_16") == 0
-              and payload.get("errors_64") == 0
-              and isinstance(sixteen, dict)
-              and sixteen.get("errors") == 0
-              and sixteen.get("overloaded") == 0
-          )
-          raise SystemExit(0 if retryable else 1)
+          raise SystemExit(0 if intel_macos_slo_attempt_retryable(payload) else 1)
           PY_CHECK
           }
           if [[ "$TARGET" == "x86_64-apple-darwin" ]]; then

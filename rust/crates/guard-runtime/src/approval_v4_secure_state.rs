@@ -27,7 +27,15 @@ pub(super) struct SecureState {
     pub(super) credential_id: String,
     pub(super) cose_public_key: String,
     pub(super) algorithm: i32,
+    #[serde(default = "active_status")]
+    pub(super) status: String,
+    #[serde(default)]
+    pub(super) enrollment_lineage: Vec<super::approval_v4_authority::lineage::EnrollmentAncestor>,
     pub(super) sign_count: u32,
+}
+
+fn active_status() -> String {
+    "active".to_owned()
 }
 
 pub(super) fn secure_state_matches_record(
@@ -41,6 +49,7 @@ pub(super) fn secure_state_matches_record(
         && state.version == SECURE_STATE_VERSION
         && state.record_digest == record_digest
         && state.enrollment_generation == record.enrollment_generation
+        && state.status == record.status
         && state.key_id == record.key_id
         && state.rp_id == record.rp_id
         && state.origin == record.origin
@@ -54,7 +63,7 @@ use super::approval_enrollment::{
     read_platform_secret_for_v4_state, write_platform_secret_for_v4_state,
 };
 
-const MAX_SECRET_TEXT_BYTES: usize = 16 * 1024;
+const MAX_SECRET_TEXT_BYTES: usize = 512 * 1024;
 #[cfg(test)]
 const V4_SECURE_STATE_FILE_NAME: &str = "approval-webauthn-v4-state.test.json";
 #[cfg(not(test))]

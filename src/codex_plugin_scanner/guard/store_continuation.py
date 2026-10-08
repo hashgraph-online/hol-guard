@@ -81,11 +81,17 @@ def _append_terminal_review_event(
     }:
         raise ValueError("terminal continuation status is invalid")
     request = connection.execute(
-        "select oauth_source from approval_requests where request_id = ?",
+        "select oauth_source, continuation_snapshot_json from approval_requests where request_id = ?",
         (request_id,),
     ).fetchone()
     if request is None:
         raise ValueError("terminal continuation request is missing")
+    if status == "blocked_not_resumed":
+        # A headless recompute can report retry-only after the pause was published
+        # as suspended-response. Cloud rejects that block. Cite the stored pause.
+        published = _published_block_binding(request["continuation_snapshot_json"])
+        if published is not None:
+            correlation_id, capability = published
     append_request_snapshot_event(
         connection,
         request_id=request_id,
@@ -102,6 +108,27 @@ def _append_terminal_review_event(
             "status": status,
         },
     )
+
+
+def _published_block_binding(raw_snapshot: object) -> tuple[str, str] | None:
+    """Return the pause binding already stored for this request."""
+
+    import json
+
+    from .continuation_snapshot import validated_continuation_snapshot
+
+    try:
+        decoded = json.loads(raw_snapshot) if isinstance(raw_snapshot, str) else raw_snapshot
+    except (TypeError, ValueError):
+        return None
+    snapshot = validated_continuation_snapshot(decoded)
+    if snapshot is None:
+        return None
+    correlation = snapshot.get("correlationId")
+    published_capability = snapshot.get("capability")
+    if not isinstance(correlation, str) or not isinstance(published_capability, str):
+        return None
+    return correlation, published_capability
 
 
 def _continuation_claim_allows_finalization(

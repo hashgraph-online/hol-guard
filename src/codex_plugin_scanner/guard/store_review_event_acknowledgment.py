@@ -6,6 +6,37 @@ import sqlite3
 from collections.abc import Sequence
 
 
+def release_unacked_snapshot_gaps(
+    connection: sqlite3.Connection,
+    *,
+    source: str,
+    sequences: Sequence[int],
+    binding: tuple[str, str, str, str],
+) -> int:
+    """Remove ready rows Cloud refused because a later snapshot covers them.
+
+    The accepted snapshot is the server checkpoint. These rows are deleted
+    without an acknowledgement so they cannot block that checkpoint, and
+    quarantined rows are left untouched.
+    """
+
+    released = sorted({int(sequence) for sequence in sequences if int(sequence) > 0})
+    if not released:
+        return 0
+    placeholders = ",".join("?" for _ in released)
+    cursor = connection.execute(
+        f"""
+        delete from guard_review_outbox_events
+        where stream_sequence in ({placeholders})
+          and oauth_source = ? and oauth_subject_hash = ? and workspace_id = ?
+          and machine_id = ? and machine_installation_id = ?
+          and binding_status = 'ready' and acknowledged_at is null
+        """,
+        (*released, source, *binding),
+    )
+    return max(0, int(cursor.rowcount or 0))
+
+
 def acknowledge_review_events(
     connection: sqlite3.Connection,
     *,

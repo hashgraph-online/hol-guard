@@ -45,6 +45,7 @@ from .review_signature_verification import (
     _verify_signed_payload,
     validated_review_verification_keys_from_sync,  # noqa: F401 - public compatibility re-export
 )
+from .runtime.native_cloud_review_origin import frozen_native_approval_challenge, has_native_approval_origin_marker
 from .stable_digest import sha256_content_digest
 from .stable_json import stable_json_serialize
 
@@ -233,7 +234,12 @@ def build_local_review_request_claim(
         "runtimeId": oauth.runtime_id,
         "workspaceId": oauth.workspace_id,
     }
+    native_challenge = frozen_native_approval_challenge(request_row)
+    if native_challenge is not None:
+        claim["nativeApprovalChallenge"] = native_challenge
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
+    if native_challenge is None and has_native_approval_origin_marker(request_row):
+        return claim
     return attach_exact_review_capability(claim, oauth, store)
 
 
@@ -479,6 +485,6 @@ def validate_decision_memory_bundle_target(
         if (
             isinstance(machine_ids, list)
             and machine_ids
-            and oauth.installation_id not in {str(item) for item in machine_ids}
+            and oauth.machine_id not in {str(item) for item in machine_ids}
         ):
             raise GuardReviewContractError("decision_memory_machine_mismatch")

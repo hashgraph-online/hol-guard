@@ -11,13 +11,31 @@ import sqlite3
 import uuid
 from collections.abc import Mapping
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from ..models import GuardApprovalRequest, format_local_http_origin
-from ..native_decision_receipt import validate_native_decision_receipt
+from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from ..continuation_snapshot import validated_continuation_snapshot
+from ..live_process_identity import (
+    CODEX_BROWSER_WAIT_PROCESS_KEY,
+    bound_wait_timeout_seconds,
+    process_identity_matches,
+)
+from ..models import GuardAction, GuardApprovalRequest, format_local_http_origin
+from ..native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
+from ..review_correlation import cloud_review_correlation_id
 from ..runtime.actions import normalize_harness_payload
+from ..runtime.native_cloud_review_origin import (
+    NATIVE_CLOUD_REVIEW_ORIGIN_FIELD,
+    NATIVE_CLOUD_REVIEW_ORIGIN_QUEUE_PREFIX,
+    NATIVE_CLOUD_REVIEW_ORIGIN_UNAVAILABLE_FIELD,
+    eligible_native_origin_receipt,
+    frozen_native_approval_origin,
+    native_approval_origins_match,
+    validated_native_approval_origin,
+)
+from ..runtime.native_cloud_review_v4 import NativeCloudReviewV4Error, get_native_approval_origin
 from .hook_native_review_binding import (
     native_review_claimed_allow,
     native_review_matching_allow,
@@ -132,6 +150,7 @@ def pause_native_pre_tool_for_approval(
         claimed_saved_allow_hash=claimed_saved_allow_hash,
         claimed_approval_request_id=claimed_approval_request_id,
         claim_saved_approval=claim_saved_approval,
+        fresh_receipt=native_receipt,
     ):
         allowed = dict(native_result)
         allowed["decision"] = "allow"
@@ -270,11 +289,35 @@ def queue_native_pre_tool_review(
         return None
     launch_target = _native_review_launch_target(payload)
     tool_name = _native_review_tool_name(payload)
-    request_id = uuid.uuid4().hex
+    native_origin, native_origin_unavailable = _native_cloud_review_origin(
+        guard_home=guard_home,
+        harness=harness,
+        native_result=native_result,
+        native_receipt=native_receipt,
+    )
+    request_id = str(native_origin["request_id"]) if native_origin is not None else uuid.uuid4().hex
+    if native_origin is not None:
+        try:
+            existing = lookup(request_id)
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+            return None
+        if isinstance(existing, dict):
+            if existing.get("status") == "pending" and native_approval_origins_match(
+                frozen_native_approval_origin(existing), native_origin
+            ):
+                return existing
+            # A pre-cutover or terminal row cannot acquire an eligible origin.
+            native_origin = None
+            native_origin_unavailable = _native_origin_unavailable(
+                native_receipt, reason_code="native_cloud_review_original_snapshot_conflict"
+            )
+            request_id = uuid.uuid4().hex
     artifact_id = _native_review_artifact_id(harness, tool_name)
     approval_center_url = _native_review_approval_center_url(store)
     approval_url = f"{approval_center_url}/requests/{request_id}"
     reason = str(native_result.get("reason") or "HOL Guard requires review before this action can execute.")
+    queued_at = datetime.now(tz=timezone.utc)
+    live_wait = _live_codex_wait(harness=harness, payload=payload, request_id=request_id, now=queued_at)
     binding = _native_review_binding(harness, payload, native_result, native_receipt, workspace)
     try:
         action_envelope = _native_review_action_envelope(
@@ -292,31 +335,185 @@ def queue_native_pre_tool_review(
     if action_envelope is None:
         _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)
         return None
+    raw_command: str | None = None
+    if native_origin is not None and isinstance(native_origin.get("command_sha256"), str):
+        from ..memory_decision_outbox import NATIVE_MEMORY_SOURCE_BINDING_FIELD, native_memory_source_binding
+
+        candidate = pre_tool_command(payload)
+        source_binding = native_memory_source_binding(store)
+        if (
+            candidate is not None
+            and source_binding is not None
+            and hashlib.sha256(candidate.encode("utf-8")).hexdigest() == native_origin["command_sha256"]
+            and native_origin.get("consent_revision") == source_binding["consent_revision"]
+            and native_origin.get("revocation_epoch") == source_binding["revocation_epoch"]
+        ):
+            raw_command = candidate
+            action_envelope[NATIVE_MEMORY_SOURCE_BINDING_FIELD] = source_binding
+    policy_action: GuardAction = "review"
+    if native_origin is not None:
+        assert native_receipt is not None
+        policy_action = cast(GuardAction, native_receipt["policy_action"])
+        action_envelope["pre_execution_result"] = policy_action
+        action_envelope[NATIVE_CLOUD_REVIEW_ORIGIN_FIELD] = deepcopy(native_origin)
+        action_envelope["nativeApprovalChallenge"] = deepcopy(native_origin["challenge"])
+    elif native_origin_unavailable is not None:
+        action_envelope[NATIVE_CLOUD_REVIEW_ORIGIN_UNAVAILABLE_FIELD] = native_origin_unavailable
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,
         artifact_id=artifact_id,
         artifact_name=tool_name,
         artifact_hash=binding or request_id,
-        policy_action="review",
+        policy_action=policy_action,
         recommended_scope="artifact",
         changed_fields=("native_pre_tool",),
         source_scope="project" if workspace is not None else "harness",
         config_path=str(workspace if workspace is not None else guard_home),
         review_command=f"hol-guard approvals approve {request_id}",
         approval_url=approval_url,
+        raw_command_text=raw_command,
         workspace=str(workspace) if workspace is not None else None,
         artifact_type="tool_call",
         launch_target=launch_target,
         risk_summary=reason,
+        queue_group_id=NATIVE_CLOUD_REVIEW_ORIGIN_QUEUE_PREFIX + request_id if native_origin is not None else None,
         action_envelope_json=action_envelope,
+        continuation_snapshot=None if live_wait is None else live_wait[0],
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())
         stored = lookup(persisted_id)
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         return None
-    return stored if isinstance(stored, dict) else None
+    if not isinstance(stored, dict):
+        return None
+    _bind_live_codex_hook_wait(
+        store,
+        request_id=str(stored.get("request_id") or persisted_id),
+        workspace=workspace,
+        now=queued_at,
+        live_wait=live_wait,
+    )
+    return stored
+
+
+def _live_codex_wait(
+    *,
+    harness: str,
+    payload: Mapping[str, object],
+    request_id: str,
+    now: datetime,
+) -> tuple[dict[str, object], datetime, int, dict[str, object]] | None:
+    """Freeze the attached hook before the approval insert copies its snapshot."""
+
+    if harness.strip().lower() != "codex":
+        return None
+    from .hook_request_parsing import runtime_hook_event_name
+
+    if runtime_hook_event_name(payload) != "PreToolUse":
+        return None
+    identity = _proven_codex_wait_process(payload)
+    timeout_seconds = bound_wait_timeout_seconds(payload, maximum=MAX_APPROVAL_WAIT_TIMEOUT_SECONDS)
+    if identity is None or timeout_seconds is None:
+        return None
+    deadline = now + timedelta(seconds=timeout_seconds)
+    snapshot = validated_continuation_snapshot(
+        {
+            "capability": "suspended-response",
+            "correlationId": cloud_review_correlation_id(request_id),
+            "hookAttached": True,
+            "opaqueTargetId": None,
+            "waitDeadline": deadline.isoformat(),
+        }
+    )
+    if snapshot is None:
+        return None
+    return snapshot, deadline, timeout_seconds, identity
+
+
+def _bind_live_codex_hook_wait(
+    store: object,
+    *,
+    request_id: str,
+    workspace: Path | None,
+    now: datetime,
+    live_wait: tuple[dict[str, object], datetime, int, dict[str, object]] | None,
+) -> None:
+    """Record a proven waiting Codex hook so exact Cloud apply can resume it.
+
+    A native pause previously stored only the approval row. Continuation then
+    treated the still-running hook as retry-only and the original action stayed
+    denied. A process that is not this live bridge does not become authority.
+    The deadline is the same instant frozen on the approval snapshot.
+    """
+
+    if live_wait is None:
+        return
+    _snapshot, deadline, timeout_seconds, identity = live_wait
+    upsert_session = getattr(store, "upsert_guard_session", None)
+    upsert_operation = getattr(store, "upsert_guard_operation", None)
+    if not callable(upsert_session) or not callable(upsert_operation):
+        return
+    now_text = now.isoformat()
+    try:
+        session = upsert_session(
+            session_id=uuid.uuid4().hex,
+            harness="codex",
+            surface="harness-adapter",
+            status="active",
+            client_name="codex-hook",
+            client_title="codex hook",
+            client_version="1.0.0",
+            workspace=str(workspace) if workspace is not None else None,
+            capabilities=["approval-resolution"],
+            now=now_text,
+        )
+        session_id = session.get("session_id") if isinstance(session, dict) else None
+        if not isinstance(session_id, str) or not session_id:
+            return
+        upsert_operation(
+            operation_id=uuid.uuid4().hex,
+            session_id=session_id,
+            harness="codex",
+            operation_type="tool_call",
+            status="waiting_on_approval",
+            approval_request_ids=[request_id],
+            resume_token=None,
+            metadata={
+                "codex_hook_waits_for_browser_approval": True,
+                "codex_browser_wait_deadline_at": deadline.isoformat(),
+                "codex_browser_wait_process": identity,
+                "codex_browser_wait_timeout_seconds": timeout_seconds,
+                "hook_event_name": "PreToolUse",
+                "event": "PreToolUse",
+                "workspace": str(workspace) if workspace is not None else None,
+            },
+            now=now_text,
+        )
+        from ..codex_resume import seed_request_resume_record
+        from ..store import GuardStore
+
+        if isinstance(store, GuardStore):
+            seed_request_resume_record(store, request_id=request_id, now=now_text)
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        _LOGGER.warning("Native Codex wait binding failed for %s", request_id)
+
+
+def _proven_codex_wait_process(payload: Mapping[str, object]) -> dict[str, object] | None:
+    raw = payload.get(CODEX_BROWSER_WAIT_PROCESS_KEY)
+    if not isinstance(raw, dict) or set(raw) != {"pid", "startToken"}:
+        return None
+    pid = raw.get("pid")
+    start_token = raw.get("startToken")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    if not isinstance(start_token, str) or not start_token:
+        return None
+    # A live start token can match this process.
+    if not process_identity_matches(raw):  # NOSONAR
+        return None
+    return {"pid": pid, "startToken": start_token}
 
 
 def _native_review_artifact_id(harness: str, tool_name: str) -> str:
@@ -485,6 +682,60 @@ def _native_review_binding(
     return f"{identity}:{domain}"
 
 
+def _native_cloud_review_origin(
+    *,
+    guard_home: Path,
+    harness: str,
+    native_result: Mapping[str, object],
+    native_receipt: object,
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    receipt = eligible_native_origin_receipt(native_receipt, harness=harness)
+    if (
+        receipt is None
+        or native_result.get("agent_visible_immutable_block") is True
+        or not receipt_matches_edge(
+            {
+                "harness": harness,
+                "event_name": "PreToolUse",
+                "payload_kind": receipt["payload_kind"],
+                "result": native_result,
+            },
+            receipt,
+        )
+    ):
+        return None, _native_origin_unavailable(native_receipt, reason_code="native_cloud_review_origin_ineligible")
+    try:
+        origin = get_native_approval_origin(guard_home, str(receipt["request_id"]))
+    except NativeCloudReviewV4Error as error:
+        if error.code == "native_cloud_review_v4_capability_unavailable":
+            # A genuinely older native core may still prove its legacy Root
+            # origin. No copied receipt or SDK snapshot establishes that proof.
+            return None, None
+        return None, _native_origin_unavailable(receipt, reason_code=error.code)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None, _native_origin_unavailable(receipt, reason_code="native_cloud_review_origin_unavailable")
+    validated = validated_native_approval_origin(origin, native_receipt=receipt, harness=harness)
+    if validated is None:
+        return None, _native_origin_unavailable(receipt, reason_code="native_cloud_review_v4_origin_invalid")
+    return validated, None
+
+
+def _native_origin_unavailable(native_receipt: object, *, reason_code: str) -> dict[str, object]:
+    receipt = validate_native_decision_receipt(native_receipt)
+    code = (
+        reason_code
+        if re.fullmatch(r"[a-z0-9_]{1,128}", reason_code) is not None
+        else "native_cloud_review_origin_unavailable"
+    )
+    return {
+        "schema": "guard-native-cloud-review-origin-unavailable.v4",
+        "version": 4,
+        "request_id": receipt["request_id"] if receipt is not None else None,
+        "reason_code": code,
+        "executable": False,
+    }
+
+
 def _native_review_action_envelope(
     *,
     harness: str,
@@ -504,6 +755,10 @@ def _native_review_action_envelope(
     except ValueError:
         return None
     validated = validate_native_decision_receipt(native_receipt)
+    if validated is not None:
+        intent = validated.get("execution_intent_digest")
+        if isinstance(intent, str) and _NATIVE_DIGEST.fullmatch(intent) is not None:
+            envelope["execution_intent_digest"] = intent
     if validated is None or "origin_authentication" not in validated:
         return envelope
     # Keep only the validated aggregate receipt. Never carry raw hook input

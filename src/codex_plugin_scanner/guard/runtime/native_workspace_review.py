@@ -17,11 +17,13 @@ from .. import native_policy_snapshot as _native_policy_snapshot
 from ..durable_io import fsync_directory
 from ..native_resident_client import (
     native_resident_client_failure_code,
+    native_resident_client_failure_context,
     native_resident_client_request,
 )
 from ..native_runtime import _isolated_environment, native_runtime_status
 from ..store_native_workspace_review import NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY
+from .native_transport_retry import native_transport_security_rejection
 
 _REQUEST_SCHEMA = "guard-native-workspace-review-request.v1"
 _REQUEST_VERSION = 1
@@ -29,6 +31,7 @@ _REQUEST_DIRECTORY = "workspace-review-requests"
 _MAX_REQUEST_ID_LENGTH = 128
 _MAX_REQUEST_STATE_BYTES = 64 * 1024
 _MAX_DECISION_BYTES = 16 * 1024
+_NATIVE_CONSUMPTION_QUERY_FEATURE = "native-workspace-review-consumption-query-v1"
 _NATIVE_RESIDENT_FEATURE = "resident-protocol-v2"
 _NATIVE_REVIEW_FEATURE = "native-workspace-review-decision-v1"
 
@@ -36,8 +39,10 @@ _NATIVE_REVIEW_FEATURE = "native-workspace-review-decision-v1"
 class NativeWorkspaceReviewError(ValueError):
     """Finite error raised by the local native review bridge."""
 
-    def __init__(self, code: str):
+    def __init__(self, code: str, *, call_stage: str = "verify", commit_certainty: str = "pre_commit"):
         self.code: str = code if code else "native_workspace_review_failed"
+        self.call_stage = call_stage
+        self.commit_certainty = commit_certainty
         super().__init__(self.code)
 
 
@@ -337,37 +342,116 @@ def _native_response(
     )
     if len(payload) > _MAX_DECISION_BYTES:
         raise NativeWorkspaceReviewError("native_workspace_review_decision_invalid")
+    try:
+        return _submit_native_decision(
+            guard_home=guard_home,
+            executable=identity.path,
+            payload=payload,
+            request_id=request_id,
+            request_snapshot_digest=request_snapshot_digest,
+        )
+    except NativeWorkspaceReviewError as first_error:
+        if (
+            first_error.commit_certainty not in {"unknown", "committed"}
+            or native_transport_security_rejection(first_error.code)
+            or _NATIVE_CONSUMPTION_QUERY_FEATURE not in features
+        ):
+            raise
+        # Observe the protected journal; never resend a consuming operation.
+        query = _canonical_json_bytes(
+            {
+                "operation": "workspace_review_decision_consumption",
+                "request": {"request_id": request_id, "decision": decision},
+            }
+        )
+        try:
+            return _submit_native_decision(
+                guard_home=guard_home,
+                executable=identity.path,
+                payload=query,
+                request_id=request_id,
+                request_snapshot_digest=request_snapshot_digest,
+                require_consumed=True,
+            )
+        except NativeWorkspaceReviewError as query_error:
+            if native_transport_security_rejection(query_error.code) or (
+                query_error.code.startswith("native_workspace_review_")
+                and query_error.code
+                not in {
+                    "native_workspace_review_consumption_unconfirmed",
+                    "native_workspace_review_response_invalid",
+                    "native_workspace_review_transport_failed",
+                }
+            ):
+                raise
+            raise first_error from None
+
+
+def _submit_native_decision(
+    *,
+    guard_home: Path,
+    executable: Path,
+    payload: bytes,
+    request_id: str,
+    request_snapshot_digest: str,
+    require_consumed: bool = False,
+) -> dict[str, object]:
     encoded = native_resident_client_request(
-        executable=identity.path,
+        executable=executable,
         guard_home=guard_home,
         environment=_isolated_environment(),
         payload=payload,
         timeout_seconds=10.0,
     )
     if encoded is None:
+        stage, certainty = native_resident_client_failure_context() or ("read", "unknown")
         raise NativeWorkspaceReviewError(
-            native_resident_client_failure_code() or "native_workspace_review_transport_failed"
+            native_resident_client_failure_code() or "native_workspace_review_transport_failed",
+            call_stage=stage,
+            commit_certainty=certainty,
         )
     try:
         decoded: object = json.loads(encoded.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as error:
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid") from error
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_response_invalid", call_stage="read", commit_certainty="unknown"
+        ) from error
     if not isinstance(decoded, dict):
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_response_invalid", call_stage="read", commit_certainty="unknown"
+        )
     response = cast(dict[str, object], decoded)
     error = response.get("error")
     if isinstance(error, str) and error:
-        raise NativeWorkspaceReviewError(error)
+        # The authenticated resident rejects overload before dispatching a job.
+        certainty = "pre_commit" if error == "native_overloaded" and response.get("retryable") is True else "unknown"
+        raise NativeWorkspaceReviewError(error, call_stage="read", commit_certainty=certainty)
+    if require_consumed and (response.get("status") != "replayed" or response.get("replayed") is not True):
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_consumption_unconfirmed",
+            call_stage="read",
+            commit_certainty="unknown",
+        )
     if response.get("request_id") != request_id:
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_response_invalid", call_stage="read", commit_certainty="unknown"
+        )
     if response.get("status") not in {"verified", "replayed"}:
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_response_invalid", call_stage="read", commit_certainty="unknown"
+        )
     if response.get("replayed") is not (response.get("status") == "replayed"):
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_response_invalid", call_stage="read", commit_certainty="unknown"
+        )
     if response.get("decision") not in {"allow", "deny"}:
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_response_invalid", call_stage="read", commit_certainty="unknown"
+        )
     if response.get("request_snapshot_digest") != request_snapshot_digest:
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_response_invalid", call_stage="read", commit_certainty="unknown"
+        )
     return response
 
 
@@ -422,7 +506,11 @@ def apply_native_workspace_review_decision(
         native_receipt=response,
     )
     if applied.get("resolved") is not True:
-        raise NativeWorkspaceReviewError(str(applied.get("error") or "native_workspace_review_apply_failed"))
+        raise NativeWorkspaceReviewError(
+            str(applied.get("error") or "native_workspace_review_apply_failed"),
+            call_stage="verify",
+            commit_certainty="committed",
+        )
     return {
         "status": "replayed" if response["replayed"] else "verified",
         "request_id": request_id,
@@ -461,7 +549,11 @@ def _reverify_resolved_decision(
         request_snapshot_digest=snapshot_digest,
     )
     if response.get("replayed") is not True:
-        raise NativeWorkspaceReviewError("native_workspace_review_decision_replay")
+        raise NativeWorkspaceReviewError(
+            "native_workspace_review_decision_replay",
+            call_stage="verify",
+            commit_certainty="committed",
+        )
     resolution_action = "block" if response.get("decision") == "deny" else "allow"
     applied = store.resolve_native_workspace_review_request(
         request_id,
@@ -472,7 +564,11 @@ def _reverify_resolved_decision(
         native_receipt=response,
     )
     if applied.get("resolved") is not True:
-        raise NativeWorkspaceReviewError(str(applied.get("error") or "native_workspace_review_apply_failed"))
+        raise NativeWorkspaceReviewError(
+            str(applied.get("error") or "native_workspace_review_apply_failed"),
+            call_stage="verify",
+            commit_certainty="committed",
+        )
     return {
         "status": "already_resolved",
         "request_id": request_id,

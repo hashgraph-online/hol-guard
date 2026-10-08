@@ -210,6 +210,7 @@ class NativePolicySnapshotPublisherInputs:
 
         from .config import load_guard_config
         from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
+        from .runtime.review_policy_memory_executor import native_review_policy_memory_actions
 
         with self._condition:
             workspaces = tuple(sorted(self._workspace_paths, key=str))
@@ -218,6 +219,13 @@ class NativePolicySnapshotPublisherInputs:
         policy = _merge_effective_native_policies(
             tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
         )
+        try:
+            exact_actions = native_review_policy_memory_actions(self.store)
+        except ValueError as error:
+            raise NativePolicySnapshotError("native_policy_snapshot_review_memory_unavailable") from error
+        if exact_actions:
+            policy["exact_command_actions"] = exact_actions
+            policy["cloud_workspace_id"] = exact_actions[0]["cloud_workspace_id"]
         try:
             mcp_actions = native_observed_mcp_tool_actions(self.store)
         except sqlite3.Error as error:

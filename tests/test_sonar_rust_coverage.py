@@ -58,17 +58,17 @@ def _run_rust_coverage(
             'if [[ "${0##*/}" == python ]]; then echo 1.88.0; exit 0; fi\n'
             'if [[ "$*" == *"llvm-cov --version" ]]; then\n'
             '  if [[ "$COVERAGE_MODE" != install ]]; then echo "cargo-llvm-cov 0.6.21"; fi\n'
-            '  exit 0\n'
-            'fi\n'
+            "  exit 0\n"
+            "fi\n"
             'if [[ "$*" == *"--output-path"* ]]; then\n'
             '  if [[ -e "$REPORT" ]]; then echo "stale report survived" >&2; exit 8; fi\n'
             '  case "$COVERAGE_MODE" in\n'
-            '    missing) ;;\n'
+            "    missing) ;;\n"
             '    empty) : > "$REPORT" ;;\n'
             '    malformed) echo "not LCOV" > "$REPORT" ;;\n'
             '    *) printf "SF:crates/example/src/lib.rs\\nDA:1,1\\nend_of_record\\n" > "$REPORT" ;;\n'
-            '  esac\n'
-            'fi\n',
+            "  esac\n"
+            "fi\n",
             encoding="utf-8",
         )
         stub.chmod(0o700)

@@ -181,10 +181,20 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublicationMixin, Native
             self._thread.start()
         self.request_publish()
 
-    def close(self, *, timeout_seconds: float = 1.0, deadline_monotonic: float | None = None) -> bool:
+    def close(
+        self,
+        *,
+        timeout_seconds: float = _PUBLISH_TIMEOUT_SECONDS,
+        deadline_monotonic: float | None = None,
+    ) -> bool:
         return self.close_contained(timeout_seconds=timeout_seconds, deadline_monotonic=deadline_monotonic)
 
-    def close_contained(self, *, timeout_seconds: float = 1.0, deadline_monotonic: float | None = None) -> bool:
+    def close_contained(
+        self,
+        *,
+        timeout_seconds: float = _PUBLISH_TIMEOUT_SECONDS,
+        deadline_monotonic: float | None = None,
+    ) -> bool:
         """Retain publication ownership until the publisher thread exits."""
         deadline = self._monotonic_clock() + max(0.0, timeout_seconds)
         if deadline_monotonic is not None:

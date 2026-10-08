@@ -19,6 +19,20 @@ def _pop_env(name: str) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def consume_desktop_cloud_review_factors() -> dict[str, str]:
+    """Take actual factors for native consent; never forward them to subprocesses."""
+    password = _pop_env(_PASSWORD_ENV)
+    totp_code = _pop_env(_TOTP_ENV)
+    if os.environ.get(_DESKTOP_CHILD_ENV) != "1":
+        return {}
+    factors = {}
+    if password is not None:
+        factors["password"] = password
+    if totp_code is not None:
+        factors["totp_code"] = totp_code.strip()
+    return factors
+
+
 def consume_desktop_lifecycle_env(
     *,
     totp_enabled: bool,

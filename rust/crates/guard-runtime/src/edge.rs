@@ -392,13 +392,20 @@ pub(crate) fn evaluate_envelope_with_store(
     policy_store: &crate::policy_store::PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
     validate_envelope_shape(&envelope)?;
-    let snapshot = policy_store.validate_request_snapshot(
-        &envelope.policy_snapshot,
-        &envelope.source.guard_home,
-        envelope.policy_generation,
-    )?;
-    let _command_lease = policy_store.command_authority_lease(snapshot.snapshot())?;
-    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()), Some(policy_store))
+    let baseline = {
+        let snapshot = policy_store.validate_request_snapshot(
+            &envelope.policy_snapshot,
+            &envelope.source.guard_home,
+            envelope.policy_generation,
+        )?;
+        let _command_lease = policy_store.command_authority_lease(snapshot.snapshot())?;
+        evaluate_validated_envelope(
+            envelope.clone(),
+            Some(snapshot.as_ref()),
+            Some(policy_store),
+        )?
+    };
+    crate::policy_store::native_cloud_review_v4::apply_hook(envelope, policy_store, baseline)
 }
 
 /// Evaluate against a snapshot while the policy store's request fence is

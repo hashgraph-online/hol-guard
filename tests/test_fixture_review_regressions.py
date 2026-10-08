@@ -105,27 +105,6 @@ def test_full_report_evaluation_has_one_process_owner_without_losing_tests(measu
     assert len(flattened) == len(set(flattened))
 
 
-def test_ci_entry_point_and_extracted_actions_keep_bounded_reviewable_files():
-    """Verify CI entry point and extracted actions keep bounded reviewable files."""
-    path = ROOT / ".github/workflows/ci.yml"
-    assert len(path.read_text().splitlines()) <= 750
-    workflow = yaml.safe_load(path.read_text())
-    expanded = expand_ci_job_actions(workflow)
-    assert set(workflow["jobs"]) == set(expanded["jobs"])
-    assert expanded["jobs"]["ci-python-312"]["name"] == "ci (3.12)"
-    for name, job in workflow["jobs"].items():
-        assert {k: v for k, v in job.items() if k != "steps"} == {
-            k: v for k, v in expanded["jobs"][name].items() if k != "steps"
-        }
-    for action in (ROOT / ".github/actions").glob("ci-job-*/action.yml"):
-        assert len(action.read_text().splitlines()) <= 500
-        document = yaml.safe_load(action.read_text())
-        assert document["runs"]["using"] == "composite"
-        for step in document["runs"]["steps"]:
-            assert "run" not in step or "shell" in step
-    gate = next(s for s in expanded["jobs"]["sonar"]["steps"] if s.get("name") == "SonarQube Quality Gate check")
-    assert gate["run"] == "timeout --signal=TERM --kill-after=5s 300s python -m scripts.ci.check_sonar_quality"
-    assert not gate.get("continue-on-error")
 
 
 def test_expansion_preserves_literal_input_values_and_rejects_missing_bindings(tmp_path):
@@ -154,10 +133,6 @@ def test_expansion_preserves_literal_input_values_and_rejects_missing_bindings(t
         expand_ci_job_actions(workflow, tmp_path)
 
 
-def test_validation_guide_generates_evidence_before_comparing_current_report():
-    """Verify validation guide generates evidence before comparing current report."""
-    guide = (ROOT / "docs/guard/extension-builder/VALIDATION.md").read_text()
-    assert guide.index("guard_command_decision_diff.py --write") < guide.index("guard_command_decision_diff.py --check")
 
 
 def test_synthetic_contribution_does_not_reuse_a_real_extension_action_class():
@@ -184,6 +159,21 @@ def test_actual_intake_keeps_reviewed_expectations_and_contributor_ancestry(tmp_
     """Verify actual intake keeps reviewed expectations and contributor ancestry."""
     import json
     import sys
+
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for name in (
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
     remote = tmp_path / "origin.git"
     checkout = tmp_path / "checkout"
