@@ -38,6 +38,30 @@ def is_frozen_guard_runtime() -> bool:
     return bool(getattr(sys, "frozen", False)) and Path(sys.executable).is_file()
 
 
+def frozen_windows_extension_control_commands(guard_home: Path) -> dict[str, str] | None:
+    """Return PowerShell commands for a frozen Windows Core, if applicable.
+
+    The running frozen Core executable is the authoritative local command target,
+    whether it is a Desktop sidecar or an MDM-managed installation. The daemon's
+    resolved Guard home is carried into each command so the operator changes the
+    authority state backing this response rather than the user's default state.
+    Keep both paths in single-quoted PowerShell literals so spaces and shell
+    metacharacters in custom installation paths are not interpreted.
+    """
+
+    if sys.platform != "win32" or not is_frozen_guard_runtime():
+        return None
+    executable = sys.executable
+    quoted_executable = "'" + executable.replace("'", "''") + "'"
+    quoted_guard_home = "'" + str(guard_home).replace("'", "''") + "'"
+    command_prefix = f"& {quoted_executable} command --guard-home {quoted_guard_home} controls"
+    return {
+        "shell": "powershell",
+        "enroll": f"{command_prefix} enroll",
+        "recover_authority": f"{command_prefix} recover-authority",
+    }
+
+
 def _recovery_executable(executable: str | None) -> str:
     if executable is not None:
         return executable
@@ -177,5 +201,6 @@ __all__ = [
     "frozen_daemon_recovery_command",
     "frozen_daemon_recovery_worker_command",
     "frozen_daemon_serve_command",
+    "frozen_windows_extension_control_commands",
     "is_frozen_guard_runtime",
 ]

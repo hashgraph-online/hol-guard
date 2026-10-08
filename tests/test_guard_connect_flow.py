@@ -247,7 +247,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
         assert start_payload["connect_required"] is True
 
         for _ in range(50):
-            if store.get_cloud_sync_profile() is not None:
+            if store.get_cloud_sync_profile() is not None and session.closed:
                 break
             time.sleep(0.05)
         assert store.get_cloud_sync_profile() is not None, "Timed out waiting for dashboard connect to persist OAuth"
@@ -270,7 +270,11 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
     assert store.get_cloud_sync_profile() is not None
     assert status_code == 200
-    assert connect_status["connect_required"] is False and connect_status["connect_flow"] is None and str(connect_status.get("dashboard_url") or "").endswith("/guard")
+    assert (
+        connect_status["connect_required"] is False
+        and connect_status["connect_flow"] is None
+        and str(connect_status.get("dashboard_url") or "").endswith("/guard")
+    )
     assert runtime_status == 200
     assert runtime["sync_configured"] is True
     assert runtime["cloud_state"] in {"paired_active", "paired_waiting"}
@@ -1062,3 +1066,107 @@ def test_free_oauth_entitlement_does_not_turn_into_reconnect_prompt_when_expired
         "tier": "free",
         "upgrade_cta": "Upgrade to HOL Guard Cloud to run package firewall actions.",
     }
+
+
+def _seed_oauth_entitlement(
+    store,
+    *,
+    plan_id: str,
+    firewall: bool,
+    expires_at: str | None,
+) -> None:
+    kwargs: dict[str, object] = {
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "refresh_token": "refresh-token-1",
+        "dpop_private_key_pem": "private-key-1",
+        "dpop_public_jwk": {"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        "dpop_public_jwk_thumbprint": "thumbprint-1",
+        "grant_id": "grant-1",
+        "machine_id": "machine-1",
+        "supply_chain_plan_id": plan_id,
+        "supply_chain_firewall": firewall,
+        "workspace_id": "workspace-1",
+        "now": "2026-06-05T01:39:51+00:00",
+    }
+    if expires_at is not None:
+        kwargs["supply_chain_entitlement_expires_at"] = expires_at
+    store.set_oauth_local_credentials(**kwargs)
+
+
+def test_paid_plan_with_missing_expiry_denied_claim_requires_reconnect(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_oauth_entitlement(store, plan_id="team", firewall=False, expires_at=None)
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement == {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "team",
+        "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+    }
+
+
+def test_paid_plan_with_expired_denied_claim_requires_reconnect(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_oauth_entitlement(store, plan_id="pro", firewall=False, expires_at="2026-06-01T00:00:00+00:00")
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement["reason"] == "guard_cloud_reconnect_required"
+    assert entitlement["tier"] == "pro"
+
+
+def test_paid_plan_with_fresh_denied_claim_reports_paid_required(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_oauth_entitlement(store, plan_id="team", firewall=False, expires_at="2027-07-05T01:39:51+00:00")
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement == {
+        "allowed": False,
+        "reason": "paid_guard_cloud_required",
+        "tier": "team",
+        "upgrade_cta": "Upgrade to HOL Guard Cloud to run package firewall actions.",
+    }
+
+
+def test_unpaid_plan_with_denied_claim_reports_paid_required(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_oauth_entitlement(store, plan_id="solo", firewall=False, expires_at="2027-07-05T01:39:51+00:00")
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement["reason"] == "paid_guard_cloud_required"
+    assert entitlement["tier"] == "solo"
+
+
+def test_fresh_oauth_denied_claim_beats_stale_unpaid_bundle(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_oauth_entitlement(store, plan_id="team", firewall=False, expires_at="2027-07-05T01:39:51+00:00")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "free"},
+        "2026-06-05T01:39:51+00:00",
+    )
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement["reason"] == "paid_guard_cloud_required"
+    assert entitlement["tier"] == "team"
+
+
+def test_stale_oauth_denied_claim_overrides_unpaid_bundle(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_oauth_entitlement(store, plan_id="team", firewall=False, expires_at=None)
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "free"},
+        "2026-06-05T01:39:51+00:00",
+    )
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement["reason"] == "guard_cloud_reconnect_required"
+    assert entitlement["tier"] == "team"

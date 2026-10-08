@@ -198,6 +198,7 @@ def test_recovery_preserves_authenticated_live_process_when_health_probe_misses(
         "started_at": datetime.now(timezone.utc).isoformat(),
         "pid": 4321,
         "port": 4781,
+        "state_id": "live-generation",
     }
     monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: None)
@@ -221,6 +222,46 @@ def test_recovery_preserves_authenticated_live_process_when_health_probe_misses(
     assert recovered == "http://127.0.0.1:4781"
 
 
+def test_recovery_prefers_verified_live_generation_over_stale_locator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    state = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+        "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "pid": 4321,
+        "port": 4781,
+        "state_id": "live-generation",
+    }
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "load_guard_daemon_url",
+        lambda _home: "http://127.0.0.1:4782",
+    )
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: expected_guard_home == guard_home,
+    )
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "ensure_guard_daemon",
+        lambda _home, *, home_dir=None: pytest.fail("a verified live generation must be reused"),
+    )
+
+    recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(
+        guard_home,
+        failure_kind="overload",
+    )
+
+    assert recovered == "http://127.0.0.1:4781"
+
+
 def test_transport_recovery_preserves_authenticated_process_when_health_probe_misses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -233,6 +274,7 @@ def test_transport_recovery_preserves_authenticated_process_when_health_probe_mi
         "started_at": datetime.now(timezone.utc).isoformat(),
         "pid": 4321,
         "port": 4781,
+        "state_id": "live-generation",
     }
     monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: None)
@@ -273,6 +315,7 @@ def test_transport_recovery_preserves_verified_old_process_when_health_probe_mis
         **_old_generation(),
         "pid": 4321,
         "port": 4781,
+        "state_id": "old-live-generation",
     }
     retired: list[Path] = []
     monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state)

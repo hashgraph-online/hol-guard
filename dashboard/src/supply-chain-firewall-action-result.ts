@@ -194,6 +194,26 @@ export function parsePackageFirewallActionResult(
   if (op === "audit") {
     return parseAuditActionResult(result);
   }
+  if (op === "repair") {
+    const pathRepairRequired = readStringArray(result.path_repair_required);
+    if (pathRepairRequired.length > 0) {
+      const profile = isRecord(result.profile) ? result.profile : null;
+      const manualPathRequired = profile?.manual_path_required === true;
+      return {
+        emptyState: false,
+        lines: [
+          `Affected tools: ${pathRepairRequired.join(", ")}.`,
+          manualPathRequired
+            ? "Guard could not update the shell profile automatically. Check package-shims status for the PATH export, then open a new terminal."
+            : "Open a new terminal and restart AI apps so they load the updated shell PATH.",
+        ],
+        summary: manualPathRequired
+          ? "PATH still needs a manual update."
+          : "PATH is configured; a new shell is needed before protection can be verified.",
+        tone: "warning",
+      };
+    }
+  }
   if (op === "sync") {
     return parseSyncActionResult(result);
   }

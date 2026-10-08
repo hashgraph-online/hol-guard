@@ -8,6 +8,7 @@ import hmac
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 LOCAL_DASHBOARD_SESSION_VERSION = "guard-local-daemon-session.v1"
 LOCAL_DASHBOARD_SESSION_PREFIX = "gld1"
@@ -15,9 +16,33 @@ LOCAL_DASHBOARD_SESSION_AUDIENCE = "guard-local-daemon"
 DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS = 12 * 60 * 60
 MAX_LOCAL_DASHBOARD_SESSION_AGE_SECONDS = 7 * 24 * 60 * 60
 LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM = "session_started_at"
+PROTECTION_REPAIR_DASHBOARD_SURFACE = "protection-repair"
 _PROTECTED_LOCAL_DASHBOARD_SESSION_CLAIMS = frozenset(
     {"aud", "version", "surface", "expires_at", LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM}
 )
+
+
+def build_approval_browser_url(
+    approval_url: str | None,
+    *,
+    auth_token: str | None,
+    surface: str = "approval-center",
+) -> str | None:
+    """Attach a scoped session without importing approval queue orchestration."""
+
+    if not approval_url or auth_token is None:
+        return approval_url
+    parsed = urlparse(approval_url)
+    fragment_pairs = [
+        (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
+    ]
+    fragment_pairs.append(
+        (
+            "guard-token",
+            build_local_dashboard_session_token(auth_token=auth_token, surface=surface),
+        )
+    )
+    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
 
 
 def build_local_dashboard_session_token(

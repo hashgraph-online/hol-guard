@@ -9,10 +9,28 @@ from __future__ import annotations
 
 import os
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 MACOS_BUNDLED_HOL_GUARD = Path("/Applications/HOL Guard.app/Contents/MacOS/hol-guard")
 CURRENT_HOL_GUARD_SHIM = "current-hol-guard"
+_EXACT_PROCESS_BINDING: ContextVar[str | None] = ContextVar("guard_exact_process_binding", default=None)
+
+
+@contextmanager
+def exact_process_guard_cli_binding():
+    """Prepare immutable current-process argv; this scope grants no authority.
+
+    A transition must bind candidate hooks before publishing its pointer. The
+    stable launcher would still resolve the predecessor at that boundary.
+    """
+    executable = str(Path(sys.executable).resolve(strict=True))
+    token = _EXACT_PROCESS_BINDING.set(executable)
+    try:
+        yield
+    finally:
+        _EXACT_PROCESS_BINDING.reset(token)
 
 
 def desktop_core_shim_for_executable(executable: Path) -> Path | None:
@@ -30,6 +48,42 @@ def desktop_core_shim_for_executable(executable: Path) -> Path | None:
             return unix
         return windows
     return unix
+
+
+def durable_desktop_current_hol_guard(home_dir: Path | None = None) -> Path | None:
+    """Return Desktop's user-data ``current-hol-guard`` launcher when it exists.
+
+    Managed Core lives under the Desktop app data directory. That path survives
+    AppImage unmount and must outrank a PATH ``hol-guard`` installed by pipx.
+    """
+
+    home = (home_dir or Path.home()).expanduser()
+    roots: list[Path] = []
+    data_home = os.environ.get("XDG_DATA_HOME", "").strip()
+    if data_home:
+        roots.append(Path(data_home).expanduser())
+    if sys.platform == "darwin":
+        roots.append(home / "Library" / "Application Support")
+    elif sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "").strip()
+        if appdata:
+            roots.append(Path(appdata).expanduser())
+        else:
+            roots.append(home / "AppData" / "Roaming")
+    roots.append(home / ".local" / "share")
+    seen: set[Path] = set()
+    for root in roots:
+        try:
+            key = root.resolve()
+        except OSError:
+            key = root
+        if key in seen:
+            continue
+        seen.add(key)
+        shim = root / "org.hol.guard.desktop" / "core" / CURRENT_HOL_GUARD_SHIM
+        if frozen_cli_path_is_runnable(shim):
+            return shim
+    return None
 
 
 def _desktop_core_root(executable: Path) -> Path | None:
@@ -70,6 +124,9 @@ def resolve_frozen_guard_cli() -> str:
     versioned runtime. Other frozen layouts keep ``sys.executable``.
     """
 
+    exact = _EXACT_PROCESS_BINDING.get()
+    if exact is not None:
+        return exact
     executable = Path(sys.executable)
     shim = desktop_core_shim_for_executable(executable)
     if shim is not None and frozen_cli_path_is_runnable(shim):
@@ -160,6 +217,7 @@ __all__ = [
     "MACOS_BUNDLED_HOL_GUARD",
     "argv0_is_ephemeral_desktop_cli",
     "desktop_core_shim_for_executable",
+    "durable_desktop_current_hol_guard",
     "frozen_cli_path_is_runnable",
     "frozen_launcher_is_prune_safe",
     "prune_safe_cli_executable",

@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { HiMiniArrowPath, HiMiniCheckCircle, HiMiniExclamationTriangle, HiMiniInformationCircle, HiMiniMagnifyingGlass, HiMiniNoSymbol, HiMiniShieldCheck, HiMiniSparkles, HiMiniXMark } from "react-icons/hi2";
+import { HiMiniArrowPath, HiMiniExclamationTriangle, HiMiniInformationCircle, HiMiniMagnifyingGlass, HiMiniShieldCheck, HiMiniXMark } from "react-icons/hi2";
 
 import {
   catalogRowSecondLine,
   extensionDisplayName,
   extensionStateLabel,
-} from "../../extension-control-center-model";
-import type { EffectiveExtensionControls, ExtensionCatalogItem, ExtensionPermission } from "../../extension-controls-api";
-import type { PermissionDraftState } from "../../extension-policy-draft";
-import {
   managedPermissionState,
+} from "../../extension-control-center-model";
+import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../../extension-controls-api";
+import {
   PermissionPolicyRow,
   PolicyReviewSheet,
 } from "../../extension-policy-panel";
@@ -20,45 +19,8 @@ import { useExtensionPolicyDraft } from "../../use-extension-policy-draft";
 import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns } from "../model/protection-landing";
 import { ProtectionModuleRow } from "./protection-primitives";
 import { ExtensionBrandMark } from "./extension-brand-mark";
-
-type QuickApplyChoice = {
-  state: PermissionDraftState;
-  label: string;
-  detail: string;
-  icon: typeof HiMiniSparkles;
-};
-
-const QUICK_APPLY_CHOICES: readonly QuickApplyChoice[] = [
-  {
-    state: "inherit",
-    label: "Recommended",
-    detail: "Use Guard defaults for every matching capability.",
-    icon: HiMiniSparkles,
-  },
-  {
-    state: "allow",
-    label: "Allow all",
-    detail: "Allow every matching capability that organization policy permits.",
-    icon: HiMiniCheckCircle,
-  },
-  {
-    state: "block",
-    label: "Deny all",
-    detail: "Add a local block to every matching capability.",
-    icon: HiMiniNoSymbol,
-  },
-];
-
-export function quickApplyPermissionIds(
-  permissions: readonly { permission_id: string; configurable: boolean }[],
-  effective: EffectiveExtensionControls,
-  state: PermissionDraftState,
-): string[] {
-  return permissions
-    .filter((permission) => permission.configurable)
-    .filter((permission) => state !== "allow" || managedPermissionState(effective, permission.permission_id) !== "disabled")
-    .map((permission) => permission.permission_id);
-}
+import { QuickApplyToolbar } from "./quick-apply-toolbar";
+import { PolicyEditingLocks } from "./policy-editing-locks";
 
 function CatalogSearchRow(props: {
   extension: ExtensionCatalogItem;
@@ -84,76 +46,6 @@ function CatalogSearchRow(props: {
   );
 }
 
-function QuickApplyToolbar(props: {
-  permissions: readonly ExtensionPermission[];
-  effective: EffectiveExtensionControls;
-  disabled: boolean;
-  permissionState: (permissionId: string) => PermissionDraftState;
-  onApply: (permissionIds: readonly string[], state: PermissionDraftState) => void;
-}) {
-  const configurableCount = props.permissions.filter((permission) => permission.configurable).length;
-  const managedBlockCount = props.permissions.filter((permission) =>
-    permission.configurable && managedPermissionState(props.effective, permission.permission_id) === "disabled"
-  ).length;
-  let managedBlockCopy = "";
-  if (managedBlockCount) {
-    const subject = managedBlockCount === 1 ? "block stays" : "blocks stay";
-    managedBlockCopy = ` ${managedBlockCount} organization ${subject} enforced.`;
-  }
-  if (!configurableCount) return null;
-  return (
-    <div className="mt-4 flex flex-col gap-3 border-y border-[rgba(63,65,116,0.12)] bg-[rgba(85,153,254,0.045)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-brand-dark">Quick apply to {configurableCount} matching {configurableCount === 1 ? "capability" : "capabilities"}</p>
-        <p className="mt-0.5 text-xs leading-5 text-brand-dark/65">
-          Changes stay in draft until you review and approve them.
-          {managedBlockCopy}
-        </p>
-      </div>
-      <div role="group" aria-label={`Quick apply to ${configurableCount} matching capabilities`} className="flex flex-wrap gap-2">
-        {QUICK_APPLY_CHOICES.map((choice) => (
-          <QuickApplyButton
-            key={choice.state}
-            choice={choice}
-            permissionIds={quickApplyPermissionIds(props.permissions, props.effective, choice.state)}
-            disabled={props.disabled}
-            permissionState={props.permissionState}
-            onApply={props.onApply}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function QuickApplyButton(props: {
-  choice: QuickApplyChoice;
-  permissionIds: readonly string[];
-  disabled: boolean;
-  permissionState: (permissionId: string) => PermissionDraftState;
-  onApply: (permissionIds: readonly string[], state: PermissionDraftState) => void;
-}) {
-  const active = props.permissionIds.length > 0
-    && props.permissionIds.every((permissionId) => props.permissionState(permissionId) === props.choice.state);
-  const handleClick = useCallback(() => {
-    props.onApply(props.permissionIds, props.choice.state);
-  }, [props.choice.state, props.onApply, props.permissionIds]);
-  const Icon = props.choice.icon;
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      title={props.choice.detail}
-      disabled={props.disabled || props.permissionIds.length === 0}
-      onClick={handleClick}
-      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue aria-pressed:bg-brand-blue aria-pressed:text-white"
-    >
-      <Icon className="size-4" aria-hidden="true" />
-      {props.choice.label}
-    </button>
-  );
-}
-
 /**
  * Search-first command-pattern console for the Extensions landing page.
  *
@@ -175,6 +67,10 @@ export function PatternSearchConsole(props: {
   onQueryChange?: (query: string) => void;
   /** Rendered under the input while the parent hides its own header actions. */
   actionSlot?: ReactNode;
+  /** Rendered beside the search input on wide viewports (e.g. the Filters trigger). */
+  toolbarSlot?: ReactNode;
+  /** Rendered directly under the search row (filter tokens and the popover panel anchor). */
+  subtoolbarSlot?: ReactNode;
 }) {
   const [internalQuery, setInternalQuery] = useState("");
   const query = props.query ?? internalQuery;
@@ -247,7 +143,9 @@ export function PatternSearchConsole(props: {
 
   return <section aria-labelledby="pattern-search-heading" className="mt-6">
     <h2 id="pattern-search-heading" className="sr-only">Search command patterns</h2>
-    <label className="relative block">
+    <div className="relative">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <label className="relative block min-w-0 flex-1 sm:min-w-60">
       <span className="sr-only">Search command patterns</span>
       <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55" aria-hidden="true" />
       <input
@@ -260,7 +158,7 @@ export function PatternSearchConsole(props: {
         onChange={(event) => setQuery(event.target.value.slice(0, 160))}
         placeholder='Search any command Guard watches — "squash", "git push --force", "kubectl"…'
         aria-describedby="pattern-search-hint"
-        className="min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+        className="min-h-11 w-full rounded-xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
       />
       {showResults ? (
         <button
@@ -272,12 +170,25 @@ export function PatternSearchConsole(props: {
           <HiMiniXMark className="size-4" aria-hidden="true" />
         </button>
       ) : null}
-    </label>
+        </label>
+        {props.toolbarSlot ? <div className="flex shrink-0 flex-wrap items-center gap-2">{props.toolbarSlot}</div> : null}
+      </div>
+      {props.subtoolbarSlot}
+    </div>
+
     <p id="pattern-search-hint" className={`mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`}>
       Matches patterns across every tool. Press / to focus search from anywhere on this page.
     </p>
 
     {props.actionSlot ? <div className="mt-3">{props.actionSlot}</div> : null}
+
+    {showResults ? (
+      <PolicyEditingLocks
+        health={baseEffective.health}
+        globalLockdown={baseEffective.global_lockdown}
+        refreshRequired={refreshRequired}
+      />
+    ) : null}
 
     {showResults ? (
       matches.length || toolMatches.length ? (

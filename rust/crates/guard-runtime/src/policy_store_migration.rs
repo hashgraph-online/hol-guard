@@ -22,11 +22,14 @@ pub(super) fn load_legacy_authority(
             if let Some(floor) = floor {
                 return Ok(LoadedAuthority {
                     snapshot: None,
+                    recovered_snapshot: None,
                     canonical_bytes: Vec::new(),
                     generation_floor: floor.generation,
                     policy_digest: Some(floor.policy_digest),
                     invalid_on_startup: true,
                     migrate: true,
+                    command_control_floor: None,
+                    business_policy_floor: None,
                 });
             }
             return Err(error);
@@ -36,25 +39,36 @@ pub(super) fn load_legacy_authority(
         let Some(floor) = floor else {
             return Ok(LoadedAuthority {
                 snapshot: None,
+                recovered_snapshot: None,
                 canonical_bytes: Vec::new(),
                 generation_floor: 0,
                 policy_digest: None,
                 invalid_on_startup: false,
                 migrate: false,
+                command_control_floor: None,
+                business_policy_floor: None,
             });
         };
         return Ok(LoadedAuthority {
             snapshot: None,
+            recovered_snapshot: None,
             canonical_bytes: Vec::new(),
             generation_floor: floor.generation,
             policy_digest: Some(floor.policy_digest),
             invalid_on_startup: false,
             migrate: true,
+            command_control_floor: None,
+            business_policy_floor: None,
         });
     };
 
     let floor_generation = floor.as_ref().map_or(0, |item| item.generation);
     let floor_digest = floor.as_ref().map(|item| item.policy_digest.as_str());
+    // Business authority is supported only by the combined retained record.
+    // Refuse an unsupported raw record rather than silently dropping its binding.
+    if legacy_snapshot.business_policy.is_some() {
+        return Err("native_policy_snapshot_state_invalid".to_owned());
+    }
     let mut generation_floor = floor_generation.max(legacy_snapshot.generation);
     let mut invalid_on_startup = false;
     let mut snapshot = None;
@@ -92,11 +106,15 @@ pub(super) fn load_legacy_authority(
         .or_else(|| floor.map(|item| item.policy_digest));
     Ok(LoadedAuthority {
         snapshot,
+        recovered_snapshot: None,
         canonical_bytes,
         generation_floor,
         policy_digest,
         invalid_on_startup,
         migrate: true,
+        // Command-control authority starts only from a current bound snapshot.
+        command_control_floor: None,
+        business_policy_floor: None,
     })
 }
 

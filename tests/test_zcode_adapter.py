@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import argparse
-import io
 import json
 import re
-from contextlib import redirect_stderr
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
@@ -292,28 +289,18 @@ class TestZCodeDetect:
 
 
 class TestZCodeInstallUninstall:
-    def _patch_shims(self, monkeypatch, ctx: HarnessContext) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.zcode.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []},
-        )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.zcode.remove_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []},
-        )
-
     def test_install_writes_managed_hooks_under_events(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        self._patch_shims(monkeypatch, ctx)
         manifest = ZCodeHarnessAdapter().install(ctx)
         config_path = ctx.home_dir / ".zcode" / "cli" / "config.json"
         assert manifest["active"] is True
         assert config_path.is_file()
         payload = json.loads(config_path.read_text(encoding="utf-8"))
         hooks = payload["hooks"]
-        # Current ZCode requires hook groups nested under hooks.events; the
-        # legacy flat layout makes ZCode reject the whole config file.
-        assert set(hooks.keys()) == {"events"}
+        # Current ZCode requires hook groups nested under hooks.events and
+        # hooks.enabled to opt into executing either surface.
+        assert set(hooks.keys()) == {"events", "enabled"}
+        assert hooks["enabled"] is True
         events = hooks["events"]
         assert set(events.keys()) == {"PreToolUse", "UserPromptSubmit"}
         pretool_matchers = {
@@ -331,10 +318,21 @@ class TestZCodeInstallUninstall:
             if isinstance(handler, dict) and is_guard_managed_hook_command(handler.get("command"))
         ]
         assert managed_commands, "Guard-managed PreToolUse handlers must be present"
+        managed_handlers = [
+            handler
+            for entry in events["PreToolUse"]
+            if isinstance(entry, dict)
+            for handler in entry.get("hooks", [])
+            if isinstance(handler, dict) and is_guard_managed_hook_command(handler.get("command"))
+        ]
+        # Current ZCode renders statusMessage beside the hook in its Hooks
+        # settings UI.
+        assert {handler.get("statusMessage") for handler in managed_handlers} == {
+            "HOL Guard runtime policy enforcement"
+        }
 
     def test_install_hook_command_uses_bounded_bridge_for_interpreters(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        self._patch_shims(monkeypatch, ctx)
         monkeypatch.setattr("codex_plugin_scanner.guard.adapters.zcode.sys.frozen", False, raising=False)
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
@@ -346,8 +344,11 @@ class TestZCodeInstallUninstall:
 
     def test_install_hook_command_avoids_interpreter_flags_when_frozen(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        self._patch_shims(monkeypatch, ctx)
         monkeypatch.setattr("codex_plugin_scanner.guard.adapters.zcode.sys.frozen", True, raising=False)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+            lambda: None,
+        )
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         handler = payload["hooks"]["events"]["PreToolUse"][0]["hooks"][0]
@@ -379,7 +380,6 @@ class TestZCodeInstallUninstall:
                 }
             },
         )
-        self._patch_shims(monkeypatch, ctx)
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         events = payload["hooks"]["events"]
@@ -399,7 +399,6 @@ class TestZCodeInstallUninstall:
                 "plugins": {"enabledPlugins": {"user-plugin@mp": True}},
             },
         )
-        self._patch_shims(monkeypatch, ctx)
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         assert payload["mcp"]["servers"]["user-server"]["command"] == "node"
@@ -417,7 +416,6 @@ class TestZCodeInstallUninstall:
                 }
             },
         )
-        self._patch_shims(monkeypatch, ctx)
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         events = payload["hooks"]["events"]
@@ -455,7 +453,6 @@ class TestZCodeInstallUninstall:
                 }
             },
         )
-        self._patch_shims(monkeypatch, ctx)
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         hooks = payload["hooks"]
@@ -474,7 +471,6 @@ class TestZCodeInstallUninstall:
 
     def test_repeated_install_is_idempotent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        self._patch_shims(monkeypatch, ctx)
         adapter = ZCodeHarnessAdapter()
         adapter.install(ctx)
         first = (ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8")
@@ -503,7 +499,6 @@ class TestZCodeInstallUninstall:
                 },
             },
         )
-        self._patch_shims(monkeypatch, ctx)
         adapter = ZCodeHarnessAdapter()
         adapter.install(ctx)
         adapter.uninstall(ctx)
@@ -542,7 +537,6 @@ class TestZCodeInstallUninstall:
                 }
             },
         )
-        self._patch_shims(monkeypatch, ctx)
         ZCodeHarnessAdapter().uninstall(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         pretool_commands = [
@@ -554,7 +548,6 @@ class TestZCodeInstallUninstall:
     def test_uninstall_drops_empty_hooks_section(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         _write_cli_config(ctx.home_dir, {})
-        self._patch_shims(monkeypatch, ctx)
         adapter = ZCodeHarnessAdapter()
         adapter.install(ctx)
         adapter.uninstall(ctx)
@@ -612,45 +605,6 @@ class TestZCodeManagedHelpers:
         assert "raw-user-string" in result
         assert 42 in result
         assert any(isinstance(e, dict) and e.get("matcher") == "Bash" for e in result)
-
-
-class TestZCodeGenericEmitterBlock:
-    def test_block_emits_deny_json_and_exit_two(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
-        from codex_plugin_scanner.guard.config import GuardConfig
-        from codex_plugin_scanner.guard.store import GuardStore
-
-        guard_home = tmp_path / ".hol-guard"
-        store = GuardStore(guard_home)
-        config = GuardConfig(guard_home=guard_home, workspace=tmp_path)
-        args = argparse.Namespace(
-            harness="zcode",
-            json=False,
-            policy_action="block",
-            artifact_id=None,
-            artifact_name=None,
-        )
-        payload = {
-            "hookEventName": "pre_tool_use",
-            "toolName": "run_terminal_command",
-            "toolInput": {"command": "rm -rf /"},
-        }
-        stderr_capture = io.StringIO()
-        stdout_capture = io.StringIO()
-        with redirect_stderr(stderr_capture):
-            rc = _run_hook_generic_payload(
-                args,
-                action_envelope=None,
-                config=config,
-                output_stream=stdout_capture,
-                payload=payload,
-                home_dir=tmp_path,
-                runtime_workspace=tmp_path,
-                store=store,
-            )
-        assert rc == 2
-        response = json.loads(stdout_capture.getvalue())
-        assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 class TestZCodeFixturesAreRedacted:

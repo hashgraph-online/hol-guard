@@ -13,6 +13,7 @@ _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
     (".copilot", "CopilotHarnessAdapter"),
     (".cursor", "CursorHarnessAdapter"),
     (".cline", "ClineHarnessAdapter"),
+    (".devin", "DevinHarnessAdapter"),
     (".antigravity", "AntigravityHarnessAdapter"),
     (".gemini", "GeminiHarnessAdapter"),
     (".grok", "GrokHarnessAdapter"),

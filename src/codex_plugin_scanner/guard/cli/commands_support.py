@@ -44,28 +44,9 @@ from . import commands_dispatch_admin as _commands_dispatch_admin
 from . import commands_dispatch_cloud as _commands_dispatch_cloud
 from . import commands_dispatch_cloud_review as _commands_dispatch_cloud_review
 from . import commands_hook as _commands_hook
-from .commands_hook_compat_loader import (
-    load_hook_compatibility_surface as _load_hook_compatibility_surface,
-)
 from . import commands_router as _commands_router
 from . import commands_isolation as _commands_isolation
 
-_COMPATIBILITY_SURFACE_NAMES = frozenset(
-    {
-        "_run_hook_claude_permission_prompt_notification",
-        "_run_hook_claude_permission_request",
-        "maybe_handle_cursor_post_tool",
-        "prepare_compatibility_hook_payload",
-        "_run_hook_copilot_permission_request",
-        "_run_hook_copilot_pretool",
-        "_run_hook_generic_payload",
-        "_evaluate_runtime_artifact_hook",
-        "_finalize_runtime_artifact_hook",
-        "_review_runtime_artifact_hook",
-        "RuntimeArtifactHookState",
-        "hydrate_hook_payload_reference",
-    }
-)
 _SOURCE_MODULES: tuple[ModuleType, ...] = (
     __commands_shared,
     _commands_support_workspace,
@@ -154,18 +135,6 @@ def _sync_namespace(overrides: Mapping[str, object] | None = None) -> None:
 
 def _apply_overrides(overrides: Mapping[str, object]) -> None:
     _sync_namespace(overrides)
-
-
-def __getattr__(name: str) -> object:
-    """Resolve legacy hook helpers only for explicit oracle callers."""
-
-    if name not in _COMPATIBILITY_SURFACE_NAMES:
-        raise AttributeError(name)
-    surface = _load_hook_compatibility_surface()
-    if surface is None or name not in surface:
-        raise AttributeError(name)
-    globals().update(surface)
-    return surface[name]
 
 
 _sync_namespace()

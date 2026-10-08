@@ -84,11 +84,38 @@ jobs:
             src/codex_plugin_scanner/guard/store_receipts.py \
             tests/test_guard_desktop_contract.py
 
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: desktop-contract-native
+
+      - name: Build native command evaluators
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+
+      - name: Verify generated native command catalogs
+        run: |
+          arguments=(--compiler rust/target/release/guard-command-source)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          fi
+          uv run --no-sync python scripts/ci/verify_native_command_program.py "${arguments[@]}"
+
       - name: Run Desktop contract tests
         run: uv run --no-sync pytest tests/test_guard_desktop_contract.py --tb=short
 
       - name: Validate source-bound decision evidence
-        run: uv run --no-sync python tests/guard_command_decision_diff.py --check
+        run: |
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+
+      - name: Preserve current source-bound decision evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: desktop-decision-evidence
+          path: build/guard-evidence/
+          if-no-files-found: error
 
       - name: Smoke test CLI projection
         run: |

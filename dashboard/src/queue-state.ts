@@ -416,6 +416,7 @@ export type BulkApprovalTier = "blocked" | "high" | "elevated" | "low";
  */
 export function bulkApprovalRiskTier(group: QueueGroup): BulkApprovalTier {
   if (
+    group.primary.native_business_review_display_only ||
     group.primary.decision_contract_error !== undefined ||
     group.primary.policy_action === "block" ||
     group.primary.policy_action === "sandbox-required"

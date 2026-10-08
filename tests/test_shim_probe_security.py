@@ -16,6 +16,18 @@ from codex_plugin_scanner.guard.shims import install_package_shims, probe_packag
 from tests.shim_execution_helpers import write_fake_manager_script
 
 
+@pytest.fixture(autouse=True)
+def _native_shim_intents(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = _harness_context
+
+    def enrolled_context(tmp_path: Path, *, workspace_dir: Path | None = None) -> HarnessContext:
+        context = original(tmp_path, workspace_dir=workspace_dir)
+        native_mcp_probe(context.guard_home)
+        return context
+
+    monkeypatch.setitem(globals(), "_harness_context", enrolled_context)
+
+
 def _harness_context(tmp_path: Path, *, workspace_dir: Path | None = None) -> HarnessContext:
     home_dir = tmp_path / "home"
     home_dir.mkdir(parents=True, exist_ok=True)

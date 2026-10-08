@@ -762,17 +762,19 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
 @pytest.mark.skipif(os.name == "nt", reason="requires POSIX os.fchmod permission semantics")
 def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
-    fchmod_calls: list[tuple[int, int]] = []
+    fchmod_calls: list[tuple[int, int, int]] = []
 
     def fake_fchmod(descriptor: int, mode: int) -> None:
-        fchmod_calls.append((descriptor, mode))
+        metadata = daemon_manager_module.os.fstat(descriptor)
+        fchmod_calls.append((metadata.st_dev, metadata.st_ino, mode))
 
     monkeypatch.setattr(daemon_manager_module.os, "fchmod", fake_fchmod)
 
     daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
 
-    assert len(fchmod_calls) == 3
-    assert all(mode == 0o600 for _, mode in fchmod_calls)
+    state_metadata = daemon_manager_module._state_path(guard_home).stat()
+    assert (state_metadata.st_dev, state_metadata.st_ino, 0o600) in fchmod_calls
+    assert all(mode == 0o600 for _, _, mode in fchmod_calls)
 
 
 def test_authenticated_daemon_state_rejects_post_write_tampering(tmp_path):
@@ -872,6 +874,45 @@ def test_ensure_guard_daemon_quarantines_unsigned_legacy_state_before_adoption(t
     monkeypatch.setattr(daemon_manager_module, "_retire_duplicate_guard_daemons", lambda *_args, **_kwargs: None)
 
     assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="exercises the POSIX daemon-retirement workflow")
+def test_ensure_guard_daemon_retires_authenticated_state_without_identity_before_adoption(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    daemon_manager_module.write_guard_daemon_state(
+        guard_home,
+        4781,
+        "old-token",
+        pid=12345,
+        state_id="old-state",
+    )
+    discovery_key = load_daemon_discovery_key(guard_home)
+    assert discovery_key is not None
+    state_path = daemon_manager_module._state_path(guard_home)
+    state_payload = json.loads(state_path.read_text(encoding="utf-8"))
+    state_payload.pop("state_id")
+    state_payload.pop("state_signature")
+    state_path.write_text(
+        json.dumps(authenticate_daemon_state(state_payload, discovery_key=discovery_key)),
+        encoding="utf-8",
+    )
+    retired: list[dict[str, object]] = []
+    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_retire_guard_daemon_pid",
+        lambda pid, **_kwargs: retired.append({"pid": pid}) or True,
+    )
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda _home, **_kwargs: "http://127.0.0.1:4782")
+    monkeypatch.setattr(daemon_manager_module, "_retire_duplicate_guard_daemons", lambda *_args, **_kwargs: None)
+
+    assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"
+    assert [payload["pid"] for payload in retired] == [12345]
+    assert json.loads(state_path.read_text(encoding="utf-8")) == {}
 
 
 def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:
@@ -1165,10 +1206,12 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
     launched_envs: list[dict[str, str]] = []
     launched_event = threading.Event()
     barrier = threading.Barrier(8)
+    original_popen = subprocess.Popen
 
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
 
     def fake_load_guard_daemon_url(_guard_home):
         if launched_event.is_set():
@@ -1176,6 +1219,9 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
         return None
 
     def fake_popen(command, **_kwargs):
+        # Background process queries share subprocess, but are not daemon launches.
+        if daemon_manager_module._GUARD_DAEMON_BOOTSTRAP not in command:
+            return original_popen(command, **_kwargs)
         launched_commands.append(list(command))
         launched_envs.append(dict(_kwargs["env"]))
         launched_event.set()
@@ -1251,6 +1297,7 @@ def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, m
         launched_commands.append(list(command))
         return FakeProcess(alive=len(launched_commands) > 1)
 
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
     monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home, **kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5410, 5411])
@@ -1267,10 +1314,16 @@ def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, m
     os.name == "nt",
     reason="its fake Popen omits the native Windows process identity required by daemon launch",
 )
-def test_ensure_guard_daemon_uses_one_start_deadline_across_candidate_ports(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "scenario",
+    ["default", "outer_deadline", "preparation_expired", "retirement_failed", "transition_no_maintenance"],
+)
+def test_ensure_guard_daemon_uses_one_start_deadline_across_candidate_ports(tmp_path, monkeypatch, scenario):
     guard_home = tmp_path / "guard-home"
     launched_ports: list[str] = []
     clock = {"value": 100.0}
+    waited = []
+    retirement_deadlines = []
 
     class FakeProcess:
         pid = 54_210
@@ -1285,6 +1338,7 @@ def test_ensure_guard_daemon_uses_one_start_deadline_across_candidate_ports(tmp_
         process: FakeProcess | None = None,
     ) -> None:
         del process
+        waited.append(timeout)
         clock["value"] += timeout
         return None
 
@@ -1295,6 +1349,7 @@ def test_ensure_guard_daemon_uses_one_start_deadline_across_candidate_ports(tmp_
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
     monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home, **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **_kwargs: [5410, 5411, 5412])
@@ -1305,14 +1360,167 @@ def test_ensure_guard_daemon_uses_one_start_deadline_across_candidate_ports(tmp_
         "_clear_spawned_guard_daemon_pending_launch",
         lambda *_args, **_kwargs: True,
     )
-    monkeypatch.setattr(daemon_manager_module, "_terminate_spawned_guard_daemon", lambda _process: True)
+
+    def retire(_process, *, deadline_monotonic):
+        retirement_deadlines.append(deadline_monotonic)
+        return scenario != "retirement_failed"
+
+    monkeypatch.setattr(daemon_manager_module, "_terminate_spawned_guard_daemon", retire)
     monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(daemon_manager_module.time, "monotonic", lambda: clock["value"])
 
-    with pytest.raises(RuntimeError, match="approval center did not start"):
-        daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=5.0)
+    if scenario == "preparation_expired":
 
-    assert launched_ports == ["5410"]
+        def expired_launcher_env(**_kwargs):
+            clock["value"] = 106.0
+            return {}
+
+        monkeypatch.setattr(daemon_manager_module, "_daemon_launcher_env", expired_launcher_env)
+    if scenario == "transition_no_maintenance":
+
+        def unexpected_maintenance(*_args, **_kwargs):
+            pytest.fail("exact transition scheduled work outside its planned generation")
+
+        path = daemon_manager_module._state_path(guard_home)
+        path.parent.mkdir(parents=True, mode=0o700)
+        path.write_text("{}")
+        path.chmod(0o600)
+        for name in (
+            "_schedule_stale_ephemeral_guard_daemon_reap",
+            "_schedule_duplicate_guard_daemon_retirement",
+            "reap_orphaned_daemon_workers",
+            "retire_all_guard_daemons_for_home",
+        ):
+            monkeypatch.setattr(daemon_manager_module, name, unexpected_maintenance)
+    failure = (
+        "startup process could not be retired" if scenario == "retirement_failed" else "approval center did not start"
+    )
+    outer_deadline = 102.0 if scenario == "outer_deadline" else None
+    with pytest.raises(RuntimeError, match=failure):
+        daemon_manager_module.ensure_guard_daemon(
+            guard_home,
+            start_timeout=5.0,
+            deadline_monotonic=outer_deadline,
+            background_maintenance=scenario != "transition_no_maintenance",
+        )
+
+    if scenario == "preparation_expired":
+        assert launched_ports == [] and waited == [] and retirement_deadlines == []
+    else:
+        assert launched_ports == ["5410"]
+        assert waited == [2.0 if scenario == "outer_deadline" else 5.0]
+        assert retirement_deadlines == [102.0 if scenario == "outer_deadline" else 105.0]
+
+
+def test_ensure_guard_daemon_expired_outer_deadline_has_no_launch_or_home_mutation(tmp_path, monkeypatch):
+    guard_home = tmp_path / "uncreated-guard-home"
+
+    def unexpected_preparation(*_args, **_kwargs):
+        pytest.fail("expired admission must not prepare or launch a daemon")
+
+    monkeypatch.setattr(daemon_manager_module, "_trusted_daemon_home", unexpected_preparation)
+    monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", unexpected_preparation)
+    with pytest.raises(TimeoutError, match="operation deadline exceeded"):
+        daemon_manager_module.ensure_guard_daemon(guard_home, deadline_monotonic=time.monotonic() - 1)
+    assert not guard_home.exists()
+
+
+@pytest.mark.parametrize("remaining", [0.0, 0.25])
+def test_spawned_daemon_retirement_shares_the_remaining_operation_budget(monkeypatch, remaining):
+    clock = {"value": 100.0}
+    waits, signals = [], []
+
+    class FakeProcess:
+        stdin = None
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            signals.append("terminate")
+
+        def kill(self):
+            signals.append("kill")
+
+        def wait(self, *, timeout):
+            waits.append(timeout)
+            clock["value"] += timeout
+            raise subprocess.TimeoutExpired("owned-fixture-child", timeout)
+
+    monkeypatch.setattr(daemon_manager_module.time, "monotonic", lambda: clock["value"])
+    assert not daemon_manager_module._terminate_spawned_guard_daemon(
+        FakeProcess(),
+        deadline_monotonic=100.0 + remaining,
+    )
+    assert waits == [remaining, 0.0]
+    assert signals == ["terminate", "kill"]
+    assert clock["value"] == 100.0 + remaining
+
+
+@pytest.mark.skipif(os.name == "nt", reason="models POSIX PID generation checks")
+@pytest.mark.parametrize("fault", ["expired", "foreign_token", "reused_before_signal", "query_expired"])
+def test_exact_retirement_refuses_expiry_or_pid_reuse_before_signaling(monkeypatch, fault):
+    from codex_plugin_scanner.guard import live_process_identity
+
+    clock, queries = {"value": 100.0}, []
+    deadline = 99.0 if fault == "expired" else 101.0
+    monkeypatch.setattr(daemon_manager_module.time, "monotonic", lambda: clock["value"])
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
+
+    def token(pid, *, deadline_monotonic):
+        assert pid == 123 and deadline_monotonic == deadline
+        queries.append(pid)
+        if fault == "query_expired":
+            clock["value"] = deadline + 1
+        return "foreign" if fault == "foreign_token" or len(queries) == 2 else "expected"
+
+    def unexpected_signal(*_args, **_kwargs):
+        pytest.fail("retirement signaled an unbound or expired process generation")
+
+    monkeypatch.setattr(live_process_identity, "process_start_token", token)
+    monkeypatch.setattr(daemon_manager_module.os, "kill", unexpected_signal)
+    assert not daemon_manager_module._retire_guard_daemon_pid(
+        123,
+        deadline_monotonic=deadline,
+        expected_start_token="expected",
+    )
+    assert len(queries) == {"expired": 0, "foreign_token": 1, "query_expired": 1, "reused_before_signal": 2}[fault]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses POSIX readiness and signal handling")
+def test_actual_owned_startup_child_does_not_add_two_seconds_of_retirement_wait():
+    import select
+
+    child = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+                "print('owned fixture ready',flush=True); time.sleep(30)"
+            ),
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        assert child.stdout is not None
+        assert select.select([child.stdout], [], [], 3.0)[0], "owned child did not become ready"
+        assert child.stdout.readline() == b"owned fixture ready\n"
+        started = time.monotonic()
+        _ = daemon_manager_module._terminate_spawned_guard_daemon(child, deadline_monotonic=started + 0.05)
+        assert time.monotonic() - started < 0.5, "retirement added a fresh wait after the operation expired"
+    finally:
+        # This is fixture cleanup after measurement, not renewed operation
+        # admission. The exact Popen handle remains owned by this test.
+        if child.poll() is None:
+            child.kill()
+        child.wait(timeout=3.0)
+        if child.stdout is not None:
+            child.stdout.close()
 
 
 @pytest.mark.skipif(
@@ -1334,6 +1542,7 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_runtime_fingerp
         return None
 
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
     monkeypatch.setattr(
         daemon_manager_module,
@@ -1452,15 +1661,20 @@ def test_runtime_fingerprint_reuses_content_hash_when_tree_signature_matches(tmp
 
 
 def test_desktop_ensure_uses_post_update_timeout(monkeypatch):
+    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
+    margin = daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS
+    worker_floor = daemon_manager_module.hook_worker_ready_timeout(0.0)
+    # The start deadline is the larger of the base constant and the worker
+    # ready floor plus margin, so the client always outlasts a healthy worker.
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    assert (
-        daemon_manager_module._default_guard_daemon_start_timeout()
-        == daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == max(
+        daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+        worker_floor + margin,
     )
     monkeypatch.delenv("HOL_GUARD_DESKTOP")
-    assert (
-        daemon_manager_module._default_guard_daemon_start_timeout()
-        == daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == max(
+        daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS,
+        worker_floor + margin,
     )
 
 
@@ -2201,6 +2415,7 @@ def test_retire_guard_daemon_process_clears_recycled_pid_for_different_guard_hom
 
 def test_retire_all_uses_authenticated_state_when_platform_enumeration_is_empty(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda pid: pid == 55_555)
     retired_calls: list[tuple[int, Path | None]] = []
     monkeypatch.setattr(
         daemon_manager_module,
@@ -2248,6 +2463,7 @@ def test_retire_all_honors_keep_port_for_authenticated_state(tmp_path, monkeypat
 
 def test_retire_all_attempts_authenticated_state_pid_only_once(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda pid: pid == 55_555)
     monkeypatch.setattr(
         daemon_manager_module,
         "load_authenticated_daemon_state",
@@ -2807,7 +3023,7 @@ def test_existing_active_pending_launch_is_retired_or_blocks_before_spawn(tmp_pa
     monkeypatch.setattr(
         daemon_manager_module,
         "retire_all_guard_daemons_for_home",
-        lambda _guard_home: events.append("retire-attempted") or [],
+        lambda _guard_home, **_kwargs: events.append("retire-attempted") or [],
     )
     monkeypatch.setattr(
         daemon_manager_module,
@@ -2968,6 +3184,88 @@ def test_authenticated_state_with_proven_foreign_recycled_pid_is_tombstoned(tmp_
     assert state_clears == [62_222]
 
 
+@pytest.mark.skipif(os.name == "nt" or not hasattr(os, "waitid"), reason="requires POSIX waitid")
+def test_daemon_death_wait_observes_exact_exited_child_without_poll_delay(monkeypatch) -> None:
+    process = subprocess.Popen([sys.executable, "-c", "raise SystemExit(17)"])
+    try:
+        os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+        assert daemon_manager_module._guard_daemon_pid_is_running(process.pid)
+
+        def unexpected_sleep(_seconds: float) -> None:
+            pytest.fail("An exited daemon must not consume a signal grace period")
+
+        monkeypatch.setattr(daemon_manager_module.time, "sleep", unexpected_sleep)
+        assert daemon_manager_module._wait_for_guard_daemon_pid_death(process.pid)
+        assert daemon_manager_module._guard_daemon_pid_is_proven_dead(process.pid)
+        assert process.wait(timeout=5) == 17
+    finally:
+        process.wait(timeout=5)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="requires POSIX child processes")
+def test_daemon_death_wait_preserves_live_child_and_non_child() -> None:
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert not daemon_manager_module._wait_for_guard_daemon_pid_death(process.pid, timeout=0)
+        assert process.poll() is None
+        assert not daemon_manager_module._wait_for_guard_daemon_pid_death(os.getpid(), timeout=0)
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
+
+
+@pytest.mark.parametrize("pid", (0, -1, -42))
+def test_daemon_child_exit_probe_never_waits_for_a_process_group(monkeypatch, pid: int) -> None:
+    def unexpected_wait(*_args: object) -> tuple[int, int]:
+        pytest.fail("Only an exact positive daemon PID can be observed")
+
+    monkeypatch.setattr(daemon_manager_module.os, "waitid", unexpected_wait, raising=False)
+    assert not daemon_manager_module._guard_daemon_child_has_exited(pid)
+
+
+@pytest.mark.parametrize("outcome", (None, "wrong-pid", "stopped", "error"))
+def test_daemon_child_exit_probe_preserves_uncertain_liveness(monkeypatch, outcome: str | None) -> None:
+    proxy = _PosixOSProxy()
+    monkeypatch.setattr(daemon_manager_module, "os", proxy)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    for name, value in (
+        ("P_PID", 1),
+        ("WEXITED", 4),
+        ("WNOHANG", 1),
+        ("WNOWAIT", 8),
+        ("CLD_EXITED", 1),
+        ("CLD_KILLED", 2),
+        ("CLD_DUMPED", 3),
+    ):
+        monkeypatch.setattr(proxy, name, value, raising=False)
+
+    def observe(*_args: object) -> object:
+        if outcome == "error":
+            raise PermissionError("unavailable process status")
+        if outcome is None:
+            return None
+        return SimpleNamespace(
+            si_pid=1235 if outcome == "wrong-pid" else 1234, si_code=4 if outcome == "stopped" else proxy.CLD_EXITED
+        )
+
+    monkeypatch.setattr(proxy, "waitid", observe, raising=False)
+    assert not daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+
+
+def test_daemon_child_exit_probe_preserves_platform_without_waitid(monkeypatch) -> None:
+    class WithoutWaitid(_PosixOSProxy):
+        def __getattr__(self, name: str):
+            if name == "waitid":
+                raise AttributeError(name)
+            return super().__getattr__(name)
+
+    monkeypatch.setattr(daemon_manager_module, "os", WithoutWaitid())
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    assert not daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: False)
+    assert daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+
+
 def test_posix_daemon_retirement_waits_for_sigkill_to_finish(monkeypatch) -> None:
     pid = 62_223
     signals: list[int] = []
@@ -3121,6 +3419,117 @@ def test_daemon_inventory_fails_closed_for_malformed_python_guard_process(tmp_pa
     assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_skips_serve_without_guard_home(tmp_path, monkeypatch) -> None:
+    command_line = "/usr/local/bin/hol-guard daemon --serve --port 5474"
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_adopts_implicit_default_home(tmp_path, monkeypatch) -> None:
+    default_home = tmp_path / "default-home"
+    default_home.mkdir()
+    monkeypatch.setattr(daemon_manager_module, "_implicit_daemon_guard_home", lambda: default_home)
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: "123 /usr/local/bin/hol-guard daemon --serve --port 5474\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(default_home) == [(123, 5474)]
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_parses_equals_guard_home(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 /usr/local/bin/hol-guard daemon --serve --guard-home={tmp_path} --port 5474\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == [(123, 5474)]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_fails_closed_for_equals_home_without_port(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 /usr/local/bin/hol-guard daemon --serve --guard-home={tmp_path}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+@pytest.mark.parametrize("port_args", ["", " --port 0", " --port=0"])
+def test_daemon_inventory_admits_own_dynamic_port_but_preserves_unknown_competitor(tmp_path, monkeypatch, port_args):
+    current = os.getpid()
+    command = f"/usr/local/bin/hol-guard daemon --serve --guard-home={tmp_path}{port_args}"
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    query = MagicMock(return_value=f"{current} {command}\n")
+    monkeypatch.setattr(daemon_manager_module, "_bounded_process_query_stdout", query)
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+    query.return_value = f"{current} {command}\n{current + 1000} {command}\n"
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX frozen bootloader coverage")
+@pytest.mark.parametrize("trusted", [False, True])
+def test_dynamic_bootloader_parent_requires_existing_exact_identity_proof(tmp_path, monkeypatch, trusted):
+    from codex_plugin_scanner.guard import frozen_daemon_runtime
+
+    parent = os.getppid()
+    command = f"/usr/local/bin/hol-guard daemon --serve --guard-home={tmp_path} --port 0"
+    monkeypatch.setattr(daemon_manager_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(daemon_manager_module, "_bounded_process_query_stdout", lambda _args: f"{parent} {command}\n")
+    proof = MagicMock(return_value=parent if trusted else None)
+    monkeypatch.setattr(frozen_daemon_runtime, "_trusted_frozen_bootloader_parent_pid", proof)
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == ([] if trusted else None)
+    proof.assert_called_once_with(tmp_path)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_ignores_bounded_hook_launcher(tmp_path, monkeypatch) -> None:
+    command_line = (
+        "/usr/local/bin/hol-guard __guard-bounded-hook "
+        '{"python_executable":"/usr/local/bin/hol-guard","cli_args":["guard","hook"]}'
+    )
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_fails_closed_for_matching_home_without_port(tmp_path, monkeypatch) -> None:
+    command_line = f"/usr/local/bin/hol-guard daemon --serve --guard-home {tmp_path}"
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
+
+
 @pytest.mark.parametrize(
     "command_line",
     (
@@ -3237,3 +3646,71 @@ def test_guard_daemon_retirement_completeness_accepts_explicitly_empty_state(tmp
     )
 
     assert daemon_manager_module.guard_daemon_retirement_is_complete(guard_home)
+
+
+@pytest.mark.parametrize("source", ["pending", "state", "inventory"])
+@pytest.mark.parametrize("platform", ["posix", "nt"])
+def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, source, platform):
+    from types import SimpleNamespace
+
+    guard_home = tmp_path / "guard-home"
+    pid = 64_555
+    now = [100.0]
+    deadline = 100.05
+    signals = []
+    waits = []
+    reaper_deadlines = []
+    pending = {"pid": pid, "port": 4781, "process_creation_time": 1234}
+    state = {"pid": pid, "port": 4781, "guard_home": str(guard_home)}
+    monkeypatch.setattr(daemon_manager_module, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "load_authenticated_guard_daemon_pending_launch",
+        lambda _home: pending if source == "pending" else None,
+    )
+    monkeypatch.setattr(
+        daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state if source == "state" else None
+    )
+    monkeypatch.setattr(daemon_manager_module, "windows_process_creation_time", lambda _pid: 1234)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_process_inventory_for_guard_home",
+        lambda _home: [(pid, 4781)] if source == "inventory" else None,
+    )
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
+    # Isolate platform dispatch without mutating the interpreter's global os.
+    monkeypatch.setattr(
+        daemon_manager_module, "os", SimpleNamespace(name=platform, kill=lambda _pid, sig: signals.append(sig))
+    )
+    native_terminations = []
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "windows_terminate_process_if_creation_time",
+        lambda process_id, creation_time: native_terminations.append((process_id, creation_time)) or False,
+    )
+    monkeypatch.setattr(daemon_manager_module, "record_daemon_lifecycle_event", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        daemon_manager_module, "reap_orphaned_daemon_workers", lambda *, deadline: reaper_deadlines.append(deadline)
+    )
+
+    def wait(_pid, *, timeout=1.0):
+        waits.append(timeout)
+        now[0] += timeout
+        return False
+
+    monkeypatch.setattr(daemon_manager_module, "_wait_for_guard_daemon_pid_death", wait)
+
+    assert daemon_manager_module.retire_all_guard_daemons_for_home(guard_home, deadline=deadline) == []
+    assert now[0] <= deadline
+    if platform == "nt":
+        # Windows retirement is creation-time-bound native termination, not a
+        # POSIX signal/wait sequence. The shared reaper still uses the original deadline.
+        assert native_terminations == [(pid, 1234)]
+        assert waits == []
+        assert signals == []
+    else:
+        assert waits == [pytest.approx(0.05)]
+        assert signals == [signal.SIGTERM]
+        assert native_terminations == []
+    assert reaper_deadlines == [deadline]

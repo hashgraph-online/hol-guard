@@ -8,13 +8,14 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.harness_attribution import (
     cursor_hook_query_extras,
     cursor_runtime_detected,
+    origin_harness_env,
     resolve_environment_harness,
     resolve_runtime_hook_harness,
 )
+from tests.conftest import guard_commands_module
 
 
 def test_cursor_runtime_detected_from_cursor_env() -> None:
@@ -43,6 +44,19 @@ def test_resolve_environment_harness_matches_each_runtime_family() -> None:
     assert resolve_environment_harness({"CLAUDE_CODE_ENTRYPOINT": "cli"}) == "claude-code"
     assert resolve_environment_harness({"CURSOR_TRACE_ID": "trace-1"}) == "cursor"
     assert resolve_environment_harness({"CODEX_SANDBOX": "1"}) == "codex"
+    assert resolve_environment_harness({"CODEX_THREAD_ID": "thread-1"}) == "codex"
+    assert resolve_environment_harness({"CODEX_HOME": "/tmp/codex-home"}) is None
+    assert resolve_environment_harness({"GROK_AGENT": "1"}) == "grok"
+    assert resolve_environment_harness({"GROK_SESSION_ID": "session-1"}) == "grok"
+    assert resolve_environment_harness({"GROK_HOME": "/tmp/grok-home"}) is None
+    assert resolve_environment_harness({"OPENCODE_CONFIG_CONTENT": "{}"}) == "opencode"
+    assert resolve_environment_harness({"OPENCODE_CONFIG": "/tmp/opencode.json"}) is None
+    assert resolve_environment_harness({"DEVIN_PROJECT_DIR": "/workspace/project"}) == "devin"
+    assert resolve_environment_harness({"HOL_GUARD_ORIGIN_HARNESS": "grok"}) == "grok"
+    assert resolve_environment_harness({"HOL_GUARD_ORIGIN_HARNESS": "guard-cli"}) is None
+    assert origin_harness_env("grok") == {"HOL_GUARD_ORIGIN_HARNESS": "grok"}
+    assert origin_harness_env("guard-cli") == {}
+    assert origin_harness_env("unknown") == {}
 
 
 def test_resolve_environment_harness_ignores_blank_and_unrelated_env() -> None:
@@ -72,10 +86,12 @@ def test_claude_hook_http_url_includes_cursor_runtime_harness(monkeypatch: pytes
     assert f"workspace={tmp_path / 'workspace'}" in url.replace("%2F", "/")
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_records_cursor_harness_for_cursor_env(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
 ) -> None:
     from tests.test_guard_runtime import _build_guard_fixture, _run_guard_hook
 
@@ -101,6 +117,6 @@ def test_guard_hook_records_cursor_harness_for_cursor_env(
         as_json=True,
     )
 
-    assert rc == 1
+    assert rc == 2  # canonical: detected cursor harness, _RC_BLOCK_IS_TWO
     assert isinstance(payload, dict)
     assert payload["harness"] == "cursor"

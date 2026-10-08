@@ -16,14 +16,17 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
+from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
+
+pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
 
 
 @pytest.fixture(autouse=True)
@@ -63,8 +66,6 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
     }
 
 
-pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
-
 WORKSPACE_ID = "workspace-alpha"
 
 
@@ -91,7 +92,7 @@ def _fingerprint(public_key_pem: bytes) -> str:
 
 
 def _bundle_response(*, action: str, policy_rules: list[dict[str, object]] | None = None) -> dict[str, object]:
-    generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = generated_at + timedelta(hours=12)
     bundle = {
         "advisories": [
@@ -253,6 +254,7 @@ def _data_flow_signal_v2() -> RiskSignalV2:
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -313,6 +315,7 @@ def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     assert store.list_approval_requests(limit=5) == []
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -358,7 +361,7 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["approval_requests"]
     pending = store.list_approval_requests(limit=5)
@@ -367,6 +370,7 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     assert "minimist" in risk_summary.lower()
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -409,7 +413,7 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
     output = json.loads(capsys.readouterr().out)
     pending = store.list_approval_requests(status="pending", limit=5)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "require-reapproval"
     assert output["approval_requests"]
     assert len(pending) == 1
@@ -417,6 +421,7 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
     assert pending[0]["decision_v2_json"]["package_review_cloud_reason_code"] == "cloud_timeout"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -484,6 +489,7 @@ def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
     assert captured.err == ""
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -504,6 +510,7 @@ def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
         ),
         "2026-05-19T00:00:00Z",
     )
+    write_synthetic_daemon_auth_token(home_dir)
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
     observed_timeouts: list[int] = []
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
@@ -546,10 +553,12 @@ def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     assert observed_timeouts == [8]
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "/requests/" in reason
+    assert "guard-token=gld1." in reason
     assert "retry the same Codex action" in reason
     assert "waiting for approval in your browser" in captured.err
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_warns_for_package_request_without_blocking(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -588,6 +597,7 @@ def test_guard_hook_warns_for_package_request_without_blocking(
     assert "approval_requests" not in output
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -641,16 +651,23 @@ def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "block"
-    assert output["decision_v2_json"]["user_title"] == "Blocked by policy"
-    assert output["decision_v2_json"]["user_title"] != output["supply_chain_evaluation"]["user_copy"]["title"]
+    assert output["decision_v2_json"]["user_title"] == "Critical install blocked"
+    # The scanner escalation must reach the composed copy: the primary detail is
+    # the scanner's own signal. Under the Python path the package verdict stays
+    # at its weaker pre-escalation title; under the resident the package
+    # evaluation itself already escalated, so it also reports the block title.
+    # Either way the composed copy keeps the escalated block title and the
+    # scanner's primary detail rather than a weaker package warning.
+    assert output["supply_chain_evaluation"]["decision"] == "block"
     assert (
         output["decision_v2_json"]["dashboard_primary_detail"]
         == "Cisco scanner found a critical package exfiltration path."
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -704,7 +721,7 @@ def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     assert output["policy_action"] == "block"
     assert "network host" in output["risk_summary"]
     assert output["decision_v2_json"]["user_title"] == "Blocked by policy"
@@ -718,6 +735,7 @@ def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     assert evidence[0]["category"] == "supply-chain"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_preserves_cloud_reconnect_guidance_for_compound_package_install(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -791,7 +809,7 @@ def test_guard_hook_preserves_cloud_reconnect_guidance_for_compound_package_inst
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
+    assert rc == 0
     decision = output["decision_v2_json"]
     instruction = "Run `hol-guard connect` to reconnect Guard Cloud, then retry the same install."
     assert instruction in decision["user_body"]
@@ -801,6 +819,7 @@ def test_guard_hook_preserves_cloud_reconnect_guidance_for_compound_package_inst
     assert "Open HOL Guard" in decision["retry_instruction"]
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_does_not_tell_allowed_package_install_to_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

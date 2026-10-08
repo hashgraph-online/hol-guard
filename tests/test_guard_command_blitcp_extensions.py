@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
@@ -19,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.command_operand_matchers import (
 from tests.command_extension_contracts import (
     assert_safe_command_cases,
 )
+from tests.native_command_test_support import real_native_command_evaluation
 
 BLITCP_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     (
@@ -157,7 +157,7 @@ BLITCP_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 def test_blitcp_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in BLITCP_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.blitcp" for item in evaluation.extension_observations)
 
@@ -265,9 +265,11 @@ def test_blitcp_option_values_cannot_forge_a_local_destination(tmp_path: Path) -
         "blitcp /data smb://fileserver/share --smb-user backup-svc",
         "blitcp /data az://container/nightly --az-account storageacct",
     ):
-        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
-            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
-        )
+        observations = real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            controls=(("extension", "command.blitcp", "enabled"),),
+        ).evaluation.extension_observations
         rule_ids = {item.rule.rule_id for item in observations if item.extension.extension_id == "command.blitcp"}
         assert "command.blitcp.remote-destination" in rule_ids, command
 

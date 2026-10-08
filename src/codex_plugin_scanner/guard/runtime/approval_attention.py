@@ -6,10 +6,10 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import final
 
 from ..config import GuardConfig, load_guard_config
+from ..directory_path_authority import trusted_guard_directory_roots, validate_guard_directory_path
 from ..store import GuardStore
 from .surface_server import GuardSurfaceRuntime
 
@@ -164,7 +164,12 @@ class ApprovalAttentionCoordinator:
         ]
         if not requests or self._operation_was_superseded(operation):
             return
-        config = self._config_for_requests(requests)
+        try:
+            config = self._config_for_requests(requests)
+        except ValueError:
+            # An untrusted or swapped workspace fails closed for this operation
+            # without terminating the attention loop.
+            return
         if config.approval_surface_policy != "attention-aware" or self._runtime.has_live_surface("approval-center"):
             return
         open_key = f"approval-request:{item.request_ids[0]}"
@@ -206,8 +211,17 @@ class ApprovalAttentionCoordinator:
         )
 
     def _config_for_requests(self, requests: list[dict[str, object]]) -> GuardConfig:
-        workspace = next(
-            (Path(value) for request in requests if isinstance((value := request.get("workspace")), str)),
+        workspace_value = next(
+            (value for request in requests if isinstance((value := request.get("workspace")), str)),
             None,
         )
-        return load_guard_config(self._store.guard_home, workspace)
+        workspace = (
+            validate_guard_directory_path(
+                workspace_value,
+                trusted_guard_directory_roots(self._store.guard_home),
+                allow_owned_temporary=True,
+            )
+            if workspace_value is not None
+            else None
+        )
+        return load_guard_config(self._store.guard_home, workspace, require_canonical_workspace=True)

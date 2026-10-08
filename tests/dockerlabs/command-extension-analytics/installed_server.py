@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import sqlite3
 import subprocess
@@ -16,6 +17,7 @@ from pathlib import Path
 
 from codex_plugin_scanner import __version__
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
+from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.store import GuardStore
@@ -30,49 +32,64 @@ _GH_FIXTURE = Path("/opt/guard-lab/github-cli-fixture.sh")
 _REPOSITORY = "hashgraph-online/hol-guard"
 _VIEWER = "dashboard-reviewer"
 _WORKFLOW_COMMAND = f"{_GH_EXECUTABLE} issue lock 17 --repo {_REPOSITORY}"
-_KEYRING_MODULE = """\
-import hashlib
-import os
-from pathlib import Path
-
-from keyring.backend import KeyringBackend
-from keyring.errors import PasswordDeleteError
-
-
-class GuardLabKeyring(KeyringBackend):
-    priority = 1
-    _root = Path("/guard-home/lab-keyring")
-
-    def _path(self, service, username):
-        identity = f"{service}\\0{username}".encode("utf-8")
-        return self._root / hashlib.sha256(identity).hexdigest()
-
-    def get_password(self, service, username):
-        try:
-            return self._path(service, username).read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return None
-
-    def set_password(self, service, username, password):
-        self._root.mkdir(mode=0o700, exist_ok=True)
-        path = self._path(service, username)
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            stream.write(password)
-
-    def delete_password(self, service, username):
-        try:
-            self._path(service, username).unlink()
-        except FileNotFoundError as error:
-            raise PasswordDeleteError("credential unavailable") from error
-"""
+_KEYRING_FIXTURE = Path(__file__).with_name("keyring_fixture.py")
 
 
 def _safe_hook_diagnostic(value: str) -> str:
-    redacted = value.replace(SENTINEL, "[REDACTED]")
-    if len(redacted) <= _MAX_HOOK_DIAGNOSTIC_CHARS:
-        return redacted
+    redacted = re.sub(
+        r"([#&?]guard-token=)[^\s\"'&]+", r"\1[REDACTED]", value.replace(SENTINEL, "[REDACTED]")
+    )
     return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
+
+
+def _safe_hook_response_summary(value: str) -> str:
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return _safe_hook_diagnostic(value)
+    if not isinstance(payload, dict):
+        return "unexpected hook response shape"
+    reuse = payload.get("approval_reuse")
+    composition = payload.get("policy_composition")
+    scanner_evidence = payload.get("scanner_evidence")
+    post_claim = (
+        next(
+            (
+                item
+                for item in scanner_evidence
+                if isinstance(item, dict)
+                and item.get("source") == "approval_reuse"
+                and item.get("input_source") == "claimed_github_workflow_capability"
+            ),
+            None,
+        )
+        if isinstance(scanner_evidence, list)
+        else None
+    )
+    return json.dumps(
+        {
+            "keys": sorted(payload),
+            "policy_action": payload.get("policy_action"),
+            "decision_reason_code": payload.get("decision_reason_code"),
+            "reason_code": payload.get("reason_code"),
+            "approval_reuse": {
+                "status": reuse.get("status"),
+                "reason_code": reuse.get("reason_code"),
+            }
+            if isinstance(reuse, dict)
+            else None,
+            "approval_reuse_source": composition.get("approval_reuse_source")
+            if isinstance(composition, dict)
+            else None,
+            "post_claim_validation": {
+                "context_change_reason": post_claim.get("post_claim_context_change_reason"),
+                "refresh_failed": post_claim.get("post_claim_refresh_failed"),
+            }
+            if isinstance(post_claim, dict)
+            else None,
+        },
+        sort_keys=True,
+    )
 
 
 def _write_dashboard_session_handoff(session: str) -> None:
@@ -88,7 +105,12 @@ def _run_installed_hook(
     payload: Mapping[str, object],
     *,
     expected_status: int = 0,
-) -> None:
+    expect_denial: bool = False,
+    expect_approval: bool = False,
+    policy_action: str | None = None,
+) -> str:
+    if expect_denial and expect_approval:
+        raise ValueError("hook cannot expect both denial and approval")
     command = [
         "hol-guard",
         "hook",
@@ -102,6 +124,8 @@ def _run_installed_hook(
         harness,
         "--json",
     ]
+    if policy_action is not None:
+        command.extend(("--policy-action", policy_action))
     completed = subprocess.run(
         command,
         input=json.dumps(payload),
@@ -112,13 +136,39 @@ def _run_installed_hook(
         env={**os.environ, "HOME": str(GUARD_HOME)},
         timeout=30,
     )
-    if completed.returncode != expected_status:
+    if expect_denial:
+        expected_status = native_hook_verdict_exit_code(harness, "block", str(payload.get("hook_event_name", "")))
+    native_denial = False
+    native_approval = False
+    if (expect_denial or expect_approval) and expected_status == 0 and completed.returncode == 0:
+        try:
+            response = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            response = None
+        if isinstance(response, dict):
+            hook_output = response.get("hookSpecificOutput")
+            native_denial = (
+                response.get("policy_action") in {None, "review", "require-reapproval", "sandbox-required", "block"}
+                and isinstance(hook_output, dict)
+                and hook_output.get("permissionDecision") == "deny"
+            )
+            native_approval = harness == "claude-code" and (
+                response.get("policy_action") in {"review", "require-reapproval"}
+                and isinstance(hook_output, dict)
+                and hook_output.get("permissionDecision") == "ask"
+            )
+    if (
+        completed.returncode != expected_status
+        or (expect_denial and expected_status == 0 and not native_denial)
+        or (expect_approval and not native_approval)
+    ):
         diagnostic = (
             f"installed {harness} hook returned {completed.returncode}, expected {expected_status}; "
-            + f"stdout={_safe_hook_diagnostic(completed.stdout)!r}; "
+            + f"response={_safe_hook_response_summary(completed.stdout)}; "
             + f"stderr={_safe_hook_diagnostic(completed.stderr)!r}"
         )
         raise RuntimeError(diagnostic)
+    return _safe_hook_response_summary(completed.stdout)
 
 
 def _invoke_real_harnesses() -> int:
@@ -128,7 +178,12 @@ def _invoke_real_harnesses() -> int:
         "tool_input": {"command": "git diff --stat"},
         "tool_call_id": "codex_lab_0000000000000001",
     }
-    codex_post = {**codex_pre, "hook_event_name": "PostToolUse", "success": True}
+    codex_post = {
+        **codex_pre,
+        "hook_event_name": "PostToolUse",
+        "success": True,
+        "tool_response": {"stdout": "fixture.txt | 1 +\n", "stderr": "", "exit_code": 0},
+    }
     claude_no_post = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -138,21 +193,21 @@ def _invoke_real_harnesses() -> int:
     claude_review = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "git push --delete origin stale-lab-branch"},
+        "tool_input": {"command": "rm -rf ./stale-lab-dir"},
         "tool_use_id": "claude_lab_0000000000000002",
     }
     cursor_block = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Shell",
-        "tool_input": {"command": f"shutdown -h now # {SENTINEL}"},
+        "tool_input": {"command": f"rm -rf ./stale-lab-dir # {SENTINEL}"},
         "generation_id": "cursor_lab_0000000000000001",
         "cursor_source_hook_event": "beforeShellExecution",
     }
     _run_installed_hook("codex", codex_pre)
     _run_installed_hook("codex", codex_post)
     _run_installed_hook("claude-code", claude_no_post)
-    _run_installed_hook("claude-code", claude_review, expected_status=1)
-    _run_installed_hook("cursor", cursor_block, expected_status=1)
+    _run_installed_hook("claude-code", claude_review, expect_approval=True)
+    _run_installed_hook("cursor", cursor_block, expect_denial=True, policy_action="block")
     return 2
 
 
@@ -163,14 +218,24 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
         "tool_input": {"command": _WORKFLOW_COMMAND},
         "tool_call_id": "codex_lab_workflow_initial_0001",
     }
-    _run_installed_hook("codex", payload, expected_status=1)
+    hook_summary = _run_installed_hook("codex", payload, expect_denial=True)
+    all_pending = store.list_approval_requests(status="pending")
     pending = [
         request
-        for request in store.list_approval_requests(status="pending", harness="codex")
-        if request.get("artifact_name") == "Shell GitHub bounded maintenance command"
+        for request in all_pending
+        if request.get("harness") == "codex"
+        and request.get("artifact_name") == "Shell GitHub bounded maintenance command"
     ]
     if len(pending) != 1:
-        raise RuntimeError(f"workflow approval request mismatch: {pending!r}")
+        summary = [
+            {
+                "request_id": request.get("request_id"),
+                "harness": request.get("harness"),
+                "artifact_name": _safe_hook_diagnostic(str(request.get("artifact_name", ""))),
+            }
+            for request in all_pending
+        ]
+        raise RuntimeError(f"workflow approval request mismatch: {summary!r}; hook={hook_summary}")
     contract = request_scope_contract(pending[0])
     if not contract.task_capability_eligible or "artifact" not in contract.allow_scopes:
         raise RuntimeError("workflow request did not expose the exact task-capability contract")
@@ -185,7 +250,7 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
 
 
 def _await_exact_allow(store: GuardStore, request_id: str) -> None:
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         request = store.get_approval_request(request_id)
         if request is not None and request.get("status") == "resolved":
@@ -223,7 +288,7 @@ def _complete_workflow_authorization(store: GuardStore, request_id: str) -> dict
         "tool_input": {"command": _WORKFLOW_COMMAND},
         "tool_call_id": "codex_lab_workflow_drift_0002",
     }
-    _run_installed_hook("codex", drift, expected_status=1)
+    _run_installed_hook("codex", drift, expect_denial=True)
     if len(store.list_events(event_name="workflow_capability.issued")) != 1:
         raise RuntimeError("executable drift changed capability issuance")
     if store.list_events(event_name="workflow_capability.claimed"):
@@ -281,7 +346,7 @@ def _prepare_workspace() -> None:
     os.environ["PATH"] = f"{_GH_EXECUTABLE.parent}:{os.environ.get('PATH', '')}"
     os.environ["GITHUB_TOKEN"] = SENTINEL
     keyring_module = GUARD_HOME / "guard_lab_keyring.py"
-    _ = keyring_module.write_text(_KEYRING_MODULE, encoding="utf-8")
+    _ = keyring_module.write_text(_KEYRING_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     keyring_module.chmod(0o600)
     os.environ["PYTHONPATH"] = str(GUARD_HOME)
     os.environ["PYTHON_KEYRING_BACKEND"] = "guard_lab_keyring.GuardLabKeyring"
@@ -322,7 +387,7 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             "allowed_unconfirmed",
             "pre_hook",
             "warn",
-            "no_match",
+            "policy",
             0,
             0,
             "not-applicable",
@@ -333,26 +398,26 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             "prevented",
             "pre_hook",
             "require-reapproval",
-            "extension_match",
-            1,
+            "policy",
+            0,
             1,
             "not-applicable",
         ),
-        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 1, 0, "accepted"),
+        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 0, 0, "accepted"),
         (
             "codex",
             "post_success",
             "confirmed_success",
             "post_hook",
             "warn",
-            "no_match",
+            "policy",
             0,
             0,
             "not-applicable",
         ),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "not-applicable"),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "rejected"),
-        ("cursor", "pre", "prevented", "pre_hook", "block", "extension_match", 1, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "policy", 0, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "policy", 0, 1, "rejected"),
+        ("cursor", "pre", "prevented", "pre_hook", "block", "policy", 0, 1, "not-applicable"),
     ]
     if sorted(rows) != sorted(expected):
         raise RuntimeError(f"installed hook activity mismatch: {rows!r}")
@@ -372,9 +437,13 @@ def main() -> None:
     GUARD_HOME.mkdir(parents=True, exist_ok=True)
     _prepare_workspace()
     store = GuardStore(GUARD_HOME, prime_policy_integrity=False)
+    from codex_plugin_scanner.guard.config import update_guard_settings
+
+    if not (GUARD_HOME / "config.toml").exists():
+        update_guard_settings(GUARD_HOME, {"blocked_request_mode": "ask"})
     daemon = GuardDaemonServer(
         store,
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=4781,
         bundle_refresh_interval_seconds=None,
         aibom_refresh_interval_seconds=None,

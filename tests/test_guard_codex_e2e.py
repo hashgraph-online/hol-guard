@@ -73,11 +73,21 @@ def test_guard_run_codex_blocks_malicious_mcp_fixture_end_to_end(tmp_path):
     assert "network" in payload["artifacts"][0]["risk_summary"].lower()
 
 
-def test_guard_run_codex_preserves_exact_approval_or_required_sandbox(tmp_path):
+def test_guard_run_codex_preserves_exact_approval_or_required_sandbox(tmp_path, native_context_digest):
+    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+
     home_dir = tmp_path / "home"
     workspace_dir = _build_reviewable_codex_workspace(tmp_path / "workspace")
     home_dir.mkdir(parents=True)
     (home_dir / "config.toml").write_text('changed_hash_action = "review"\n', encoding="utf-8")
+    # Mint the policy integrity key before provisioning the verifier key: the
+    # store deliberately refuses to mint a signing key once verifier material
+    # exists, so the order must be sign first, verify second.
+    store = GuardStore(home_dir)
+    raw_key, _key_id = store._policy_integrity_secret_material(create=True)
+    assert raw_key is not None
+    (home_dir / "native-runtime").mkdir(mode=0o700, parents=True, exist_ok=True)
+    provision_native_policy_verifier_key(home_dir, raw_key)
 
     blocked = _run_guard_cli(
         "guard",
@@ -94,7 +104,7 @@ def test_guard_run_codex_preserves_exact_approval_or_required_sandbox(tmp_path):
     blocked_artifact = blocked_payload["artifacts"][0]
     artifact_id = blocked_artifact["artifact_id"]
     approval_context_hash = blocked_artifact["approval_context_hash"]
-    GuardStore(home_dir).upsert_policy(
+    store.upsert_policy(
         PolicyDecision(
             harness="codex",
             scope="artifact",

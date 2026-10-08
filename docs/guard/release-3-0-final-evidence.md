@@ -45,14 +45,15 @@ python scripts/release/verify_desktop_core_attestation.py \
   --source-commit <40-lowercase-hex> \
   --source-tag <tag> \
   --target <target> \
-  --team-id <team-id> \
+  --team-id <team-id-or-empty-for-linux> \
   --output desktop-core-evidence.json
 ```
 
 The check binds the signed binary, update manifest, attestation marker, Core
-version/source/target, and Apple team identity. It invokes the existing
-PyInstaller native-runtime verifier after signing, so a manifest from before
-signing cannot authorize changed bytes.
+version/source/target, and Apple team identity. Linux sidecars pass an empty
+`--team-id` and verify digest plus native-runtime identity instead of Apple
+signing. It invokes the existing PyInstaller native-runtime verifier after
+signing, so a manifest from before signing cannot authorize changed bytes.
 
 ## Installed matrix
 

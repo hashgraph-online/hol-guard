@@ -111,3 +111,30 @@ def test_blocked_subcommand_blocks_review(tmp_path: Path) -> None:
     )
     assert matched is not None
     assert matched[1] == "blocked"
+
+
+def test_blocked_subcommand_blocks_allow(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    store = GuardStore(home)
+    script, identity = _identity(tmp_path)
+    store.record_local_cli_observation(identity, seen_at=utc_now())
+    store.replace_local_cli_commands(
+        identity.cli_id,
+        (
+            LocalCliCommand("root", "ship.py", "ship.py", "root"),
+            LocalCliCommand("deploy", "deploy", "deploy", "Ship it"),
+            LocalCliCommand("other", "Other commands", "ship.py …", "other"),
+        ),
+    )
+    store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=utc_now())
+    store.upsert_local_cli_command_states(identity.cli_id, {"deploy": "block"})
+    matched = matching_local_cli_grant(
+        store=store,
+        command=f"python3 {script} deploy",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        current_action="allow",
+    )
+    assert matched is not None
+    assert matched[1] == "blocked"

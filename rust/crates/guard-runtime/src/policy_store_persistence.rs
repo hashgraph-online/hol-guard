@@ -142,12 +142,41 @@ pub(super) fn read_generation_floor(
     Ok(Some(floor))
 }
 
-pub(super) fn persist_authority(
+pub(super) fn persist_loaded_authority(
+    path: &Path,
+    loaded: &LoadedAuthority,
+    verifier_key: &[u8; VERIFIER_KEY_BYTES],
+) -> Result<(), String> {
+    if let Some(digest) = loaded.policy_digest.as_deref() {
+        let snapshot = loaded
+            .snapshot
+            .as_ref()
+            .or(loaded.recovered_snapshot.as_ref());
+        let controls = loaded
+            .command_control_floor
+            .clone()
+            .or_else(|| super::policy_store_command_floor::snapshot_floor(snapshot));
+        persist_authority_with_control_floor(
+            path,
+            loaded.generation_floor,
+            digest,
+            snapshot,
+            verifier_key,
+            controls.as_ref(),
+            loaded.business_policy_floor.as_deref(),
+        )?;
+    }
+    Ok(())
+}
+
+pub(super) fn persist_authority_with_control_floor(
     path: &Path,
     generation_floor: u64,
     policy_digest: &str,
     snapshot: Option<&PolicySnapshotV3>,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
+    command_control_floor: Option<&super::policy_store_command_floor::CommandControlFloor>,
+    business_policy_floor: Option<&str>,
 ) -> Result<(), String> {
     let private_root = path
         .parent()
@@ -166,7 +195,15 @@ pub(super) fn persist_authority(
         generation_floor,
         policy_digest: policy_digest.to_owned(),
         snapshot: snapshot.cloned(),
-        floor_mac: generation_floor_mac(generation_floor, policy_digest, verifier_key),
+        floor_mac: super::policy_store_business_floor::authority_floor_mac(
+            generation_floor,
+            policy_digest,
+            command_control_floor,
+            business_policy_floor,
+            verifier_key,
+        )?,
+        command_control_floor: command_control_floor.cloned(),
+        business_policy_floor: business_policy_floor.map(str::to_owned),
     };
     let value = serde_json::to_value(record)
         .map_err(|_| "native_policy_snapshot_authority_encode_failed".to_owned())?;
@@ -189,12 +226,34 @@ pub(super) fn is_lower_hex(value: &str, length: usize) -> bool {
 
 #[cfg(windows)]
 pub(super) fn map_private_read_error(kind: &str, error: String) -> String {
+    if is_stable_native_code(&error) {
+        return error;
+    }
     if error.ends_with("_invalid") {
         format!("native_policy_snapshot_{kind}_invalid")
     } else if error.ends_with("_not_private") {
         format!("native_policy_snapshot_{kind}_not_private")
     } else {
         format!("native_policy_snapshot_{kind}_read_failed")
+    }
+}
+
+fn is_stable_native_code(error: &str) -> bool {
+    (1..=128).contains(&error.len())
+        && error.starts_with("native_")
+        && error
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+/// Keep an already-stable resident code. Collapsing it into an unlisted
+/// `native_policy_snapshot_{kind}_*` string makes `safe_error_response`
+/// rewrite the real failure to `native_request_invalid_json`.
+fn surfaced_persist_error(kind: &str, suffix: &str, error: &str) -> String {
+    if is_stable_native_code(error) {
+        error.to_owned()
+    } else {
+        format!("native_policy_snapshot_{kind}_{suffix}")
     }
 }
 
@@ -312,7 +371,7 @@ pub(super) fn persist_private_bytes(
     #[cfg(windows)]
     let mut file = match persistence_fault(PersistBoundary::TemporaryCreate).and_then(|()| {
         crate::resident_state::private_file(&temporary, true, private_root)
-            .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+            .map_err(|error| surfaced_persist_error(kind, "write_failed", &error))
     }) {
         Ok(file) => file,
         Err(error) => {
@@ -323,7 +382,7 @@ pub(super) fn persist_private_bytes(
     let mut file = match persistence_fault(PersistBoundary::TemporaryCreate).and_then(|()| {
         options
             .open(&temporary)
-            .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+            .map_err(|error| surfaced_persist_error(kind, "write_failed", &error.to_string()))
     }) {
         Ok(file) => file,
         Err(error) => {
@@ -334,12 +393,12 @@ pub(super) fn persist_private_bytes(
     let write_result = persistence_fault(PersistBoundary::Write)
         .and_then(|()| {
             file.write_all(bytes)
-                .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+                .map_err(|error| surfaced_persist_error(kind, "write_failed", &error.to_string()))
         })
         .and_then(|()| persistence_fault(PersistBoundary::FileSync))
         .and_then(|()| {
             file.sync_all()
-                .map_err(|_| format!("native_policy_snapshot_{kind}_write_failed"))
+                .map_err(|error| surfaced_persist_error(kind, "write_failed", &error.to_string()))
         });
     if let Err(error) = write_result {
         #[cfg(windows)]
@@ -380,11 +439,11 @@ pub(super) fn persist_private_bytes(
     #[cfg(unix)]
     {
         persistence_fault(PersistBoundary::DirectorySync)?;
-        let directory =
-            File::open(parent).map_err(|_| format!("native_policy_snapshot_{kind}_sync_failed"))?;
+        let directory = File::open(parent)
+            .map_err(|error| surfaced_persist_error(kind, "sync_failed", &error.to_string()))?;
         directory
             .sync_all()
-            .map_err(|_| format!("native_policy_snapshot_{kind}_sync_failed"))?;
+            .map_err(|error| surfaced_persist_error(kind, "sync_failed", &error.to_string()))?;
     }
     // Windows has no directory fsync primitive exposed by std. Keep a
     // separate fault boundary for the post-replacement durability point so
@@ -401,7 +460,8 @@ pub(super) fn replace_temporary(
     kind: &str,
     _private_root: &Path,
 ) -> Result<(), String> {
-    fs::rename(temporary, path).map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))
+    fs::rename(temporary, path)
+        .map_err(|error| surfaced_persist_error(kind, "replace_failed", &error.to_string()))
 }
 
 #[cfg(windows)]
@@ -412,87 +472,9 @@ pub(super) fn replace_temporary(
     private_root: &Path,
 ) -> Result<(), String> {
     crate::resident_state::replace_windows_private_file(temporary, path, private_root)
-        .map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))
+        .map_err(|error| surfaced_persist_error(kind, "replace_failed", &error))
 }
 
 #[cfg(all(test, windows))]
-mod windows_recovery_tests {
-    use super::*;
-    use std::io::Write;
-
-    fn test_root(label: &str) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "hol-guard-policy-recovery-{label}-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        crate::resident_state::ensure_private_directory(&root, true).unwrap();
-        root
-    }
-
-    fn private_bytes(path: &Path, bytes: &[u8]) {
-        let private_root = path.parent().unwrap_or(path);
-        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
-        file.write_all(bytes).unwrap();
-        file.sync_all().unwrap();
-    }
-
-    #[test]
-    fn authority_recovery_replaces_only_valid_private_backup() {
-        let root = test_root("backup");
-        let target = root.join("policy-snapshot-v3.json");
-        let backup = root.join(".policy-snapshot-v3.json.previous");
-        private_bytes(&backup, b"previous");
-
-        recover_authority_replacement(&target).unwrap();
-
-        assert!(crate::resident_state::open_private_read(
-            &target,
-            AUTHORITY_RECORD_MAX_BYTES,
-            "authority",
-            &root,
-        )
-        .unwrap()
-        .is_some());
-        assert!(crate::resident_state::open_private_read(
-            &backup,
-            AUTHORITY_RECORD_MAX_BYTES,
-            "authority",
-            &root,
-        )
-        .unwrap()
-        .is_none());
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn authority_replace_succeeds_while_a_reader_holds_the_target() {
-        let root = test_root("replace-reader");
-        let target = root.join("policy-snapshot-v3.json");
-        let temporary = root.join(".policy-snapshot-v3.json.tmp");
-        private_bytes(&target, b"before");
-        private_bytes(&temporary, b"after-replace");
-        let reader = std::fs::File::open(&target).unwrap();
-        crate::resident_state::replace_windows_private_file(&temporary, &target, &root).unwrap();
-        drop(reader);
-        assert_eq!(std::fs::read(&target).unwrap(), b"after-replace");
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn authority_recovery_rejects_non_file_backup() {
-        let root = test_root("reparse-or-directory");
-        let target = root.join("policy-snapshot-v3.json");
-        let backup = root.join(".policy-snapshot-v3.json.previous");
-        crate::resident_state::ensure_private_directory(&backup, true).unwrap();
-
-        assert_eq!(
-            recover_authority_replacement(&target).unwrap_err(),
-            "native_policy_snapshot_authority_recovery_failed"
-        );
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
+#[path = "policy_store_windows_recovery_tests.rs"]
+mod windows_recovery_tests;

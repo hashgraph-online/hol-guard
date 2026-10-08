@@ -15,6 +15,7 @@ CONVENTIONAL_PATTERN = re.compile(
     r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]+)\))?(?P<breaking>!)?:[ ]+"
     r"(?P<description>.+?)(?:[ ]+\(#(?P<pr>\d+)\))?$"
 )
+PR_SUFFIX_PATTERN = re.compile(r"^(?P<description>.+?)\s+\(#(?P<pr>\d+)\)$")
 MERGE_COMMIT_PATTERN = re.compile(r"^Merge pull request #(?P<pr>\d+) from ")
 STABLE_TAG_PATTERN = re.compile(r"^v(\d+\.\d+\.\d+)$")
 ALPHA_TAG_PATTERN = re.compile(r"^alpha/v(\d+\.\d+\.\d+(?:a|b|rc)\d+)$")
@@ -61,6 +62,7 @@ class Change:
     pr_number: int | None = None
     pr_title: str | None = None
     pr_author: str | None = None
+    pr_author_id: int | None = None
     summary_bullets: list[str] = field(default_factory=list)
 
     @property
@@ -75,7 +77,8 @@ class Change:
         parsed = parse_subject(source)
         if parsed:
             return parsed["description"]
-        return source
+        title, _ = split_pr_suffix(source)
+        return title
 
     @property
     def contributor(self) -> str:
@@ -85,6 +88,22 @@ class Change:
     def is_login_contributor(self) -> bool:
         """Whether the contributor name is a verified GitHub login from PR metadata."""
         return self.pr_author is not None
+
+
+@dataclass
+class PreviousRelease:
+    """Resolution of the preceding same-channel release used for links.
+
+    ``published`` means the GitHub releases API confirmed an actual release
+    object for ``tag``; ``unpublished`` means the preceding tag has no release
+    object (a tag alone is not a release); ``unavailable`` means the lookup
+    itself failed. Only ``published`` may render a release URL; the other two
+    degrade to an explicitly labelled source comparison.
+    """
+
+    status: str
+    tag: str | None = None
+    url: str | None = None
 
 
 def parse_subject(subject: str) -> dict | None:
@@ -100,6 +119,20 @@ def parse_subject(subject: str) -> dict | None:
         "description": parsed["description"],
         "pr": int(parsed["pr"]) if parsed["pr"] else None,
     }
+
+
+def split_pr_suffix(subject: str) -> tuple[str, int | None]:
+    """Split a trailing squash suffix off a nonconventional subject.
+
+    GitHub squash subjects need not follow the conventional-commit format:
+    ``Add LDAP authentication (#123)`` still names pull request 123 as its
+    evidence. Returns ``(title, pr_number)`` where ``title`` is the subject
+    without the suffix, or ``(subject, None)`` when no suffix is present.
+    """
+    match = PR_SUFFIX_PATTERN.match(subject.strip())
+    if not match:
+        return subject.strip(), None
+    return match.group("description"), int(match.group("pr"))
 
 
 def version_sort_key(version: str) -> tuple | None:
@@ -144,6 +177,43 @@ def select_previous_tag(tags: Iterable[str], current_version: str, channel: str)
         if key is not None and key < current:
             candidates.append((key, tag))
     return max(candidates)[1] if candidates else None
+
+
+def resolve_previous_release(repo: str, tag: str) -> PreviousRelease:
+    """Authoritative per-tag lookup via the GitHub CLI.
+
+    One API call, no pagination window: asking about the specific candidate
+    tag cannot miss a published predecessor the way a capped listing scan
+    can. A tag alone is not a release, so a 404 means the tag has no
+    published release object. Any other lookup failure is ``unavailable`` so
+    publishing degrades to the labelled source comparison instead of
+    aborting.
+    """
+    try:
+        result = subprocess.run(
+            ["gh", "api", f"repos/{repo}/releases/tags/{tag}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return PreviousRelease(status="unavailable")
+    if result.returncode != 0:
+        stderr = result.stderr or ""
+        if "404" in stderr:
+            return PreviousRelease(status="unpublished")
+        return PreviousRelease(status="unavailable")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return PreviousRelease(status="unavailable")
+    if isinstance(payload, dict) and payload.get("tag_name") == tag and payload.get("draft") is not True:
+        return PreviousRelease(
+            status="published",
+            tag=tag,
+            url=f"https://github.com/{repo}/releases/tag/{tag}",
+        )
+    return PreviousRelease(status="unpublished")
 
 
 def extract_summary_bullets(body: str | None, limit: int = MAX_SUMMARY_BULLETS) -> list[str]:
@@ -210,9 +280,7 @@ def load_changes(end_ref: str, start_ref: str | None, cwd: str | None = None) ->
         sha, subject, author = line.split("\x1f", maxsplit=2)
         if subject.startswith("Merge ") and not MERGE_COMMIT_PATTERN.match(subject):
             continue
-        changes.append(
-            Change(sha=sha, subject=subject, author=author, type="internal", description=subject)
-        )
+        changes.append(Change(sha=sha, subject=subject, author=author, type="internal", description=subject))
     for change in changes:
         parsed = parse_subject(change.pr_title or change.subject)
         if parsed:
@@ -226,6 +294,13 @@ def load_changes(end_ref: str, start_ref: str | None, cwd: str | None = None) ->
             merge_match = MERGE_COMMIT_PATTERN.match(change.subject)
             if merge_match:
                 change.pr_number = int(merge_match.group("pr"))
+            else:
+                # Nonconventional squash subject: "Add LDAP authentication (#123)"
+                # still carries pull request 123 as its landing evidence.
+                title, pr_number = split_pr_suffix(change.subject)
+                if pr_number is not None:
+                    change.pr_number = pr_number
+                    change.description = title
     return changes
 
 
@@ -247,9 +322,11 @@ def fetch_pull_request(repo: str, number: int) -> dict | None:
     except json.JSONDecodeError:
         return None
     user = payload.get("user") or {}
+    author_id = user.get("id")
     return {
         "title": payload.get("title"),
         "author": user.get("login"),
+        "author_id": int(author_id) if isinstance(author_id, int) else None,
         "body": payload.get("body"),
     }
 
@@ -267,6 +344,7 @@ def enrich_with_pull_requests(changes: list[Change], repo: str) -> None:
             continue
         change.pr_title = payload["title"]
         change.pr_author = payload["author"]
+        change.pr_author_id = payload.get("author_id")
         change.summary_bullets = extract_summary_bullets(payload["body"])
         parsed = parse_subject(change.pr_title or "")
         if parsed:
@@ -274,20 +352,46 @@ def enrich_with_pull_requests(changes: list[Change], repo: str) -> None:
             change.scope = parsed["scope"]
             change.breaking = change.breaking or parsed["breaking"]
             change.description = parsed["description"]
+        elif change.pr_title:
+            # Nonconventional PR title: keep it as the description, still
+            # credited like a conventional entry via the verified PR author.
+            title, _ = split_pr_suffix(change.pr_title)
+            change.description = title
 
 
 def human_contributors(changes: Sequence[Change]) -> list[tuple[str, bool]]:
     """Distinct human contributors as ``(name, is_github_login)`` pairs.
 
-    A name is only a verified login when it came from PR metadata; fallback
-    Git display names are plain text so they never render as @mentions.
+    Entries backed by PR metadata are verified logins resolved to numeric
+    GitHub account ids, so two logins from the same account (a rename between
+    PRs) collapse to one credit. Git display names are a fallback: they are
+    deduplicated by exact name only and are never matched to a login, because
+    a display name alone is not an identity - guessing one would miscredit a
+    different person. Fallback names also never render as @mentions.
     """
     contributors: list[tuple[str, bool]] = []
+    seen_login_ids: set[int] = set()
+    seen_fallback_names: set[str] = set()
     for change in changes:
-        name = change.contributor
+        if change.is_login_contributor:
+            name = change.pr_author or ""
+            if not name or name.endswith("[bot]") or name == "anonymous":
+                continue
+            if change.pr_author_id is not None:
+                if change.pr_author_id in seen_login_ids:
+                    continue
+                seen_login_ids.add(change.pr_author_id)
+            entry = (name, True)
+            if entry not in contributors:
+                contributors.append(entry)
+            continue
+        name = change.author
         if not name or name.endswith("[bot]") or name == "anonymous":
             continue
-        entry = (name, change.is_login_contributor)
+        if name in seen_fallback_names:
+            continue
+        seen_fallback_names.add(name)
+        entry = (name, False)
         if entry not in contributors:
             contributors.append(entry)
     return contributors
@@ -338,7 +442,9 @@ def render_condensed_sections(changes: Sequence[Change], repo: str) -> str:
     lines = ["## Changes by category", ""]
     lines.extend(f"- **{title}**: {count}" for title, count in counts)
     lines.append("")
-    lines.append(f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha}).")
+    lines.append(
+        f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha})."
+    )
     return "\n".join(lines)
 
 
@@ -351,8 +457,18 @@ def render_notes(
     tag: str,
     previous_tag: str | None,
     source_sha: str,
+    previous_release: PreviousRelease | None = None,
+    pypi_deferred: bool = False,
 ) -> str:
-    """Render the full release-notes body for one Guard release."""
+    """Render the full release-notes body for one Guard release.
+
+    ``previous_release`` carries the resolved predecessor from the GitHub
+    releases API. Only a ``published`` resolution may link a release page; a
+    tag without a release object (``unpublished``) or a failed lookup
+    (``unavailable``) renders a plain-text tag plus an explicitly labelled
+    source comparison instead - never a fabricated release URL. ``None``
+    keeps the legacy rendering that treats ``previous_tag`` as published.
+    """
     contributors = human_contributors(changes)
     pr_count = len({change.pr_number for change in changes if change.pr_number})
     heading_stats = []
@@ -376,16 +492,18 @@ def render_notes(
             f"Guard {version} is a stable release cut from "
             f"[`{short_sha}`](https://github.com/{repo}/commit/{source_sha})."
         )
+    published_release = previous_release is None or previous_release.status == "published"
     if previous_tag:
         previous_version = previous_tag.removeprefix("alpha/").lstrip("v")
-        since = f" since [Guard {previous_version}](https://github.com/{repo}/releases/tag/{previous_tag})"
+        if published_release:
+            since = f" since [Guard {previous_version}](https://github.com/{repo}/releases/tag/{previous_tag})"
+        elif previous_release is not None and previous_release.status == "unavailable":
+            since = f" since tag `{previous_tag}` (published release lookup unavailable)"
+        else:
+            since = f" since tag `{previous_tag}` (previous tag has no published release)"
         lines.append(f"**{' • '.join(heading_stats)}**{since}." if heading_stats else f"Released{since}.")
     elif heading_stats:
-        scope_note = (
-            " — the first release on this channel, covering the full history to this point"
-            if changes
-            else ""
-        )
+        scope_note = " — the first release on this channel, covering the full history to this point" if changes else ""
         lines.append(f"**{' • '.join(heading_stats)}**{scope_note}.")
     lines.append("")
 
@@ -403,17 +521,38 @@ def render_notes(
 
     lines.append("## Install")
     lines.append("")
-    lines.append("Install this release:")
-    lines.append("")
-    lines.append("```bash")
-    lines.append(f'uv tool install "hol-guard[cisco]=={version}"')
-    lines.append("```")
+    if pypi_deferred:
+        lines.append(
+            "PyPI publication is pending quota availability. Download the verified wheel "
+            f"from the [GitHub release assets](https://github.com/{repo}/releases/tag/{tag}) and install it locally:"
+        )
+        lines.append("")
+        lines.append("```bash")
+        lines.append(f'uv tool install "./hol_guard-{version}-py3-none-any.whl[cisco]"')
+        lines.append("```")
+    else:
+        lines.append("Install this release:")
+        lines.append("")
+        lines.append("```bash")
+        lines.append(f'uv tool install "hol-guard[cisco]=={version}"')
+        lines.append("```")
     lines.append("")
     if previous_tag:
-        lines.append(
-            f"**Full changelog**: [{previous_tag}...{tag}]"
-            f"(https://github.com/{repo}/compare/{previous_tag}...{tag})"
-        )
+        comparison = f"[{previous_tag}...{tag}](https://github.com/{repo}/compare/{previous_tag}...{tag})"
+        if published_release:
+            lines.append(f"**Full changelog**: {comparison}")
+        elif previous_release is not None and previous_release.status == "unavailable":
+            lines.append(
+                f"**Source comparison**: {comparison} — the published-release lookup"
+                " was unavailable, so this is a source-level comparison, not a"
+                " release-to-release changelog."
+            )
+        else:
+            lines.append(
+                f"**Source comparison**: {comparison} — the previous tag has no"
+                " published release, so this is a source-level comparison, not a"
+                " release-to-release changelog."
+            )
         lines.append("")
     if contributors:
         credited = [f"@{name}" if is_login else name for name, is_login in contributors]
@@ -432,6 +571,11 @@ def main() -> int:
     parser.add_argument("--source-sha", default=None, help="Release commit; defaults to resolving --tag")
     parser.add_argument("--end-ref", default=None, help="Git ref covering the release commits (default: tag/sha)")
     parser.add_argument("--output", default=None, help="Write notes here instead of stdout")
+    parser.add_argument(
+        "--pypi-deferred",
+        action="store_true",
+        help="Render local GitHub-asset installation instructions while PyPI publication is pending",
+    )
     parser.add_argument(
         "--skip-pr-metadata",
         action="store_true",
@@ -465,6 +609,14 @@ def main() -> int:
         tags = run_git(["tag", "--list"]).split()
         previous_tag = select_previous_tag(tags, args.version, args.channel)
 
+    # A git tag alone is not a release: only link a predecessor that the
+    # releases API confirms as an actual published release object on the same
+    # channel. Lookup failures fail open to the labelled degraded rendering so
+    # website availability never becomes a dependency of software publishing.
+    previous_release: PreviousRelease | None = None
+    if previous_tag is not None:
+        previous_release = resolve_previous_release(repo, previous_tag)
+
     changes = load_changes(args.end_ref or source_sha, previous_tag)
     if not args.skip_pr_metadata:
         enrich_with_pull_requests(changes, repo)
@@ -476,6 +628,8 @@ def main() -> int:
         tag=tag,
         previous_tag=previous_tag,
         source_sha=source_sha,
+        previous_release=previous_release,
+        pypi_deferred=args.pypi_deferred,
     )
     if args.output:
         with open(args.output, "w", encoding="utf-8") as handle:

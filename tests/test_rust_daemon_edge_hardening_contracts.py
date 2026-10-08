@@ -5,10 +5,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_native_resident_client_has_bounded_admission() -> None:
-    source = (ROOT / "src/codex_plugin_scanner/guard/native_runtime_resident.py").read_text(encoding="utf-8")
-    assert "@native_resident_admission" in source
-    assert "from .native_runtime_admission import native_resident_admission" in source
+def test_production_native_resident_client_has_bounded_admission() -> None:
+    from codex_plugin_scanner.guard.native_resident_client import _MAX_PERSISTENT_CLIENTS, _MAX_PERSISTENT_POOLS
+
+    assert 0 < _MAX_PERSISTENT_CLIENTS <= 16
+    assert 0 < _MAX_PERSISTENT_POOLS <= 16
 
 
 def test_daemon_http_server_is_bounded() -> None:

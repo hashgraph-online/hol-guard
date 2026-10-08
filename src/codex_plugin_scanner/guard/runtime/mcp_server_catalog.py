@@ -7,7 +7,27 @@ from typing import Final
 
 from .command_extension_specs import CommandExtensionValues
 from .command_permission_catalog import permissions_for_action_classes
-from .mcp_server_contribution import catalog_id_for_mcp_id, load_mcp_contribution_payloads
+from .mcp_server_contribution import (
+    catalog_id_for_mcp_id,
+    direct_mcp_command_name,
+    load_mcp_contribution_payloads,
+    remote_mcp_endpoint_identity,
+)
+
+# Runnable example per package launcher. `-y` is an npx flag (`uvx -y <pkg>` fails);
+# the other forms match the launcher subcommands mcp_protection recognizes.
+# Keep in sync with package_launch_example in native_command_source_mcp.rs.
+_PACKAGE_LAUNCH_PREFIX: Final[dict[str, str]] = {
+    "npx": "npx -y",
+    "npm": "npm exec --yes",
+    "pnpm": "pnpm dlx",
+    "yarn": "yarn dlx",
+    "pipx": "pipx run",
+}
+
+
+def package_launch_example(command: str, package: str) -> str:
+    return f"{_PACKAGE_LAUNCH_PREFIX.get(command, command)} {package}"
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
@@ -41,12 +61,31 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
     launch = payload.get("launch")
     if not isinstance(launch, dict):
         raise ValueError(f"{mcp_id} is missing launch metadata")
-    command = launch.get("command")
-    package = launch.get("package")
-    if not isinstance(command, str) or not command.strip():
-        raise ValueError(f"{mcp_id} launch command is invalid")
-    if not isinstance(package, str) or not package.strip():
-        raise ValueError(f"{mcp_id} launch package is invalid")
+    launch_kind = launch.get("kind")
+    executables: tuple[str, ...]
+    if launch_kind == "package-launcher":
+        command = launch.get("command")
+        package = launch.get("package")
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError(f"{mcp_id} launch command is invalid")
+        if not isinstance(package, str) or not package.strip():
+            raise ValueError(f"{mcp_id} launch package is invalid")
+        example = package_launch_example(command, package)
+        executables = (command,)
+    elif launch_kind == "direct-command":
+        command = launch.get("command")
+        if not isinstance(command, str) or direct_mcp_command_name(command) != command:
+            raise ValueError(f"{mcp_id} direct command is invalid")
+        example = command
+        executables = (command,)
+    elif launch_kind == "remote-http":
+        remote_url = launch.get("url")
+        example = remote_mcp_endpoint_identity(remote_url)
+        if example is None:
+            raise ValueError(f"{mcp_id} remote launch URL is invalid")
+        executables = ()
+    else:
+        raise ValueError(f"{mcp_id} launch kind is invalid")
     name = payload.get("name")
     description = payload.get("description")
     version = payload.get("version")
@@ -60,7 +99,6 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
         raise ValueError(f"{mcp_id} requires risk classes")
     extension_id = catalog_id_for_mcp_id(mcp_id)
     action_classes = (_action_class_for(mcp_id),)
-    example = f"{command} -y {package}"
     return {
         "extension_id": extension_id,
         "version": version,
@@ -83,7 +121,7 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
         "required": False,
         "delegated_protection": None,
         "ecosystem_ids": (),
-        "executables": (command,),
+        "executables": executables,
         "project_markers": (),
     }
 

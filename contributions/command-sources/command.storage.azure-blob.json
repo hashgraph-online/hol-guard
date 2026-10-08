@@ -1,0 +1,1055 @@
+{
+  "extension": {
+    "action_classes": [
+      "Azure storage destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Azure CLI storage commands including upload, list, copy, and deletion.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.storage.azure-blob",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Azure Blob Storage command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure container create operations.",
+        "example_command": "az storage container create",
+        "family": "azure-blob",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure container create",
+        "permission_id": "command.storage.azure-blob.permission.container-create",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure blob copy operations.",
+        "example_command": "az storage blob copy start",
+        "family": "azure-blob",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure blob copy",
+        "permission_id": "command.storage.azure-blob.permission.copy",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure blob storage deletion operations.",
+        "example_command": "az storage blob delete",
+        "family": "azure-blob",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure Blob Storage deletion",
+        "permission_id": "command.storage.azure-blob.permission.deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List the exact objects and confirm retention or recovery controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure blob download operations.",
+        "example_command": "az storage blob download",
+        "family": "azure-blob",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure blob download",
+        "permission_id": "command.storage.azure-blob.permission.download",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure blob list operations.",
+        "example_command": "az storage blob list",
+        "family": "azure-blob",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure blob list",
+        "permission_id": "command.storage.azure-blob.permission.list",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure blob upload operations.",
+        "example_command": "az storage blob upload",
+        "family": "azure-blob",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure blob upload",
+        "permission_id": "command.storage.azure-blob.permission.upload",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://learn.microsoft.com/cli/azure/storage/blob"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure blob storage deletion operations.",
+        "family": "azure-blob",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "blob",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "blob",
+                  "delete-batch"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "container",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.azure-blob.permission.deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.azure-blob.deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "blob",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "blob",
+                      "delete-batch"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "container",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure Blob Storage deletion help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dryrun"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "blob",
+                      "delete-batch"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure Blob Storage deletion dry run",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "List the exact objects and confirm retention or recovery controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Azure Blob Storage deletion"
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure blob upload operations.",
+        "family": "azure-blob",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "blob",
+                  "upload"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.azure-blob.permission.upload",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.azure-blob.upload",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "blob",
+                      "upload"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure blob upload help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "Azure blob upload"
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure blob download operations.",
+        "family": "azure-blob",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "blob",
+                  "download"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.azure-blob.permission.download",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.azure-blob.download",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "blob",
+                      "download"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure blob download help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "Azure blob download"
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies azure blob list operations.",
+        "family": "azure-blob",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "blob",
+                  "list"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.azure-blob.permission.list",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.storage.azure-blob.list",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "blob",
+                      "list"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure blob list help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "severity": "low",
+        "title": "Azure blob list"
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure blob copy operations.",
+        "family": "azure-blob",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "blob",
+                  "copy",
+                  "start"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.azure-blob.permission.copy",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.azure-blob.copy",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "blob",
+                      "copy",
+                      "start"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure blob copy help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "Azure blob copy"
+      },
+      {
+        "action_classes": [
+          "Azure storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure container create operations.",
+        "family": "azure-blob",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "container",
+                  "create"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.azure-blob.permission.container-create",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.azure-blob.container-create",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "container",
+                      "create"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure container create help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "Azure container create"
+      }
+    ],
+    "safer_alternatives": [
+      "List matching blobs and inspect soft-delete controls before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

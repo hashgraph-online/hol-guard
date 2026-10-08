@@ -39,6 +39,7 @@ from ..runtime.approval_reuse import (
     APPROVAL_REUSE_NO_SAVED_DECISION,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
 )
 from ..runtime.decisions import build_authoritative_decision, evaluation_authority_error
@@ -844,7 +845,13 @@ def _compose_consumer_saved_policy(
             validation_reason = cast(ApprovalReuseValidationFailure, diagnosed_reason)
 
     if not has_saved_state:
-        return evaluate_approval_reuse(current_action), False
+        # No saved evidence: preserve the current action unchanged regardless
+        # of resident reachability (the resident composes the same
+        # no_saved_decision result; on transport failure we project it locally).
+        no_state = evaluate_approval_reuse(current_action)
+        if no_state is None:
+            no_state = approval_reuse_authority_unavailable(current_action)
+        return no_state, False
 
     reuse = evaluate_approval_reuse(
         current_action,
@@ -852,6 +859,10 @@ def _compose_consumer_saved_policy(
         saved_decision_present=True,
         validation_reason=validation_reason,
     )
+    if reuse is None:
+        # Resident unreachable: no saved approval is claimed; the caller's
+        # current evaluation stands unchanged.
+        return approval_reuse_authority_unavailable(current_action), True
     if reuse.should_claim and saved_decision is not None and pending_approval_claims is not None:
         pending_approval_claims.append((saved_decision, artifact_id, artifact_hash))
     return reuse, True
@@ -1130,6 +1141,11 @@ def evaluate_detection(
 ) -> dict[str, Any]:
     """Apply policy, generate diffs, and persist receipts for a harness."""
 
+    from ..native_context import bind_context_digest_home
+
+    # Some consumer entry points run against partial stores (tests, shims)
+    # that carry no guard_home; binding None is a valid no-op.
+    bind_context_digest_home(getattr(store, "guard_home", None))
     workspace = _consumer_policy_workspace(config)
     results: list[dict[str, object]] = []
     blocked = False
@@ -1145,6 +1161,65 @@ def evaluate_detection(
         current_artifact_ids.add(artifact.artifact_id)
         previous = previous_snapshots.get(artifact.artifact_id)
         diff = diff_artifact(previous, artifact)
+        if (
+            detection.harness == "codex"
+            and artifact.artifact_type == "skill"
+            and artifact.metadata.get("enabled") is False
+            and artifact.runtime_private_metadata.get("inventory_only") is True
+        ):
+            inventory_decision = build_authoritative_decision(
+                "allow",
+                reason="inventory_only",
+                composition_trace={"inventory_only": True},
+                authority_finalized=False,
+            )
+            if persist:
+                store.record_inventory_artifact(
+                    artifact=artifact,
+                    artifact_hash=str(diff["current_hash"]),
+                    policy_action=inventory_decision.action,
+                    changed=bool(diff["changed"]),
+                    now=now,
+                    approved=False,
+                )
+                store.save_artifact_capability(
+                    harness=detection.harness,
+                    artifact_id=artifact.artifact_id,
+                    capability_snapshot=normalize_artifact_capabilities(artifact).to_dict(),
+                    now=now,
+                )
+                if diff["changed"]:
+                    previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
+                    store.record_diff(
+                        detection.harness,
+                        artifact.artifact_id,
+                        list(diff["changed_fields"]),
+                        previous_hash,
+                        str(diff["current_hash"]),
+                        now,
+                    )
+                store.save_snapshot(
+                    detection.harness,
+                    artifact.artifact_id,
+                    {**diff["current_snapshot"], "artifact_hash": diff["current_hash"]},
+                    str(diff["current_hash"]),
+                    now,
+                )
+            results.append(
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "changed": diff["changed"],
+                    "changed_fields": diff["changed_fields"],
+                    **inventory_decision.to_artifact_projection(),
+                    "artifact_hash": diff["current_hash"],
+                    "artifact_type": artifact.artifact_type,
+                    "config_path": artifact.config_path,
+                    "source_scope": artifact.source_scope,
+                    "inventory_only": True,
+                }
+            )
+            continue
         is_first_seen = diff["changed_fields"] == ["first_seen"]
         configured_action = config.resolve_action_override(
             detection.harness,
@@ -1235,10 +1310,18 @@ def evaluate_detection(
             claimed=claimed_saved_approval,
         )
         if claimed_saved_approval:
-            approval_reuse = evaluate_approval_reuse(
+            claimed_reuse = evaluate_approval_reuse(
                 current_policy_action,
                 "allow",
                 saved_decision_present=True,
+            )
+            approval_reuse = (
+                claimed_reuse
+                if claimed_reuse is not None
+                # Resident unreachable: the claim disposition is already
+                # recorded; project the current action unchanged with no
+                # additional claim authority.
+                else approval_reuse_authority_unavailable(current_policy_action)
             )
             has_saved_state = True
         trusted_request_override = _trusted_request_override_applies(
@@ -1537,10 +1620,18 @@ def evaluate_detection(
             claimed=claimed_saved_approval,
         )
         if claimed_saved_approval:
-            approval_reuse = evaluate_approval_reuse(
+            claimed_reuse = evaluate_approval_reuse(
                 current_policy_action,
                 "allow",
                 saved_decision_present=True,
+            )
+            approval_reuse = (
+                claimed_reuse
+                if claimed_reuse is not None
+                # Resident unreachable: the claim disposition is already
+                # recorded; project the current action unchanged with no
+                # additional claim authority.
+                else approval_reuse_authority_unavailable(current_policy_action)
             )
             has_saved_state = True
         trusted_request_override = _trusted_request_override_applies(

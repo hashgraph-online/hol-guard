@@ -1,4 +1,4 @@
-"""Emit deterministic per-node pytest call durations for CI sharding evidence."""
+"""Emit deterministic per-node pytest durations for CI sharding evidence."""
 
 from __future__ import annotations
 
@@ -39,10 +39,10 @@ def load_duration_report(path: Path) -> dict[str, float]:
 
 
 def pytest_runtest_logreport(report: _Report) -> None:
-    """Keep only the call phase, keyed by the exact collected node id."""
+    """Include fixture setup and teardown in the cost of each collected node."""
 
-    if report.when == "call" and report.duration >= 0:
-        _DURATIONS[report.nodeid] = report.duration
+    if report.when in {"setup", "call", "teardown"} and report.duration >= 0:
+        _DURATIONS[report.nodeid] = _DURATIONS.get(report.nodeid, 0.0) + report.duration
 
 
 def pytest_sessionstart() -> None:

@@ -1,4 +1,8 @@
-import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import {
+  cloudPolicyRecoveryHint,
+  hasRepairableProtectionGap,
+  isUnsupportedPlatformCheck,
+} from "./fleet-protection-recovery";
 import { recoverySummary } from "./fleet-protection-recovery-copy";
 import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
@@ -6,12 +10,36 @@ import { repairHarnessesFor } from "./fleet-workspace";
 import { resolveFleetHeroCopy } from "./fleet-hero-copy";
 import { isHarnessDetectedItems, resolveDetectedAppStatus, visibleHarnessesFor } from "./harness-detection";
 import type { FleetHeroCopy } from "./fleet-hero-copy";
+import type { GuardProtectionCheck } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new Error(message);
   }
 }
+
+const unsupportedContainmentCheck: GuardProtectionCheck = {
+  check_id: "containment_compatibility",
+  status: "fail",
+  reason_code: "unsupported_platform",
+};
+const ordinaryContainmentFailure: GuardProtectionCheck = {
+  check_id: "containment_compatibility",
+  status: "fail",
+  reason_code: "containment_probe_failed",
+};
+assert(
+  isUnsupportedPlatformCheck(unsupportedContainmentCheck),
+  "unsupported containment is identified from its stable reason code",
+);
+assert(
+  !hasRepairableProtectionGap([unsupportedContainmentCheck]),
+  "unsupported-only protection gaps do not offer futile repair",
+);
+assert(
+  hasRepairableProtectionGap([unsupportedContainmentCheck, ordinaryContainmentFailure]),
+  "repair remains available when a supported protection gap also needs attention",
+);
 
 const targetedRepairError = new ProtectionRepairFlowError("App hooks need repair.", ["codex", "grok"]);
 assert(
@@ -208,6 +236,12 @@ assert(
   recoverySummary(1, 0, false, ["App hooks"]) ===
     "Repair App hooks here. Guard repairs and rechecks every local protection layer in one pass.",
   "a single failed local check is named instead of a generic count",
+);
+const mixedProtectionSummary = recoverySummary(1, 0, false, ["App hooks"], 3);
+assert(
+  mixedProtectionSummary.includes("Containment remains unavailable on this platform") &&
+    mixedProtectionSummary.includes("full protection cannot be reached here"),
+  "mixed repair copy distinguishes supported repairs from permanently unsupported containment",
 );
 
 const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", urls);

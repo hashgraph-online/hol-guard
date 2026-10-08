@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { assertSimpleCopySafe, localSettingChoiceLabel, PROTECTION_TERMS, protectionCenterLoadError, simpleCopyViolations } from "./copy/protection-copy";
-import { CatalogFilterBar } from "./components/catalog-filter-bar";
+import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
 import { ProtectionModuleRow, ProtectionStatusHero, TechnicalDetails } from "./components/protection-primitives";
 import {
   CLOUD_CONNECTED_FIXTURE,
@@ -20,6 +20,9 @@ import {
 import { EMPTY_CATALOG_FILTERS } from "./model/catalog-filters";
 import { groupProtectionModules, protectionCategoryIdForExtension } from "./model/protection-categories";
 import { deriveProtectionStatus } from "./model/protection-presentation";
+import { CustomExtensionsSection } from "./custom-extensions-section";
+import type { LocalCliItem } from "../local-cli-api";
+import { LocalCliDetail } from "./local-clis-panel";
 
 assert.equal(PROTECTION_TERMS.navigation, "Extensions");
 assert.equal(PROTECTION_TERMS.pageTitle, "Extensions");
@@ -163,21 +166,38 @@ assert.match(mcpRow, />MCP</);
 assert.match(mcpRow, />External</);
 assert.match(mcpRow, /Off until you turn it on/);
 
-const filterBar = renderToStaticMarkup(createElement(CatalogFilterBar, {
-  catalog: [
-    protectionModuleFixture({ extension_id: "command.git", name: "Git" }),
-    protectionModuleFixture({
-      extension_id: "command.mcp-filesystem",
-      name: "Filesystem MCP",
-      trust_class: "external",
-      surface: "mcp",
-      description: "Reviews official filesystem MCP tools.",
-    }),
-  ],
-  filters: EMPTY_CATALOG_FILTERS,
-  onChange: () => undefined,
-}));
+const filterCatalog = [
+  protectionModuleFixture({ extension_id: "command.git", name: "Git" }),
+  protectionModuleFixture({
+    extension_id: "command.mcp-filesystem",
+    name: "Filesystem MCP",
+    trust_class: "external",
+    surface: "mcp",
+    description: "Reviews official filesystem MCP tools.",
+  }),
+];
+const filterBar = renderToStaticMarkup(createElement("div", { "data-testid": "catalog-filters" },
+  createElement(CatalogFilterTrigger, {
+    open: false,
+    activeCount: 0,
+    panelId: "catalog-filter-panel-test",
+    buttonRef: { current: null },
+    onToggle: () => undefined,
+  }),
+  createElement(CatalogFilterBar, {
+    catalog: filterCatalog,
+    filters: EMPTY_CATALOG_FILTERS,
+    onChange: () => undefined,
+    open: false,
+    onOpenChange: () => undefined,
+    panelId: "catalog-filter-panel-test",
+  }),
+));
 assert.match(filterBar, /data-testid="catalog-filters"/);
+assert.match(filterBar, /aria-expanded="false"/);
+assert.match(filterBar, /aria-controls="catalog-filter-panel-test"/);
+assert.match(filterBar, /id="catalog-filter-panel-test"/);
+assert.match(filterBar, /hidden/);
 assert.match(filterBar, /<legend[^>]*>Trust<\/legend>/);
 assert.match(filterBar, /<legend[^>]*>Kind<\/legend>/);
 assert.match(filterBar, /<legend[^>]*>Area<\/legend>/);
@@ -188,10 +208,116 @@ assert.match(filterBar, />MCP</);
 assert.match(filterBar, />Commands</);
 assert.match(filterBar, />Source control</);
 assert.match(filterBar, /aria-pressed="false"/);
+assert.match(filterBar, /data-testid="catalog-filter-count"/);
 assert.doesNotMatch(filterBar, /Clear filters/);
+
+const filteringBar = renderToStaticMarkup(createElement(CatalogFilterBar, {
+  catalog: filterCatalog,
+  filters: { trusts: ["external"], kinds: [], areas: [] },
+  onChange: () => undefined,
+  open: true,
+  onOpenChange: () => undefined,
+  panelId: "catalog-filter-panel-open",
+}));
+assert.match(filteringBar, /data-testid="catalog-filter-tokens"/);
+assert.match(filteringBar, /Remove External trust filter/);
+assert.match(filteringBar, />Clear filters</);
+assert.match(filteringBar, />Clear all 1 filter</);
+assert.match(filteringBar, /1 of 2 tools/);
+assert.doesNotMatch(filteringBar, /<div id="catalog-filter-panel-open"[^>]*hidden/);
 
 const technical = renderToStaticMarkup(createElement(TechnicalDetails, { children: createElement("code", null, "command.git") }));
 assert.match(technical, /<details/);
 assert.doesNotMatch(technical, / open/);
+
+const baseCustomExtension: LocalCliItem = {
+  cli_id: "local-cli.fixture-abcdef12",
+  name: "Fixture connector",
+  kind: "executable",
+  identity_hash: "a".repeat(64),
+  example_label: "fixture --help",
+  interpreter_name: null,
+  observed_count: 1,
+  last_seen_at: "2026-09-29T00:00:00Z",
+  source_path: null,
+  help_status: "ok",
+  surface: "mcp",
+  server_identity_hash: null,
+  source_label: "ZCode",
+  state: "unset",
+  stale: false,
+  grant_revision: null,
+  authority_revision: 1,
+  suggestable: true,
+  suggestion_score: 1,
+  commands: [],
+};
+
+const customEmpty = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [], onOpen: () => undefined, onAdd: () => undefined,
+}));
+assert.match(customEmpty, /data-testid="custom-extensions-empty"/);
+assert.match(customEmpty, /No custom extensions yet\./);
+assert.match(customEmpty, />Add custom extension</);
+assert.match(customEmpty, /custom-extensions-heading/);
+assert.doesNotMatch(customEmpty, /Search custom extensions/);
+assert.doesNotMatch(customEmpty, /Show all/);
+
+const customDiscovered = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [], onOpen: () => undefined, onAdd: () => undefined, discovering: true,
+}));
+assert.match(customDiscovered, /Checking host configuration for connectors…/);
+
+const customMixed = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [
+    { ...baseCustomExtension, cli_id: "local-cli.enrolled", name: "Enrolled tool", state: "allowed" },
+    { ...baseCustomExtension, cli_id: "local-cli.observed", name: "Observed tool", state: "unset" },
+  ],
+  onOpen: () => undefined, onAdd: () => undefined,
+}));
+assert.match(customMixed, /Needs review · 1/);
+assert.match(customMixed, /Reviewed · 1/);
+assert.doesNotMatch(customMixed, /custom-extensions-empty/);
+
+// When the section search is visible it must render in its own row below the
+// header: the Add action closes the header row and a bounded search label
+// opens the row that follows it — never inside the header's flex container,
+// where a long description squeezes it into a floating box above the heading.
+const customSearched = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: Array.from({ length: 12 }, (_, index) => ({
+    ...baseCustomExtension,
+    cli_id: `local-cli.seeded-${index}`,
+    name: `Seeded tool ${index}`,
+  })),
+  onOpen: () => undefined, onAdd: () => undefined,
+}));
+assert.match(customSearched, /Search custom extensions/);
+const headerClose = customSearched.indexOf(">Add custom extension</button></div>");
+const searchRow = customSearched.indexOf('<div class="mt-4"><label class="relative block w-full max-w-sm">');
+assert.ok(headerClose !== -1, "the Add action must be the header row's last element");
+assert.ok(searchRow > headerClose && searchRow - headerClose < 40,
+  "the search label must open its own row immediately after the header closes");
+
+const customFiltered = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [], onOpen: () => undefined, onAdd: () => undefined, filteredOut: true,
+  onClearFilters: () => undefined,
+}));
+assert.match(customFiltered, /data-testid="custom-extensions-filter-empty"/);
+assert.match(customFiltered, /No custom extensions match these filters\./);
+assert.match(customFiltered, /Clear filters/);
+assert.doesNotMatch(customFiltered, /No custom extensions yet\./);
+
+for (const state of ["unset", "allowed", "blocked"] as const) {
+  const detail = renderToStaticMarkup(createElement(LocalCliDetail, {
+    item: { ...baseCustomExtension, surface: "mcp", state, name: "Synthetic MCP connector" },
+    revision: 0,
+    continuity: { sync_local_only: true, continuity_enabled: false, summary: "Local fixture" },
+    onBack: () => undefined,
+    onRefresh: async () => undefined,
+  }));
+  assert.match(detail, /data-testid="local-cli-detail"/);
+  assert.match(detail, /Synthetic MCP connector/);
+  assert.match(detail, /Refresh inventory/);
+}
 
 console.log("protection-center.test.tsx: all assertions passed");
