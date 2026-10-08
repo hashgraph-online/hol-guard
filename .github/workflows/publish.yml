@@ -685,6 +685,14 @@ jobs:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: python scripts/release/prepared_native.py install --directory prepared-native
+      - name: Self-test prepared runtime on native hardware
+        if: needs.precompile-native.result == 'success'
+        shell: bash
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        # Prepared binaries may be cross-compiled; every target is executed
+        # on its own architecture here before projection checks and packaging.
+        run: '"$RUNTIME" self-test --json'
       - name: Verify native command program is current
         shell: bash
         env:

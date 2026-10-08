@@ -111,3 +111,26 @@ def test_determinism_gate_compares_cached_and_cold_binaries_without_writing_cach
 
 def prepare_steps(job):
     return {step.get("name"): step for step in job["steps"]}
+
+
+def test_intel_binaries_are_cross_compiled_but_executed_only_on_native_intel():
+    prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
+    legs = {leg["target"]: leg for leg in prepare["strategy"]["matrix"]["include"]}
+    assert legs["x86_64-apple-darwin"]["runner"] == "macos-15"
+    assert legs["x86_64-apple-darwin"]["cross"] is True
+    assert all("cross" not in leg for target, leg in legs.items() if target != "x86_64-apple-darwin")
+    assert prepare["env"]["CROSS_COMPILED"] == "${{ matrix.cross == true }}"
+    script = next(step for step in prepare["steps"] if step.get("name") == "Compile canonical release inputs")["run"]
+    guard = script.index('if [[ "$CROSS_COMPILED" != "true" ]]; then')
+    assert guard < script.index("build_native_command_program.py") < script.index("self-test") < script.index("fi\n")
+    assert script.index("fi\n") < script.index("prepared_native.py pack")
+    wheels = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]
+    runners = {leg["target"]: leg["runner"] for leg in wheels["strategy"]["matrix"]["include"]}
+    assert runners["x86_64-apple-darwin"] == "macos-15-intel"
+    names = [step.get("name") for step in wheels["steps"]]
+    install = names.index("Verify and install prepared native binaries")
+    self_test = names.index("Self-test prepared runtime on native hardware")
+    assert install < self_test < names.index("Verify native command program is current")
+    step = wheels["steps"][self_test]
+    assert step["if"] == "needs.precompile-native.result == 'success'"
+    assert step["run"] == '"$RUNTIME" self-test --json'

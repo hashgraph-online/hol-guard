@@ -33,9 +33,12 @@ jobs:
           - runner: ubuntu-latest
             target: x86_64-unknown-linux-musl
             suffix: ''
-          - runner: macos-15-intel
+          # Intel binaries are cross-compiled on Apple silicon; the native
+          # macos-15-intel wheel job self-tests and verifies them before packaging.
+          - runner: macos-15
             target: x86_64-apple-darwin
             suffix: ''
+            cross: true
           - runner: macos-15
             target: aarch64-apple-darwin
             suffix: ''
@@ -48,6 +51,7 @@ jobs:
       VERSION: ${{ inputs.version }}
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
+      CROSS_COMPILED: ${{ matrix.cross == true }}
       RUNTIME: rust/target/${{ matrix.target }}/release/hol-guard-runtime${{ matrix.suffix }}
       SOURCE_COMPILER: rust/target/${{ matrix.target }}/release/guard-command-source${{ matrix.suffix }}
       HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
@@ -128,8 +132,10 @@ jobs:
           # so shared workspace crates compile once. The generator only writes files
           # that no build script reads, so it can verify the finished compiler.
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
-          python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
-          "$RUNTIME" self-test --json
+          if [[ "$CROSS_COMPILED" != "true" ]]; then
+            python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
+            "$RUNTIME" self-test --json
+          fi
           python scripts/release/prepared_native.py pack --directory prepared-native
           "$SCCACHE_PATH" --show-stats
       - name: Upload exact-run binaries
