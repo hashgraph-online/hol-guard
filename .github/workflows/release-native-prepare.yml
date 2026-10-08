@@ -103,18 +103,35 @@ jobs:
           prefix-key: release-native-v1
           workspaces: rust
           shared-key: release-${{ matrix.target }}
-          cache-workspace-crates: true
+          # Fresh checkouts reset source mtimes, so cached workspace crates are
+          # always stale; content-addressed sccache below covers them instead.
+          cache-workspace-crates: false
           cache-bin: false
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
       - name: Compile canonical release inputs
         shell: bash
+        env:
+          # Only workspace members are wrapped; third-party crates come from rust-cache.
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'on'
+          SCCACHE_GHA_VERSION: release-native-v1
+          # Only trusted main pushes may write; every other run is read-only.
+          SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
         run: |
           set -euo pipefail
-          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p guard-command --bin guard-command-source
-          python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
+          # One invocation keeps nix feature unification identical for both binaries,
+          # so shared workspace crates compile once. The generator only writes files
+          # that no build script reads, so it can verify the finished compiler.
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
           "$RUNTIME" self-test --json
           python scripts/release/prepared_native.py pack --directory prepared-native
+          "$SCCACHE_PATH" --show-stats
       - name: Upload exact-run binaries
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

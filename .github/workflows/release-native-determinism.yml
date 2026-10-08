@@ -1,0 +1,121 @@
+name: Verify release compiler cache determinism
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact commit to compile; defaults to the dispatched ref.
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  compare:
+    name: Cached vs cold release binaries (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            suffix: ''
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            suffix: ''
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            suffix: ''
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+            rustflags: -C link-arg=/Brepro
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+      RUST_TARGET: ${{ matrix.target }}
+      RUSTFLAGS: ${{ matrix.rustflags }}
+      SUFFIX: ${{ matrix.suffix }}
+      HOL_GUARD_BUILD_SHA: ${{ inputs.source_sha || github.sha }}
+      HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+      HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - name: Bind exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
+          echo "HOL_GUARD_PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Install pinned Rust target
+        shell: bash
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+          rustup target add "$RUST_TARGET"
+      - name: Install Linux static toolchain
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Restore trusted release dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          prefix-key: release-native-v1
+          workspaces: rust
+          shared-key: release-${{ matrix.target }}
+          cache-workspace-crates: false
+          cache-bin: false
+          save-if: 'false'
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
+      - name: Compile with the release compiler cache
+        shell: bash
+        env:
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'on'
+          SCCACHE_GHA_VERSION: release-native-v1
+          # This gate only reads entries written by trusted main pushes.
+          SCCACHE_GHA_RW_MODE: READ_ONLY
+          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          "$SCCACHE_PATH" --show-stats
+          mkdir -p "$RUNNER_TEMP/cached"
+          for binary in hol-guard-runtime guard-command-source; do
+            cp "rust/target/$RUST_TARGET/release/$binary$SUFFIX" "$RUNNER_TEMP/cached/"
+          done
+      - name: Compile cold without any compiler cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clean --manifest-path rust/Cargo.toml
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+      - name: Require byte-identical release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          for binary in hol-guard-runtime guard-command-source; do
+            cached=$(python -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$RUNNER_TEMP/cached/$binary$SUFFIX")
+            cold=$(python -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "rust/target/$RUST_TARGET/release/$binary$SUFFIX")
+            echo "$binary cached=$cached cold=$cold"
+            echo "| $RUST_TARGET | $binary | \`$cached\` | \`$cold\` |" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$cached" != "$cold" ]]; then
+              echo "::error::$binary differs between cached and cold compilation for $RUST_TARGET"
+              status=1
+            fi
+          done
+          exit "$status"
