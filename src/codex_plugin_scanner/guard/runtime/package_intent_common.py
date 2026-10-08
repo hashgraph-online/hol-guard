@@ -496,8 +496,15 @@ def _fingerprint_command_shape(intent: PackageIntent) -> str:
     for target in intent.targets:
         if target.source_kind != "git":
             continue
-        for source_spelling in (target.raw_spec, target.source_url):
-            if not source_spelling:
+        public_target = target.to_dict()
+        source_spellings = (
+            target.raw_spec,
+            target.source_url,
+            public_target.get("raw_spec"),
+            public_target.get("source_url"),
+        )
+        for source_spelling in source_spellings:
+            if not isinstance(source_spelling, str) or not source_spelling:
                 continue
             tokens = [token.replace(source_spelling, "<canonical-git-source>") for token in tokens]
     return shlex.join(tokens)
