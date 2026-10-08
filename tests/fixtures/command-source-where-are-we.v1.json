@@ -23306,6 +23306,7 @@
           "command.tui-runner",
           "command.uivoid",
           "command.vttforge",
+          "command.where-are-we",
           "command.xencode",
           "command.xrpl-muse-skill"
         ],
