@@ -130,26 +130,12 @@ jobs:
           retention-days: 7
 
   quality:
-    needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-evaluators
-          path: rust/target/release
-      - name: Bind the compiled native runtime
-        run: |
-          chmod 0755 rust/target/release/hol-guard-runtime
-          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: pytest-native-command-projections
-          path: .
       - uses: ./.github/actions/ci-job-quality
 
   # Rust validation is required, but is not on the artifact/Python fan-out critical path.
@@ -165,6 +151,12 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Configure the checked optimized test profile
+        if: matrix.check == 'test'
+        run: |
+          echo "CARGO_PROFILE_TEST_OPT_LEVEL=1" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-workspace-${{ matrix.check }}
@@ -174,10 +166,36 @@ jobs:
           CARGO_CHECK: ${{ matrix.check }}
         run: |
           case "$CARGO_CHECK" in
-            clippy) cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings ;;
-            test) cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets ;;
+            clippy)
+              mkdir -p clippy-report
+              if cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets --message-format=json -- -D warnings > clippy-report/clippy.jsonl; then
+                :
+              else
+                clippy_status=$?
+                if ! python3 -m scripts.ci.clippy_report diagnostics; then
+                  echo "Unable to render Clippy diagnostics" >&2
+                fi
+                exit "$clippy_status"
+              fi
+              ;;
+            test)
+              nextest_bin="$(python3 scripts/ci/install_nextest.py)"
+              PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --workspace --all-targets \
+                --test-threads 2 --retries 0 --no-fail-fast
+              ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
+      - name: Bind successful strict Clippy report
+        if: matrix.check == 'clippy'
+        run: python3 -m scripts.ci.clippy_report bind
+      - name: Upload successful strict Clippy report
+        if: matrix.check == 'clippy'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: clippy-report-${{ github.run_attempt }}
+          path: clippy-report/
+          if-no-files-found: error
+          retention-days: 1
 
   native-command-evaluators:
     runs-on: ubuntu-latest
@@ -341,6 +359,7 @@ jobs:
           chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
           echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_BUILD_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Run coverage shard ${{ matrix.shard-index }}
@@ -435,6 +454,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     steps:
       - name: Check for SonarQube Cloud token
         id: token-presence
@@ -642,8 +662,66 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+  native-windows-evaluators:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: ./.github/actions/setup-rust
+        with:
+          save-main-cache: "true"
+      - name: Build Windows native command evaluators once for both updater Python versions
+        shell: pwsh
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          python scripts/refresh_extension_artifacts.py --trust-only
+          if ($LASTEXITCODE -ne 0) {
+            throw "Staging Windows native trust bindings failed with exit code $LASTEXITCODE"
+          }
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          if ($LASTEXITCODE -ne 0) {
+            throw "Building Windows native command evaluators failed with exit code $LASTEXITCODE"
+          }
+      - name: Verify current Windows native command projections
+        shell: pwsh
+        run: |
+          python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source.exe
+          if ($LASTEXITCODE -ne 0) {
+            throw "Verifying Windows native command projections failed with exit code $LASTEXITCODE"
+          }
+      - name: Verify Windows native runtime source binding
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          $runtime = (Resolve-Path -LiteralPath "rust/target/release/hol-guard-runtime.exe").Path
+          $capabilitiesJson = & $runtime capabilities
+          if ($LASTEXITCODE -ne 0) {
+            throw "Reading Windows native runtime capabilities failed with exit code $LASTEXITCODE"
+          }
+          $capabilities = $capabilitiesJson | ConvertFrom-Json
+          if ($capabilities.build_sha -ne $env:EXPECTED_SOURCE_SHA) {
+            throw "Windows native runtime does not match this checkout's source SHA"
+          }
+      - name: Upload this attempt's verified Windows native command evaluators
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-native-command-evaluators-Windows-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            rust/target/release/guard-command-source.exe
+            rust/target/release/hol-guard-runtime.exe
+          if-no-files-found: error
+          retention-days: 1
+
   windows-updater:
-    needs: native-command-evaluators
+    needs: [native-command-evaluators, native-windows-evaluators]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 15

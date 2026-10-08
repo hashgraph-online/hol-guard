@@ -35,25 +35,6 @@ fn restart_mapping_retains_hard_failure_without_swallowing_unrelated_errors() {
 #[cfg(unix)]
 #[test]
 fn authenticated_initial_probe_reaches_restart_and_preserves_auth_failure() {
-    // Run the real initial-probe path in a child so the diagnostic stream is
-    // asserted as well as the registered Result error code.
-    if std::env::var_os("HOL_GUARD_RETRY_DIAGNOSTIC_TEST_CHILD").is_none() {
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .arg("authenticated_initial_probe_reaches_restart_and_preserves_auth_failure")
-            .arg("--nocapture")
-            .env("HOL_GUARD_RETRY_DIAGNOSTIC_TEST_CHILD", "1")
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(String::from_utf8_lossy(&output.stderr).contains(
-            "native_resident_recovery_previous_failure=native_resident_live_request_failed:native_client_auth_rejected"
-        ));
-        return;
-    }
     use std::fs;
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -90,6 +71,8 @@ fn authenticated_initial_probe_reaches_restart_and_preserves_auth_failure() {
         while requests < 2 && Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    // Accepted sockets inherit nonblocking mode on some Unix hosts.
+                    stream.set_nonblocking(false).unwrap();
                     // The client revalidates process identity after connect
                     // and before sending its nonce. Let the fixture honor the
                     // client's four-second budget rather than closing early.

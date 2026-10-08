@@ -19,7 +19,7 @@ READY = {
     "adapter": ADAPTER_ID,
     "provider": "openai-codex",
     "model": "gpt-5.6-luna",
-    "thinking": "high",
+    "thinking": "medium",
 }
 
 
@@ -51,6 +51,7 @@ def test_ready_record_must_name_the_expected_backend_and_a_real_port():
         {"model": "gpt-5.6-mini"},
         {"provider": "other"},
         {"thinking": "low"},
+        {"thinking": "high"},
         {"adapter": "x"},
         {"port": 0},
         {"port": "40123"},
@@ -58,6 +59,9 @@ def test_ready_record_must_name_the_expected_backend_and_a_real_port():
     ):
         with pytest.raises(RuntimeError):
             validate_ready(json.dumps({**READY, **change}))
+    assert validate_ready(json.dumps({**READY, "thinking": "high"}), "high")["port"] == 40123
+    with pytest.raises(RuntimeError):
+        validate_ready(json.dumps(READY), "high")
     for bad in ("", "not json", "[]"):
         with pytest.raises((RuntimeError, AttributeError)):
             validate_ready(bad)
@@ -70,16 +74,33 @@ def test_sdk_root_comes_from_the_omp_executable_and_must_hold_the_packages(tmp_p
         sdk_root_for(None, tmp_path)
 
 
-def test_route_provider_is_loopback_high_with_real_identity(tmp_path, monkeypatch):
+@pytest.mark.parametrize(("requested", "effort"), [({}, "medium"), ({"effort": "high"}, "high")])
+def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monkeypatch, requested, effort):
     _root, omp = _sdk(tmp_path)
     monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 0\n")) + os.pathsep + os.environ["PATH"])
-    route = NativeLunaRoute(omp=str(omp))
+    route = NativeLunaRoute(omp=str(omp), **requested)
     route.port = 40123
     provider = route.provider(max_rounds=32, timeout=120)
     assert provider["base_url"] == "http://127.0.0.1:40123/v1"
     assert provider["allow_loopback"] is True and bool(provider["api_key"])
-    assert provider["reasoning_effort"] == "high"
-    assert "openai-codex/gpt-5.6-luna/high" in provider["identity"]
+    assert provider["reasoning_effort"] == effort
+    assert f"openai-codex/gpt-5.6-luna/{effort} via" in provider["identity"]
+
+
+def test_route_rejects_unsupported_effort(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 0\n")) + os.pathsep + os.environ["PATH"])
+    with pytest.raises(ValueError):
+        NativeLunaRoute(omp=str(omp), effort="low")
+
+
+def test_route_passes_its_effort_to_the_adapter(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    ready = json.dumps({**READY, "thinking": "high"})
+    script = f"[ \"$GUARD_GAUNTLET_LUNA_THINKING\" = high ] || exit 4\necho '{ready}'\nexec sleep 300\n"
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, script)) + os.pathsep + os.environ["PATH"])
+    with NativeLunaRoute(omp=str(omp), effort="high") as route:
+        assert route.port == 40123
 
 
 def test_route_starts_stops_and_reaps_its_process_group(tmp_path, monkeypatch):
@@ -104,7 +125,68 @@ def test_route_fails_closed_when_the_adapter_exits_or_misreports(tmp_path, monke
 
 
 def test_environment_forwards_no_provider_keys():
-    assert not any("KEY" in name or "TOKEN" in name for name in luna_route._ENVIRONMENT_KEYS)
+    names = luna_route._ENVIRONMENT_KEYS + luna_route._WINDOWS_ENVIRONMENT_KEYS
+    assert not any("KEY" in name or "TOKEN" in name for name in names)
+
+
+class _FakeJob:
+    def __init__(self):
+        self.calls = []
+
+    def terminate(self):
+        self.calls.append("terminate")
+
+    def __exit__(self, *_args):
+        self.calls.append("close")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX stand-in process")
+def test_job_owned_stop_closes_stdin_terminates_the_job_and_reaps(tmp_path, monkeypatch):
+    # The Windows path never signals a process group: it ends the owned job only.
+    monkeypatch.setattr(luna_route.os, "killpg", lambda *_a: pytest.fail("killpg must not be used with a job"))
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exec sleep 300\n")) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setattr(luna_route, "STOP_SECONDS", 0.2)
+    route = NativeLunaRoute(omp=str(omp))
+    route.process = subprocess.Popen(
+        ["sleep", "300"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, start_new_session=True
+    )
+    process, job = route.process, _FakeJob()
+    route._job = job
+    # The stand-in ignores stdin closing, so the job terminate is the escalation.
+    job.terminate = lambda: (job.calls.append("terminate"), process.kill())
+    route.stop()
+    assert job.calls == ["terminate", "close"] and process.poll() is not None
+    assert route.process is None and route._job is None
+    route.stop()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX stand-in process")
+def test_job_stop_kills_a_process_that_never_joined_the_job(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exec sleep 300\n")) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setattr(luna_route, "STOP_SECONDS", 0.2)
+    route = NativeLunaRoute(omp=str(omp))
+    route.process = subprocess.Popen(
+        ["sleep", "300"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, start_new_session=True
+    )
+    process, job = route.process, _FakeJob()
+    route._job = job
+    route.stop()
+    assert job.calls == ["terminate", "close"] and process.poll() is not None
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Job Object lifecycle")
+def test_windows_route_starts_and_stops_in_a_job(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    bun = tmp_path / "bin" / "bun.cmd"
+    bun.parent.mkdir()
+    bun.write_text(f"@echo {json.dumps(READY)}\r\n@ping -n 300 127.0.0.1 >nul\r\n")
+    monkeypatch.setenv("PATH", str(bun.parent) + os.pathsep + os.environ["PATH"])
+    with NativeLunaRoute(omp=str(omp)) as route:
+        process = route.process
+        assert process.poll() is None
+    assert process.poll() is not None and route._job is None
 
 
 def test_cli_rejects_a_conflicting_provider_selection(tmp_path):
@@ -129,6 +211,30 @@ def test_cli_rejects_a_conflicting_provider_selection(tmp_path):
         check=False,
     )
     assert result.returncode == 2 and "native-luna-route" in result.stderr
+
+
+def test_cli_rejects_an_unsupported_luna_effort(tmp_path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ci.gauntlet",
+            "run",
+            "--expected-source-sha",
+            "0" * 40,
+            "--output",
+            str(tmp_path / "e"),
+            "--native-luna-route",
+            "--reasoning-effort",
+            "low",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parents[1],
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 2 and "Luna medium or high" in result.stderr
 
 
 @pytest.mark.skipif(shutil.which("bun") is None, reason="bun is required for the adapter unit tests")

@@ -37,11 +37,18 @@ def main() -> int:
     run.add_argument(
         "--native-luna-route",
         action="store_true",
-        help="Run OpenAI Luna high (openai-codex/gpt-5.6-luna) through the existing Oh My Pi ChatGPT login",
+        help="Run OpenAI Luna (openai-codex/gpt-5.6-luna) through the existing Oh My Pi ChatGPT login; "
+        "medium effort unless --reasoning-effort high",
     )
     run.add_argument("--sdk-root", type=Path, help="Pinned SDK directory for --native-luna-route (default: from omp)")
     run.add_argument("--case", action="append", dest="cases", help="Targeted runs are never full-profile qualification")
     run.add_argument("--timeout", type=float, default=300, help="Per-scenario host deadline in seconds")
+    run.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="Concurrent isolated case workers (1-8; default 1 runs cases sequentially in-process)",
+    )
     run.add_argument("--max-inference-rounds", type=int, default=32)
     run.add_argument("--omp", help="Path to the repository-pinned Oh My Pi executable")
     run.add_argument("--work-root", type=Path, help="Parent for newly created disposable fixtures")
@@ -118,8 +125,11 @@ def main() -> int:
         if args.native_luna_route:
             if args.provider_url or args.model or args.provider_identity or args.allow_loopback_provider:
                 raise ValueError("--native-luna-route selects the provider, model, identity and loopback itself")
-            if args.reasoning_effort not in (None, "high"):
-                raise ValueError("--native-luna-route is Luna high only")
+            from .luna_route import DEFAULT_EFFORT, EFFORTS
+
+            args.reasoning_effort = args.reasoning_effort or DEFAULT_EFFORT
+            if args.reasoning_effort not in EFFORTS:
+                raise ValueError("--native-luna-route supports Luna " + " or ".join(EFFORTS))
         elif not args.provider_url or not args.model or not args.provider_identity:
             raise ValueError("live provider URL, model and provider identity are required; there is no mock fallback")
         if not 30 <= args.timeout <= 1800 or not 1 <= args.max_inference_rounds <= 128:
@@ -127,6 +137,11 @@ def main() -> int:
         # argparse does not apply choices to an environment-supplied default.
         if args.reasoning_effort is not None and args.reasoning_effort not in REASONING_EFFORTS:
             raise ValueError("unsupported reasoning effort; use " + ", ".join(REASONING_EFFORTS))
+        from .parallel import validate_jobs
+
+        validate_jobs(args.jobs)
+        if args.profile == "contained-bun-vitest" and args.jobs != 1:
+            raise ValueError("--jobs is only supported by the core profile")
         if args.profile == "core" and args.contained_test_project is not None:
             raise ValueError("--contained-test-project requires --profile contained-bun-vitest")
         if args.profile == "contained-bun-vitest" and args.contained_test_project is None:
@@ -144,10 +159,14 @@ def main() -> int:
                 from .luna_route import NativeLunaRoute
 
                 # Unwind the context manager on SIGTERM/SIGHUP so the adapter is always reaped.
-                for name in (signal.SIGTERM, signal.SIGHUP):
+                for name in (signal.SIGTERM, getattr(signal, "SIGHUP", None)):
+                    if name is None:
+                        continue
                     signal.signal(name, lambda number, _frame: sys.exit(128 + number))
 
-                route = stack.enter_context(NativeLunaRoute(omp=args.omp, sdk_root=args.sdk_root))
+                route = stack.enter_context(
+                    NativeLunaRoute(omp=args.omp, sdk_root=args.sdk_root, effort=args.reasoning_effort)
+                )
                 provider = route.provider(max_rounds=args.max_inference_rounds, timeout=min(args.timeout, 120))
             else:
                 provider = {
@@ -181,6 +200,7 @@ def main() -> int:
                     omp=args.omp,
                     work_root=args.work_root,
                     candidate_sha=args.candidate_sha,
+                    jobs=args.jobs,
                 )
         print(
             json.dumps(

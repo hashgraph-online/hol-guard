@@ -15,11 +15,13 @@
 
 use std::collections::HashSet;
 use std::fs::{self, Metadata};
-use std::io::Read;
+use std::io::{Cursor, Read, Write};
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use guard_contracts::write_canonical_json;
 use serde_json::{json, Map, Value};
@@ -240,10 +242,55 @@ fn executable_path_chain_snapshot(path: &Path) -> Option<Vec<Value>> {
     }
 }
 
+// Match the runtime's opt-in sanitized stderr protocol without exposing any
+// executable path, digest, launch environment, or file content.
+static EXECUTABLE_DIGEST_DIAGNOSTIC: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var("HOL_GUARD_NATIVE_DIAGNOSTIC").is_ok_and(|value| {
+        let value = value.trim();
+        value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("yes")
+    })
+});
+
+fn emit_executable_digest_phase(status: &'static str, elapsed: Duration) {
+    let mut line = [0u8; 192];
+    let mut output = Cursor::new(line.as_mut_slice());
+    if writeln!(
+        output,
+        "native_resident_phase phase=executable_digest status={status} elapsed_ms={}",
+        elapsed.as_millis()
+    )
+    .is_ok()
+    {
+        let length = output.position() as usize;
+        let _ = std::io::stderr().lock().write_all(&line[..length]);
+    }
+}
+
 // `_cached_executable_hash` (:1743-1782) — ported uncached; the Python
 // `lru_cache` is a pure optimization (output identical for same stat key).
 // Returns (digest, hash_status, shebang, shebang_status).
 fn cached_executable_hash(
+    path: &Path,
+    expected_stat: StatKey,
+) -> (Option<String>, &'static str, Option<String>, &'static str) {
+    if !*EXECUTABLE_DIGEST_DIAGNOSTIC {
+        return executable_hash_inner(path, expected_stat);
+    }
+    let started = Instant::now();
+    emit_executable_digest_phase("start", Duration::ZERO);
+    let result = executable_hash_inner(path, expected_stat);
+    emit_executable_digest_phase(
+        if result.1 == "verified" {
+            "ok"
+        } else {
+            "error"
+        },
+        started.elapsed(),
+    );
+    result
+}
+
+fn executable_hash_inner(
     path: &Path,
     expected_stat: StatKey,
 ) -> (Option<String>, &'static str, Option<String>, &'static str) {

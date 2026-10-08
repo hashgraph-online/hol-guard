@@ -101,9 +101,6 @@ class _GuardCommandsProxy:
 guard_commands_module = _GuardCommandsProxy()
 
 
-
-
-
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--validate-test-invariants",
@@ -167,8 +164,6 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
 
     for guard_home in sorted(_test_guard_homes_with_daemon_state(test_tmp_path)):
         retire_all_guard_daemons_for_home(guard_home)
-
-
 
 
 @pytest.fixture(autouse=True)

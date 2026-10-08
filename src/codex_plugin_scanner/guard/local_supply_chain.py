@@ -305,7 +305,7 @@ def _parse_package_intent_native(
     ``parse_package_intent`` is resident-sole-authority, so no Python
     re-parse exists to fall back to."""
     try:
-        payload = _native_package_authority_module().package_intent_parse_native(
+        intent = _native_package_authority_module().package_intent_parse_native(
             raw_command,
             workspace=workspace,
             environment=dict(environment) if environment is not None else None,
@@ -313,12 +313,7 @@ def _parse_package_intent_native(
         )
     except Exception:
         return None
-    if not isinstance(payload, dict):
-        return None
-    try:
-        return PackageIntent.from_dict(payload)
-    except (TypeError, ValueError):
-        return None
+    return intent if isinstance(intent, PackageIntent) else None
 
 
 def _native_cloud_transport_unavailable(payload: dict[str, object]) -> bool:

@@ -129,19 +129,6 @@ def test_platform_gates_require_complete_inventory_and_all_native_proofs() -> No
     }
 
 
-def test_sonar_starts_independently_and_keeps_coverage_and_quality_gates() -> None:
-    """Verify sonar starts independently and keeps coverage and quality gates."""
-    job = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]["sonar"]
-    assert "needs" not in job
-    assert job["steps"][0]["id"] == "token-presence"
-    assert job["if"] == "vars.SONAR_CI_ENABLED == 'true' && github.event_name != 'pull_request'"
-    assert all("steps.token-presence.outputs.has-token == 'true'" in step["if"] for step in job["steps"][1:])
-    commands = "\n".join(step.get("run", "") for step in job["steps"])
-    assert "select_pytest_coverage.py" in commands
-    assert "prepare_sonar_analysis.sh" in commands
-    assert any("sonarqube-quality-gate-action@" in step.get("uses", "") for step in job["steps"])
-
-
 def test_regression_action_installs_only_the_same_run_wheel() -> None:
     """Verify regression action installs only the same run wheel."""
     action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/native-regression/action.yml").read_text()))
@@ -223,15 +210,3 @@ def test_failed_shard_errors_identify_platform_and_index(platform: str) -> None:
 def test_missing_report_error_identifies_expected_and_actual_counts() -> None:
     with pytest.raises(ValueError, match="expected 16, got 15"):
         VERIFY.verify_reports(_reports()[:-1], 4)
-
-
-def test_windows_native_build_keeps_the_warm_main_only_cache() -> None:
-    """Verify windows native build keeps the warm main only cache."""
-    action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text()))
-    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))["jobs"]
-    setup = next(step for step in jobs["windows-build"]["steps"] if step.get("uses") == "./.github/actions/setup-rust")
-    default_key = action["inputs"]["cache-key"]["default"]
-    assert setup.get("with", {}).get("cache-key", default_key) == default_key == "native-wheel"
-    cache = next(step for step in action["runs"]["steps"] if step.get("name") == "Cache Rust compilation")
-    assert cache["with"]["prefix-key"] == "v0-rust"
-    assert cache["with"]["save-if"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"

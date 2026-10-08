@@ -12,6 +12,11 @@ runs:
     with:
       name: pytest-native-command-projections
       path: .
+  - name: Download this attempt's verified Windows native command evaluators
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      name: pytest-native-command-evaluators-Windows-${{ github.sha }}-${{ github.run_attempt }}
+      path: rust/target/release
   - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
     with:
       python-version: ${{ inputs.python-version }}
@@ -32,22 +37,31 @@ runs:
       enable-cache: true
       cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       save-cache: false
-  - uses: ./.github/actions/setup-rust
-  - name: Build and select this checkout's native command evaluators
-    shell: bash
-    run: |
-      cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
-      compiler="$GITHUB_WORKSPACE/rust/target/release/guard-command-source"
-      runtime="$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime"
-      if [[ "$RUNNER_OS" == "Windows" ]]; then
-        compiler="${compiler}.exe"
-        runtime="${runtime}.exe"
-      fi
-      echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
-      echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
-      echo "HOL_GUARD_NATIVE_BINARY=$runtime" >> "$GITHUB_ENV"
   - run: uv sync --frozen --no-dev --group ci-test --python ${{ inputs.python-version }}
     shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+  - name: Bind the current Windows native runtime and source compiler
+    shell: pwsh
+    env:
+      EXPECTED_SOURCE_SHA: ${{ github.sha }}
+    run: |
+      $runtime = (Resolve-Path -LiteralPath "rust/target/release/hol-guard-runtime.exe").Path
+      $compiler = (Resolve-Path -LiteralPath "rust/target/release/guard-command-source.exe").Path
+      uv run --no-sync python scripts/build_native_command_program.py --compiler $compiler --check
+      if ($LASTEXITCODE -ne 0) {
+        throw "Windows native source compiler does not match this checkout"
+      }
+      $capabilitiesJson = & $runtime capabilities
+      if ($LASTEXITCODE -ne 0) {
+        throw "Reading Windows native runtime capabilities failed with exit code $LASTEXITCODE"
+      }
+      $capabilities = $capabilitiesJson | ConvertFrom-Json
+      if ($capabilities.build_sha -ne $env:EXPECTED_SOURCE_SHA) {
+        throw "Windows native runtime does not match this checkout's source SHA"
+      }
+      "HOL_GUARD_NATIVE_BINARY=$runtime" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      "HOL_GUARD_NATIVE_SOURCE_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      "HOL_GUARD_BUILD_SOURCE_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
   - name: Run trusted updater and daemon regressions
     run: uv run --no-sync pytest tests/test_guard_update_artifact.py tests/test_guard_update_subprocess.py tests/test_guard_update_isolation.py
       tests/test_guard_phase03_local_install.py tests/test_guard_phase03_remainder.py tests/test_dashboard_update.py tests/test_guard_daemon_manager.py

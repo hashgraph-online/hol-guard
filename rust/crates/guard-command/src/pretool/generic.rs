@@ -350,8 +350,13 @@ fn evaluate_envelope(
         result.reason_code = "native_git_execution_context_review".into();
         result.reason = "HOL Guard requires review because this Git read may execute a configured helper, or its effective configuration could not be verified.".into();
     }
-    let contained_test_reason =
-        command_model.and_then(super::restricted_tests::readonly_test_reason);
+    let contained_test_reason = command_model.and_then(|model| {
+        super::restricted_tests::readonly_test_reason(model).or_else(|| {
+            super::contained_wrapper::contained_core(model, super::PathContext { home_dir, cwd })
+                .and_then(|core| super::restricted_tests::readonly_test_reason(&core))
+                .filter(|reason| *reason != "native_git_readonly_containment_required")
+        })
+    });
     // The read-only credential-filtering backend currently exists on macOS.
     // Other platforms retain review until they can enforce the same profile.
     if cfg!(target_os = "macos")

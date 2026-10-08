@@ -284,6 +284,7 @@ def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
         "config": {},
         "matchers": groups,
     }
+
     result = invoke(compiler, example)
     assert result.returncode != 0
     assert json.loads(result.stdout)["code"] == "command_source_matcher_budget_exceeded"
