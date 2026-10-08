@@ -707,6 +707,7 @@
           "command.kim",
           "command.kranz",
           "command.librarybridge",
+          "command.macscope",
           "command.mcp-agenthub",
           "command.mcp-asdecided",
           "command.mcp-authyouragent",
@@ -1023,6 +1024,32 @@
       "expected_action": "allow",
       "expected_effective_segments": [],
       "id": "unrelated-echo",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --help && MacScopeMCPServer --allow-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "help-then-write",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "'/Applications/MacScope.app/Contents/Resources/MacScopeMCPServer' --allow-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "app-bundle-path",
       "rule_id": "command.macscope.feature-writes"
     }
   ],
