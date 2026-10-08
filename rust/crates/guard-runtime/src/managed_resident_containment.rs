@@ -348,6 +348,29 @@ pub(super) fn wait_for_generation_containment(
     }
 }
 
+/// Retire generations whose exact resident identity has already exited.
+///
+/// A resident that is killed without a shutdown request, for example when a
+/// Windows job object closes, cannot remove its own generation file.
+pub(super) fn retire_exited_states(scope: &Path, digest: &str) -> Result<(), String> {
+    for state in discover_states(scope, digest)? {
+        if process_is_alive(&state_process_identity(&state))? {
+            continue;
+        }
+        if let Ok(token) = token_from_state(&state) {
+            super::resident_state_retirement::retire_state(
+                scope,
+                state.generation,
+                state.process_id,
+                &state.process_start_marker,
+                digest,
+                &token,
+            );
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn wait_for_stop_containment(
     scope: &Path,
     digest: &str,

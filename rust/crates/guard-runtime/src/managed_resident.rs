@@ -172,6 +172,9 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
         let _ = restart_budget::clear(&scope);
         return Ok(());
     }
+    // Clean up after a resident that died without a shutdown request, so
+    // the next stop reports an empty scope instead of a stale generation.
+    containment::retire_exited_states(&scope, &digest)?;
     Err("native_resident_stop_unavailable".to_owned())
 }
 

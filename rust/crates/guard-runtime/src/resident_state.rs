@@ -216,7 +216,7 @@ fn state_message(state: &ResidentState) -> Vec<u8> {
     message
 }
 
-fn state_mac(state: &ResidentState, token: &[u8]) -> String {
+pub(crate) fn state_mac(state: &ResidentState, token: &[u8]) -> String {
     hex_bytes(&crate::hmac_sha256(
         token,
         STATE_MAC_LABEL,
