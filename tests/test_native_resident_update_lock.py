@@ -305,7 +305,7 @@ def test_update_retirement_retries_a_transient_failure(
     monkeypatch.setattr(update_commands, "_isolated_environment", lambda: {})
     monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
     assert update_commands._retire_native_resident_before_update(tmp_path / "guard-home") is True
-    assert len(calls) == 2
+    assert calls == [6.0, 6.0]
 
 
 def test_update_retirement_fails_closed_after_bounded_attempts(
@@ -323,4 +323,4 @@ def test_update_retirement_fails_closed_after_bounded_attempts(
     monkeypatch.setattr(update_commands, "_isolated_environment", lambda: {})
     monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
     assert update_commands._retire_native_resident_before_update(tmp_path / "guard-home") is False
-    assert len(calls) == update_commands._NATIVE_RESIDENT_RETIREMENT_ATTEMPTS
+    assert len(calls) == 3

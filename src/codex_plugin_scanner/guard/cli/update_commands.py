@@ -74,6 +74,7 @@ from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
 from .update_opencode import _refresh_opencode_pretool_plugin
 from .update_release_candidates import newest_pypi_version
+from .update_retirement import retire_with_retry
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
@@ -198,33 +199,22 @@ print(json.dumps({"before": before, "repair": repair, "after": after}))
 """.strip()
 
 
-_NATIVE_RESIDENT_RETIREMENT_ATTEMPTS = 3
-_NATIVE_RESIDENT_RETIREMENT_TIMEOUT_SECONDS = 6.0
-_NATIVE_RESIDENT_RETIREMENT_RETRY_DELAY_SECONDS = 0.5
-
-
 def _retire_native_resident_before_update(guard_home: Path) -> bool:
     """Stop shared native state while the installed runtime is still intact."""
 
-    # Other agent sessions keep using the resident during an update, so one
-    # attempt can meet a held lease lock, a lease that is still being written,
-    # or a resident that a hook just started. Retirement is authenticated and
-    # idempotent, so a short bounded retry is safe and still fails closed.
-    for attempt in range(_NATIVE_RESIDENT_RETIREMENT_ATTEMPTS):
-        if attempt:
-            time.sleep(_NATIVE_RESIDENT_RETIREMENT_RETRY_DELAY_SECONDS)
-        try:
-            if retire_native_resident_for_update(
+    try:
+        return retire_with_retry(
+            lambda timeout_seconds: retire_native_resident_for_update(
                 executable=_bundled_runtime_candidate(),
                 guard_home=guard_home,
                 environment=_isolated_environment(),
-                timeout_seconds=_NATIVE_RESIDENT_RETIREMENT_TIMEOUT_SECONDS,
-            ):
-                return True
-        except Exception:
-            # A failed preflight must leave the current package untouched.
-            return False
-    return False
+                timeout_seconds=timeout_seconds,
+            ),
+            sleep=time.sleep,
+        )
+    except Exception:
+        # A failed preflight must leave the current package untouched.
+        return False
 
 
 _DAEMON_REFRESH_TIMEOUT_SECONDS = 75.0
