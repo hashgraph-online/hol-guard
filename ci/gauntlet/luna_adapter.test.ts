@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test';
-import { authorized, convertMessages, finishReason, requirePromptable, eventDelta, setModel, WireArguments } from './luna_adapter';
+import { authorized, convertMessages, finishReason, requirePromptable, eventDelta, setModel, WireArguments,
+  requireTransportSelection, thinkingLevel, REQUEST_MODEL, THINKING_LEVELS } from './luna_adapter';
 
 test('native streaming tool argument bytes are preserved across arbitrary splits', () => {
   const indices = new Map<number, number>();
@@ -62,6 +63,22 @@ test('only the per-run bearer token is authorized', () => {
   expect(authorized('Bearer ', '')).toBe(false);
 });
 
+test('only medium or high thinking levels are accepted', () => {
+  expect(thinkingLevel('medium')).toBe('medium');
+  expect(thinkingLevel('high')).toBe('high');
+  for (const value of [undefined, '', 'low', 'xhigh', 'Medium', ' high'])
+    expect(() => thinkingLevel(value)).toThrow('Unsupported Luna thinking level');
+});
+test('requests must select the adapter model, streaming and the configured effort', () => {
+  for (const thinking of ['medium', 'high']) {
+    const body = { model: REQUEST_MODEL, stream: true, reasoning_effort: thinking };
+    expect(() => requireTransportSelection(body, thinking)).not.toThrow();
+    const other = thinking === 'medium' ? 'high' : 'medium';
+    for (const bad of [{ ...body, reasoning_effort: other }, { ...body, reasoning_effort: undefined },
+      { ...body, model: 'gpt-5.6-luna' }, { ...body, stream: false }, null])
+      expect(() => requireTransportSelection(bad, thinking)).toThrow('Unexpected transport selection');
+  }
+});
 test('finish reasons map without nesting', () => {
   expect(finishReason('toolUse')).toBe('tool_calls');
   expect(finishReason('length')).toBe('length');
@@ -78,10 +95,13 @@ test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned SDK exposes the Luna m
   const model = registry.find('openai-codex', 'gpt-5.6-luna');
   expect(model?.id).toBe('gpt-5.6-luna');
   const seen: unknown[] = [];
-  const agent = new Agent({ initialState: { model, thinkingLevel: 'high', systemPrompt: '', tools: [], messages: [] },
-    onSseEvent: (event: unknown) => seen.push(event) });
-  expect(typeof agent.prompt).toBe('function');
-  expect(typeof agent.abort).toBe('function');
+  for (const thinkingLevel of THINKING_LEVELS) {
+    const agent = new Agent({ initialState: { model, thinkingLevel, systemPrompt: '', tools: [], messages: [] },
+      onSseEvent: (event: unknown) => seen.push(event) });
+    expect(agent.state.thinkingLevel).toBe(thinkingLevel);
+    expect(typeof agent.prompt).toBe('function');
+    expect(typeof agent.abort).toBe('function');
+  }
   expect(typeof registry.resolver).toBe('function');
 });
 

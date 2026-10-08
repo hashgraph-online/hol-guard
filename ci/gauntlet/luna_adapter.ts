@@ -53,6 +53,16 @@ export function requirePromptable(converted: any[]) {
   return converted;
 }
 
+export function thinkingLevel(value: string | undefined) {
+  if (!THINKING_LEVELS.includes(value ?? '')) throw new Error('Unsupported Luna thinking level');
+  return value as string;
+}
+
+export function requireTransportSelection(body: any, thinking: string) {
+  if (body?.model !== REQUEST_MODEL || body?.stream !== true || body?.reasoning_effort !== thinking)
+    throw new Error('Unexpected transport selection');
+}
+
 export function finishReason(stopReason: string) {
   if (stopReason === 'toolUse') return 'tool_calls';
   if (stopReason === 'length') return 'length';
@@ -126,9 +136,8 @@ async function main() {
 const token = process.env.GUARD_GAUNTLET_ROUTE_TOKEN ?? '';
 delete process.env.GUARD_GAUNTLET_ROUTE_TOKEN;
 if (token.length < 32) throw new Error('Missing per-run route token');
-const thinking = process.env.GUARD_GAUNTLET_LUNA_THINKING ?? '';
+const thinking = thinkingLevel(process.env.GUARD_GAUNTLET_LUNA_THINKING);
 delete process.env.GUARD_GAUNTLET_LUNA_THINKING;
-if (!THINKING_LEVELS.includes(thinking)) throw new Error('Unsupported Luna thinking level');
 const sdkRoot = process.argv[2];
 if (!sdkRoot || !isAbsolute(sdkRoot)) throw new Error('Usage: luna_adapter.ts ABSOLUTE_SDK_ROOT');
 const load = (name: string) => import(Bun.resolveSync(name, sdkRoot));
@@ -151,8 +160,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
     let body: any;
     try {
       body = JSON.parse(text);
-      if (body.model !== REQUEST_MODEL || body.stream !== true || body.reasoning_effort !== thinking)
-        throw new Error('Unexpected transport selection');
+      requireTransportSelection(body, thinking);
       requirePromptable(convertMessages(body.messages));
     } catch { return new Response('Invalid transport request', { status: 400 }); }
     const controller = new AbortController();
