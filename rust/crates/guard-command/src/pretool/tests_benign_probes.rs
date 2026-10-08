@@ -27,7 +27,7 @@ fn bounded_waits_and_read_only_probes_need_no_approval() {
         "sleep 1800 && sleep 1800",
         "uptime",
         "pgrep -f guard",
-        "pgrep -fl hol-guard",
+        "pgrep -fi hol-guard",
         "node --version",
         "node -v",
         "python3 --version",
@@ -51,6 +51,9 @@ fn unbounded_waits_and_mutating_variants_keep_review() {
         "pgrep",
         "pgrep -f a b",
         "pgrep -F pidfile",
+        "pgrep -a .",
+        "pgrep -fl hol-guard",
+        "pgrep -la guard",
         "pgrep --signal KILL guard",
         "pkill -f guard",
         "python -v",
@@ -63,4 +66,36 @@ fn unbounded_waits_and_mutating_variants_keep_review() {
     ] {
         assert!(!allowed(command), "{command}");
     }
+}
+
+#[test]
+fn chained_sleeps_past_the_bound_cover_no_segment() {
+    for command in [
+        "sleep 3600; sleep 1; git push",
+        "sleep 3600 && sleep 1 && git status",
+    ] {
+        let model = parse_command(&request(command)).unwrap();
+        assert!(
+            benign_command_segments(
+                &model,
+                PathContext {
+                    home_dir: Some("/tmp"),
+                    cwd: Some("/tmp"),
+                },
+            )
+            .is_empty(),
+            "{command}"
+        );
+    }
+    let model = parse_command(&request("sleep 1800; sleep 1800; git push")).unwrap();
+    assert_eq!(
+        benign_command_segments(
+            &model,
+            PathContext {
+                home_dir: Some("/tmp"),
+                cwd: Some("/tmp"),
+            },
+        ),
+        vec![0, 1]
+    );
 }

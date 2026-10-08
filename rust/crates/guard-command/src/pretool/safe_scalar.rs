@@ -57,9 +57,9 @@ pub(super) fn safe_pgrep_arguments(arguments: &[String]) -> bool {
     for argument in arguments {
         if let Some(flags) = argument.strip_prefix('-') {
             if flags.is_empty()
-                || !flags.bytes().all(|flag| {
-                    matches!(flag, b'f' | b'l' | b'a' | b'i' | b'x' | b'n' | b'o' | b'c')
-                })
+                || !flags
+                    .bytes()
+                    .all(|flag| matches!(flag, b'f' | b'i' | b'x' | b'n' | b'o' | b'c'))
             {
                 return false;
             }

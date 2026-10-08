@@ -121,6 +121,8 @@ pub(crate) fn benign_command_segments(
     if model.confidence != "exact"
         || model.path_overridden
         || !model.wrapper_chain.is_empty()
+        // Per-segment sleep proofs must not add up past the whole-command bound.
+        || !super::safe_scalar::bounded_total_sleep(model)
         // A cwd transition changes the meaning of subsequent relative operands.
         || (cwd.is_none()
             && model
