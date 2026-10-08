@@ -115,6 +115,17 @@ def _watch_parent(parent_pid: int) -> None:
         time.sleep(1.0)
 
 
+def restore_signal_delivery() -> None:
+    """Unblock interrupts inherited from the scheduler's spawn-time signal mask.
+
+    The scheduler spawns workers with interrupts blocked and an exec'd child keeps that
+    mask, which would leave cancellation pending until the force-kill.
+    """
+    if hasattr(signal, "pthread_sigmask"):
+        names = [getattr(signal, name) for name in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, name)]
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, names)
+
+
 def main() -> int:
     """Run one catalog case from a JSON spec on stdin and write its private result file."""
     spec = json.loads(sys.stdin.read())
@@ -125,6 +136,7 @@ def main() -> int:
     for name in ("SIGTERM", "SIGHUP"):
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), _exit)
+    restore_signal_delivery()
     threading.Thread(target=_watch_parent, args=(int(spec["parent_pid"]),), daemon=True).start()
 
     from ci.native_runtime import probe_installed_pi_output as probe

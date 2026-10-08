@@ -64,7 +64,11 @@ def terminate_as_exit() -> Iterator[None]:
 
 @contextmanager
 def deferred_signals() -> Iterator[None]:
-    """Hold interrupts until a started worker is registered for cleanup."""
+    """Hold interrupts until a started worker is registered for cleanup.
+
+    Children spawned inside this block inherit the blocked mask across exec, so the
+    case worker unblocks these signals itself at startup (see ``case_worker.main``).
+    """
     if not hasattr(signal, "pthread_sigmask") or threading.current_thread() is not threading.main_thread():
         yield
         return
@@ -83,16 +87,23 @@ def cancel_all(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
 ) -> None:
-    """Request cooperative cleanup from every worker, then force-reap survivors."""
-    for handle in running:
-        with suppress(Exception):
-            handle.terminate()
-    deadline = clock() + grace
-    while clock() < deadline and any(handle.poll() is None for handle in running):
-        sleep(0.1)
-    for handle in running:
-        with suppress(Exception):
-            handle.kill()
+    """Request cooperative cleanup from every worker, then force-reap survivors.
+
+    A signal that interrupts the grace wait still reaches the final kill, and the kill
+    itself runs with interrupts held so a second Ctrl-C cannot strand a worker group.
+    """
+    try:
+        for handle in running:
+            with suppress(Exception):
+                handle.terminate()
+        deadline = clock() + grace
+        while clock() < deadline and any(handle.poll() is None for handle in running):
+            sleep(0.1)
+    finally:
+        with deferred_signals():
+            for handle in running:
+                with suppress(Exception):
+                    handle.kill()
 
 
 def run_scheduled(
@@ -111,8 +122,8 @@ def run_scheduled(
     pending = deque(enumerate(items))
     running: dict[int, CaseWorkerHandle] = {}
     results: dict[int, Any] = {}
-    try:
-        with terminate_as_exit():
+    with terminate_as_exit():
+        try:
             while pending or running:
                 while pending and len(running) < jobs:
                     index, item = pending.popleft()
@@ -126,7 +137,7 @@ def run_scheduled(
                         on_complete(index, results[index])
                 if not finished:
                     sleep(poll_interval)
-    finally:
-        if running:
-            cancel_all(list(running.values()), grace=grace, sleep=sleep, clock=clock)
+        finally:
+            if running:
+                cancel_all(list(running.values()), grace=grace, sleep=sleep, clock=clock)
     return [results[index] for index in range(len(items))]

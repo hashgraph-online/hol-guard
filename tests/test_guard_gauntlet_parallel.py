@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -130,6 +131,7 @@ def test_spawn_failure_and_interrupt_reap_started_workers() -> None:
     assert {"kill:a", "kill:b"} <= set(log)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX signals and process groups")
 def test_sigterm_becomes_system_exit_and_reaps() -> None:
     log: list[str] = []
     calls = {"n": 0}
@@ -157,6 +159,7 @@ def _script(path: Path, body: str) -> list[str]:
     return [sys.executable, str(path)]
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX signals and process groups")
 def test_subprocess_worker_group_is_reaped_after_cancel(tmp_path: Path) -> None:
     pid_file = tmp_path / "child.pid"
     command = _script(
@@ -387,3 +390,59 @@ def test_interrupt_during_spawn_still_reaps_the_started_worker() -> None:
     with pytest.raises(SystemExit):
         parallel.run_scheduled(["a"], jobs=1, spawn=spawn, sleep=_no_sleep, grace=0.0)
     assert "kill:a" in log
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX signals")
+def test_signal_during_cleanup_grace_still_force_kills() -> None:
+    log: list[str] = []
+    calls = {"n": 0}
+
+    def sleep(_seconds: float) -> None:
+        calls["n"] += 1
+        if calls["n"] in (2, 3):
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    previous = signal.getsignal(signal.SIGTERM)
+    with pytest.raises(SystemExit):
+        parallel.run_scheduled(["a", "b"], jobs=2, spawn=lambda n: FakeWorker(n, log, 99), sleep=sleep, grace=60.0)
+    assert calls["n"] == 3
+    assert {"kill:a", "kill:b"} <= set(log)
+    assert signal.getsignal(signal.SIGTERM) is previous
+
+
+def test_interrupt_during_cancel_grace_still_kills() -> None:
+    log: list[str] = []
+    workers = [FakeWorker("a", log, 99), FakeWorker("b", log, 99)]
+    with pytest.raises(KeyboardInterrupt):
+        parallel.cancel_all(workers, grace=60.0, sleep=lambda _s: (_ for _ in ()).throw(KeyboardInterrupt()))
+    assert {"kill:a", "kill:b"} <= set(log)
+
+
+@pytest.mark.skipif(not hasattr(signal, "pthread_sigmask"), reason="POSIX signal masks")
+@pytest.mark.parametrize("restore", [True, False])
+def test_worker_spawned_under_deferred_signals_honors_terminate(tmp_path: Path, restore: bool) -> None:
+    ready = tmp_path / "ready"
+    root = Path(__file__).resolve().parents[1]
+    body = "import signal,sys,time\n"
+    if restore:
+        body += f"sys.path.insert(0,{str(root)!r})\nfrom ci.gauntlet.case_worker import restore_signal_delivery\n"
+        body += "restore_signal_delivery()\n"
+    body += f"open({str(ready)!r},'w').close()\ntime.sleep(60)\n"
+    script = tmp_path / "w.py"
+    script.write_text(body, encoding="utf-8")
+    with parallel.deferred_signals():
+        process = subprocess.Popen([sys.executable, str(script)], start_new_session=True)
+    try:
+        deadline = time.monotonic() + 15
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+            exited = True
+        except subprocess.TimeoutExpired:
+            exited = False
+        assert exited is restore
+    finally:
+        process.kill()
+        process.wait()
