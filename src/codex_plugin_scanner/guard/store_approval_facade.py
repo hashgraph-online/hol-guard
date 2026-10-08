@@ -395,7 +395,7 @@ class StoreApprovalsMixin:
                 for row in rows
                 if _path_within_workspace(str(row["config_path"]), workspace)
                 and (artifact_id is None or row["artifact_id"] == artifact_id)
-                and (artifact_hash is None or row["artifact_hash"] == artifact_hash)
+                and (artifact_id is None or artifact_hash is None or row["artifact_hash"] == artifact_hash)
                 and approval_request_surfaces_are_resolvable(
                     row["policy_action"],
                     row["decision_v2_json"],

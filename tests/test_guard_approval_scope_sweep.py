@@ -145,3 +145,48 @@ def test_global_block_without_artifact_keeps_legacy_queue_sweep(tmp_path: Path) 
     )
 
     assert sorted(resolved_ids) == ["other-bash", "other-omp", "other-read", "other-write", "target"]
+
+
+def test_workspace_sweep_without_artifact_binding_covers_the_workspace(tmp_path: Path) -> None:
+    """A workspace-wide decision without an artifact binding sweeps the workspace."""
+
+    store = _seed_unrelated_queue(tmp_path / "workspace-broad")
+
+    resolved_ids = store.resolve_matching_approval_requests(
+        harness="zcode",
+        scope="workspace",
+        artifact_id=None,
+        artifact_hash=None,
+        workspace="/workspace/repo",
+        publisher=None,
+        resolution_action="block",
+        resolution_scope="workspace",
+        reason="blocked workspace-wide",
+        resolved_at="2026-07-20T00:00:07+00:00",
+    )
+
+    # The zcode rows share the workspace config path; the omp row does not.
+    assert sorted(resolved_ids) == ["other-bash", "other-read", "other-write", "target"]
+    assert _pending_ids(store) == ["other-omp"]
+
+
+def test_workspace_sweep_with_artifact_binding_stays_on_the_decided_action(tmp_path: Path) -> None:
+    """A workspace decision bound to one artifact never resolves other actions."""
+
+    store = _seed_unrelated_queue(tmp_path / "workspace-bound")
+
+    resolved_ids = store.resolve_matching_approval_requests(
+        harness="zcode",
+        scope="workspace",
+        artifact_id="zcode:native-pretool:Bash",
+        artifact_hash="hash-target",
+        workspace="/workspace/repo",
+        publisher=None,
+        resolution_action="block",
+        resolution_scope="workspace",
+        reason="blocked this action in the workspace",
+        resolved_at="2026-07-20T00:00:07+00:00",
+    )
+
+    assert resolved_ids == ["target"]
+    assert _pending_ids(store) == ["other-bash", "other-omp", "other-read", "other-write"]
