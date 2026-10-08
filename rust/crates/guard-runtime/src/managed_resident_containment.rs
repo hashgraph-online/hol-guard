@@ -4,6 +4,10 @@
 #[path = "managed_resident_containment_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "managed_resident_exit_tests.rs"]
+mod exit_tests;
+
 #[cfg(windows)]
 use guard_runtime_windows_process::ManagedChild;
 #[cfg(not(windows))]
@@ -348,6 +352,43 @@ pub(super) fn wait_for_generation_containment(
     }
 }
 
+/// Require affirmative evidence that a recorded resident is gone: its PID no
+/// longer exists, or that PID now carries a different start marker. Identity
+/// lookup failures keep the state, because an unreadable executable does not
+/// prove that the resident stopped.
+fn state_resident_exited(state: &ResidentState) -> bool {
+    if crate::resident_state::process_is_definitively_gone(state.process_id).unwrap_or(false) {
+        return true;
+    }
+    matches!(
+        process_start_marker(state.process_id),
+        Ok(marker) if !crate::constant_time_eq(marker.as_bytes(), state.process_start_marker.as_bytes())
+    )
+}
+
+/// Retire generations whose exact resident identity has already exited.
+///
+/// A resident that is killed without a shutdown request, for example when a
+/// Windows job object closes, cannot remove its own generation file.
+pub(super) fn retire_exited_states(scope: &Path, digest: &str) -> Result<(), String> {
+    for state in discover_states(scope, digest)? {
+        if !state_resident_exited(&state) {
+            continue;
+        }
+        if let Ok(token) = token_from_state(&state) {
+            super::resident_state_retirement::retire_state(
+                scope,
+                state.generation,
+                state.process_id,
+                &state.process_start_marker,
+                digest,
+                &token,
+            );
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn wait_for_stop_containment(
     scope: &Path,
     digest: &str,
@@ -365,21 +406,7 @@ pub(super) fn wait_for_stop_containment(
             for process_id in &process_ids {
                 terminate_managed_process(process_id, Duration::ZERO)?;
             }
-            for state in &states {
-                let identity = state_process_identity(state);
-                if !process_is_alive(&identity)? {
-                    if let Ok(token) = token_from_state(state) {
-                        super::resident_state_retirement::retire_state(
-                            scope,
-                            state.generation,
-                            state.process_id,
-                            &state.process_start_marker,
-                            digest,
-                            &token,
-                        );
-                    }
-                }
-            }
+            retire_exited_states(scope, digest)?;
             let states_remaining = !discover_states(scope, digest)?.is_empty();
             let processes_remaining = any_process_alive(&process_ids)?;
             if !states_remaining && !processes_remaining {

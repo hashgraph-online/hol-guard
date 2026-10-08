@@ -3113,15 +3113,15 @@ function requireReactDomClient_production() {
     return value;
   }
   var AbortControllerLocal = "undefined" !== typeof AbortController ? AbortController : function() {
-    var listeners = [], signal = this.signal = {
+    var listeners2 = [], signal = this.signal = {
       aborted: false,
       addEventListener: function(type, listener) {
-        listeners.push(listener);
+        listeners2.push(listener);
       }
     };
     this.abort = function() {
       signal.aborted = true;
-      listeners.forEach(function(listener) {
+      listeners2.forEach(function(listener) {
         return listener();
       });
     };
@@ -3167,33 +3167,33 @@ function requireReactDomClient_production() {
   function pingEngtangledActionScope() {
     if (0 === --currentEntangledPendingCount && null !== currentEntangledListeners) {
       null !== currentEntangledActionThenable && (currentEntangledActionThenable.status = "fulfilled");
-      var listeners = currentEntangledListeners;
+      var listeners2 = currentEntangledListeners;
       currentEntangledListeners = null;
       currentEntangledLane = 0;
       currentEntangledActionThenable = null;
-      for (var i = 0; i < listeners.length; i++) (0, listeners[i])();
+      for (var i = 0; i < listeners2.length; i++) (0, listeners2[i])();
     }
   }
   function chainThenableValue(thenable, result) {
-    var listeners = [], thenableWithOverride = {
+    var listeners2 = [], thenableWithOverride = {
       status: "pending",
       value: null,
       reason: null,
       then: function(resolve) {
-        listeners.push(resolve);
+        listeners2.push(resolve);
       }
     };
     thenable.then(
       function() {
         thenableWithOverride.status = "fulfilled";
         thenableWithOverride.value = result;
-        for (var i = 0; i < listeners.length; i++) (0, listeners[i])(result);
+        for (var i = 0; i < listeners2.length; i++) (0, listeners2[i])(result);
       },
       function(error) {
         thenableWithOverride.status = "rejected";
         thenableWithOverride.reason = error;
-        for (error = 0; error < listeners.length; error++)
-          (0, listeners[error])(void 0);
+        for (error = 0; error < listeners2.length; error++)
+          (0, listeners2[error])(void 0);
       }
     );
     return thenableWithOverride;
@@ -10134,15 +10134,15 @@ function requireReactDomClient_production() {
     };
   }
   function accumulateTwoPhaseListeners(targetFiber, reactName) {
-    for (var captureName = reactName + "Capture", listeners = []; null !== targetFiber; ) {
+    for (var captureName = reactName + "Capture", listeners2 = []; null !== targetFiber; ) {
       var _instance2 = targetFiber, stateNode = _instance2.stateNode;
       _instance2 = _instance2.tag;
-      5 !== _instance2 && 26 !== _instance2 && 27 !== _instance2 || null === stateNode || (_instance2 = getListener(targetFiber, captureName), null != _instance2 && listeners.unshift(
+      5 !== _instance2 && 26 !== _instance2 && 27 !== _instance2 || null === stateNode || (_instance2 = getListener(targetFiber, captureName), null != _instance2 && listeners2.unshift(
         createDispatchListener(targetFiber, _instance2, stateNode)
-      ), _instance2 = getListener(targetFiber, reactName), null != _instance2 && listeners.push(
+      ), _instance2 = getListener(targetFiber, reactName), null != _instance2 && listeners2.push(
         createDispatchListener(targetFiber, _instance2, stateNode)
       ));
-      if (3 === targetFiber.tag) return listeners;
+      if (3 === targetFiber.tag) return listeners2;
       targetFiber = targetFiber.return;
     }
     return [];
@@ -10155,18 +10155,18 @@ function requireReactDomClient_production() {
     return inst ? inst : null;
   }
   function accumulateEnterLeaveListenersForEvent(dispatchQueue, event, target, common, inCapturePhase) {
-    for (var registrationName = event._reactName, listeners = []; null !== target && target !== common; ) {
+    for (var registrationName = event._reactName, listeners2 = []; null !== target && target !== common; ) {
       var _instance3 = target, alternate = _instance3.alternate, stateNode = _instance3.stateNode;
       _instance3 = _instance3.tag;
       if (null !== alternate && alternate === common) break;
-      5 !== _instance3 && 26 !== _instance3 && 27 !== _instance3 || null === stateNode || (alternate = stateNode, inCapturePhase ? (stateNode = getListener(target, registrationName), null != stateNode && listeners.unshift(
+      5 !== _instance3 && 26 !== _instance3 && 27 !== _instance3 || null === stateNode || (alternate = stateNode, inCapturePhase ? (stateNode = getListener(target, registrationName), null != stateNode && listeners2.unshift(
         createDispatchListener(target, stateNode, alternate)
-      )) : inCapturePhase || (stateNode = getListener(target, registrationName), null != stateNode && listeners.push(
+      )) : inCapturePhase || (stateNode = getListener(target, registrationName), null != stateNode && listeners2.push(
         createDispatchListener(target, stateNode, alternate)
       )));
       target = target.return;
     }
-    0 !== listeners.length && dispatchQueue.push({ event, listeners });
+    0 !== listeners2.length && dispatchQueue.push({ event, listeners: listeners2 });
   }
   var NORMALIZE_NEWLINES_REGEX = /\r\n?/g, NORMALIZE_NULL_AND_REPLACEMENT_REGEX = /\u0000|\uFFFD/g;
   function normalizeMarkupForTextOrAttribute(markup) {
@@ -12537,6 +12537,41 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
     return baseModule().catch(handlePreloadError);
   });
 };
+let readFailed = false;
+const listeners = /* @__PURE__ */ new Set();
+function recordBusinessQueueReadFailure(failed) {
+  if (failed === readFailed) return;
+  readFailed = failed;
+  for (const listener of listeners) listener();
+}
+function businessQueueReadFailed() {
+  return readFailed;
+}
+function recordBusinessQueueReadResult(payload) {
+  if (payload.native_business_queue_error !== void 0) recordBusinessQueueReadFailure(true);
+  else if (payload.native_business_queue_checked === true) recordBusinessQueueReadFailure(false);
+}
+function useBusinessQueueReadFailure() {
+  return reactExports.useSyncExternalStore((listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }, businessQueueReadFailed, () => false);
+}
+function BusinessQueueReadNotice() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-attention", children: "Saved business requests could not be loaded." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: "Other Guard requests remain available. The saved business queue is incomplete; refresh to try again." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => window.location.reload(),
+        className: "mt-3 min-h-11 rounded-lg border border-brand-attention/30 px-3 text-sm font-semibold text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+        children: "Refresh queue"
+      }
+    )
+  ] });
+}
 const GUARD_ACTIONS$1 = [
   "allow",
   "warn",
@@ -13599,7 +13634,7 @@ const BULK_HIGH_CATEGORY_IDS = /* @__PURE__ */ new Set([
   "file_delete_cleanup"
 ]);
 function bulkApprovalRiskTier(group) {
-  if (group.primary.decision_contract_error !== void 0 || group.primary.policy_action === "block" || group.primary.policy_action === "sandbox-required") {
+  if (group.primary.native_business_review_display_only || group.primary.decision_contract_error !== void 0 || group.primary.policy_action === "block" || group.primary.policy_action === "sandbox-required") {
     return "blocked";
   }
   const categoryId = resolveQueueCategory(group.primary).id;
@@ -14999,6 +15034,9 @@ function policyActionLabel(action) {
   return guardActionPresentation(action).label;
 }
 function requestResolutionBlockReason(item) {
+  if (item.native_business_review_display_only) {
+    return "This saved business request is read-only. Review decisions and execution are not connected yet.";
+  }
   if (item.decision_contract_error !== void 0) {
     return "HOL Guard found inconsistent stored decision data. This request cannot be approved; rerun the action to create a fresh, consistent review request.";
   }
@@ -15067,6 +15105,7 @@ function serializeMcpInput(payload, maxLength = null) {
   }
 }
 function harnessDisplayName(harness) {
+  if (harness === "native-business") return "Native business workflow";
   if (typeof harness !== "string") {
     return "Unknown app";
   }
@@ -17110,6 +17149,7 @@ function normalizeOptionalApprovalRequest(item) {
   return isRecord$2(item) ? normalizeApprovalRequest(item) : null;
 }
 function normalizeApprovalPage(payload, statusFallback = "pending") {
+  recordBusinessQueueReadResult(payload);
   return {
     items: normalizeApprovalRequests(payload.items),
     next_cursor: isStringOrNull(payload.next_cursor) ? payload.next_cursor : null,
@@ -17738,6 +17778,24 @@ async function resetSettings(proof) {
       ...proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}
     })
   });
+}
+async function fetchBusinessReviewSummary(requestId, signal) {
+  if (isGuardDemoMode()) return null;
+  const response = await fetchWithGuardAuth(
+    `/v1/requests/${encodeURIComponent(requestId)}/business-summary`,
+    { signal, cache: "no-store" }
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) throw new Error("Saved business details are unavailable.");
+  const { parseBusinessReviewSummary: parseBusinessReviewSummary2 } = await __vitePreload(async () => {
+    const { parseBusinessReviewSummary: parseBusinessReviewSummary3 } = await Promise.resolve().then(() => businessReviewSummary);
+    return { parseBusinessReviewSummary: parseBusinessReviewSummary3 };
+  }, true ? void 0 : void 0);
+  const summary = parseBusinessReviewSummary2(await response.json(), requestId);
+  if (!summary) throw new Error("Saved business details are unavailable.");
+  return summary;
 }
 async function fetchRequest(requestId) {
   if (isGuardDemoMode()) {
@@ -29830,7 +29888,7 @@ function ReviewCodexResumePanel({ resume, onRetry }) {
     ] })
   ] });
 }
-function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }) {
+function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume, queueReadIncomplete = false }) {
   const protectionHealth = runtime === null ? unavailableProtectionHealth() : protectionHealthFor(runtime);
   const presentation = useProtectionPresentationState(protectionHealth);
   if (runtime === null) {
@@ -29851,7 +29909,7 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
   const protectionLabel = presentation === "checking" ? "Checking" : protectionHealth.label;
   const protectionDetail = presentation === "checking" ? "Guard is confirming local protection. This takes a moment." : protectionHealth.detail;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
+    !queueReadIncomplete && /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,
       {
         status: heroStatus,
@@ -29863,7 +29921,7 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
       ProofStrip,
       {
         items: [
-          { label: "Queue", value: "All clear", tone: "green" },
+          { label: "Queue", value: queueReadIncomplete ? "Incomplete" : "All clear", tone: queueReadIncomplete ? "slate" : "green" },
           { label: "Protection", value: protectionLabel, tone: protectionHealth.state === "protected" ? "green" : "slate" },
           { label: "Apps protected", value: protectedAppsCount, tone: protectedAppsCount > 0 ? "green" : "slate" }
         ]
@@ -29968,6 +30026,92 @@ function pastDecisionVerb(decision) {
     case "block":
       return "blocked";
   }
+}
+const businessOperationLabels = {
+  mail_read: "Read email",
+  mail_draft: "Prepare an email draft",
+  mail_send: "Send email",
+  mail_label: "Change email labels",
+  mail_permanent_delete: "Permanently delete email",
+  mail_settings: "Change email settings",
+  drive_read: "Read Drive files",
+  drive_edit: "Edit Drive files",
+  drive_share: "Share Drive files",
+  calendar_read: "Read calendar events",
+  calendar_invite: "Invite calendar attendees"
+};
+const businessServiceLabels = {
+  google_gmail: "Gmail",
+  google_drive: "Google Drive",
+  google_calendar: "Google Calendar"
+};
+const fields = ["schema", "version", "request_id", "request_snapshot_digest", "prepared_input_binding", "service", "operation", "audience_kind", "audience_expansion_state", "recipient_count", "record_count", "byte_count", "attachment_count", "inspection_state", "sensitivity_labels", "snapshot_fact_completeness", "account_currentness", "execution_state"];
+function parseBusinessReviewSummary(value, requestId) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value;
+  if (Object.keys(item).length !== fields.length || !fields.every((field) => Object.hasOwn(item, field))) return null;
+  if (item.schema !== "guard-native-local-business-review-summary.v1" || item.version !== 1 || item.request_id !== requestId || item.account_currentness !== "not_asserted" || item.execution_state !== "not_checked") return null;
+  if (![item.request_snapshot_digest, item.prepared_input_binding].every((digest) => typeof digest === "string" && /^[0-9a-f]{64}$/.test(digest))) return null;
+  if (typeof item.service !== "string" || !Object.hasOwn(businessServiceLabels, item.service) || typeof item.operation !== "string" || !Object.hasOwn(businessOperationLabels, item.operation)) return null;
+  const servicePrefix = { google_gmail: "mail_", google_drive: "drive_", google_calendar: "calendar_" }[item.service];
+  if (!item.operation.startsWith(servicePrefix)) return null;
+  if (typeof item.audience_kind !== "string" || !["private", "named", "public", "unknown"].includes(item.audience_kind)) return null;
+  if (![item.audience_expansion_state, item.inspection_state, item.snapshot_fact_completeness].every((state) => typeof state === "string" && ["known", "unknown", "unsupported"].includes(state))) return null;
+  if (![item.recipient_count, item.record_count, item.byte_count, item.attachment_count].every((count) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0)) return null;
+  const labels = item.sensitivity_labels;
+  if (!Array.isArray(labels) || labels.length > 5 || !labels.every((label) => typeof label === "string" && ["public", "personal", "confidential", "secret", "unknown"].includes(label)) || new Set(labels).size !== labels.length) return null;
+  return item;
+}
+const businessReviewSummary = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  businessOperationLabels,
+  businessServiceLabels,
+  parseBusinessReviewSummary
+}, Symbol.toStringTag, { value: "Module" }));
+function BusinessReviewSummaryDetails({ summary }) {
+  const count = new Intl.NumberFormat();
+  const audience = { private: "Private", named: "Named recipients", public: "Public", unknown: "Unknown" }[summary.audience_kind];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-5 border-t border-slate-200 pt-4", "aria-label": "Saved business action details", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold text-brand-dark", children: [
+      businessOperationLabels[summary.operation],
+      " · ",
+      businessServiceLabels[summary.service]
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3", children: [
+      ["Audience", audience],
+      ["Recipients", count.format(summary.recipient_count)],
+      ["Records", count.format(summary.record_count)],
+      ["Attachments", count.format(summary.attachment_count)],
+      ["Content size", `${count.format(summary.byte_count)} bytes`],
+      ["Sensitivity", summary.sensitivity_labels.length ? summary.sensitivity_labels.join(", ") : "Not labeled"]
+    ].map(([label, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-words text-brand-dark", children: value })
+    ] }, label)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "These details describe the saved request. This summary does not verify the work account or confirm execution." }),
+    summary.audience_expansion_state !== "known" || summary.inspection_state !== "known" || summary.snapshot_fact_completeness !== "known" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark", children: "Some recipient or content details are unknown or unsupported. Counts alone do not establish that the action is safe." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs leading-5 text-muted-foreground", children: "Message content, exact recipients and attachments are not shown in this summary." })
+  ] });
+}
+function BusinessReviewSummaryPanel({ requestId }) {
+  const [state, setState] = reactExports.useState(null);
+  const [revision, setRevision] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    const controller = new AbortController();
+    setState({ requestId, status: "loading", summary: null });
+    fetchBusinessReviewSummary(requestId, controller.signal).then((summary) => {
+      if (!controller.signal.aborted) setState({ requestId, status: "ready", summary });
+    }).catch(() => {
+      if (!controller.signal.aborted) setState({ requestId, status: "error", summary: null });
+    });
+    return () => controller.abort();
+  }, [requestId, revision]);
+  if (!state || state.requestId !== requestId || state.status === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-muted-foreground", role: "status", children: "Checking saved business details…" });
+  if (state.status === "error") return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 text-sm text-brand-dark", role: "status", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Saved business details could not be loaded." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "mt-2 min-h-11 rounded-lg px-3 text-brand-blue underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue", onClick: () => setRevision((value) => value + 1), children: "Refresh details" })
+  ] });
+  return state.summary ? /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryDetails, { summary: state.summary }) : null;
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
 function resolvedActionCopy(item, action, persistedExactAction) {
@@ -30255,6 +30399,16 @@ function ReviewDecisionCard(props) {
     setUseCooldown(event.target.checked);
   }, []);
   if (!detail || !item) {
+    if (props.detailError) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { role: "alert", className: "rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold text-brand-dark", children: "Request details are unavailable" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: props.detailError }),
+        props.onRetryDetail && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { className: "mt-4", variant: "outline", onClick: props.onRetryDetail, children: "Refresh request" })
+      ] });
+    }
+    if (props.detailLoading) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-busy": "true", "aria-live": "polite", className: "p-5 text-sm text-brand-dark/80", children: "Loading request details…" });
+    }
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
@@ -30264,12 +30418,22 @@ function ReviewDecisionCard(props) {
       }
     );
   }
-  const plainTitle = plainEnglishRequestTitle(item);
+  const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
-  const whatWouldHappen = buildWhatWouldHappen(item);
-  const topAlertItems = buildTopAlertItems(item);
-  const evidenceItems = buildEvidenceItems(item);
+  const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
+  const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
+  const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
+  let sectionLabel = "Paused action";
+  let badgeLabel = actionPresentation.label;
+  if (nativeDisplayOnly) {
+    sectionLabel = "Saved request";
+    badgeLabel = "Read-only";
+  } else if (watchOnlyObservation) {
+    sectionLabel = "Watch-only finding";
+    badgeLabel = "Would have stopped";
+  }
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
   const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
@@ -30282,7 +30446,7 @@ function ReviewDecisionCard(props) {
   if (watchOnlyObservation || persistExactBlock) {
     resolvedBlockButtonLabel = "Stop this next time";
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-5", children: [
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
@@ -30304,16 +30468,17 @@ function ReviewDecisionCard(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: watchOnlyObservation ? "Watch-only finding" : "Paused action" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "mt-2 text-lg font-semibold text-brand-dark", children: plainTitle }),
+          !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: sectionLabel }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: `${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`, children: plainTitle }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
             "From ",
             harnessName
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: watchOnlyObservation ? "info" : actionPresentation.tone, children: watchOnlyObservation ? "Would have stopped" : actionPresentation.label })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone, children: badgeLabel })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
+      !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
+      nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
       item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -30324,7 +30489,7 @@ function ReviewDecisionCard(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-attention", children: "This decision cannot be overridden" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-attention", children: item.native_business_review_display_only ? "Review is not connected yet" : "This decision cannot be overridden" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: resolutionBlockReason }),
           item.superseded_by_request_id ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             "a",
@@ -30501,6 +30666,8 @@ function riskIndicatorClass(level) {
 function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
   const risk = riskScore(item);
   const riskLevel = riskLevelFromScore(risk);
+  const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const riskLabel = nativeDisplayOnly ? "Risk: unassessed" : `Risk: ${riskLevel}`;
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
@@ -30591,11 +30758,11 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                 "span",
                 {
                   role: "img",
-                  "aria-label": `Risk: ${riskLevel}`,
+                  "aria-label": riskLabel,
                   className: "group/icon relative flex h-2 w-2 shrink-0 items-center justify-center",
                   children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-2 w-2 rounded-full ${riskIndicatorClass(riskLevel)}` }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: `Risk: ${riskLevel}` })
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-2 w-2 rounded-full ${nativeDisplayOnly ? "bg-slate-400" : riskIndicatorClass(riskLevel)}` }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: riskLabel })
                   ]
                 }
               ),
@@ -30826,7 +30993,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             disabled: allFilteredRequests.length > 0 && allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT,
             title: allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? `Cannot mark all read: doing so would exceed the read-state storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Reduce filters to shrink the visible queue, or mark requests read one by one.` : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`,
             onClick: () => readState.markAllRead(allFilteredRequests.map((item) => item.request_id)),
-            className: `text-xs font-medium transition-colors ${allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
+            className: `min-h-11 min-w-11 text-xs font-medium transition-colors ${allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
             children: "Mark all read"
           }
         ),
@@ -30849,7 +31016,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             value: searchTerm,
             onChange: handleSearchChange,
             placeholder: "Search queue...",
-            className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           }
         )
       ] }),
@@ -30858,7 +31025,7 @@ const ReviewQueueList = reactExports.forwardRef(({
         {
           type: "button",
           onClick: handleToggleFilters,
-          className: "flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+          className: "flex min-h-11 min-w-11 items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
           children: [
             showFilters ? "Hide filters" : "Show filters",
             isFiltered && !showFilters && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" })
@@ -30883,7 +31050,7 @@ const ReviewQueueList = reactExports.forwardRef(({
               value: sortDirection,
               onChange: handleSortChange,
               "aria-label": "Sort review queue",
-              className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "newest", children: "Newest first" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "oldest", children: "Oldest first" }),
@@ -30903,7 +31070,7 @@ const ReviewQueueList = reactExports.forwardRef(({
                 value: dateFrom,
                 onChange: handleDateFromChange,
                 "aria-label": "Filter requests from date",
-                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
           ] }),
@@ -30916,7 +31083,7 @@ const ReviewQueueList = reactExports.forwardRef(({
                 value: dateTo,
                 onChange: handleDateToChange,
                 "aria-label": "Filter requests to date",
-                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
           ] })
@@ -30926,7 +31093,7 @@ const ReviewQueueList = reactExports.forwardRef(({
           {
             type: "button",
             onClick: handleClearFilters,
-            className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+            className: "min-h-11 min-w-11 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
             children: "Clear all filters"
           }
         )
@@ -30939,7 +31106,7 @@ const ReviewQueueList = reactExports.forwardRef(({
         "aria-label": "Review queue",
         className: "space-y-2 rounded-lg border border-slate-100 bg-white p-1.5",
         children: [
-          selectionMode && pageSelectableItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex shrink-0 cursor-pointer items-center gap-2", children: [
+          selectionMode && pageSelectableItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 shrink-0 cursor-pointer items-center gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
               {
@@ -30986,7 +31153,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             type: "button",
             onClick: handlePreviousPage,
             disabled: page <= 1,
-            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
+            className: "min-h-11 min-w-11 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
             children: "Previous"
           }
         ),
@@ -31001,7 +31168,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             type: "button",
             onClick: handleNextPage,
             disabled: page >= totalPages,
-            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
+            className: "min-h-11 min-w-11 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
             children: "Next"
           }
         )
@@ -31020,13 +31187,14 @@ function SemanticFilterButton(props) {
     {
       type: "button",
       onClick: handleSelect,
-      className: `rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${selected ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+      className: `min-h-11 min-w-11 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${selected ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
       children: group.label
     }
   );
 }
 const QUEUE_PAGE_SIZE = 10;
 function ReviewWorkspace(props) {
+  const businessQueueReadFailed2 = useBusinessQueueReadFailure();
   const { requests, activeRequestId, detail } = props;
   const readState = useRequestReadState();
   const queueRef = reactExports.useRef(null);
@@ -31150,12 +31318,25 @@ function ReviewWorkspace(props) {
     filteredRequests
   ]);
   if (requests.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewEmptyState, { runtime: props.runtime, resolutionMessage: props.resolutionMessage, codexResume: props.codexResume, onRetryResume: props.onRetryResume });
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+      businessQueueReadFailed2 && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessQueueReadNotice, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ReviewEmptyState,
+        {
+          runtime: props.runtime,
+          resolutionMessage: props.resolutionMessage,
+          codexResume: props.codexResume,
+          onRetryResume: props.onRetryResume,
+          queueReadIncomplete: businessQueueReadFailed2
+        }
+      )
+    ] });
   }
   const activeItem = activeRequest ?? filteredRequests[0] ?? requests[0];
   const progressIndex = filteredRequests.findIndex((r) => r.request_id === activeItem.request_id);
   const progress = filteredRequests.length > 0 ? `${Math.max(0, progressIndex) + 1} of ${filteredRequests.length}` : `0 of ${requests.length}`;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    businessQueueReadFailed2 && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessQueueReadNotice, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewHeader,
       {
@@ -31192,7 +31373,7 @@ function ReviewWorkspace(props) {
       "button",
       {
         onClick: handleToggleMobileQueue,
-        className: "flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark",
+        className: "flex min-h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark",
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
             "Queue (",
@@ -31243,6 +31424,9 @@ function ReviewWorkspace(props) {
         ReviewDecisionCard,
         {
           detail,
+          detailError: props.detailError,
+          detailLoading: props.detailLoading,
+          onRetryDetail: props.onRetryDetail,
           onResolve: props.onResolve,
           onGoHome: props.onGoHome,
           approvalGate: props.approvalGate ?? null
@@ -31624,6 +31808,9 @@ function renderInboxContent(props) {
     {
       requests: props.requests.items,
       activeRequestId: props.activeRequestId,
+      detailError: props.detail.kind === "error" ? props.detail.message : null,
+      detailLoading: props.detail.kind === "loading",
+      onRetryDetail: props.onRetryDetail,
       detail: props.detail.kind === "ready" ? {
         item: props.detail.item,
         diff: props.detail.diff,
@@ -32131,6 +32318,7 @@ function App() {
   const appDetailHarness = parseAppDetail(pathname);
   const [requests, setRequests] = reactExports.useState({ kind: "loading" });
   const [detail, setDetail] = reactExports.useState({ kind: "idle" });
+  const [detailRefreshKey, setDetailRefreshKey] = reactExports.useState(0);
   const [receipts, setReceipts] = reactExports.useState({ kind: "loading" });
   const [runtime, setRuntime] = reactExports.useState({ kind: "loading" });
   const [policies, setPolicies] = reactExports.useState({ kind: "loading" });
@@ -32171,7 +32359,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeRequestId]);
+  }, [activeRequestId, detailRefreshKey]);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
       const target = event.target;
@@ -32753,6 +32941,7 @@ function App() {
         onResolve: handleResolve,
         onBulkApprove: handleBulkApprove,
         onRetry: handleRetry,
+        onRetryDetail: () => setDetailRefreshKey((key) => key + 1),
         onRepair: handleRepair,
         onGuardReconnected: handleRetry,
         onClearEvidence: handleClearEvidence,

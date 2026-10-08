@@ -10,6 +10,8 @@ pub struct PathContext<'a> {
     pub cwd: Option<&'a str>,
 }
 
+pub(crate) mod directory_targets;
+pub(crate) use directory_targets::safe_directory_target;
 mod git_config;
 mod git_helper_context;
 mod git_probe;
@@ -253,23 +255,6 @@ fn safe_gh_arguments(arguments: &[String]) -> bool {
     matches!(arguments, [auth, status, flag]
         if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h"))
         || crate::command_compatibility::github_arguments_are_read_only(arguments)
-}
-
-pub(crate) fn safe_directory_target(target: &str) -> bool {
-    let tilde_head = target
-        .strip_prefix('~')
-        .map(|rest| rest.split('/').next().unwrap_or(""));
-    let directory_history = tilde_head.is_some_and(|head| {
-        head.starts_with(['+', '-'])
-            || (!head.is_empty() && head.bytes().all(|byte| byte.is_ascii_digit()))
-    });
-    crate::is_plain_cd_target(target)
-        && !directory_history
-        && !target.contains(['*', '?', '[', ']', '\\'])
-        && !sensitive_command(target)
-        && !normalized_haystack(target)
-            .split('/')
-            .any(|component| matches!(component, ".ssh" | ".aws" | ".kube" | ".gnupg" | ".docker"))
 }
 
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {

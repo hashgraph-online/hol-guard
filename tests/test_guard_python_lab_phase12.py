@@ -28,6 +28,8 @@ from .guard_python_phase12_support import (
     write_text,
 )
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def _build_wheel(build_root: Path, version: str, dist_dir: Path) -> Path:
     del build_root

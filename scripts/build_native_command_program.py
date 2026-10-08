@@ -170,6 +170,12 @@ def main() -> int:
     compiled = json.loads(completed.stdout)
     if compiled["catalog_projection_kind"] != "complete":
         raise ValueError("release generation requires a complete catalog")
+    bound_ids = {identity for identities in request_value["trust"]["classes"].values() for identity in identities}
+    contribution_ids = {descriptor["id"] for descriptor in compiled["descriptors"]}
+    contribution_ids.update(extension["extension_id"] for extension in compiled["program"]["extensions"])
+    missing_bindings = sorted(contribution_ids - bound_ids)
+    if missing_bindings:
+        raise ValueError("canonical contributions lack authored trust bindings: " + ", ".join(missing_bindings))
     if compiled["implementation_digest"] != implementation_digest():
         raise ValueError("source compiler does not match the current native implementation; rebuild it")
     built = subprocess.run([*command[:-1], "export-built"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)

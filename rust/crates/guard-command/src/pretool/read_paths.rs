@@ -344,51 +344,6 @@ pub(super) fn verified_path_context(home_dir: Option<&str>, cwd: Option<&str>) -
         && context_root_is_absolute(cwd, Some(home_dir))
 }
 
-pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<String> {
-    if context.home_dir.is_none() || context.cwd.is_none() || !super::safe_directory_target(value) {
-        return None;
-    }
-    let supplied = std::path::Path::new(value);
-    if !supplied.is_absolute() {
-        return None;
-    }
-    let canonical = std::fs::canonicalize(supplied).ok()?;
-    // Absolute, non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
-    if !absolute_path_spelling_matches(supplied, &canonical)
-        || !canonical.is_dir()
-        || !resolved_path_allowed(&canonical, context.home_dir, context.cwd)
-    {
-        return None;
-    }
-    canonical.to_str().map(str::to_owned)
-}
-
-fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::path::Path) -> bool {
-    if canonical == supplied {
-        return true;
-    }
-    // macOS exposes the root temporary directory through this fixed system
-    // alias. Permit only the exact canonical suffix; deeper symlink aliases
-    // remain rejected by the physical-cwd proof.
-    #[cfg(target_os = "macos")]
-    {
-        let alias = std::path::Path::new("/tmp");
-        let Ok(relative) = supplied.strip_prefix(alias) else {
-            return false;
-        };
-        let Ok(alias_canonical) = std::fs::canonicalize(alias) else {
-            return false;
-        };
-        alias_canonical == std::path::Path::new("/private/tmp")
-            && canonical == alias_canonical.join(relative)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (supplied, canonical);
-        false
-    }
-}
-
 pub(super) fn context_root_is_absolute(root: &str, home_dir: Option<&str>) -> bool {
     if root.is_empty() || root.trim() != root {
         return false;

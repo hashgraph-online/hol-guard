@@ -23,6 +23,8 @@ from tests.test_guard_supply_chain_evaluator import (
     _package,
 )
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
@@ -442,6 +444,8 @@ def test_unidentified_package_reason_absent_for_unsupported_ecosystem(tmp_path: 
         now="2026-05-19T00:00:00Z",
     )
     assert all(reason["code"] != "unidentified_package" for package in result.packages for reason in package["reasons"])
+
+
 def test_unknown_package_result_directly_skips_unidentified_for_unsupported() -> None:
     """Directly test _unknown_package_result does not emit unidentified_package for unsupported ecosystem."""
     from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import _unknown_package_result

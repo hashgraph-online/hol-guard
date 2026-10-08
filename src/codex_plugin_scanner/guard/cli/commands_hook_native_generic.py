@@ -156,6 +156,7 @@ from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
     with_saved_artifact_hash_provenance,
 )
@@ -615,14 +616,19 @@ def _generic_hook_approval_reuse(
         and decision.get("expires_at") is None
         and parse_approval_context_token(decision.get("artifact_hash")) is not None
     )
+    reuse_native = evaluate_approval_reuse(
+        current_action,
+        saved_action,
+        saved_decision_present=saved_present,
+        validation_reason=validation_reason,
+        durable_exact_approval=durable_exact_approval,
+    )
     reuse = with_saved_artifact_hash_provenance(
-        evaluate_approval_reuse(
-            current_action,
-            saved_action,
-            saved_decision_present=saved_present,
-            validation_reason=validation_reason,
-            durable_exact_approval=durable_exact_approval,
-        ),
+        reuse_native
+        if reuse_native is not None
+        # Resident unreachable: preserve the recomputed action unchanged; the
+        # saved decision is not claimed.
+        else approval_reuse_authority_unavailable(current_action),
         decision.get("artifact_hash") if decision is not None else diagnosed_stored_hash,
     )
     return reuse, saved_present
@@ -960,13 +966,16 @@ def run_native_generic_payload(
     )
     if approval_reuse.should_claim and stored_policy_decision is not None and _claim_saved_approval:
         if not store.claim_approval_reuse_decision(stored_policy_decision):
+            claim_failed_reuse = evaluate_approval_reuse(
+                current_policy_action,
+                stored_policy_decision.get("action"),
+                saved_decision_present=True,
+                validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+            )
             approval_reuse = with_saved_artifact_hash_provenance(
-                evaluate_approval_reuse(
-                    current_policy_action,
-                    stored_policy_decision.get("action"),
-                    saved_decision_present=True,
-                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-                ),
+                claim_failed_reuse
+                if claim_failed_reuse is not None
+                else approval_reuse_authority_unavailable(current_policy_action),
                 stored_policy_decision.get("artifact_hash"),
             )
         else:
@@ -1034,21 +1043,26 @@ def run_native_generic_payload(
                 post_claim_current_action,
                 "require-reapproval",
             )
-        approval_reuse = with_saved_artifact_hash_provenance(
-            evaluate_approval_reuse(
-                post_claim_current_action,
-                "allow",
-                saved_decision_present=True,
-                validation_reason=claimed_validation_reason,
-                durable_exact_approval=(
-                    claimed_validation_reason is None
-                    and stored_policy_decision is not None
-                    and stored_policy_decision.get("source") == "approval-gate"
-                    and stored_policy_decision.get("scope") == "artifact"
-                    and stored_policy_decision.get("expires_at") is None
-                    and parse_approval_context_token(stored_policy_decision.get("artifact_hash")) is not None
-                ),
+        post_claim_reuse = evaluate_approval_reuse(
+            post_claim_current_action,
+            "allow",
+            saved_decision_present=True,
+            validation_reason=claimed_validation_reason,
+            durable_exact_approval=(
+                claimed_validation_reason is None
+                and stored_policy_decision is not None
+                and stored_policy_decision.get("source") == "approval-gate"
+                and stored_policy_decision.get("scope") == "artifact"
+                and stored_policy_decision.get("expires_at") is None
+                and parse_approval_context_token(stored_policy_decision.get("artifact_hash")) is not None
             ),
+        )
+        approval_reuse = with_saved_artifact_hash_provenance(
+            post_claim_reuse
+            if post_claim_reuse is not None
+            # Resident unreachable after the atomic claim: keep the consumed
+            # claim's projected action rather than inventing a new grant.
+            else approval_reuse_authority_unavailable(post_claim_current_action),
             _claimed_saved_allow_hash,
         )
         policy_action = approval_reuse.action

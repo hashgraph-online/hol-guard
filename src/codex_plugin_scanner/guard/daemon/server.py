@@ -2881,8 +2881,43 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/connect/state":
             self._write_legacy_pairing_disabled()
             return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "business-summary":
+            from .business_review_summary import handle_business_review_summary
+
+            handle_business_review_summary(self, path_parts[2])
+            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
+            if approval is None and not self._is_hosted_dashboard_origin():
+                from .business_review_queue import NativeBusinessReviewQueueReadError, native_request_detail
+
+                try:
+                    native_detail = native_request_detail(store, unquote(path_parts[2]))
+                except NativeBusinessReviewQueueReadError:
+                    self._write_json(
+                        {
+                            "error": "native_local_business_queue_read_failed",
+                            "message": (
+                                "Saved request details could not be verified. "
+                                "Refresh this request or return to the queue."
+                            ),
+                            "recovery": {
+                                "code": "request_unavailable",
+                                "title": "Request details are unavailable.",
+                                "body": (
+                                    "The saved request could not be checked. "
+                                    "Refresh this request or return to the queue."
+                                ),
+                                "queue_url": self._local_queue_url(),
+                            },
+                        },
+                        status=503,
+                        extra_headers={"Cache-Control": "no-store"},
+                    )
+                    return
+                if native_detail is not None:
+                    self._write_json(native_detail, extra_headers={"Cache-Control": "no-store"})
+                    return
             if approval is None:
                 self._write_json(
                     {
@@ -5138,8 +5173,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "invalid_status"}, status=400)
             return
         include_totals = self._query_bool(query_string, "include_totals", default=True)
+        from .business_review_queue import NativeBusinessReviewQueueReadError, local_request_page
+
         try:
-            page = self.server.store.list_approval_request_page(  # type: ignore[attr-defined]
+            read_page = (
+                self.server.store.list_approval_request_page
+                if self._is_hosted_dashboard_origin()
+                else (lambda **options: local_request_page(self.server.store, **options))
+            )
+            page = read_page(
                 status=status_filter,
                 limit=limit,
                 cursor=self._query_string(query_string, "cursor"),
@@ -5147,6 +5189,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 search=self._query_string(query_string, "search"),
                 include_totals=include_totals,
             )
+        except NativeBusinessReviewQueueReadError:
+            self._write_json(
+                {"error": "native_local_business_queue_read_failed"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
         except InvalidApprovalCursorError:
             self._write_json(
                 {
@@ -5160,7 +5209,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=400,
             )
             return
-        self._write_json(page)
+        self._write_json(page, extra_headers={"Cache-Control": "no-store"})
 
     @staticmethod
     def _optional_bool(value: object, *, default: bool) -> bool:
@@ -6162,6 +6211,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             request,
             payload,
             home_dir=home_dir,
+            guard_home=daemon_server.store.guard_home,
             claimed_saved_allow_hash=claimed_saved_allow_hash,
             claimed_approval_request_id=claimed_approval_request_id,
             reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: (
@@ -6660,39 +6710,46 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None = None,
     ) -> None:
         if self._hook_fast_path_enabled() or _native_mode_requires_rust():
-            result = self._handle_runtime_hook_fast(
-                payload,
-                params,
-                default_harness=default_harness,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-                deadline=deadline,
-            )
-            if result is not None:
-                if deadline is not None and time.monotonic() >= deadline:
-                    result = self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
-                        reason_code="daemon_hook_deadline_exhausted",
-                        native_authoritative=_native_mode_requires_rust(),
-                    )
-                self._write_json(result)
-                return
-            if _native_mode_requires_rust():
-                self._write_json(
-                    self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete the native hook decision safely.",
-                        reason_code="native_hook_worker_unavailable",
-                        native_authoritative=True,
-                    )
+            from contextlib import nullcontext
+
+            from ..sqlite_tuning import sqlite_operation_deadline
+
+            with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+                result = self._handle_runtime_hook_fast(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    deadline=deadline,
                 )
-                return
+                if result is not None:
+                    if deadline is not None and time.monotonic() >= deadline:
+                        result = self._runtime_hook_fail_safe_response(
+                            payload,
+                            params,
+                            default_harness=default_harness,
+                            reason=(
+                                "HOL Guard could not complete local review within the hook deadline. Retry this action."
+                            ),
+                            reason_code="daemon_hook_deadline_exhausted",
+                            native_authoritative=_native_mode_requires_rust(),
+                        )
+                    self._write_json(result)
+                    return
+                if _native_mode_requires_rust():
+                    self._write_json(
+                        self._runtime_hook_fail_safe_response(
+                            payload,
+                            params,
+                            default_harness=default_harness,
+                            reason="HOL Guard could not complete the native hook decision safely.",
+                            reason_code="native_hook_worker_unavailable",
+                            native_authoritative=True,
+                        )
+                    )
+                    return
 
         self._handle_runtime_hook_compatibility_cli(
             payload,
@@ -6722,36 +6779,42 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None,
     ) -> dict[str, object] | None:
         """Try the resident hook worker; only explicit rollback may fall back."""
+        from contextlib import nullcontext
+
+        from ..sqlite_tuning import sqlite_operation_deadline
+
         daemon_server = self._daemon_server()
         effective_home_dir = Path(home_dir) if home_dir is not None else daemon_server.home_dir
         effective_guard_home = Path(guard_home) if guard_home is not None else daemon_server.store.guard_home
 
-        try:
-            worker = daemon_server.hook_worker
-            return worker.review_http_payload(
-                payload=payload,
-                params=params,
-                default_harness=default_harness,
-                home_dir=effective_home_dir,
-                guard_home=effective_guard_home,
-                workspace=Path(workspace) if workspace else None,
-                deadline=deadline,
-            )
-        except Exception as error:
-            # Fail safe: deny/block. Do not fall back to compatibility CLI for
-            # requests that omitted full output and supplied only guard_source_ref.
-            self._daemon_server().hook_worker.metrics.record_failure(
-                stage="server",
-                exception_type=type(error).__name__,
-            )
-            return self._runtime_hook_fail_safe_response(
-                payload,
-                params,
-                default_harness=default_harness,
-                reason="HOL Guard could not complete local hook review safely.",
-                reason_code="daemon_worker_exception",
-                native_authoritative=_native_mode_requires_rust(),
-            )
+        # Keep failure rendering on the same storage clock as direct review.
+        with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+            try:
+                worker = daemon_server.hook_worker
+                return worker.review_http_payload(
+                    payload=payload,
+                    params=params,
+                    default_harness=default_harness,
+                    home_dir=effective_home_dir,
+                    guard_home=effective_guard_home,
+                    workspace=Path(workspace) if workspace else None,
+                    deadline=deadline,
+                )
+            except Exception as error:
+                # Fail safe: deny/block. Do not fall back to compatibility CLI for
+                # requests that omitted full output and supplied only guard_source_ref.
+                self._daemon_server().hook_worker.metrics.record_failure(
+                    stage="server",
+                    exception_type=type(error).__name__,
+                )
+                return self._runtime_hook_fail_safe_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    reason="HOL Guard could not complete local hook review safely.",
+                    reason_code="daemon_worker_exception",
+                    native_authoritative=_native_mode_requires_rust(),
+                )
 
     def _handle_runtime_hook_compatibility_cli(
         self,
@@ -7501,6 +7564,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
         if self.command == "GET":
+            if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "business-summary":
+                return True
             if len(path_parts) == 4 and path_parts[:3] == ["v1", "mcp-policy", "requests"]:
                 return True
             if len(path_parts) == 3 and path_parts[:2] in (

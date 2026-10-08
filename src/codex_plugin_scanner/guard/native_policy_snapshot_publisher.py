@@ -28,6 +28,7 @@ from .native_policy_snapshot_publisher_transport import (
     _publish_snapshot_v3 as _publish_snapshot_v3,
 )
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
+from .native_policy_snapshot_workspace_readiness import NativePolicySnapshotWorkspaceReadinessMixin
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -104,7 +105,11 @@ def ensure_native_launch_resident_verifier(store: GuardStore) -> None:
     provision_native_verifier_key_for_store(store)
 
 
-class NativePolicySnapshotPublisher(NativePolicySnapshotPublicationMixin, NativePolicySnapshotPublisherInputs):
+class NativePolicySnapshotPublisher(
+    NativePolicySnapshotWorkspaceReadinessMixin,
+    NativePolicySnapshotPublicationMixin,
+    NativePolicySnapshotPublisherInputs,
+):
     """Asynchronously publish an authenticated snapshot and expose its barrier."""
 
     def __init__(
@@ -145,6 +150,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublicationMixin, Native
         self._retry_not_before_monotonic: float | None = None
         self._failure_count = 0
         self._workspace_paths: set[Path] = set()
+        self._pending_workspace_paths: set[Path] = set()
         self._command_control_runtime = None
         self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
         self._input_fingerprint: (
@@ -327,23 +333,6 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublicationMixin, Native
 
     notify_policy_changed = request_publish
 
-    def register_workspace(self, workspace: Path | None) -> bool:
-        """Track workspace override files without reading them on a hook."""
-
-        if workspace is None:
-            return False
-        candidate = self._resolved_workspace(workspace)
-        with self._condition:
-            if candidate in self._workspace_paths:
-                return False
-            self._workspace_paths.add(candidate)
-            # A newly observed workspace can add a stricter local overlay.
-            # Invalidate the barrier immediately so no request can continue
-            # on a home-only snapshot while the overlay is being compiled.
-            self._input_fingerprint = None
-        self.request_publish()
-        return True
-
     def _provision_verifier_key(self) -> None:
         provision_native_verifier_key_for_store(self.store)
 
@@ -470,14 +459,15 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublicationMixin, Native
         with self._condition:
             return self._last_error
 
-    def wait_until_ready(self, deadline_monotonic: float | None = None) -> bool:
+    def wait_until_ready(self, deadline_monotonic: float | None = None, *, workspace: Path | None = None) -> bool:
         deadline = (
             deadline_monotonic if deadline_monotonic is not None else self._monotonic_clock() + _PUBLISH_TIMEOUT_SECONDS
         )
+        candidate = self._resolved_workspace(workspace) if workspace is not None else None
         with self._condition:
             while not self._closed:
                 self._mark_expired_locked()
-                if self._acked and self._snapshot is not None:
+                if self._acked and self._snapshot is not None and candidate not in self._pending_workspace_paths:
                     return True
                 # Known unavailable authority wakes the caller promptly. Keep
                 # bounded retries for lost ACKs and resident recovery.
@@ -488,4 +478,9 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublicationMixin, Native
                     break
                 self._condition.wait(timeout=remaining)
             self._mark_expired_locked()
-            return self._acked and self._snapshot is not None and not self._closed
+            return (
+                self._acked
+                and self._snapshot is not None
+                and not self._closed
+                and candidate not in self._pending_workspace_paths
+            )
