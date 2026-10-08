@@ -67,9 +67,7 @@ def _resident_request(
     features = set(status.capabilities.features)
     if _RESIDENT_PROTOCOL_FEATURE not in features or _PACKAGE_AUTHORITY_FEATURE not in features:
         return None
-    remaining_seconds = (
-        timeout_seconds if deadline_monotonic is None else deadline_monotonic - time.monotonic()
-    )
+    remaining_seconds = timeout_seconds if deadline_monotonic is None else deadline_monotonic - time.monotonic()
     if remaining_seconds <= 0:
         return None
 
