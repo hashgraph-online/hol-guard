@@ -276,7 +276,7 @@ def run_native_hook_pipeline(
             _claim_saved_approval=_claim_saved_approval,
         )
 
-    def revalidate_generic_after_claim(claimed_artifact_hash: str, fresh_approval: bool, durable_approval: bool) -> int:
+    def revalidate_generic_after_claim(claimed_artifact_hash: str, claimed_approval: Mapping[str, object]) -> int:
         fresh_config = overlay_synced_guard_policy(
             load_guard_config(context.guard_home, workspace=runtime_workspace),
             _synced_policy_payload(store),
@@ -301,8 +301,7 @@ def run_native_hook_pipeline(
             native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
             native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
             _claimed_saved_allow_hash=claimed_artifact_hash,
-            _claimed_fresh_local_approval=fresh_approval,
-            _claimed_durable_exact_approval=durable_approval,
+            _claimed_saved_approval=claimed_approval,
             _claim_saved_approval=False,
         )
 

@@ -4,9 +4,8 @@
 //! Every public function returns a `serde_json::Value` object whose keys are
 //! the exact Python dict keys. Digests use the canonical-JSON contract from
 //! `guard-contracts` (`json.dumps(v, sort_keys=True, separators=(",",":"),
-//! ensure_ascii=True)`); opaque digests are `sha256(material.encode("utf-8"))`
-//! or the `guard-context-unbound:<label>:<sha256>` sentinel for strict digests
-//! — the native-resident fallback in Python `native_context.py`.
+//! ensure_ascii=True)`); opaque digests hash raw UTF-8 bytes. Launch verification
+//! hashes canonical JSON bytes and emits no unbound fallback sentinel.
 //!
 //! All host-OS and filesystem semantics are POSIX-only (`shutil.which`
 //! directory search + execute bit, `lstat` chains, shebang extraction).

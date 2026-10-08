@@ -12,6 +12,7 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 // Native authority matches OpaqueMaterialDigest: raw UTF-8, not a fallback sentinel.
+#[cfg(unix)]
 pub(crate) fn context_opaque_digest_strict(material: &str) -> String {
     sha256_hex(material.as_bytes())
 }

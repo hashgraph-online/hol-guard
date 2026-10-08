@@ -712,11 +712,10 @@ def run_native_generic_payload(
     payload: Mapping[str, object],
     runtime_workspace: Path | None,
     store: GuardStore,
-    post_claim_revalidator: Callable[[str, bool, bool], int | None] | None = None,
+    post_claim_revalidator: Callable[[str, Mapping[str, object]], int | None] | None = None,
     runtime_artifact_checked: bool = False,
     _claimed_saved_allow_hash: str | None = None,
-    _claimed_fresh_local_approval: bool = False,
-    _claimed_durable_exact_approval: bool = False,
+    _claimed_saved_approval: Mapping[str, object] | None = None,
     _claim_saved_approval: bool = True,
     _post_claim_refresh_failed: bool = False,
     native_edge_result: Mapping[str, object] | None = None,
@@ -983,8 +982,7 @@ def run_native_generic_payload(
                 try:
                     refreshed_result = post_claim_revalidator(
                         runtime_artifact_hash,
-                        stored_policy_decision.get("fresh_local_approval") is True,
-                        stored_policy_decision.get("durable_exact_approval") is True,
+                        stored_policy_decision,
                     )
                 except Exception:
                     refreshed_result = None
@@ -1003,8 +1001,7 @@ def run_native_generic_payload(
                 post_claim_revalidator=None,
                 runtime_artifact_checked=runtime_artifact_checked,
                 _claimed_saved_allow_hash=runtime_artifact_hash,
-                _claimed_fresh_local_approval=stored_policy_decision.get("fresh_local_approval") is True,
-                _claimed_durable_exact_approval=stored_policy_decision.get("durable_exact_approval") is True,
+                _claimed_saved_approval=stored_policy_decision,
                 _claim_saved_approval=False,
                 _post_claim_refresh_failed=_post_claim_refresh_failed,
             )
@@ -1033,6 +1030,11 @@ def run_native_generic_payload(
         )
         if ignored_integrity is not None:
             claimed_validation_reason = "approval_reuse_integrity_failure"
+        if _claimed_saved_approval is None or (
+            store.approval_reuse_claim_disposition(_claimed_saved_approval) != "consumed"
+            and stored_policy_decision != _claimed_saved_approval
+        ):
+            claimed_validation_reason = APPROVAL_REUSE_CLAIM_FAILED
 
         # An unclaimed allow found by the fresh lookup is evidence only. The
         # already-claimed exact row may satisfy a freshly recomputed review;
@@ -1050,8 +1052,8 @@ def run_native_generic_payload(
             "allow",
             saved_decision_present=True,
             validation_reason=claimed_validation_reason,
-            fresh_local_approval=_claimed_fresh_local_approval,
-            durable_exact_approval=_claimed_durable_exact_approval,
+            fresh_local_approval=(_claimed_saved_approval or {}).get("fresh_local_approval") is True,
+            durable_exact_approval=(_claimed_saved_approval or {}).get("durable_exact_approval") is True,
         )
         approval_reuse = with_saved_artifact_hash_provenance(
             post_claim_reuse
