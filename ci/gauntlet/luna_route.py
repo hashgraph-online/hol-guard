@@ -191,7 +191,12 @@ class NativeLunaRoute:
                 except subprocess.TimeoutExpired:
                     pass
                 job.terminate()
-                process.wait(timeout=STOP_SECONDS)
+                try:
+                    process.wait(timeout=STOP_SECONDS)
+                except subprocess.TimeoutExpired:
+                    # Never assigned to the job (for example, assignment failed): kill it directly.
+                    process.kill()
+                    process.wait(timeout=STOP_SECONDS)
             else:
                 group = process.pid
                 with suppress(ProcessLookupError, PermissionError):
