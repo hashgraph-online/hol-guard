@@ -3,7 +3,7 @@
   "id": "mcp.cf-mail-mcp",
   "version": "1.0.0",
   "name": "cf-mail-mcp",
-  "description": "Reviews a self-deployed Cloudflare Worker that gives one AI agent a mailbox on your domain over streamable HTTP. send_message, reply_to_message, mark_read and delete_message require review; list_messages and read_message treat inbound mail as untrusted. status is read-only. There is no shared public endpoint. Off until you turn it on.",
+  "description": "Reviews a self-deployed Cloudflare Worker that gives one AI agent a mailbox on your domain over streamable HTTP. send_message, reply_to_message, mark_read and delete_message require review; list_messages and read_message treat inbound mail as untrusted. status is read-only. launch.url is a self-deploy template, not a live shared endpoint. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -20,7 +20,7 @@
   "license": "MIT",
   "launch": {
     "kind": "remote-http",
-    "url": "https://mail-mcp.workers.dev/mcp",
+    "url": "https://your-worker.your-subdomain.workers.dev/mcp",
     "serverNames": [
       "cf-mail-mcp",
       "mail-mcp"
