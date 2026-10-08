@@ -58,6 +58,9 @@ fn child_process() {
             .unwrap();
         println!("DESCENDANT={}", child.id());
         std::io::stdout().flush().unwrap();
+        // The capture owner, not this intentionally exiting fixture, must
+        // terminate the descendant through its owned job.
+        std::process::exit(0);
     } else {
         panic!("invalid fixture mode");
     }
@@ -70,15 +73,17 @@ fn run(
     cancellation: &AtomicBool,
 ) -> io::Result<CapturedOutput> {
     capture(
-        &std::env::current_exe()?,
-        &[
-            OsStr::new("--exact"),
-            OsStr::new(CHILD_TEST),
-            OsStr::new("--ignored"),
-            OsStr::new("--nocapture"),
-        ],
-        &std::env::current_dir()?,
-        &environment(mode),
+        CaptureCommand {
+            executable: &std::env::current_exe()?,
+            args: &[
+                OsStr::new("--exact"),
+                OsStr::new(CHILD_TEST),
+                OsStr::new("--ignored"),
+                OsStr::new("--nocapture"),
+            ],
+            cwd: &std::env::current_dir()?,
+            environment: &environment(mode),
+        },
         input,
         limit,
         Instant::now() + Duration::from_secs(5),
@@ -183,15 +188,17 @@ fn explicit_cancellation_has_no_success_exit_status() {
         marker.clone().into_os_string(),
     ));
     let result = capture(
-        &std::env::current_exe().unwrap(),
-        &[
-            OsStr::new("--exact"),
-            OsStr::new(CHILD_TEST),
-            OsStr::new("--ignored"),
-            OsStr::new("--nocapture"),
-        ],
-        &std::env::current_dir().unwrap(),
-        &env,
+        CaptureCommand {
+            executable: &std::env::current_exe().unwrap(),
+            args: &[
+                OsStr::new("--exact"),
+                OsStr::new(CHILD_TEST),
+                OsStr::new("--ignored"),
+                OsStr::new("--nocapture"),
+            ],
+            cwd: &std::env::current_dir().unwrap(),
+            environment: &env,
+        },
         &[],
         64 * 1024,
         Instant::now() + Duration::from_secs(5),

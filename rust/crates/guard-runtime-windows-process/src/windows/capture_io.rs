@@ -1,7 +1,8 @@
 use super::*;
 use std::sync::{mpsc, LazyLock};
 use winapi::shared::winerror::{
-    ERROR_IO_INCOMPLETE, ERROR_IO_PENDING, ERROR_NOT_FOUND, ERROR_OPERATION_ABORTED,
+    ERROR_BROKEN_PIPE, ERROR_IO_INCOMPLETE, ERROR_IO_PENDING, ERROR_NOT_FOUND, ERROR_NO_DATA,
+    ERROR_OPERATION_ABORTED,
 };
 use winapi::um::fileapi::{ReadFile, WriteFile};
 use winapi::um::ioapiset::{CancelIoEx, GetOverlappedResult};
@@ -9,6 +10,11 @@ use winapi::um::minwinbase::OVERLAPPED;
 use winapi::um::synchapi::CreateEventW;
 
 const BUFFER_BYTES: usize = 8192;
+
+fn pipe_closed(error: DWORD, writing: bool) -> bool {
+    error == ERROR_BROKEN_PIPE || (writing && error == ERROR_NO_DATA)
+}
+
 struct Resources {
     handle: OwnedHandle,
     overlapped: Box<OVERLAPPED>,
@@ -38,7 +44,7 @@ static REAPER: LazyLock<Option<mpsc::Sender<Resources>>> = LazyLock::new(|| {
                 if completed == FALSE
                     && !matches!(
                         unsafe { GetLastError() },
-                        ERROR_OPERATION_ABORTED | winapi::shared::winerror::ERROR_BROKEN_PIPE
+                        ERROR_OPERATION_ABORTED | ERROR_BROKEN_PIPE | ERROR_NO_DATA
                     )
                 {
                     // An unverified operation must never outlive its allocation.
@@ -65,6 +71,7 @@ pub(super) struct Operation {
     resources: Option<Resources>,
     pending: bool,
     used: usize,
+    writing: bool,
 }
 
 impl Operation {
@@ -85,6 +92,7 @@ impl Operation {
             }),
             pending: false,
             used: 0,
+            writing: false,
         })
     }
 
@@ -120,6 +128,7 @@ impl Operation {
 
     fn start(&mut self, write: bool, input: &[u8]) -> io::Result<Option<usize>> {
         let resources = self.resources.as_mut().unwrap();
+        self.writing = write;
         self.used = if write {
             input.len().min(BUFFER_BYTES)
         } else {
@@ -162,7 +171,7 @@ impl Operation {
             self.pending = true;
             return Ok(None);
         }
-        if error == winapi::shared::winerror::ERROR_BROKEN_PIPE {
+        if pipe_closed(error, self.writing) {
             return Ok(Some(0));
         }
         Err(io::Error::from_raw_os_error(error as i32))
@@ -206,7 +215,7 @@ impl Operation {
             return Ok(None);
         }
         self.pending = false;
-        if error == winapi::shared::winerror::ERROR_BROKEN_PIPE {
+        if pipe_closed(error, self.writing) {
             return Ok(Some(0));
         }
         Err(io::Error::from_raw_os_error(error as i32))
@@ -271,5 +280,20 @@ impl Drop for Operation {
             );
         }
         retain_until_completed(resources);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closed_stdin_errors_are_eof_but_other_errors_are_not() {
+        assert!(pipe_closed(ERROR_BROKEN_PIPE, true));
+        assert!(pipe_closed(ERROR_BROKEN_PIPE, false));
+        assert!(pipe_closed(ERROR_NO_DATA, true));
+        assert!(!pipe_closed(ERROR_NO_DATA, false));
+        assert!(!pipe_closed(ERROR_IO_PENDING, true));
+        assert!(!pipe_closed(ERROR_OPERATION_ABORTED, true));
     }
 }

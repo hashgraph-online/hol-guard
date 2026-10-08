@@ -148,10 +148,10 @@ impl ChildJobGuard {
     pub fn terminate_and_wait(&mut self, deadline: Instant) -> io::Result<()> {
         if let Some(job) = &self.job {
             process_lifecycle::terminate_job(job)?;
-        } else if process_lifecycle::process_is_running(&self.process)? {
-            if unsafe { TerminateProcess(self.process.as_raw_handle() as HANDLE, 1) } == FALSE {
-                return Err(io::Error::last_os_error());
-            }
+        } else if process_lifecycle::process_is_running(&self.process)?
+            && unsafe { TerminateProcess(self.process.as_raw_handle() as HANDLE, 1) } == FALSE
+        {
+            return Err(io::Error::last_os_error());
         }
         let millis = process_lifecycle::duration_to_wait_millis(
             deadline.saturating_duration_since(Instant::now()),

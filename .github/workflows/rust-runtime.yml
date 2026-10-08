@@ -193,3 +193,25 @@ jobs:
           ci/native_runtime/test_native_managed_resident.py
           ci/native_runtime/test_native_managed_resident_cross_process.py
           --tb=short
+
+  process-custody:
+    name: Process custody (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
+          cache-key: process-custody
+      - name: Lint native process custody
+        run: cargo clippy --locked --manifest-path rust/Cargo.toml -p guard-contained-process -p guard-runtime-windows-process --all-targets -- -D warnings
+      - name: Exercise real native process and filesystem operations
+        run: cargo test --locked --manifest-path rust/Cargo.toml -p guard-contained-process -p guard-runtime-windows-process --lib

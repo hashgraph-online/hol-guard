@@ -8,7 +8,7 @@ use std::os::windows::{
     io::{AsRawHandle, FromRawHandle, OwnedHandle},
 };
 use std::path::Path;
-use std::ptr::{null, null_mut};
+use std::ptr::null_mut;
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use winapi::shared::ntdef::HANDLE;
@@ -49,222 +49,8 @@ struct SecurityCapabilities {
     reserved: u32,
 }
 
-pub struct AppContainer {
-    name: Vec<u16>,
-    sid: PSID,
-    closed: bool,
-}
-
-impl AppContainer {
-    /// Every run uses a new SID; no network capabilities or loopback exemption
-    /// are requested. Creation and LPAC process attributes are probed by launch.
-    pub fn create(name: &str) -> io::Result<Self> {
-        if name.is_empty()
-            || name.len() > 64
-            || !name
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid AppContainer name",
-            ));
-        }
-        let name = wide(OsStr::new(name))?;
-        let mut sid = null_mut();
-        let status = unsafe {
-            CreateAppContainerProfile(
-                name.as_ptr(),
-                name.as_ptr(),
-                name.as_ptr(),
-                null_mut(),
-                0,
-                &mut sid,
-            )
-        };
-        if status < 0 || sid.is_null() {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!("AppContainer creation failed: {status:#x}"),
-            ));
-        }
-        Ok(Self {
-            name,
-            sid,
-            closed: false,
-        })
-    }
-
-    /// Grants touch only newly-created private staging objects, never the live
-    /// workspace, user profile, Guard state, executable installation or host ACLs.
-    pub fn grant(&self, path: &Path, writable: bool, directory: bool) -> io::Result<()> {
-        use std::os::windows::fs::OpenOptionsExt;
-        let file = std::fs::OpenOptions::new()
-            .access_mode(0x0002_0000 | 0x0004_0000 | 0x0008_0000)
-            .share_mode(1 | 2)
-            .custom_flags(0x0020_0000 | if directory { 0x0200_0000 } else { 0 })
-            .open(path)?;
-        let metadata = file.metadata()?;
-        use std::os::windows::fs::MetadataExt;
-        if metadata.file_attributes() & 0x400 != 0 || metadata.is_dir() != directory {
-            return Err(crate::bound_fs::changed());
-        }
-        let handle = file.as_raw_handle() as HANDLE;
-        let mut owner: PSID = null_mut();
-        let mut old_descriptor: PSECURITY_DESCRIPTOR = null_mut();
-        let status = unsafe {
-            GetSecurityInfo(
-                handle,
-                SE_FILE_OBJECT,
-                OWNER_SECURITY_INFORMATION,
-                &mut owner,
-                null_mut(),
-                null_mut(),
-                null_mut(),
-                &mut old_descriptor,
-            )
-        };
-        if status != 0 {
-            return Err(io::Error::from_raw_os_error(status as i32));
-        }
-        struct Local(*mut std::ffi::c_void);
-        impl Drop for Local {
-            fn drop(&mut self) {
-                unsafe {
-                    LocalFree(self.0);
-                }
-            }
-        }
-        let _old = Local(old_descriptor);
-        let mut entries: [EXPLICIT_ACCESS_W; 2] = unsafe { zeroed() };
-        for (entry, (sid, rights)) in entries.iter_mut().zip([
-            (owner, 0x001f_01ff),
-            (
-                self.sid,
-                if writable {
-                    FILE_READ_WRITE_EXECUTE
-                } else {
-                    FILE_READ_EXECUTE
-                },
-            ),
-        ]) {
-            entry.grfAccessPermissions = rights;
-            entry.grfAccessMode = SET_ACCESS;
-            entry.grfInheritance = if directory && writable { 3 } else { 0 };
-            entry.Trustee.pMultipleTrustee = null_mut();
-            entry.Trustee.MultipleTrusteeOperation = NO_MULTIPLE_TRUSTEE;
-            entry.Trustee.TrusteeForm = TRUSTEE_IS_SID;
-            entry.Trustee.TrusteeType = TRUSTEE_IS_USER;
-            entry.Trustee.ptstrName = sid.cast();
-        }
-        let mut acl: PACL = null_mut();
-        let status = unsafe { SetEntriesInAclW(2, entries.as_mut_ptr(), null_mut(), &mut acl) };
-        if status != 0 {
-            return Err(io::Error::from_raw_os_error(status as i32));
-        }
-        let _acl = Local(acl.cast());
-        let status = unsafe {
-            SetSecurityInfo(
-                handle,
-                SE_FILE_OBJECT,
-                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-                null_mut(),
-                null_mut(),
-                acl,
-                null_mut(),
-            )
-        };
-        if status != 0 {
-            return Err(io::Error::from_raw_os_error(status as i32));
-        }
-        // DACL grants alone do not permit a low-integrity AppContainer to write
-        // medium-integrity user files. Only captured private objects are lowered.
-        #[link(name = "advapi32")]
-        unsafe extern "system" {
-            fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                text: *const u16,
-                revision: u32,
-                descriptor: *mut PSECURITY_DESCRIPTOR,
-                size: *mut u32,
-            ) -> i32;
-            fn GetSecurityDescriptorSacl(
-                descriptor: PSECURITY_DESCRIPTOR,
-                present: *mut i32,
-                sacl: *mut PACL,
-                defaulted: *mut i32,
-            ) -> i32;
-        }
-        let label = wide(OsStr::new(if directory {
-            "S:(ML;OICI;NW;;;LW)"
-        } else {
-            "S:(ML;;NW;;;LW)"
-        }))?;
-        let mut descriptor = null_mut();
-        if unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                label.as_ptr(),
-                1,
-                &mut descriptor,
-                null_mut(),
-            )
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        let _label = Local(descriptor);
-        let mut present = 0;
-        let mut defaulted = 0;
-        let mut sacl = null_mut();
-        if unsafe { GetSecurityDescriptorSacl(descriptor, &mut present, &mut sacl, &mut defaulted) }
-            == 0
-            || present == 0
-            || sacl.is_null()
-        {
-            return Err(io::Error::last_os_error());
-        }
-        let status = unsafe {
-            SetSecurityInfo(
-                handle,
-                SE_FILE_OBJECT,
-                0x10,
-                null_mut(),
-                null_mut(),
-                null_mut(),
-                sacl,
-            )
-        };
-        if status != 0 {
-            return Err(io::Error::from_raw_os_error(status as i32));
-        }
-        Ok(())
-    }
-
-    pub fn close(&mut self) -> io::Result<()> {
-        if !self.closed {
-            let status = unsafe { DeleteAppContainerProfile(self.name.as_ptr()) };
-            if status < 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("AppContainer cleanup failed: {status:#x}"),
-                ));
-            }
-            self.closed = true;
-        }
-        Ok(())
-    }
-}
-impl Drop for AppContainer {
-    fn drop(&mut self) {
-        if !self.closed {
-            unsafe {
-                DeleteAppContainerProfile(self.name.as_ptr());
-            }
-        }
-        unsafe {
-            FreeSid(self.sid);
-        }
-    }
-}
+mod app_container;
+pub use app_container::AppContainer;
 
 fn wide(value: &OsStr) -> io::Result<Vec<u16>> {
     let mut result: Vec<u16> = value.encode_wide().collect();
@@ -446,26 +232,7 @@ fn capture_native(
             "Windows argv byte budget exceeded",
         ));
     }
-    let mut environment: Vec<(OsString, OsString)> = command.environment.clone();
-    environment.sort_by_key(|(key, _)| key.to_string_lossy().to_uppercase());
-    let mut env = Vec::new();
-    for (key, value) in environment {
-        if key.is_empty() || key.to_string_lossy().contains('=') {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid environment key",
-            ));
-        }
-        let key = wide(&key)?;
-        let value = wide(&value)?;
-        env.extend_from_slice(&key[..key.len() - 1]);
-        env.push(b'=' as u16);
-        env.extend_from_slice(&value);
-    }
-    env.push(0);
-    if env.len() == 1 {
-        env.push(0);
-    }
+    let mut env = environment_block(&command.environment)?;
     let mut startup: STARTUPINFOEXW = unsafe { zeroed() };
     startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
@@ -528,229 +295,8 @@ pub(crate) fn system_directory() -> io::Result<std::path::PathBuf> {
     )))
 }
 
-#[repr(C)]
-struct IoStatus {
-    status: usize,
-    information: usize,
-}
-#[repr(C)]
-struct RenameInfo {
-    replace: u8,
-    root: HANDLE,
-    length: u32,
-    name: [u16; 1],
-}
-#[link(name = "ntdll")]
-unsafe extern "system" {
-    fn NtSetInformationFile(
-        file: HANDLE,
-        status: *mut IoStatus,
-        information: *mut std::ffi::c_void,
-        length: u32,
-        class: u32,
-    ) -> i32;
-}
-pub(crate) fn rename_bound(
-    source: &File,
-    parent: &crate::bound_fs::Directory,
-    name: &OsStr,
-    replace: bool,
-) -> io::Result<()> {
-    use std::os::windows::fs::OpenOptionsExt;
-    let root = std::fs::OpenOptions::new()
-        .access_mode(0x0010_0082)
-        .share_mode(1 | 2 | 4)
-        .custom_flags(0x0200_0000 | 0x0020_0000)
-        .open(parent.path())?;
-    if guard_runtime_windows_process::handle_file_id(&root)?
-        != guard_runtime_windows_process::handle_file_id(parent.handle())?
-    {
-        return Err(crate::bound_fs::changed());
-    }
-    let name = wide(name)?;
-    let name = &name[..name.len() - 1];
-    let offset = std::mem::offset_of!(RenameInfo, name);
-    let length = offset + name.len() * 2;
-    let mut storage = vec![0usize; length.div_ceil(size_of::<usize>())];
-    let information = storage.as_mut_ptr().cast::<RenameInfo>();
-    unsafe {
-        (*information).replace = u8::from(replace);
-        (*information).root = root.as_raw_handle() as HANDLE;
-        (*information).length = (name.len() * 2) as u32;
-        std::ptr::copy_nonoverlapping(
-            name.as_ptr(),
-            information.cast::<u8>().add(offset).cast(),
-            name.len(),
-        );
-    }
-    let mut status = IoStatus {
-        status: 0,
-        information: 0,
-    };
-    let result = unsafe {
-        NtSetInformationFile(
-            source.as_raw_handle() as HANDLE,
-            &mut status,
-            information.cast(),
-            length as u32,
-            10,
-        )
-    };
-    if result < 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("bound output rename failed: {result:#x}"),
-        ));
-    }
-    parent.verify()
-}
-
-fn transaction_file(path: &Path, write: bool) -> io::Result<File> {
-    use std::os::windows::fs::OpenOptionsExt;
-    let access = 0x8000_0000 | 0x0001_0000 | if write { 0x4000_0000 } else { 0 };
-    // DELETE authority is on this opened object. With no WRITE/DELETE sharing,
-    // third-party target mutation/rename cannot change the object we move.
-    let file = std::fs::OpenOptions::new()
-        .access_mode(access)
-        .share_mode(1)
-        .custom_flags(0x0020_0000)
-        .open(path)?;
-    use std::os::windows::fs::MetadataExt;
-    if !file.metadata()?.is_file() || file.metadata()?.file_attributes() & 0x400 != 0 {
-        return Err(crate::bound_fs::changed());
-    }
-    Ok(file)
-}
-fn delete_object(file: &File) -> io::Result<()> {
-    let mut delete = 1u8;
-    let mut status = IoStatus {
-        status: 0,
-        information: 0,
-    };
-    let result = unsafe {
-        NtSetInformationFile(
-            file.as_raw_handle() as HANDLE,
-            &mut status,
-            (&mut delete as *mut u8).cast(),
-            1,
-            13,
-        )
-    };
-    if result < 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("bound output disposal failed: {result:#x}"),
-        ));
-    }
-    Ok(())
-}
-fn published_object(
-    parent: &crate::bound_fs::Directory,
-    name: &OsStr,
-    expected: &crate::bound_fs::Identity,
-) -> io::Result<bool> {
-    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-    let file = std::fs::OpenOptions::new()
-        .access_mode(0x80)
-        .share_mode(1 | 2 | 4)
-        .custom_flags(0x0020_0000)
-        .open(parent.path().join(name))?;
-    if file.metadata()?.file_attributes() & 0x400 != 0 {
-        return Ok(false);
-    }
-    Ok(crate::bound_fs::identity(&file)?.same_object(expected))
-}
-pub(crate) fn promote_transaction(
-    parent: &crate::bound_fs::Directory,
-    name: &OsStr,
-    recovery: &crate::bound_fs::Directory,
-    expected: Option<(&crate::bound_fs::Identity, &str)>,
-    written: &crate::bound_fs::ReadFile,
-) -> io::Result<()> {
-    let mut new = transaction_file(&recovery.path().join("new"), true)?;
-    let bytes = crate::bound_fs::read_file(&mut new, 256 * 1024 * 1024)?;
-    if !bytes.identity.same_object(&written.identity) || bytes.digest != written.digest {
-        return Err(crate::bound_fs::changed());
-    }
-    let old = if let Some((expected_id, expected_digest)) = expected {
-        let mut old = transaction_file(&parent.path().join(name), false)?;
-        let read = crate::bound_fs::read_file(&mut old, 256 * 1024 * 1024)?;
-        if &read.identity != expected_id || read.digest != expected_digest {
-            return Err(crate::bound_fs::changed());
-        }
-        parent.verify()?;
-        if !published_object(parent, name, expected_id)? {
-            return Err(crate::bound_fs::changed());
-        }
-        rename_bound(&old, recovery, OsStr::new("old"), false)?;
-        Some(old)
-    } else {
-        None
-    };
-    if let Err(error) = rename_bound(&new, parent, name, false) {
-        // A newly created user target wins. Restore only into an absent name;
-        // never overwrite that target. The old bytes remain in recovery/old
-        // when an intervening writer prevents restoration.
-        if let Some(old) = old.as_ref() {
-            let _ = rename_bound(old, parent, name, false);
-        }
-        delete_object(&new)?;
-        return Err(error);
-    }
-    if !published_object(parent, name, &written.identity)? {
-        return Err(crate::bound_fs::changed());
-    }
-    if let Some(old) = old.as_ref() {
-        delete_object(old)?;
-    }
-    parent.verify()
-}
-
-pub(crate) fn remove_bound_file(
-    parent: &crate::bound_fs::Directory,
-    name: &OsStr,
-    expected: (&crate::bound_fs::Identity, &str),
-) -> io::Result<()> {
-    let mut file = transaction_file(&parent.path().join(name), false)?;
-    let read = crate::bound_fs::read_file(&mut file, 256 * 1024 * 1024)?;
-    if read.identity != *expected.0
-        || read.digest != expected.1
-        || !published_object(parent, name, expected.0)?
-    {
-        return Err(crate::bound_fs::changed());
-    }
-    parent.verify()?;
-    delete_object(&file)?;
-    parent.verify()
-}
-pub(crate) fn remove_bound_directory(
-    parent: &crate::bound_fs::Directory,
-    name: &OsStr,
-    expected: &crate::bound_fs::Identity,
-) -> io::Result<()> {
-    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-    let path = parent.path().join(name);
-    let file = std::fs::OpenOptions::new()
-        .access_mode(0x8000_0000 | 0x0001_0000)
-        .share_mode(1)
-        .custom_flags(0x0220_0000)
-        .open(&path)?;
-    let metadata = file.metadata()?;
-    if !metadata.is_dir()
-        || metadata.file_attributes() & 0x400 != 0
-        || !crate::bound_fs::identity(&file)?.same_object(expected)
-    {
-        return Err(crate::bound_fs::changed());
-    }
-    if std::fs::read_dir(&path)?.next().transpose()?.is_some() {
-        return Err(crate::bound_fs::changed());
-    }
-    parent.verify()?;
-    // DELETE disposition belongs to this held, non-reparse object. Windows
-    // itself refuses a nonempty directory; no recursive live path cleanup.
-    delete_object(&file)?;
-    parent.verify()
-}
+mod files;
+pub(crate) use files::{promote_transaction, remove_bound_directory, remove_bound_file};
 
 pub(crate) fn job_containment_probe() -> io::Result<bool> {
     use winapi::um::winnt::JOBOBJECT_EXTENDED_LIMIT_INFORMATION;
@@ -795,3 +341,38 @@ pub(crate) fn job_containment_probe() -> io::Result<bool> {
     let flags = information.BasicLimitInformation.LimitFlags;
     Ok(flags & 0x2000 != 0 && flags & (0x800 | 0x1000) == 0)
 }
+
+fn environment_block(entries: &[(OsString, OsString)]) -> io::Result<Vec<u16>> {
+    let mut environment = entries.to_vec();
+    environment.sort_by_key(|(key, _)| key.to_string_lossy().to_uppercase());
+    let mut env = Vec::new();
+    let mut names = std::collections::BTreeSet::new();
+    for (key, value) in environment {
+        if !names.insert(key.to_string_lossy().to_uppercase()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "duplicate environment name",
+            ));
+        }
+        if key.is_empty() || key.to_string_lossy().contains('=') {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid environment key",
+            ));
+        }
+        let key = wide(&key)?;
+        let value = wide(&value)?;
+        env.extend_from_slice(&key[..key.len() - 1]);
+        env.push(b'=' as u16);
+        env.extend_from_slice(&value);
+    }
+    env.push(0);
+    if env.len() == 1 {
+        env.push(0);
+    }
+    Ok(env)
+}
+
+#[cfg(test)]
+#[path = "windows/environment_tests.rs"]
+mod environment_tests;
