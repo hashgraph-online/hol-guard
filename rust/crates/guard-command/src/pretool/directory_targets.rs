@@ -34,11 +34,15 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         return None;
     }
     let supplied = std::path::Path::new(value);
-    if !supplied.is_absolute() {
-        return None;
-    }
+    let joined;
+    let supplied = if supplied.is_absolute() {
+        supplied
+    } else {
+        joined = relative_cwd_target(value, context)?;
+        joined.as_path()
+    };
     let canonical = std::fs::canonicalize(supplied).ok()?;
-    // Absolute, non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
+    // Non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
     if !absolute_path_spelling_matches(supplied, &canonical)
         || !canonical.is_dir()
         || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
@@ -49,6 +53,38 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     #[cfg(windows)]
     let canonical = std::path::PathBuf::from(supplied.to_str()?.replace('/', "\\"));
     canonical.to_str().map(str::to_owned)
+}
+
+/// POSIX `cd` skips the CDPATH search for operands that begin with `.` or
+/// `..`; any other relative operand needs proof that CDPATH is unset. The
+/// lexical join is what a logical `cd` reaches, so the caller's spelling
+/// check rejects symlinked components.
+fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
+    if cfg!(windows) || value.starts_with('~') {
+        return None;
+    }
+    let dotted =
+        value == "." || value == ".." || value.starts_with("./") || value.starts_with("../");
+    if !dotted && !context.cdpath_unset {
+        return None;
+    }
+    let base = std::path::Path::new(context.cwd?);
+    if !base.is_absolute() {
+        return None;
+    }
+    let mut joined = std::path::PathBuf::new();
+    for component in base.join(value).components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if !joined.pop() {
+                    return None;
+                }
+            }
+            other => joined.push(other),
+        }
+    }
+    Some(joined)
 }
 
 fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::path::Path) -> bool {

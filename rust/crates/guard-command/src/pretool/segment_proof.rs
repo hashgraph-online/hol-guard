@@ -63,6 +63,7 @@ pub(super) fn exact_safe_cwd_compound(
             false,
             crate::pretool::PathContext {
                 home_dir: context.home_dir,
+                cdpath_unset: context.cdpath_unset,
                 cwd: Some(&cwd),
             },
         );
@@ -107,6 +108,7 @@ pub(super) fn exact_safe_cwd_compound(
             false,
             crate::pretool::PathContext {
                 home_dir: context.home_dir,
+                cdpath_unset: context.cdpath_unset,
                 cwd: Some(&cwd),
             },
         )
@@ -134,6 +136,7 @@ pub(crate) fn benign_command_segments(
     }
     let proof_context = crate::pretool::PathContext {
         home_dir: context.home_dir,
+        cdpath_unset: context.cdpath_unset,
         cwd: cwd.as_deref().or(context.cwd),
     };
     let segment_benign: Vec<bool> = model
@@ -294,7 +297,11 @@ pub(super) fn exact_safe_segment_with_context(
         "ls" => safe_reads::safe_listing_arguments(&segment.arguments, context),
         "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
         "find" => safe_reads::safe_find_listing_arguments(&segment.arguments, context),
-        "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments, context),
+        // Operand-free `cat` after a pipe only copies the proven producer's output.
+        "cat" => {
+            (segment.pipeline_index > 0 && segment.arguments.is_empty())
+                || safe_reads::safe_plain_file_arguments(&segment.arguments, context)
+        }
         "stat" => matches!(segment.arguments.as_slice(), [target]
             if !target.starts_with('-')
                 && safe_reads::bounded_read_target(target, context.home_dir, context.cwd, false)),

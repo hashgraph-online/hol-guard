@@ -8,6 +8,25 @@ use std::path::Path;
 pub struct PathContext<'a> {
     pub home_dir: Option<&'a str>,
     pub cwd: Option<&'a str>,
+    /// Set only from a harness-stamped environment that declares no CDPATH,
+    /// so a bare relative `cd` operand cannot be redirected by a CDPATH search.
+    pub cdpath_unset: bool,
+}
+
+impl PathContext<'_> {
+    pub(crate) fn with_execution_environment(
+        mut self,
+        execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> Self {
+        self.cdpath_unset = execution_environment.is_some_and(|environment| {
+            environment.has_valid_shape()
+                && !environment
+                    .environment_names
+                    .iter()
+                    .any(|name| name == "CDPATH")
+        });
+        self
+    }
 }
 
 mod contained_wrapper;
@@ -364,7 +383,12 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 ) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
-    let context = crate::pretool::PathContext { home_dir, cwd };
+    let context = crate::pretool::PathContext {
+        home_dir,
+        cwd,
+        cdpath_unset: false,
+    }
+    .with_execution_environment(execution_environment);
     if shell_script::contains_credential_post(&model, context) {
         return Ok(pretool_decision(
             model,
@@ -497,3 +521,5 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 mod tests;
 #[cfg(test)]
 mod tests_benign_probes;
+#[cfg(test)]
+mod tests_relative_cd;

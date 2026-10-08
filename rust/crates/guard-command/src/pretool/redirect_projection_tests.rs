@@ -16,6 +16,7 @@ fn context() -> crate::pretool::PathContext<'static> {
     crate::pretool::PathContext {
         home_dir: Some(HOME),
         cwd: Some(CWD),
+        cdpath_unset: false,
     }
 }
 
@@ -116,6 +117,7 @@ fn file_writes_never_follow_an_existing_symlink() {
     let context = crate::pretool::PathContext {
         home_dir: Some(HOME),
         cwd: Some(&cwd),
+        cdpath_unset: false,
     };
     for command in [
         "echo hi > link/hosts".to_owned(),
