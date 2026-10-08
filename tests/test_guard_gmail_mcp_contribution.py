@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime import mcp_server_grants as grants
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
@@ -158,3 +159,33 @@ def test_exact_endpoint_matches_under_any_server_name(gmail_payload: dict, monke
 def test_other_endpoints_do_not_match_even_with_listed_server_name(gmail_payload: dict, monkeypatch, url: str) -> None:
     monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
     assert grants.matching_mcp_contribution(artifact("create_draft", url=url, server_name="gmail")) is None
+
+
+def name_only_artifact(tool: str, server_name: str) -> GuardArtifact:
+    return GuardArtifact(
+        artifact_id=f"codex:runtime:project:{server_name}:{tool}",
+        name=f"{server_name}:{tool}",
+        harness="codex",
+        artifact_type="tool_call",
+        source_scope="project",
+        config_path=".mcp.json",
+        command=tool,
+        transport="http",
+        metadata={"server_name": server_name},
+    )
+
+
+@pytest.mark.parametrize("server_name", ["gmail", "gmail-mcp", "google-gmail"])
+def test_listed_server_names_match_without_endpoint_evidence(
+    gmail_payload: dict, monkeypatch, server_name: str
+) -> None:
+    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
+    assert grants.matching_mcp_contribution(name_only_artifact("create_draft", server_name)) == gmail_payload
+
+
+@pytest.mark.parametrize("server_name", ["work-mail", "gmail-backup", "google"])
+def test_unlisted_server_names_do_not_match_without_endpoint_evidence(
+    gmail_payload: dict, monkeypatch, server_name: str
+) -> None:
+    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
+    assert grants.matching_mcp_contribution(name_only_artifact("create_draft", server_name)) is None
