@@ -83,11 +83,12 @@ def test_publication_staging_works_without_a_nonexistent_mcp_resource_directory(
     )
     assert "scripts/extension_artifact_bundle.py" in step["run"]
     assert "git add" not in step["run"]
-    for name in bundle.FILES:
+    source_files = set(bundle.FILES) - {"contracts/extensions/trust-class-map.v1.json"}
+    for name in source_files:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("{}\n")
-    assert len(bundle.selected_files(tmp_path)) == len(bundle.FILES)
+    assert {path.relative_to(tmp_path).as_posix() for path in bundle.selected_files(tmp_path)} == source_files
     assert not (tmp_path / "src/codex_plugin_scanner/guard/contracts/data/mcp_servers").exists()
 
 
