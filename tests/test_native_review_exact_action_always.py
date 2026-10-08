@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_native_command_observations import _edge, _observations, _receipt
 
 _HARNESS = "claude-code"
-_ARTIFACT_ID = "claude-code:native-review:Bash"
+_ARTIFACT_ID = "claude-code:native-pretool:Bash"
 
 
 def _write_executable(path: Path, body: str) -> None:
@@ -114,9 +114,9 @@ def test_token_changes_when_native_rules_change(
     changed_receipt["decision_id"] = hashlib.sha256(
         json.dumps(identity, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
     ).hexdigest()
-    original = _token("git status", workspace, result=result, receipt=receipt)
+    original = _token("cat package.json", workspace, result=result, receipt=receipt)
     assert original is not None
-    assert _token("git status", workspace, result=changed_result, receipt=changed_receipt) not in {None, original}
+    assert _token("cat package.json", workspace, result=changed_result, receipt=changed_receipt) not in {None, original}
 
 
 @pytest.mark.parametrize(
@@ -162,7 +162,7 @@ def test_receipt_without_policy_binding_stays_once_only(
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     result, _ = _verdict()
     result.pop("command_extensions")
-    assert _token("git status", workspace, result=result, receipt=_receipt(None)) is None
+    assert _token("cat package.json", workspace, result=result, receipt=_receipt(None)) is None
 
 
 def _save(store: GuardStore, token: str, action: str, **fields: object) -> None:
@@ -332,3 +332,103 @@ def test_native_review_offers_and_honors_always_for_local_wrangler(
     assert second["approval_reuse_status"] == "accepted"
     third = review("third")
     assert third["approval_reuse_status"] == "accepted"
+
+
+def _local_bin(workspace: Path, package: str, name: str) -> None:
+    root = workspace / "node_modules" / package
+    (root / "package.json").parent.mkdir(parents=True, exist_ok=True)
+    (root / "package.json").write_text(json.dumps({"name": package, "version": "1.0.0"}))
+    _write_executable(root / "bin" / f"{name}.js", name)
+    link = workspace / "node_modules" / ".bin" / name
+    if not link.is_symlink():
+        link.symlink_to(Path("..") / package / "bin" / f"{name}.js")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "npx --package=wrangler@3 wrangler --version",
+        "npx -p wrangler@3 wrangler --version",
+        "npx --call 'wrangler --version'",
+        "npx --prefix /tmp wrangler --version",
+        "npx tsx script.ts",
+        "awk -f program.awk input.txt",
+        "awk '{ print }' input.txt",
+        "git -c alias.x=!./payload x",
+        "git status",
+        "find . -name '*.txt' -exec ./payload {} ;",
+        "xargs ./payload",
+    ],
+)
+def test_selectors_interpreters_and_code_loaders_stay_once_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, command: str
+) -> None:
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    _local_bin(workspace, "tsx", "tsx")
+    (workspace / "script.ts").write_text("console.log(1)\n")
+    assert _token(command, workspace) is None
+
+
+def test_token_binds_file_operand_contents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    notes = workspace / "notes.txt"
+    notes.write_text("first\n")
+    original = _token("cat notes.txt", workspace)
+    assert original is not None
+    assert original == _token("cat notes.txt", workspace)
+    notes.write_text("second\n")
+    assert _token("cat notes.txt", workspace) not in {None, original}
+
+
+def test_unreadable_saved_decision_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    import sqlite3
+
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    token = _token("npx wrangler --version", workspace)
+    assert token is not None
+    _save(store, token, "block")
+
+    def _broken_lookup(*_args: object, **_kwargs: object) -> None:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(store, "resolve_policy_decision_lookup", _broken_lookup)
+    result, _ = _verdict()
+    response = native_saved_decision_response(
+        store, harness=_HARNESS, token=token, artifact_id=_ARTIFACT_ID, native_result=result, workspace=workspace
+    )
+    assert response is not None
+    assert response["policy_action"] == "block"
+    assert response["reason_code"] == "saved_exact_action_unreadable"
+
+
+def test_saved_block_wins_over_a_pending_once_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    token = _token("npx wrangler --version", workspace)
+    assert token is not None
+    _save(store, token, "block")
+    monkeypatch.setattr(hook_native_review_approval, "native_review_claimed_allow", lambda *_a, **_k: True)
+    monkeypatch.setattr(hook_native_review_approval, "native_review_matching_allow", lambda *_a, **_k: True)
+    result, receipt = _verdict()
+    response = hook_native_review_approval.pause_native_pre_tool_for_approval(
+        store,
+        harness=_HARNESS,
+        payload={"tool_name": "Bash", "tool_input": {"command": "npx wrangler --version"}, "cwd": str(workspace)},
+        native_result=result,
+        native_receipt=receipt,
+        workspace=workspace,
+        guard_home=tmp_path / "guard-home",
+        home_dir=workspace.parent / "home",
+        claimed_saved_allow_hash="once-hash",
+    )
+    assert response["policy_action"] == "block"
+    assert response["approval_reuse_status"] == "blocked"

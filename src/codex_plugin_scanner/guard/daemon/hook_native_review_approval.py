@@ -23,11 +23,7 @@ from .hook_native_review_binding import (
     native_review_matching_allow,
     native_review_policy_binding,
 )
-from .hook_native_saved_approval import (
-    EXACT_ACTION_CONTEXT_TOKEN_KEY,
-    native_exact_action_token,
-    native_saved_decision_response,
-)
+from .hook_native_saved_approval import attach_exact_action_token, native_saved_review_response
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
@@ -129,6 +125,20 @@ def pause_native_pre_tool_for_approval(
         native_receipt,
         workspace,
     )
+    # A saved exact-action block must win over any pending once approval.
+    saved = native_saved_review_response(
+        store,
+        harness=harness,
+        tool_name=tool_name,
+        artifact_id=_native_review_artifact_id(harness, tool_name),
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    if saved is not None:
+        return saved
     if claimed_saved_allow_hash is not None and native_review_claimed_allow(
         store,
         harness=harness,
@@ -162,25 +172,6 @@ def pause_native_pre_tool_for_approval(
         response = harness_json_from_native_pre_tool(harness, allowed)
         response["approval_reuse_status"] = "accepted"
         return response
-    exact_action_token = native_exact_action_token(
-        harness=harness,
-        tool_name=tool_name,
-        payload=payload,
-        native_result=native_result,
-        native_receipt=native_receipt,
-        workspace=workspace,
-        home_dir=home_dir,
-    )
-    saved = native_saved_decision_response(
-        store,
-        harness=harness,
-        token=exact_action_token,
-        artifact_id=_native_review_artifact_id(harness, tool_name),
-        native_result=native_result,
-        workspace=workspace,
-    )
-    if saved is not None:
-        return saved
     from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
     from ..config import load_guard_config
 
@@ -322,7 +313,8 @@ def queue_native_pre_tool_review(
     if action_envelope is None:
         _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)
         return None
-    exact_action_token = native_exact_action_token(
+    attach_exact_action_token(
+        action_envelope,
         harness=harness,
         tool_name=tool_name,
         payload=payload,
@@ -331,8 +323,6 @@ def queue_native_pre_tool_review(
         workspace=workspace,
         home_dir=home_dir,
     )
-    if exact_action_token is not None:
-        action_envelope[EXACT_ACTION_CONTEXT_TOKEN_KEY] = exact_action_token
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,

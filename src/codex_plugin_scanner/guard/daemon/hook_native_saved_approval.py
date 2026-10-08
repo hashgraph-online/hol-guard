@@ -8,6 +8,7 @@ the reviewed command, or the Rust rules that judged it change.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -33,10 +34,59 @@ _NATIVE_EXACT_ACTION_POLICY_VERSION = "native-exact-action-v1"
 # Runners whose target is accepted only when it resolves to a content-hashed
 # project-local binary. Registry and cache fetches stay once-only.
 _LOCAL_BIN_RUNNERS = frozenset({"npx", "bunx", "pnpm", "pnpx", "yarn", "npm"})
-# Interpreters and task runners beyond the once-retry list whose launch
-# identity does not bind the code they load.
-_EXTRA_MUTABLE_LAUNCHERS = frozenset({"nodejs", "php", "go", "tsx", "ts-node", "docker", "podman"})
+# Only these options may precede a runner target. Package selectors such as
+# ``--package``/``-p`` or ``--call``/``-c`` make the runner execute something
+# other than the local bin, so any other pre-target option stays once-only.
+_RUNNER_PRETARGET_OPTIONS = frozenset({"-y", "--yes"})
+_RUNNER_EXEC_SUBCOMMANDS = frozenset({"exec", "x"})
+# Interpreters, task runners and wrappers beyond the once-retry list whose
+# launch identity does not bind the code they load or run.
+_EXTRA_MUTABLE_LAUNCHERS = frozenset(
+    {
+        "nodejs",
+        "php",
+        "go",
+        "tsx",
+        "ts-node",
+        "vite-node",
+        "jiti",
+        "esno",
+        "babel-node",
+        "nodemon",
+        "zx",
+        "docker",
+        "podman",
+        # git runs aliases, hooks and config-defined helpers from mutable files.
+        "git",
+        "awk",
+        "gawk",
+        "mawk",
+        "nawk",
+        "xargs",
+        "parallel",
+        "env",
+        "sudo",
+        "doas",
+        "nohup",
+        "timeout",
+        "watch",
+        "osascript",
+        "pwsh",
+        "powershell",
+        "java",
+        "dotnet",
+        "lua",
+        "rscript",
+        "julia",
+        "swift",
+    }
+)
+_FIND_EXEC_OPTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 _MAX_PACKAGE_MANIFEST_BYTES = 1_048_576
+# Existing file operands are content-bound so an edited script, program or
+# input re-prompts. Larger or more numerous operands stay once-only.
+_MAX_BOUND_OPERANDS = 16
+_MAX_BOUND_OPERAND_BYTES = 4_194_304
 
 
 def native_exact_action_token(
@@ -124,6 +174,11 @@ def native_saved_decision_response(
         # on the hot hook path unless an exact decision for this token exists.
         if not policy_decision_hash_exists(store, harness=harness, artifact_id=artifact_id, artifact_hash=token):
             return None
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        # Without a probe result the action still goes to a human review.
+        _LOGGER.warning("Native saved approval probe failed (%s)", type(error).__name__)
+        return None
+    try:
         result = lookup(
             harness,
             artifact_id,
@@ -132,8 +187,14 @@ def native_saved_decision_response(
             consume_one_shot=False,
         )
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        # A saved decision exists but could not be read; it may be a block.
         _LOGGER.warning("Native saved approval lookup failed (%s)", type(error).__name__)
-        return None
+        return _saved_block_response(
+            harness,
+            native_result,
+            reason_code="saved_exact_action_unreadable",
+            reason="HOL Guard could not read your saved decision for this exact action.",
+        )
     if not isinstance(result, Mapping) or result.get("ignored_local_integrity"):
         return None
     decision = result.get("decision")
@@ -147,17 +208,12 @@ def native_saved_decision_response(
         return None
     action = decision.get("action")
     if action == "block":
-        blocked = dict(native_result)
-        blocked.update(
-            decision="deny",
-            minimum_action="block",
-            policy_action="block",
+        return _saved_block_response(
+            harness,
+            native_result,
             reason_code="saved_exact_action_block",
             reason="You chose to always block this exact action in HOL Guard.",
         )
-        response = harness_json_from_native_pre_tool(harness, blocked)
-        response["approval_reuse_status"] = "blocked"
-        return response
     if action != "allow" or decision.get("source") != "approval-gate" or decision.get("expires_at"):
         return None
     if not _native_review_is_overridable(native_result):
@@ -166,6 +222,63 @@ def native_saved_decision_response(
     allowed.update(decision="allow", minimum_action="allow", policy_action="allow")
     response = harness_json_from_native_pre_tool(harness, allowed)
     response["approval_reuse_status"] = "accepted"
+    return response
+
+
+def native_saved_review_response(
+    store: object,
+    *,
+    harness: str,
+    tool_name: str,
+    artifact_id: str,
+    payload: Mapping[str, object],
+    native_result: Mapping[str, object],
+    native_receipt: Mapping[str, object] | None,
+    workspace: Path | None,
+    home_dir: Path | None,
+) -> dict[str, object] | None:
+    """Return the saved exact-action outcome for a paused native review."""
+
+    token = native_exact_action_token(
+        harness=harness,
+        tool_name=tool_name,
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    return native_saved_decision_response(
+        store,
+        harness=harness,
+        token=token,
+        artifact_id=artifact_id,
+        native_result=native_result,
+        workspace=workspace,
+    )
+
+
+def attach_exact_action_token(envelope: dict[str, object], **token_inputs: object) -> None:
+    """Offer an exact-action Always on the queued row when the action binds."""
+
+    token = native_exact_action_token(**token_inputs)  # type: ignore[arg-type]
+    if token is not None:
+        envelope[EXACT_ACTION_CONTEXT_TOKEN_KEY] = token
+
+
+def _saved_block_response(
+    harness: str, native_result: Mapping[str, object], *, reason_code: str, reason: str
+) -> dict[str, object]:
+    blocked = dict(native_result)
+    blocked.update(
+        decision="deny",
+        minimum_action="block",
+        policy_action="block",
+        reason_code=reason_code,
+        reason=reason,
+    )
+    response = harness_json_from_native_pre_tool(harness, blocked)
+    response["approval_reuse_status"] = "blocked"
     return response
 
 
@@ -194,10 +307,16 @@ def _launch_identity(command: str, *, cwd: Path, home_dir: Path | None) -> dict[
     name = (executable_name(segment.executable) or "").lower()
     for suffix in (".exe", ".cmd"):
         name = name.removesuffix(suffix)
+    arguments = list(segment.arguments)
+    operands = _file_operand_hashes(arguments, cwd=cwd)
+    if operands is None:
+        return None
     if name in _LOCAL_BIN_RUNNERS:
-        local_bin = _runner_local_bin(command, list(segment.arguments), cwd=cwd, home_dir=home_dir)
-        return {"kind": "runner-local-bin", "runner": name, "local_bin": local_bin} if local_bin else None
-    if _loads_unbound_code(name, list(segment.arguments)):
+        local_bin = _runner_local_bin(command, name, arguments, cwd=cwd, home_dir=home_dir)
+        if local_bin is None:
+            return None
+        return {"kind": "runner-local-bin", "runner": name, "local_bin": local_bin, "operands": operands}
+    if _loads_unbound_code(name, arguments):
         return None
     launch = build_runtime_launch_identity(
         segment.executable,
@@ -208,27 +327,49 @@ def _launch_identity(command: str, *, cwd: Path, home_dir: Path | None) -> dict[
     )
     if not runtime_launch_identity_is_reusable(launch):
         return None
-    return {"kind": "direct", "identity": launch}
+    return {"kind": "direct", "identity": launch, "operands": operands}
 
 
 def _loads_unbound_code(name: str, arguments: list[str]) -> bool:
     from .hook_native_review_approval import (
         _FILE_BACKED_PROGRAM_COMMANDS,
-        _MUTABLE_CODE_LAUNCHERS,
-        _PYTHON_LAUNCHER,
         _rg_executes_unreviewed_preprocessor,
         _uses_file_backed_program,
     )
 
-    if name in _MUTABLE_CODE_LAUNCHERS or name in _EXTRA_MUTABLE_LAUNCHERS or _PYTHON_LAUNCHER.fullmatch(name):
+    if _is_mutable_launcher(name):
+        return True
+    if name == "find" and any(argument in _FIND_EXEC_OPTIONS for argument in arguments):
         return True
     if name in _FILE_BACKED_PROGRAM_COMMANDS and _uses_file_backed_program(arguments):
         return True
     return name == "rg" and _rg_executes_unreviewed_preprocessor(arguments)
 
 
+def _is_mutable_launcher(name: str) -> bool:
+    from .hook_native_review_approval import _MUTABLE_CODE_LAUNCHERS, _PYTHON_LAUNCHER
+
+    return name in _MUTABLE_CODE_LAUNCHERS or name in _EXTRA_MUTABLE_LAUNCHERS or bool(_PYTHON_LAUNCHER.fullmatch(name))
+
+
+def _runner_target(runner: str, arguments: list[str]) -> str | None:
+    """Return the bin a runner launches, or ``None`` for any selector form."""
+
+    exec_subcommand_allowed = runner in {"npm", "pnpm", "yarn"}
+    for argument in arguments:
+        if argument == "--" or argument in _RUNNER_PRETARGET_OPTIONS:
+            continue
+        if argument.startswith("-"):
+            return None
+        if exec_subcommand_allowed and argument in _RUNNER_EXEC_SUBCOMMANDS:
+            exec_subcommand_allowed = False
+            continue
+        return argument
+    return None
+
+
 def _runner_local_bin(
-    command: str, arguments: list[str], *, cwd: Path, home_dir: Path | None
+    command: str, runner: str, arguments: list[str], *, cwd: Path, home_dir: Path | None
 ) -> dict[str, object] | None:
     from ..runtime.package_intent_parser import parse_package_intent
 
@@ -247,8 +388,11 @@ def _runner_local_bin(
         return None
     # A versioned or aliased spec (``wrangler@3``) can make the runner fetch a
     # different release than the local bin, so only the bare bin name binds.
-    target = next((argument for argument in arguments if not argument.startswith("-")), None)
+    target = _runner_target(runner, arguments)
     if target is None or target != getattr(evidence, "executable_name", None):
+        return None
+    # A local interpreter or task runner loads code its identity does not bind.
+    if _is_mutable_launcher(target.lower()):
         return None
     package_name = getattr(evidence, "package_name", None)
     version = _installed_package_version(Path(resolved), package_name)
@@ -303,6 +447,27 @@ def _file_hashes(entries: object) -> list[dict[str, object]]:
     ]
 
 
+def _file_operand_hashes(arguments: list[str], *, cwd: Path) -> list[dict[str, str]] | None:
+    """Hash existing regular-file operands, or ``None`` when they cannot be bound."""
+
+    bound: list[dict[str, str]] = []
+    for argument in arguments:
+        value = argument.partition("=")[2] if argument.startswith("-") else argument
+        if not value or value.startswith("-"):
+            continue
+        candidate = Path(value) if os.path.isabs(value) else cwd / value
+        try:
+            if not candidate.is_file():
+                continue
+            if candidate.stat().st_size > _MAX_BOUND_OPERAND_BYTES or len(bound) >= _MAX_BOUND_OPERANDS:
+                return None
+            digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        except (OSError, ValueError):
+            return None
+        bound.append({"argument": argument, "sha256": digest})
+    return bound
+
+
 def _launch_cwd(payload: Mapping[str, object], workspace: Path | None) -> Path | None:
     raw = payload.get("cwd")
     candidate = Path(raw) if isinstance(raw, str) and raw.strip() else workspace
@@ -317,6 +482,8 @@ def _launch_cwd(payload: Mapping[str, object], workspace: Path | None) -> Path |
 
 __all__ = [
     "EXACT_ACTION_CONTEXT_TOKEN_KEY",
+    "attach_exact_action_token",
     "native_exact_action_token",
     "native_saved_decision_response",
+    "native_saved_review_response",
 ]
