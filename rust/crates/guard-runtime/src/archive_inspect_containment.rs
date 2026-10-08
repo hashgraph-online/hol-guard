@@ -339,6 +339,12 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
             vec![SeccompRule::new(vec![condition]).expect("non-empty rule")],
         )
     }
+    // Linux aarch64 uses the asm-generic syscall ABI. libc 0.2.189 exposes
+    // number 294 for GNU but omits it for musl; keep the denial on both.
+    #[cfg(target_arch = "aarch64")]
+    const KEXEC_FILE_LOAD: libc::c_long = 294;
+    #[cfg(not(target_arch = "aarch64"))]
+    const KEXEC_FILE_LOAD: libc::c_long = libc::SYS_kexec_file_load;
 
     let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
     for syscall in [
@@ -352,7 +358,7 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
         libc::SYS_bpf,
         libc::SYS_perf_event_open,
         libc::SYS_kexec_load,
-        libc::SYS_kexec_file_load,
+        KEXEC_FILE_LOAD,
         libc::SYS_init_module,
         libc::SYS_finit_module,
         libc::SYS_delete_module,

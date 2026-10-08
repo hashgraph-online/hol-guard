@@ -13,6 +13,11 @@ pub(crate) struct Limit {
 pub(crate) type Limits = [Limit; 6];
 
 pub(crate) fn process_ceiling(additional: u64) -> io::Result<u64> {
+    // An inherited unlimited allowance stays unlimited; adding a live process
+    // count would overflow and scanning the host cannot change this result.
+    if additional == libc::RLIM_INFINITY {
+        return Ok(libc::RLIM_INFINITY);
+    }
     #[cfg(target_os = "linux")]
     let count = {
         use std::os::unix::fs::MetadataExt;

@@ -45,7 +45,7 @@ Unix capture requires exclusive host child-wait custody and stable non-autoreapi
 
 Recovery cleanup remains uncertified against unrestricted same-UID writers: a checked recovery leaf can be replaced before unlink. Another identity check cannot make Unix unlink conditional. Kernel-enforced recovery-namespace writer exclusion is required before claiming replacement-preserving deletion or complete teardown.
 
-
+Unix resource preparation preserves inherited unlimited process allowances without adding a live-process count to `RLIM_INFINITY`; finite allowances still use checked addition. Linux aarch64 archive containment uses syscall number 294 for `kexec_file_load` on both GNU and musl, retaining the denial when libc omits the musl constant. The local GNU process suite and musl runtime build exercise these fixes; neither establishes installed-wheel or guarded OMP qualification.
 ## Overload semantics
 
 Overload is a first-class bounded result, distinct from corruption, authentication failure, timeout, crash, or incompatibility. Overload cannot default to allow and cannot trigger unbounded one-shot or Python process spawning.
