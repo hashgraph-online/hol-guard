@@ -516,3 +516,18 @@ def test_determinism_gate_compares_cached_and_cold_binaries_without_writing_cach
     compare = steps["Require byte-identical release binaries"]["run"]
     assert "hol-guard-runtime guard-command-source" in compare
     assert 'exit "$status"' in compare
+    assert '"cache_hits"' in cached["run"]
+    assert "hits == 0" in cached["run"]
+    assert cached["run"].index("cache_hits") < cached["run"].index('mkdir -p "$RUNNER_TEMP/cached"')
+    release = prepare_steps(prepare)
+    build_sha_line = 'echo "HOL_GUARD_BUILD_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"\n'
+    bind = release["Bind exact source and version"]["run"].replace(build_sha_line, "")
+    assert steps["Bind exact source and version"]["run"] == bind
+    assert workflow[True]["workflow_dispatch"]["inputs"]["version"]["required"] is False
+    assert job["env"]["VERSION"] == "${{ inputs.version }}"
+    root_gate = "Verify release enrollment root"
+    assert steps[root_gate]["run"] == release[root_gate]["run"]
+
+
+def prepare_steps(job):
+    return {step.get("name"): step for step in job["steps"]}
