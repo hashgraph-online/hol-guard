@@ -44,6 +44,7 @@ mod policy_snapshot_build;
 mod policy_store;
 mod prompt_analyze_op;
 mod resident_client;
+mod resident_diagnostics;
 mod resident_endpoint;
 mod resident_ops;
 #[allow(dead_code)] // Worker enrollment is not enabled by this OS identity input.

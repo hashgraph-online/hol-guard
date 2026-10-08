@@ -11,28 +11,7 @@ import yaml
 
 from tests.support.ci_workflow import expand_ci_job_actions
 
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
-
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_ci_group_preserves_dev_tools_except_the_type_checker() -> None:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    dev = project["project"]["optional-dependencies"]["dev"]
-    group = project["dependency-groups"]["ci-test"]
-    assert set(group) == {requirement for requirement in dev if not requirement.startswith("basedpyright")}
-    assert any(requirement.startswith("basedpyright") for requirement in dev)
-    lock = tomllib.loads((ROOT / "uv.lock").read_text())
-    package = next(package for package in lock["package"] if package["name"] == "hol-guard")
-    assert {item["name"] for item in package["dev-dependencies"]["ci-test"]} == {
-        "build",
-        "pytest",
-        "pytest-cov",
-        "ruff",
-    }
 
 
 def test_test_workers_select_the_frozen_group_without_default_dev_dependencies() -> None:

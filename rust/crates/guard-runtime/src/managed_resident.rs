@@ -198,29 +198,50 @@ pub(crate) fn serve_managed(
     expected_digest: &str,
 ) -> Result<(), String> {
     MANAGED_SHUTDOWN_REQUESTED.store(false, Ordering::Release);
+    let startup_started = crate::resident_diagnostics::enabled().then(Instant::now);
     if generation == 0 || owner_process_id == 0 || runtime_digest()? != expected_digest {
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }
     let owner_start_marker = process_start_marker(owner_process_id)?;
     let scope = state_scope(state_base, expected_digest)?;
-    let _owner_lock = acquire_managed_owner_lock(state_base)?;
-    let policy_store = std::sync::Arc::new(
-        crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+    let owner_lock = acquire_managed_owner_lock(state_base)?;
+    // Initialize before fallible policy startup so every client can see a
+    // resident still starting. This guard drops before owner_lock on all exits.
+    let _diagnostic_lifetime =
+        crate::resident_diagnostics::install_managed_sink(state_base, &owner_lock);
+    crate::resident_diagnostics::start(crate::resident_diagnostics::Phase::ResidentStartup);
+    let startup = (|| -> Result<_, String> {
+        let policy_store = std::sync::Arc::new(
+            crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+                state_base,
+                expected_digest,
+                generation,
+            )?,
+        );
+        let token = crate::read_resident_auth_token()?;
+        let owner_alive = combine_liveness(
             state_base,
+            owner_process_id,
+            owner_start_marker,
             expected_digest,
-            generation,
-        )?,
-    );
-    let token = crate::read_resident_auth_token()?;
-    let owner_alive = combine_liveness(
-        state_base,
-        owner_process_id,
-        owner_start_marker,
-        expected_digest,
-    );
+        );
+        Ok((policy_store, token, owner_alive))
+    })();
+    if let Some(started) = startup_started {
+        crate::resident_diagnostics::finish_since(
+            crate::resident_diagnostics::Phase::ResidentStartup,
+            if startup.is_ok() {
+                crate::resident_diagnostics::Status::Ok
+            } else {
+                crate::resident_diagnostics::Status::Error
+            },
+            started,
+        );
+    }
+    let (policy_store, token, owner_alive) = startup?;
     if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
-            (&scope, &_owner_lock),
+            (&scope, &owner_lock),
             policy_store,
             generation,
             owner_process_id,

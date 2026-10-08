@@ -214,6 +214,7 @@ def _isolated_environment() -> dict[str, str]:
     allowed = {
         "COMSPEC",
         "HOME",
+        "HOL_GUARD_NATIVE_DIAGNOSTIC",
         "LANG",
         "PATHEXT",
         "SYSTEMROOT",

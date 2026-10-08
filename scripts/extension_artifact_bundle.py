@@ -65,13 +65,13 @@ def create_bundle(root: Path, output: Path, expected_sha: str) -> dict:
     if actual != expected_sha:
         raise ValueError("snapshot checkout does not match the requested source")
     files = {path.relative_to(root).as_posix(): path.read_bytes() for path in selected_files(root)}
-    # Scope the import path: leaving scripts/ on sys.path lets scripts/ci shadow the
-    # repository's top-level ci package for every later import in this process.
     scripts_dir = str(Path(__file__).resolve().parent)
     sys.path.insert(0, scripts_dir)
     try:
         from extension_trust_projection import repository_trust_map
     finally:
+        # Leaving scripts/ first on sys.path lets scripts/ci shadow the ci
+        # namespace package for every later import in the same process.
         sys.path.remove(scripts_dir)
 
     files["contracts/extensions/trust-class-map.v1.json"] = (

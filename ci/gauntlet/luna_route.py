@@ -32,6 +32,22 @@ STARTUP_SECONDS = 60.0
 STOP_SECONDS = 5.0
 # Only what Bun and Oh My Pi's auth discovery need. Provider keys are not forwarded.
 _ENVIRONMENT_KEYS = ("PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "XDG_CONFIG_HOME", "XDG_DATA_HOME")
+# Windows needs these to start Bun, resolve the user profile and find Oh My Pi's login store.
+_WINDOWS_ENVIRONMENT_KEYS = (
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "TEMP",
+    "TMP",
+    "USERNAME",
+)
 
 
 def sdk_root_for(omp: str | None, override: Path | None = None) -> Path:
@@ -87,6 +103,7 @@ class NativeLunaRoute:
         self.bun = Path(found).absolute()
         self._token = secrets.token_urlsafe(32)
         self.process: subprocess.Popen[str] | None = None
+        self._job: Any = None
         self.port = 0
 
     def provider(self, *, max_rounds: int, timeout: float) -> dict[str, Any]:
@@ -104,18 +121,37 @@ class NativeLunaRoute:
 
     def __enter__(self) -> NativeLunaRoute:
         """Start the adapter and wait for its loopback readiness record."""
-        environment = {key: os.environ[key] for key in _ENVIRONMENT_KEYS if key in os.environ}
+        keys = _ENVIRONMENT_KEYS + (_WINDOWS_ENVIRONMENT_KEYS if os.name == "nt" else ())
+        environment = {key: os.environ[key] for key in keys if key in os.environ}
         environment["GUARD_GAUNTLET_ROUTE_TOKEN"] = self._token
-        self.process = subprocess.Popen(
-            [str(self.bun), "run", str(ADAPTER), str(self.sdk_root)],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            env=environment,
-            cwd=self.sdk_root,
-            text=True,
-            start_new_session=True,
-        )
+        command = [str(self.bun), "run", str(ADAPTER), str(self.sdk_root)]
+        streams = {
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.DEVNULL,
+            "env": environment,
+            "cwd": self.sdk_root,
+            "text": True,
+        }
+        if os.name == "nt":
+            from . import windows_job
+
+            # A kill-on-close job owns the adapter and every descendant, and nothing else.
+            self._job = windows_job.KillOnCloseJob()
+            self._job.__enter__()
+            try:
+                # Start suspended so no descendant exists before job assignment.
+                self.process = subprocess.Popen(
+                    command,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | windows_job.CREATE_SUSPENDED,
+                    **streams,
+                )
+                self._job.assign_and_resume(self.process)
+            except BaseException:
+                self.stop()
+                raise
+        else:
+            self.process = subprocess.Popen(command, start_new_session=True, **streams)
         try:
             lines: queue.Queue[str] = queue.Queue()
             assert self.process.stdout is not None
@@ -137,22 +173,43 @@ class NativeLunaRoute:
         self.stop()
 
     def stop(self) -> None:
-        """Terminate the owned process group, escalate only if it survives, and reap it."""
+        """Terminate the owned process tree, escalate only if it survives, and reap it."""
         process, self.process = self.process, None
+        job, self._job = self._job, None
         if process is None:
+            if job is not None:
+                job.__exit__()
             return
-        group = process.pid
         if process.stdin is not None:
             with suppress(OSError):
                 process.stdin.close()
-        with suppress(ProcessLookupError, PermissionError):
-            os.killpg(group, signal.SIGTERM)
         try:
-            process.wait(timeout=STOP_SECONDS)
-        except subprocess.TimeoutExpired:
-            with suppress(ProcessLookupError, PermissionError):
-                os.killpg(group, signal.SIGKILL)
-            process.wait(timeout=STOP_SECONDS)
+            if job is not None:
+                # The adapter stops itself when its stdin closes; the job reaps anything left.
+                try:
+                    process.wait(timeout=STOP_SECONDS)
+                except subprocess.TimeoutExpired:
+                    pass
+                job.terminate()
+                try:
+                    process.wait(timeout=STOP_SECONDS)
+                except subprocess.TimeoutExpired:
+                    # Never assigned to the job (for example, assignment failed): kill it directly.
+                    process.kill()
+                    process.wait(timeout=STOP_SECONDS)
+            else:
+                group = process.pid
+                with suppress(ProcessLookupError, PermissionError):
+                    os.killpg(group, signal.SIGTERM)
+                try:
+                    process.wait(timeout=STOP_SECONDS)
+                except subprocess.TimeoutExpired:
+                    with suppress(ProcessLookupError, PermissionError):
+                        os.killpg(group, signal.SIGKILL)
+                    process.wait(timeout=STOP_SECONDS)
+        finally:
+            if job is not None:
+                job.__exit__()
         for stream in (process.stdin, process.stdout):
             if stream is not None:
                 with suppress(OSError):

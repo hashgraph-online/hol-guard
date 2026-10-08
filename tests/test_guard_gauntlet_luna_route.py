@@ -104,7 +104,68 @@ def test_route_fails_closed_when_the_adapter_exits_or_misreports(tmp_path, monke
 
 
 def test_environment_forwards_no_provider_keys():
-    assert not any("KEY" in name or "TOKEN" in name for name in luna_route._ENVIRONMENT_KEYS)
+    names = luna_route._ENVIRONMENT_KEYS + luna_route._WINDOWS_ENVIRONMENT_KEYS
+    assert not any("KEY" in name or "TOKEN" in name for name in names)
+
+
+class _FakeJob:
+    def __init__(self):
+        self.calls = []
+
+    def terminate(self):
+        self.calls.append("terminate")
+
+    def __exit__(self, *_args):
+        self.calls.append("close")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX stand-in process")
+def test_job_owned_stop_closes_stdin_terminates_the_job_and_reaps(tmp_path, monkeypatch):
+    # The Windows path never signals a process group: it ends the owned job only.
+    monkeypatch.setattr(luna_route.os, "killpg", lambda *_a: pytest.fail("killpg must not be used with a job"))
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exec sleep 300\n")) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setattr(luna_route, "STOP_SECONDS", 0.2)
+    route = NativeLunaRoute(omp=str(omp))
+    route.process = subprocess.Popen(
+        ["sleep", "300"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, start_new_session=True
+    )
+    process, job = route.process, _FakeJob()
+    route._job = job
+    # The stand-in ignores stdin closing, so the job terminate is the escalation.
+    job.terminate = lambda: (job.calls.append("terminate"), process.kill())
+    route.stop()
+    assert job.calls == ["terminate", "close"] and process.poll() is not None
+    assert route.process is None and route._job is None
+    route.stop()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX stand-in process")
+def test_job_stop_kills_a_process_that_never_joined_the_job(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exec sleep 300\n")) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setattr(luna_route, "STOP_SECONDS", 0.2)
+    route = NativeLunaRoute(omp=str(omp))
+    route.process = subprocess.Popen(
+        ["sleep", "300"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, start_new_session=True
+    )
+    process, job = route.process, _FakeJob()
+    route._job = job
+    route.stop()
+    assert job.calls == ["terminate", "close"] and process.poll() is not None
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Job Object lifecycle")
+def test_windows_route_starts_and_stops_in_a_job(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    bun = tmp_path / "bin" / "bun.cmd"
+    bun.parent.mkdir()
+    bun.write_text(f"@echo {json.dumps(READY)}\r\n@ping -n 300 127.0.0.1 >nul\r\n")
+    monkeypatch.setenv("PATH", str(bun.parent) + os.pathsep + os.environ["PATH"])
+    with NativeLunaRoute(omp=str(omp)) as route:
+        process = route.process
+        assert process.poll() is None
+    assert process.poll() is not None and route._job is None
 
 
 def test_cli_rejects_a_conflicting_provider_selection(tmp_path):

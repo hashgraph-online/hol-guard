@@ -15,7 +15,7 @@ import time
 from collections.abc import Mapping
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, native_runtime_status
@@ -23,6 +23,9 @@ from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
 )
+
+if TYPE_CHECKING:
+    from .runtime.package_intent_common import PackageIntent
 
 _MAX_REQUEST_BYTES = 256 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
@@ -142,8 +145,10 @@ def package_intent_parse_native(
     guard_home: Path,
     timeout_seconds: float = 5.0,
     deadline_monotonic: float | None = None,
-) -> dict[str, object] | None:
-    """``package_intent_parse`` op — returns the decoded payload dict."""
+) -> PackageIntent | None:
+    """Hydrate exact intent targets and argv from the bound private channel."""
+    from .runtime.package_intent_common import PackageIntent
+
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": _request_id(),
@@ -163,7 +168,12 @@ def package_intent_parse_native(
     if response is None:
         return None
     payload = response.get("payload")
-    return payload if isinstance(payload, dict) else None
+    if not isinstance(payload, dict):
+        return None
+    runtime_private_metadata = response.get("runtime_private_metadata")
+    if not isinstance(runtime_private_metadata, Mapping):
+        raise ValueError("native package intent missing private metadata")
+    return PackageIntent.from_dict(payload, runtime_private_metadata=runtime_private_metadata)
 
 
 def supply_chain_cloud_transport_available() -> bool:

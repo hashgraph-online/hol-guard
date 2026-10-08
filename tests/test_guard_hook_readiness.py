@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -89,7 +90,7 @@ def _daemon(*, prepared: dict[str, object] | None) -> SimpleNamespace:
 def test_unmanaged_readiness_does_not_prepare_native_policy(monkeypatch) -> None:
     monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
     server = _daemon(prepared=None)
-    server.store = SimpleNamespace(get_managed_install=lambda _harness: {"active": False})
+    server.store = SimpleNamespace(get_managed_install=lambda _harness: {"active": False}, connection_scope=nullcontext)
     handler = _FakeHandler(server)
     handler._handle_hook_readiness({}, "", default_harness="grok")
     assert handler.responses == [
