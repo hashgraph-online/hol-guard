@@ -18,11 +18,18 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+from .host_process import live_ledger_groups
+
 REPO = Path(__file__).resolve().parents[2]
 
 
 def _result_path(workdir: Path, scenario_id: str) -> Path:
     return workdir / f"{scenario_id}.result.json"
+
+
+def _kill_group(pgid: int) -> None:
+    with suppress(ProcessLookupError, PermissionError):
+        os.killpg(pgid, signal.SIGKILL)
 
 
 class SubprocessCaseWorker:
@@ -31,6 +38,7 @@ class SubprocessCaseWorker:
     def __init__(self, scenario_id: str, spec: dict[str, Any], workdir: Path, command: list[str] | None = None):
         self.scenario_id = scenario_id
         self._result = _result_path(workdir, scenario_id)
+        self._groups = workdir / f"{scenario_id}.groups"
         out = (workdir / f"{scenario_id}.stdout.txt").open("wb")
         err = (workdir / f"{scenario_id}.stderr.txt").open("wb")
         self._files = (out, err)
@@ -41,7 +49,8 @@ class SubprocessCaseWorker:
                 stdin=subprocess.PIPE,
                 stdout=out,
                 stderr=err,
-                start_new_session=True,
+                # On Windows the worker's kill-on-close job contains the agent instead.
+                start_new_session=os.name == "posix",
             )
         except BaseException:
             self._close()
@@ -49,7 +58,9 @@ class SubprocessCaseWorker:
         try:
             assert self.process.stdin is not None
             self.process.stdin.write(
-                json.dumps({**spec, "parent_pid": os.getpid(), "result": str(self._result)}).encode()
+                json.dumps(
+                    {**spec, "parent_pid": os.getpid(), "result": str(self._result), "groups": str(self._groups)}
+                ).encode()
             )
             self.process.stdin.close()
         except BaseException:
@@ -78,8 +89,15 @@ class SubprocessCaseWorker:
             os.kill(self.process.pid, signal.SIGTERM)
 
     def _reap_group(self) -> None:
-        with suppress(ProcessLookupError, PermissionError):
-            os.killpg(self.process.pid, signal.SIGKILL)
+        if os.name != "posix":
+            # Killing the worker closes its job handle, which ends the agent tree.
+            with suppress(OSError):
+                self.process.kill()
+            return
+        _kill_group(self.process.pid)
+        # The agent runs in its own session; reap any the worker left behind.
+        for pgid in live_ledger_groups(self._groups):
+            _kill_group(pgid)
 
     def kill(self) -> None:
         self._reap_group()
@@ -111,12 +129,14 @@ def main() -> int:
 
     from ci.native_runtime import probe_installed_pi_output as probe
 
+    from . import host_process
     from .catalog import load_catalog
     from .runner import run_case
 
     _, identity, capabilities = probe._probe_native_identity()
     if identity.sha256 != spec["identity_sha256"] or capabilities.build_sha != spec["build_sha"]:
         raise RuntimeError("installed Guard changed between runner and case worker")
+    host_process.group_ledger = Path(spec["groups"])
     scenario = next(s for s in load_catalog() if s.id == spec["scenario_id"])
     case = run_case(
         scenario,

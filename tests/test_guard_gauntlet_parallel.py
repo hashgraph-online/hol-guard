@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from ci.gauntlet import case_worker, parallel, runner
+from ci.gauntlet import case_worker, host_process, parallel, runner
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.fixtures import scenario_fixture_name
 
@@ -293,3 +293,97 @@ def test_partial_selection_stays_non_full_profile_with_jobs(monkeypatch: pytest.
         expected_source_sha="a" * 40, output=tmp_path / "o", provider={}, selected_ids=ids, jobs=1
     )
     assert report["full_profile"] is False and report["merge_qualified"] is False
+
+
+def test_ledger_reports_only_groups_without_a_reap_record(tmp_path: Path) -> None:
+    ledger = tmp_path / "case.groups"
+    assert host_process.live_ledger_groups(ledger) == []
+    ledger.write_text("start 10\nstart 11\nend 10\nbogus\nstart x\nend 99\nstart 12\n", encoding="utf-8")
+    assert host_process.live_ledger_groups(ledger) == [11, 12]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process sessions")
+def test_host_process_records_agent_session_start_and_reap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = tmp_path / "case.groups"
+    monkeypatch.setattr(host_process, "group_ledger", ledger)
+    host_process.run_process(
+        [sys.executable, "-c", "pass"],
+        cwd=tmp_path,
+        env=dict(os.environ),
+        output=tmp_path / "out.txt",
+        error_output=tmp_path / "err.txt",
+        timeout=30,
+    )
+    events = ledger.read_text(encoding="utf-8").split()
+    assert events[0::2] == ["start", "end"] and events[1] == events[3]
+    assert host_process.live_ledger_groups(ledger) == []
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process sessions")
+def test_forced_cancel_reaps_agent_session_the_worker_left_behind(tmp_path: Path) -> None:
+    pid_file = tmp_path / "agent.pid"
+    command = _script(
+        tmp_path / "w.py",
+        "import json,signal,subprocess,sys,time\n"
+        "spec=json.load(sys.stdin)\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "c=subprocess.Popen([sys.executable,'-c','import time; time.sleep(300)'],start_new_session=True)\n"
+        "open(spec['groups'],'a').write(f'start {c.pid}\\n')\n"
+        f"open({str(pid_file)!r},'w').write(str(c.pid))\n"
+        "time.sleep(300)\n",
+    )
+    worker = case_worker.SubprocessCaseWorker("case", {}, tmp_path, command=command)
+    deadline = time.monotonic() + 15
+    while not pid_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    agent = int(pid_file.read_text())
+    assert os.getpgid(agent) != os.getpgid(worker.process.pid)
+    parallel.cancel_all([worker], grace=0.2)
+    assert worker.poll() is not None
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.kill(agent, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    with pytest.raises(ProcessLookupError):
+        os.kill(agent, 0)
+
+
+def test_windows_reap_kills_the_worker_without_process_groups(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    killed: list[str] = []
+
+    class Process:
+        pid = 4242
+
+        def kill(self) -> None:
+            killed.append("worker")
+
+    worker = object.__new__(case_worker.SubprocessCaseWorker)
+    worker.process = Process()  # type: ignore[assignment]
+    worker._groups = tmp_path / "case.groups"
+    (tmp_path / "case.groups").write_text("start 77\n", encoding="utf-8")
+
+    def no_process_groups(*_args: Any) -> None:
+        raise AssertionError("os.killpg is POSIX-only")
+
+    monkeypatch.setattr(case_worker.os, "name", "nt")
+    monkeypatch.setattr(case_worker.os, "killpg", no_process_groups, raising=False)
+    worker._reap_group()
+    assert killed == ["worker"]
+
+
+@pytest.mark.skipif(not hasattr(signal, "pthread_sigmask"), reason="POSIX signal masks")
+def test_interrupt_during_spawn_still_reaps_the_started_worker() -> None:
+    log: list[str] = []
+
+    def spawn(name: str) -> FakeWorker:
+        worker = FakeWorker(name, log, 99)
+        # The subprocess is already running when the signal lands.
+        os.kill(os.getpid(), signal.SIGTERM)
+        return worker
+
+    with pytest.raises(SystemExit):
+        parallel.run_scheduled(["a"], jobs=1, spawn=spawn, sleep=_no_sleep, grace=0.0)
+    assert "kill:a" in log

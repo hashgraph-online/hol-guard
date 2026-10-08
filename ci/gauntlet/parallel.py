@@ -62,6 +62,20 @@ def terminate_as_exit() -> Iterator[None]:
             signal.signal(number, handler)
 
 
+@contextmanager
+def deferred_signals() -> Iterator[None]:
+    """Hold interrupts until a started worker is registered for cleanup."""
+    if not hasattr(signal, "pthread_sigmask") or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    names = [getattr(signal, name) for name in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, name)]
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, names)
+    try:
+        yield
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+
+
 def cancel_all(
     running: Sequence[CaseWorkerHandle],
     *,
@@ -102,7 +116,8 @@ def run_scheduled(
             while pending or running:
                 while pending and len(running) < jobs:
                     index, item = pending.popleft()
-                    running[index] = spawn(item)
+                    with deferred_signals():
+                        running[index] = spawn(item)
                 finished = [index for index, handle in running.items() if handle.poll() is not None]
                 for index in finished:
                     handle = running.pop(index)
