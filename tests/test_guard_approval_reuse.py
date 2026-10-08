@@ -144,7 +144,7 @@ def _approval_context_token(
 @pytest.mark.parametrize("current_action", GUARD_ACTION_VALUES)
 def test_no_saved_approval_preserves_recomputed_current_action(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(current_action)
 
@@ -155,7 +155,7 @@ def test_no_saved_approval_preserves_recomputed_current_action(
 
 
 @pytest.mark.parametrize("field", ("current_action", "saved_action"))
-def test_non_json_action_cannot_become_allow(field: str, native_approval_reuse_runtime: Path) -> None:
+def test_non_json_action_cannot_become_allow(field: str, native_context_digest: Path) -> None:
     from codex_plugin_scanner.guard.runtime.approval_reuse import ApprovalReuseMalformedResultError
 
     class LooksLikeAllow:
@@ -168,7 +168,7 @@ def test_non_json_action_cannot_become_allow(field: str, native_approval_reuse_r
         evaluate_approval_reuse(**actions)
 
 
-def test_exact_saved_allow_can_satisfy_only_current_review(native_approval_reuse_runtime: Path) -> None:
+def test_exact_saved_allow_can_satisfy_only_current_review(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse("review", "allow")
 
     assert result.action == "allow"
@@ -177,7 +177,7 @@ def test_exact_saved_allow_can_satisfy_only_current_review(native_approval_reuse
     assert result.should_claim is True
 
 
-def test_fresh_local_allow_satisfies_current_reapproval_once(native_approval_reuse_runtime: Path) -> None:
+def test_fresh_local_allow_satisfies_current_reapproval_once(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse(
         "require-reapproval",
         "allow",
@@ -190,7 +190,7 @@ def test_fresh_local_allow_satisfies_current_reapproval_once(native_approval_reu
     assert result.should_claim is True
 
 
-def test_durable_exact_allow_satisfies_identical_current_reapproval(native_approval_reuse_runtime: Path) -> None:
+def test_durable_exact_allow_satisfies_identical_current_reapproval(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse(
         "require-reapproval",
         "allow",
@@ -203,7 +203,7 @@ def test_durable_exact_allow_satisfies_identical_current_reapproval(native_appro
     assert result.should_claim is True
 
 
-def test_changed_durable_exact_allow_cannot_satisfy_reapproval(native_approval_reuse_runtime: Path) -> None:
+def test_changed_durable_exact_allow_cannot_satisfy_reapproval(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse(
         "require-reapproval",
         "allow",
@@ -219,7 +219,7 @@ def test_changed_durable_exact_allow_cannot_satisfy_reapproval(native_approval_r
 @pytest.mark.parametrize("current_action", ("sandbox-required", "block"))
 def test_durable_exact_allow_never_lowers_terminal_enforcement(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         current_action,
@@ -235,7 +235,7 @@ def test_durable_exact_allow_never_lowers_terminal_enforcement(
 @pytest.mark.parametrize("current_action", ("sandbox-required", "block"))
 def test_fresh_local_allow_never_lowers_enforcement(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         current_action,
@@ -248,7 +248,7 @@ def test_fresh_local_allow_never_lowers_enforcement(
     assert result.should_claim is False
 
 
-def test_changed_fresh_local_allow_cannot_satisfy_reapproval(native_approval_reuse_runtime: Path) -> None:
+def test_changed_fresh_local_allow_cannot_satisfy_reapproval(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse(
         "require-reapproval",
         "allow",
@@ -273,7 +273,7 @@ def test_changed_fresh_local_allow_cannot_satisfy_reapproval(native_approval_reu
 def test_saved_allow_never_lowers_stronger_current_action(
     current_action: str,
     expected_reason: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(current_action, "allow")
 
@@ -286,7 +286,7 @@ def test_saved_allow_never_lowers_stronger_current_action(
 @pytest.mark.parametrize("current_action", ("allow", "warn"))
 def test_saved_allow_is_not_consumed_when_current_action_needs_no_review(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(current_action, "allow")
 
@@ -297,7 +297,7 @@ def test_saved_allow_is_not_consumed_when_current_action_needs_no_review(
 
 
 def test_integrity_invalid_authority_requires_reapproval_even_when_current_action_allows(
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         "allow",
@@ -314,7 +314,7 @@ def test_integrity_invalid_authority_requires_reapproval_even_when_current_actio
 @pytest.mark.parametrize("current_action", GUARD_ACTION_VALUES)
 def test_saved_block_remains_block_for_every_current_action(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(current_action, "block")
 
@@ -324,7 +324,7 @@ def test_saved_block_remains_block_for_every_current_action(
     assert result.should_claim is False
 
 
-def test_non_allow_saved_action_cannot_satisfy_review(native_approval_reuse_runtime: Path) -> None:
+def test_non_allow_saved_action_cannot_satisfy_review(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse("review", "warn")
 
     assert result.action == "review"
@@ -347,7 +347,7 @@ def test_non_allow_saved_action_cannot_satisfy_review(native_approval_reuse_runt
 def test_invalidated_saved_allow_is_rejected_with_stable_reason(
     validation_reason: ApprovalReuseValidationFailure,
     expected_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         "review",
@@ -361,7 +361,7 @@ def test_invalidated_saved_allow_is_rejected_with_stable_reason(
     assert result.should_claim is False
 
 
-def test_unknown_current_action_fails_closed_with_diagnostics(native_approval_reuse_runtime: Path) -> None:
+def test_unknown_current_action_fails_closed_with_diagnostics(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse("future-permissive-action", "allow")
 
     assert result.action == "block"
@@ -372,7 +372,7 @@ def test_unknown_current_action_fails_closed_with_diagnostics(native_approval_re
 
 
 def test_present_malformed_saved_action_requires_reapproval_with_diagnostics(
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse("review", None, saved_decision_present=True)
 
@@ -384,7 +384,7 @@ def test_present_malformed_saved_action_requires_reapproval_with_diagnostics(
 
 
 def test_claim_failure_reason_takes_precedence_and_preserves_normalization_diagnostics(
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         "review",
@@ -400,7 +400,7 @@ def test_claim_failure_reason_takes_precedence_and_preserves_normalization_diagn
 
 def test_malformed_native_payload_raises_instead_of_granting_reuse(
     monkeypatch: pytest.MonkeyPatch,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     """A well-formed envelope with an invalid decision payload is a contract
     violation, not a successful no-decision: it raises and never claims."""
@@ -448,7 +448,7 @@ def test_malformed_native_payload_raises_instead_of_granting_reuse(
 
 @pytest.mark.parametrize("corruption", ("json", "schema", "request_id", "request_sha256", "status", "code", "payload"))
 def test_invalid_resident_envelope_cannot_grant_reuse(
-    corruption: str, monkeypatch: pytest.MonkeyPatch, native_approval_reuse_runtime: Path
+    corruption: str, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     import hashlib
     import json
@@ -2003,7 +2003,7 @@ def test_runtime_saved_artifact_allow_requires_matching_v1_context_token(native_
 
 
 def test_shared_deadline_expiry_cannot_grant_another_reuse(
-    monkeypatch: pytest.MonkeyPatch, native_approval_reuse_runtime: Path
+    monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     import time
     from types import SimpleNamespace
@@ -2085,13 +2085,16 @@ def test_approval_reuse_discovery_and_serialization_cannot_restart_budget(
         pytest.fail("budget exhausted before resident dispatch")
 
     monkeypatch.setattr(native_approval_reuse, "native_resident_client_request", forbidden_transport)
-    assert native_approval_reuse.approval_reuse_decide_native(
-        "review",
-        "allow",
-        saved_decision_present=True,
-        validation_reason=None,
-        fresh_local_approval=False,
-        durable_exact_approval=False,
-        guard_home=tmp_path,
-        deadline_monotonic=caller_deadline,
-    ) is None
+    assert (
+        native_approval_reuse.approval_reuse_decide_native(
+            "review",
+            "allow",
+            saved_decision_present=True,
+            validation_reason=None,
+            fresh_local_approval=False,
+            durable_exact_approval=False,
+            guard_home=tmp_path,
+            deadline_monotonic=caller_deadline,
+        )
+        is None
+    )

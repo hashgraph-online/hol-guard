@@ -111,6 +111,25 @@ Its report is labeled `contained-bun-vitest-extended`, requires all seven review
 
 The default per-scenario host deadline is 300 seconds with at most 32 provider rounds. `--timeout` and `--max-inference-rounds` are explicit bounded controls. `--case ID` runs a targeted investigation but **cannot qualify the full profile**. Every run uses a fresh output directory and fresh disposable fixture; failed evidence is not overwritten. Qualification requires the entire Git working tree to be clean, including untracked files. Put downloaded wheels, public reports and scratch files outside the checkout. The start/end source snapshots detect drift during the run; publication independently rechecks immutable source bindings. `--work-root` accepts a private parent directory, including spaces and Unicode. Command placeholders are shell-quoted separately from native file paths.
 
+### Run cases in parallel (`--jobs N`)
+
+A full core run executes every catalog case against live inference, which takes roughly 20-25 minutes sequentially. `--jobs N` (1-8, default 1) runs up to N cases concurrently. `--jobs 4` is the recommended starting point; raise it only if your provider's rate limits and the machine's CPU headroom allow.
+
+```sh
+python -m ci.gauntlet run --jobs 4 \
+  --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-evidence
+```
+
+- `--jobs 1` is the existing in-process sequential path, unchanged. With `--jobs` above 1 the runner starts one worker process per case (`ci/gauntlet/case_worker.py`); each worker calls the same `run_case`, so the per-case procedure and the judge are identical.
+- Each case is fully private to its worker: fixture directory (named from the scenario id), Guard home, in-process daemon and native resident, loopback collector, inference relay (its own ephemeral port, session id and round budget), generated extension, agent directory, OMP process group and private evidence. Daemon, relay and collector ports are ephemeral. The in-process daemon and native resident client hold process-global state, which is why workers are separate interpreters rather than threads.
+- Shared and read-only: the installed Guard build and the pinned OMP executable (each worker re-checks the native binary digest and build SHA the runner verified), the repository checkout, and, with `--native-luna-route`, the single loopback Luna adapter, which is transport only and keeps no per-case state. Shared and writable by every case: only the OMP agents' ordinary temporary directory (`/tmp`), which holds randomly named files. Cases never share a `HOME`.
+- Evidence and `summary.json` are byte-for-byte the same shape as a sequential run and always list cases in catalog order, whatever order they finish in. Only the informational `jobs` field is added; `verify` and `pack` do not change and do not read it. A parallel run is a full run: full-profile qualification still requires every catalog case, and `--case` selections remain non-qualifying.
+- Concurrency only changes timing. Hook-latency percentiles and per-case wall time reflect a loaded machine, and an overloaded machine can push a case past `--timeout` (`task-incomplete`). Do not use a parallel run to establish a latency baseline.
+- A provider 429 or 5xx ends that case's inference round as failed, which the judge classifies as `inference-error`; it is never a pass and never a product failure. There are no retries, and no model output is replayed. If you see these, lower `--jobs` and rerun the whole profile in a fresh output directory.
+- SIGINT, SIGTERM and SIGHUP cancel every in-flight worker: each worker unwinds its own agent process group, daemon and resident, and the runner then force-terminates the process group of any worker that has not exited within 90 seconds. A worker also unwinds itself if the runner dies. Processes are only ever terminated through handles the runner started, never by name. If a runner or worker is killed with SIGKILL, check for leftover processes under the work root before the next run.
+- `--jobs` is rejected with `--profile contained-bun-vitest`.
+
 A local live inference server can be selected with `--provider-url http://127.0.0.1:PORT/v1 --allow-loopback-provider --model MODEL --provider-identity ID`. The identity must truthfully describe the actual backend. Do not label an opaque helper as DeepSeek, Codex or another model whose identity was not verified.
 
 ### Luna high through an Oh My Pi ChatGPT login

@@ -113,6 +113,19 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      - name: Retain workflow wheel-size policy before source checkout
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIZE_POLICY_SHA: ${{ github.workflow_sha }}
+        run: |
+          policy_root="$RUNNER_TEMP/hol-guard-wheel-size-policy"
+          mkdir -p "$policy_root/scripts/ci" "$policy_root/ci/package_size"
+          gh api "repos/$GITHUB_REPOSITORY/contents/scripts/ci/check_wheel_size.py?ref=$SIZE_POLICY_SHA" \
+            -H 'Accept: application/vnd.github.raw+json' > "$policy_root/scripts/ci/check_wheel_size.py"
+          gh api "repos/$GITHUB_REPOSITORY/contents/ci/package_size/budgets.json?ref=$SIZE_POLICY_SHA" \
+            -H 'Accept: application/vnd.github.raw+json' > "$policy_root/ci/package_size/budgets.json"
+          echo "HOL_GUARD_WHEEL_SIZE_CHECKER=$policy_root/scripts/ci/check_wheel_size.py" >> "$GITHUB_ENV"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -449,15 +462,9 @@ jobs:
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions
-        env:
-          RELEASE_REPAIR: ${{ steps.version.outputs.release_repair }}
         run: |
           uv run --no-sync twine check dist/*
-          if [[ "$RELEASE_REPAIR" == 'true' && ! -f scripts/ci/check_wheel_size.py ]]; then
-            echo "Legacy release source predates package-size budgets"
-          else
-            python scripts/ci/check_wheel_size.py --dist-dir dist
-          fi
+          python "$HOL_GUARD_WHEEL_SIZE_CHECKER" --dist-dir dist
           python3 scripts/verify_guard_wheel_entrypoints.py dist
       - name: Record immutable distribution hashes
         run: |
@@ -564,6 +571,19 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.build.outputs.source_sha }}
+      - name: Retain immutable workflow wheel-size policy
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIZE_POLICY_SHA: ${{ github.workflow_sha }}
+        run: |
+          policy_root="$RUNNER_TEMP/hol-guard-wheel-size-policy"
+          mkdir -p "$policy_root/scripts/ci" "$policy_root/ci/package_size"
+          gh api "repos/$GITHUB_REPOSITORY/contents/scripts/ci/check_wheel_size.py?ref=$SIZE_POLICY_SHA" \
+            -H 'Accept: application/vnd.github.raw+json' > "$policy_root/scripts/ci/check_wheel_size.py"
+          gh api "repos/$GITHUB_REPOSITORY/contents/ci/package_size/budgets.json?ref=$SIZE_POLICY_SHA" \
+            -H 'Accept: application/vnd.github.raw+json' > "$policy_root/ci/package_size/budgets.json"
+          echo "HOL_GUARD_WHEEL_SIZE_CHECKER=$policy_root/scripts/ci/check_wheel_size.py" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
@@ -713,11 +733,7 @@ jobs:
             --source-compiler "$SOURCE_COMPILER" \
             --implementation-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["implementation_digest"])')" \
             --base-program-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["base_program_digest"])')"
-          if [[ "$RELEASE_REPAIR" == 'true' && ! -f scripts/ci/check_wheel_size.py ]]; then
-            echo "Legacy release source predates package-size budgets"
-          else
-            python scripts/ci/check_wheel_size.py --dist-dir native-dist
-          fi
+          python "$HOL_GUARD_WHEEL_SIZE_CHECKER" --dist-dir native-dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-guard-wheel-${{ matrix.platform_tag }}

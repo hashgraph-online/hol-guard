@@ -71,7 +71,7 @@ def _native_package_intent(
         from ..config import resolve_guard_home
         from ..native_package_authority import package_intent_parse_native
 
-        payload = package_intent_parse_native(
+        intent = package_intent_parse_native(
             command_text,
             workspace=workspace,
             home_dir=home_dir,
@@ -82,12 +82,7 @@ def _native_package_intent(
         )
     except Exception:
         return None
-    if not isinstance(payload, dict):
-        return None
-    try:
-        return PackageIntent.from_dict(payload)
-    except (TypeError, ValueError, KeyError, AttributeError):
-        return None
+    return intent if isinstance(intent, PackageIntent) else None
 
 
 def parse_package_intent(

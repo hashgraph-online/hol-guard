@@ -242,6 +242,7 @@ def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_pat
 
     assert secret not in repr(result.to_dict())
 
+
 @pytest.mark.parametrize("explicit_guard_home", (False, True))
 def test_external_archive_credentials_stay_private_across_artifact_and_receipt_surfaces(
     tmp_path: Path,
@@ -261,12 +262,16 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
         guard_home=archive_package_intent_native if explicit_guard_home else None,
     )
     assert intent is not None
+    assert intent.command_tokens == tuple(command)
+    assert intent.targets[0].raw_spec == command[-1]
+    assert intent.targets[0].source_url == source_url
     artifact = build_package_request_artifact(
         "guard-cli",
         intent,
         config_path="hol-guard.toml",
         source_scope="project",
     )
+
     store = GuardStore(tmp_path / "guard-home")
     evaluation = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
