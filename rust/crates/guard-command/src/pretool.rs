@@ -34,6 +34,7 @@ mod shell_script;
 mod stdin_filters;
 mod worktree_add;
 mod worktree_writes;
+mod wrangler_reads;
 
 pub mod generic;
 
