@@ -27,8 +27,8 @@ from .native_activity_projection_ledger import (
     _capture_watermark,
     _discover,
     _ensure_ledger,
-    _is_native_activity_event,
     _native_tables_ready,
+    _prune_ledger,
     _quarantine_other_bindings,
     _reduce_backfill,
     _sendable_keys,
@@ -387,4 +387,5 @@ def _commit(
                 now,
             ),
         )
+        _prune_ledger(connection, eligibility)
         return stored_state

@@ -14,6 +14,8 @@ attempt count.
 
 from __future__ import annotations
 
+import sqlite3
+
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
 
@@ -67,7 +69,7 @@ def _recovery_reason(error: Exception) -> str:
 def _quarantine_entries(store: GuardStore) -> dict[str, dict[str, object]]:
     try:
         saved = store.get_sync_payload(_QUARANTINE_KEY)
-    except Exception:
+    except (OSError, RuntimeError, sqlite3.Error, ValueError):
         return {}
     entries = saved.get("entries") if isinstance(saved, dict) else None
     if not isinstance(entries, dict):
@@ -104,7 +106,7 @@ def _quarantine_candidate(
             {"schema": _QUARANTINE_SCHEMA, "entries": entries, "updatedAt": now},
             now,
         )
-    except Exception:
+    except (OSError, RuntimeError, sqlite3.Error, ValueError):
         del entries[request_id]
         return False
     return True
@@ -182,9 +184,11 @@ def recover_native_applications_once(store: GuardStore) -> dict[str, object]:
                 raise NativeCloudReviewV4Error("native_cloud_review_v4_recovery_observation_mismatch")
             record_native_application_observation(store, observed)
             confirmed += 1
-        except Exception as error:
-            # One unexpected per-candidate error must not abort the pass or lose
-            # quarantine/cursor progress already made for this page.
+        except (NativeCloudReviewV4Error, OSError, RuntimeError, ValueError, KeyError) as error:
+            # A per-candidate transport/decode failure must not abort the pass or
+            # lose quarantine/cursor progress already made for this page — but
+            # unexpected exceptions (programmer errors, cancellation signals)
+            # are allowed to propagate so corruption cannot be silently retried.
             reason = _recovery_reason(error)
             if reason in _TERMINAL_REASONS and _quarantine_candidate(store, quarantine, candidate, reason, now):
                 quarantined += 1

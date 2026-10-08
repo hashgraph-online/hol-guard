@@ -124,7 +124,8 @@ def pause_native_pre_tool_for_approval(
 
     try:
         ask = asks_for_approval(load_guard_config(guard_home, workspace=workspace))
-    except (OSError, RuntimeError, TypeError, ValueError):
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        _LOGGER.warning("could not read approval-mode config for %s; defaulting to silent block: %s", harness, error)
         ask = False
     if not ask:
         # The agent stays on the silent block. The inbox row is a separate record.

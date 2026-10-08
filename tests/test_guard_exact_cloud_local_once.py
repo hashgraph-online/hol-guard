@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import replace
@@ -26,6 +27,11 @@ from tests.guard_exact_cloud_review_support import (
 from tests.test_codex_live_decision import _seed_waiting_request
 from tests.test_native_decision_receipt import _receipt
 
+pytestmark = pytest.mark.skipif(
+    os.environ.get("HOL_GUARD_NATIVE", "off") != "force",
+    reason="resolve_policy_decision_lookup dispatches to the native resident; "
+    "unit mode has no resident — exercise these paths under HOL_GUARD_NATIVE_REGRESSION.",
+)
 
 def _workspace_key(value: str) -> str:
     return f"workspace:{sha256(str(Path(value).resolve()).encode('utf-8')).hexdigest()}"

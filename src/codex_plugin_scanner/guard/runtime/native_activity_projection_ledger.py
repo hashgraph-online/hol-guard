@@ -90,6 +90,40 @@ def _quarantine_other_bindings(
     return int(cursor.rowcount or 0)
 
 
+_LEDGER_RETENTION_CAP = 500
+
+
+def _prune_ledger(
+    connection: sqlite3.Connection,
+    eligibility: NativeActivityEligibility,
+) -> int:
+    """Bound the projection ledger per (workspace, installation) pair.
+
+    Receipts written to ``projected``/``withheld``/``dropped`` are terminal — the
+    only live read path is ``_sendable_keys`` (``state = 'projected'``), so a
+    projected row stays pinned until its matching event has been uploaded.
+    Pruning is by retention cap: keep the newest ``_LEDGER_RETENTION_CAP`` rows
+    per (workspace, installation); older terminal rows are dead weight.
+    """
+    cursor = connection.execute(
+        f"""
+        delete from {_LEDGER}
+        where (source_kind, decision_id) in (
+            select source_kind, decision_id from {_LEDGER}
+            where workspace_id = ? and installation_id = ?
+            order by recorded_at desc
+            limit -1 offset ?
+        )
+        """,
+        (
+            eligibility.workspace_id,
+            eligibility.installation_id,
+            _LEDGER_RETENTION_CAP,
+        ),
+    )
+    return int(cursor.rowcount or 0)
+
+
 def _capture_watermark(
     store: NativeActivityStore,
     eligibility: NativeActivityEligibility,
