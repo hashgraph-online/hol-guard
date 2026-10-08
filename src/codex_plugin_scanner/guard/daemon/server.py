@@ -309,7 +309,7 @@ from .protection_repair_stages import (
 )
 from .request_executor import BoundedRequestExecutor as _BoundedRequestExecutor
 from .runtime_heartbeat import RuntimeHeartbeatWriter
-from .runtime_hook_deadline import RuntimeHookDeadline
+from .runtime_hook_deadline import PROMPT_ADMISSION_SECONDS, RuntimeHookDeadline
 from .runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from .runtime_hook_scheduler import RuntimeHookAdmissionReason, RuntimeHookLane, RuntimeHookScheduler
 from .service_lifecycle import (
@@ -447,7 +447,6 @@ class _AuthAuditWindow(TypedDict):
 _MAX_CONCURRENT_RUNTIME_HOOKS = 32
 _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
 _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS = 3.0
-_RUNTIME_PROMPT_HOOK_ADMISSION_TIMEOUT_SECONDS = 10.0
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
 _RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS = 2.75
 _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS = WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
@@ -6378,32 +6377,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             runtime_hook_event_name,
         )
 
-        # The first prompt in a new workspace waits for its policy overlay to
-        # publish, which can outlast the tool-hook budget. Prompts arrive once
-        # per turn, so every harness gets the longer prompt budget.
         prompt_event = runtime_hook_event_name(payload) == "UserPromptSubmit"
-        admission_seconds = (
-            _RUNTIME_PROMPT_HOOK_ADMISSION_TIMEOUT_SECONDS if prompt_event else _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
-        )
-        transport_deadline = self._daemon_server().request_deadline(
-            self.request,
-            admission_seconds,
-        )
+        admission_seconds = PROMPT_ADMISSION_SECONDS if prompt_event else _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
+        transport_deadline = self._daemon_server().request_deadline(self.request, admission_seconds)
         params = parse_qs(query)
         hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
-        remaining_hint = _runtime_hook_remaining_hint(payload)
-        if prompt_event and hint_missing:
-            remaining_hint = admission_seconds
-        hinted_deadline = (
-            RuntimeHookDeadline.from_remaining_hint(
-                remaining_hint,
-                monotonic=lambda: transport_deadline - admission_seconds,
-                maximum_budget_seconds=_RUNTIME_PROMPT_HOOK_ADMISSION_TIMEOUT_SECONDS,
-            )
-            if prompt_event
-            else RuntimeHookDeadline.from_remaining_hint(remaining_hint)
+        hook_deadline = RuntimeHookDeadline.for_admission(
+            _runtime_hook_remaining_hint(payload),
+            hint_missing=hint_missing,
+            prompt_event=prompt_event,
+            admission_seconds=admission_seconds,
+            transport_deadline=transport_deadline,
         )
-        hook_deadline = RuntimeHookDeadline(expires_at=min(hinted_deadline.expires_at, transport_deadline))
         hook_env = _runtime_hook_env_overlay_from_payload(payload)
         payload = {key: value for key, value in payload.items() if key != "hook_env"}
         daemon_server = self._daemon_server()
