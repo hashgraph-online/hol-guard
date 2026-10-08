@@ -28,6 +28,13 @@ _HARNESS = "claude-code"
 _ARTIFACT_ID = "claude-code:native-pretool:Bash"
 
 
+@pytest.fixture(autouse=True)
+def _native_package_intent(package_intent_native):
+    """Resolve runner local bins through the resident package-intent authority."""
+
+    return package_intent_native
+
+
 def _write_executable(path: Path, body: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"#!/bin/sh\n# {body}\n", encoding="utf-8")

@@ -23,7 +23,11 @@ from .hook_native_review_binding import (
     native_review_matching_allow,
     native_review_policy_binding,
 )
-from .hook_native_saved_approval import attach_exact_action_token, native_saved_review_response
+from .hook_native_saved_approval import (
+    EXACT_ACTION_CONTEXT_TOKEN_KEY,
+    native_exact_action_token,
+    native_saved_review_response,
+)
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
@@ -313,8 +317,8 @@ def queue_native_pre_tool_review(
     if action_envelope is None:
         _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)
         return None
-    attach_exact_action_token(
-        action_envelope,
+    # Offer an exact-action Always only when the action binds to a stable token.
+    exact_token = native_exact_action_token(
         harness=harness,
         tool_name=tool_name,
         payload=payload,
@@ -323,6 +327,8 @@ def queue_native_pre_tool_review(
         workspace=workspace,
         home_dir=home_dir,
     )
+    if exact_token is not None:
+        action_envelope[EXACT_ACTION_CONTEXT_TOKEN_KEY] = exact_token
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,

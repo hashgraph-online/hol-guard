@@ -258,14 +258,6 @@ def native_saved_review_response(
     )
 
 
-def attach_exact_action_token(envelope: dict[str, object], **token_inputs: object) -> None:
-    """Offer an exact-action Always on the queued row when the action binds."""
-
-    token = native_exact_action_token(**token_inputs)  # type: ignore[arg-type]
-    if token is not None:
-        envelope[EXACT_ACTION_CONTEXT_TOKEN_KEY] = token
-
-
 def _saved_block_response(
     harness: str, native_result: Mapping[str, object], *, reason_code: str, reason: str
 ) -> dict[str, object]:
@@ -482,7 +474,6 @@ def _launch_cwd(payload: Mapping[str, object], workspace: Path | None) -> Path |
 
 __all__ = [
     "EXACT_ACTION_CONTEXT_TOKEN_KEY",
-    "attach_exact_action_token",
     "native_exact_action_token",
     "native_saved_decision_response",
     "native_saved_review_response",
