@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "venv.rs"]
+mod venv_config;
+
 fn version_name(name: &str) -> Option<String> {
     let value = name
         .strip_prefix("pythonw")
@@ -44,29 +47,21 @@ fn capture(
     if canonical.starts_with(&guard_home) || executable.starts_with(&guard_home) {
         return Err(bound_fs::changed());
     }
-    let bin = canonical.parent().ok_or_else(bound_fs::changed)?;
-    let base = if bin
-        .file_name()
-        .is_some_and(|name| name == "bin" || name == "Scripts")
-    {
-        bin.parent().ok_or_else(bound_fs::changed)?
-    } else {
-        bin
+    let requested_bin = executable.parent().ok_or_else(bound_fs::changed)?;
+    let requested_base = installation_root(requested_bin)?;
+    let (requested_root, links) = resolve(requested_base)?;
+    bindings.extend(links);
+    let config = venv_config::read(&requested_root, &guard_home, &mut bindings)?;
+    let base_image = match &config {
+        Some(config) => config.base_image(executable, &canonical, &guard_home, &mut bindings)?,
+        None => canonical.clone(),
     };
-    if base.parent().is_none() || protected(base) {
+    let base = installation_root(base_image.parent().ok_or_else(bound_fs::changed)?)?;
+    if base.parent().is_none() || protected(base) || base.starts_with(&guard_home) {
         return Err(bound_fs::changed());
     }
-    let requested_bin = executable.parent().ok_or_else(bound_fs::changed)?;
-    let requested_base = if requested_bin
-        .file_name()
-        .is_some_and(|name| name == "bin" || name == "Scripts")
-    {
-        requested_bin.parent().ok_or_else(bound_fs::changed)?
-    } else {
-        requested_bin
-    };
     let version = version_name(
-        canonical
+        base_image
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or(""),
@@ -75,7 +70,7 @@ fn capture(
     let version = if version.is_some() {
         version
     } else {
-        crate::runtime_files::python_version(&canonical)?
+        crate::runtime_files::python_version(&base_image)?
     };
     let version = if let Some(version) = version {
         version
@@ -140,61 +135,11 @@ fn capture(
     {
         return Err(bound_fs::changed());
     }
-    let mut include_system = true;
-    let mut venv = false;
-    let config = requested_base.join("pyvenv.cfg");
-    match bound_fs::open_regular(&config) {
-        Ok(mut file) => {
-            let read = bound_fs::read_file(&mut file, 64 * 1024)?;
-            bindings.push(SourceBinding::capture(&config, &read.identity)?);
-            let text = std::str::from_utf8(&read.bytes).map_err(io::Error::other)?;
-            let mut fields = BTreeMap::new();
-            for line in text
-                .lines()
-                .filter(|line| !line.trim().is_empty() && !line.trim_start().starts_with('#'))
-            {
-                let (key, value) = line.split_once('=').ok_or_else(bound_fs::changed)?;
-                if fields
-                    .insert(key.trim().to_ascii_lowercase(), value.trim().to_owned())
-                    .is_some()
-                {
-                    return Err(bound_fs::changed());
-                }
-            }
-            let home = fields.get("home").ok_or_else(bound_fs::changed)?;
-            let (home, links) = resolve(Path::new(home))?;
-            bindings.extend(links);
-            if home != bin {
-                return Err(bound_fs::changed());
-            }
-            if let Some(selector) = fields.get("executable") {
-                let (selected, links) = resolve(Path::new(selector))?;
-                bindings.extend(links);
-                if selected != canonical {
-                    return Err(bound_fs::changed());
-                }
-            }
-            include_system = match fields
-                .get("include-system-site-packages")
-                .map(|value| value.to_ascii_lowercase())
-                .as_deref()
-            {
-                Some("true") => true,
-                Some("false") | None => false,
-                _ => return Err(bound_fs::changed()),
-            };
-            if fields.get("version").is_some_and(|value| {
-                !value.starts_with(&format!("{version}.")) && value != &version
-            }) {
-                return Err(bound_fs::changed());
-            }
-            venv = true;
-        }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
+    let include_system = config.as_ref().is_none_or(|config| config.include_system);
+    let venv = config.is_some();
+    if let Some(config) = &config {
+        config.validate_version(&version)?;
     }
-    let (requested_root, links) = resolve(requested_base)?;
-    bindings.extend(links);
     approved.extend([
         requested_root.join("lib"),
         requested_root.join("lib64"),
@@ -287,3 +232,18 @@ pub fn python(
     resources.verify()?;
     Ok(resources)
 }
+
+fn installation_root(bin: &Path) -> io::Result<&Path> {
+    if bin
+        .file_name()
+        .is_some_and(|name| name == "bin" || name == "Scripts")
+    {
+        bin.parent().ok_or_else(bound_fs::changed)
+    } else {
+        Ok(bin)
+    }
+}
+
+#[cfg(test)]
+#[path = "python_tests.rs"]
+mod tests;

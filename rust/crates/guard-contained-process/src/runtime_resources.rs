@@ -10,6 +10,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+#[path = "runtime_resources/public_ca.rs"]
+mod public_ca;
+use public_ca::{public_ca_bundle, resource_protected};
+
 const MAX_FILES: usize = 20_000;
 const MAX_ENTRIES: usize = 50_000;
 const MAX_BYTES: usize = 256 * 1024 * 1024;
@@ -310,7 +314,7 @@ impl Capture<'_> {
                 } else {
                     relative.join(&name)
                 };
-                if protected(&source)
+                if resource_protected(&root.join(&source))
                     || (omit_sites
                         && ["site-packages", "dist-packages"]
                             .contains(&name.to_string_lossy().as_ref()))
@@ -331,7 +335,7 @@ impl Capture<'_> {
                                     .to_string_lossy()
                             ));
                     if resolved.starts_with(self.excluded)
-                        || protected(&resolved)
+                        || resource_protected(&resolved)
                         || (!sitecustomize
                             && !self
                                 .approved
@@ -376,7 +380,7 @@ impl Capture<'_> {
         destination: PathBuf,
         source: PathBuf,
     ) -> io::Result<()> {
-        if source.starts_with(self.excluded) || protected(&source) {
+        if source.starts_with(self.excluded) || resource_protected(&source) {
             return Err(bound_fs::changed());
         }
         if self.files.contains_key(&destination) {
@@ -386,6 +390,9 @@ impl Capture<'_> {
             return Err(bound_fs::changed());
         }
         let read = directory.read_installed(name, MAX_BYTES.saturating_sub(self.total))?;
+        if public_ca_bundle(&source) && !public_ca::certificate_envelopes(&read.bytes) {
+            return Err(bound_fs::changed());
+        }
         self.total = self
             .total
             .checked_add(read.bytes.len())
@@ -433,3 +440,7 @@ impl Capture<'_> {
 #[path = "runtime_resources/python.rs"]
 mod python_capture;
 pub use python_capture::python;
+
+#[cfg(test)]
+#[path = "runtime_resources/resource_tests.rs"]
+mod resource_tests;
