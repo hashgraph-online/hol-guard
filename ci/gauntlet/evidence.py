@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import WATCH_OUTPUT, Scenario
+from .extension_adapters import extension_adapter
 from .input_evidence import redact_value
 from .mixed_reads import assess_mixed_reads
 from .proofs import (
@@ -22,11 +23,6 @@ from .proofs import (
 from .transport import reconcile_rounds
 
 TRANSCRIPT_LIMIT = 16 * 1024 * 1024
-_OLLAMA_PERMISSION_RULE_CONTRACT = (
-    "command.ollama",
-    "command.ollama.rm",
-    "command.ollama.permission.rm",
-)
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -339,6 +335,7 @@ def _assess_extension_permission_block(
     by_id: dict[str, list[dict[str, Any]]],
 ) -> tuple[str, str]:
     """Require the actual OMP observer receipt and native extension evidence."""
+    adapter = extension_adapter(scenario.commands[0])
     if len(calls) != 1 or calls[0]["name"] != "bash":
         return "not-exercised", "expected one native bash attempt for the configured extension"
     pre = [row for row in by_id[calls[0]["id"]] if row.get("event") == "PreToolUse"]
@@ -427,13 +424,13 @@ def _assess_extension_permission_block(
     if type(binding.get("control_revision")) is not int or binding["control_revision"] <= 0:
         return "harness-error", "extension denial is not bound to a committed control revision"
     if (
-        control.get("extension_id") != "command.ollama"
-        or control.get("rule_id") != "command.ollama.rm"
-        or control.get("permission_id") != "command.ollama.permission.rm"
+        control.get("extension_id") != adapter.extension_id
+        or control.get("rule_id") != adapter.rule_id
+        or control.get("permission_id") != adapter.permission_id
         or control.get("control_revision") != binding["control_revision"]
         or control.get("permission_state") != "disabled"
     ):
-        return "harness-error", "native binding is not tied to the configured ollama permission"
+        return "harness-error", f"native binding is not tied to the configured {adapter.label} permission"
     observations = evidence.get("observations")
     permissions = evidence.get("permission_observations")
     if (
@@ -456,12 +453,12 @@ def _assess_extension_permission_block(
         and bool(row["matcher_evidence"])
     ]
     if len(matching_rules) != 1:
-        return "harness-error", "native evidence does not match the configured ollama remove rule"
+        return "harness-error", f"native evidence does not match the configured {adapter.label} rule"
     if (
         matching_rules[0].get("extension_id"),
         matching_rules[0].get("rule_id"),
         control.get("permission_id"),
-    ) != _OLLAMA_PERMISSION_RULE_CONTRACT:
+    ) != (adapter.extension_id, adapter.rule_id, adapter.permission_id):
         return "harness-error", "native rule is not independently mapped to the configured permission"
     matching_permissions = [
         row
@@ -476,5 +473,5 @@ def _assess_extension_permission_block(
     # Native v1 may omit a permission row when the matched rule is disabled;
     # the reviewed rule-to-permission contract above remains the proof.
     if permissions and (len(permissions) != 1 or len(matching_permissions) != 1):
-        return "harness-error", "native evidence does not match the disabled ollama permission"
-    return "pass", "actual OMP ollama command blocked by the configured native extension permission"
+        return "harness-error", f"native evidence does not match the disabled {adapter.label} permission"
+    return "pass", f"actual OMP {adapter.executable} command blocked by the configured native extension permission"

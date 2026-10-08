@@ -24,6 +24,11 @@ def test_rendered_command_arguments_survive_prompt_serialization(tmp_path, scena
     else:
         assert COMMANDS_HEADER not in prompt
     assert fixture.canary not in prompt
+    authorization = fixture_authorization(fixture, "http://127.0.0.1:12345/", rendered)
+    batch_context = "three independent native read calls in a single assistant response"
+    assert (batch_context in authorization) == (scenario.oracle == "mixed-read-batch")
+    assert "never authorizes bypassing or retrying a denial" in authorization or scenario.oracle != "mixed-read-batch"
+    assert fixture.canary not in authorization
 
 
 def test_authorization_names_only_generated_fixture_scope(tmp_path):

@@ -13,6 +13,7 @@ pub(super) fn verified_cwd_compound_context(
         || first.executable.as_deref() != Some("cd")
         || !first.environment_names.is_empty()
         || first.pipeline_index != 0
+        || !super::directory_targets::drive_targets_quoted(first)
         || model.segments[1..]
             .iter()
             .any(|segment| segment.executable.as_deref() == Some("cd"))
@@ -277,6 +278,7 @@ pub(super) fn exact_safe_segment_with_context(
         "cd" => {
             model.segments.len() == 1
                 && matches!(segment.arguments.as_slice(), [target] if safe_directory_target(target))
+                && super::directory_targets::drive_targets_quoted(segment)
         }
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => true,
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
@@ -302,7 +304,10 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0,
             context,
         ),
-        "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context, context),
+        "git" => {
+            safe_git_arguments(&segment.arguments, allow_git_helper_context, context)
+                && super::directory_targets::drive_targets_quoted(segment)
+        }
         "gh" => safe_gh_arguments(&segment.arguments),
         "jq" => {
             segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments)

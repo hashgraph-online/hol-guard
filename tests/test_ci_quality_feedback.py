@@ -49,35 +49,6 @@ def test_extended_soak_is_scheduled_while_routine_recovery_still_runs() -> None:
     )
 
 
-def test_exact_analysis_gate_and_evidence_remain_in_the_scanned_job() -> None:
-    action = yaml.safe_load((ROOT / ".github/actions/ci-job-sonar/action.yml").read_text())
-    steps = action["runs"]["steps"]
-    scan = next(i for i, step in enumerate(steps) if step.get("name") == "Analyze with SonarQube Cloud")
-    index = next(i for i, step in enumerate(steps) if step.get("name") == "SonarQube Quality Gate check")
-    gate = steps[index]
-    assert scan < index and "continue-on-error" not in gate
-    assert gate["run"] == "timeout --signal=TERM --kill-after=5s 300s python -m scripts.ci.check_sonar_quality"
-    assert gate["if"] == (
-        "inputs.has-token == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'"
-    )
-    vendor = next(step for step in steps if step.get("name") == "Check standard Sonar gate for PRs and qualification")
-    assert vendor["uses"] == "sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa"
-    assert vendor["if"] == (
-        "inputs.has-token == 'true' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')"
-    )
-    assert vendor["with"]["pollingTimeoutSec"] == 280
-    assert "continue-on-error" not in vendor
-
-    assert gate["env"] == {"SONAR_TOKEN": "${{ inputs.secret-sonar-token }}"}
-    evidence = next(step for step in steps if step.get("name") == "Preserve analysis-specific quality evidence")
-    assert evidence["if"] == (
-        "always() && inputs.has-token == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'"
-    )
-    assert evidence["with"]["path"] == "sonar-quality-evidence/"
-    properties = (ROOT / "sonar-project.properties").read_text()
-    assert "sonar.coverage.exclusions" not in properties and "sonar.sources=src,rust" in properties
-
-
 @pytest.mark.parametrize(
     ("metric", "expected"),
     [

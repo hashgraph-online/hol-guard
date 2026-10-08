@@ -455,7 +455,34 @@ fn any_live_with_clock(
     // Renewal uses this same directory lock. An otherwise fresh lease must
     // not expire merely because a bounded ACL/file scan delays its heartbeat.
     // Take one reference time after acquiring the lock for the whole sweep.
-    let observed_at = clock();
+    any_live_locked(&directory, &private_root, expected_digest, clock())
+}
+
+/// Run `action` only while no live lease of `digest` exists, holding the
+/// lease directory lock across both. Every runtime takes this lock before it
+/// publishes a lease, so no client of `digest` can start in between. Returns
+/// `None` when the directory stays busy, is unavailable, or a lease is live.
+pub(super) fn unless_live<T>(
+    state_base: &Path,
+    digest: &str,
+    action: impl FnOnce() -> T,
+) -> Option<T> {
+    let private_root = private_root_for_state_base(state_base).ok()?;
+    let directory = lease_directory(state_base).ok()?;
+    let _lock =
+        acquire_directory_lock_with_retry(&directory, &private_root, LEASE_HEARTBEAT).ok()?;
+    if any_live_locked(&directory, &private_root, Some(digest), SystemTime::now()) {
+        return None;
+    }
+    Some(action())
+}
+
+fn any_live_locked(
+    directory: &Path,
+    private_root: &Path,
+    expected_digest: Option<&str>,
+    observed_at: SystemTime,
+) -> bool {
     let Ok(entries) = fs::read_dir(directory) else {
         return true;
     };
@@ -471,7 +498,7 @@ fn any_live_with_clock(
             break;
         }
         let Ok(entry) = entry else {
-            let _ = batch_has_live_lease(&mut paths, expected_digest, &private_root, observed_at);
+            let _ = batch_has_live_lease(&mut paths, expected_digest, private_root, observed_at);
             return true;
         };
         let name = entry.file_name();
@@ -480,13 +507,13 @@ fn any_live_with_clock(
             continue;
         }
         if paths.len() >= LEASE_MAX_FILES
-            && batch_has_live_lease(&mut paths, expected_digest, &private_root, observed_at)
+            && batch_has_live_lease(&mut paths, expected_digest, private_root, observed_at)
         {
             return true;
         }
         paths.push(entry.path());
     }
-    let found_live = batch_has_live_lease(&mut paths, expected_digest, &private_root, observed_at);
+    let found_live = batch_has_live_lease(&mut paths, expected_digest, private_root, observed_at);
     found_live || stopped_before_end
 }
 
@@ -508,11 +535,11 @@ fn batch_has_live_lease(
     found_live
 }
 
-#[cfg(test)]
 pub(super) fn any_live(state_base: &Path, expected_digest: &str) -> bool {
     any_live_with_digest(state_base, Some(expected_digest))
 }
 
+#[cfg(test)]
 pub(super) fn any_live_for_home(state_base: &Path) -> bool {
     any_live_with_digest(state_base, None)
 }

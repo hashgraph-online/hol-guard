@@ -957,6 +957,7 @@ def apply_approval_resolution(
                 harness=resolution_harness,
                 scope=scope,
                 artifact_id=scoped_artifact_id,
+                artifact_hash=request_artifact_hash,
                 workspace=resolved_workspace if scope == "workspace" else None,
                 publisher=(
                     str(request["publisher"])
@@ -997,6 +998,7 @@ def apply_approval_resolution(
             harness=resolution_harness,
             scope=scope,
             artifact_id=scoped_artifact_id,
+            artifact_hash=request_artifact_hash,
             workspace=resolved_workspace if scope == "workspace" else None,
             publisher=(
                 str(request["publisher"])

@@ -15,6 +15,7 @@ from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_n
 pytest_plugins = [
     "tests.bundle_first_cloud",
     "tests.approval_mode_fixtures",
+    "tests.approval_reuse_fixtures",
     "tests.native_runtime_fixtures",
 ]
 
@@ -100,9 +101,6 @@ class _GuardCommandsProxy:
 guard_commands_module = _GuardCommandsProxy()
 
 
-
-
-
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--validate-test-invariants",
@@ -166,8 +164,6 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
 
     for guard_home in sorted(_test_guard_homes_with_daemon_state(test_tmp_path)):
         retire_all_guard_daemons_for_home(guard_home)
-
-
 
 
 @pytest.fixture(autouse=True)

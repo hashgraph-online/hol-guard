@@ -41,7 +41,19 @@ def snapshot(tmp_path, monkeypatch):
     for name in bundle.DIRECTORIES:
         directory = root / name
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / "command.example.json").write_text('{"id":"command.example"}')
+        if name == "contracts/extensions/trust":
+            (directory / "command.example.v1.json").write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "guard.extension-trust-binding.v1",
+                        "extension": "command.example",
+                        "trustClass": "external",
+                    }
+                )
+            )
+        else:
+            (directory / "command.example.json").write_text('{"id":"command.example"}')
+    (root / "contracts/extensions/trust-class-map.v1.json").unlink()
     monkeypatch.setattr(bundle.subprocess, "check_output", lambda *args, **kwargs: SHA + "\n")
     output = tmp_path / "snapshot"
     bundle.create_bundle(root, output, SHA)
@@ -58,6 +70,19 @@ def test_snapshot_is_deterministic_and_source_bound(snapshot, tmp_path):
         bundle.verify_bundle(output, "c" * 40)
     with pytest.raises(ValueError, match="checkout"):
         bundle.create_bundle(root, second, "c" * 40)
+
+
+def test_snapshot_ignores_a_leftover_unreviewed_repository_map(snapshot, tmp_path):
+    root, _ = snapshot
+    (root / "contracts/extensions/trust-class-map.v1.json").write_text(
+        '{"classes":{"first-party":["command.unreviewed"]}}'
+    )
+    output = tmp_path / "fresh"
+    bundle.create_bundle(root, output, SHA)
+    with zipfile.ZipFile(output / bundle.ARCHIVE) as archive:
+        trust = json.loads(archive.read("contracts/extensions/trust-class-map.v1.json"))
+    assert trust["classes"]["first-party"] == []
+    assert trust["classes"]["external"] == ["command.example"]
 
 
 @pytest.mark.parametrize("asset", [bundle.ARCHIVE, bundle.MANIFEST])
@@ -114,9 +139,14 @@ class PublisherRemote:
         self.bad_download = False
 
     def set_release(self, draft, names):
-        self.release = {"id": 123, "tag_name": "extension-artifacts-" + SHA,
-                        "draft": draft, "target_commitish": SHA, "prerelease": True,
-                        "assets": [{"id": 100 + i, "name": name} for i, name in enumerate(names)]}
+        self.release = {
+            "id": 123,
+            "tag_name": "extension-artifacts-" + SHA,
+            "draft": draft,
+            "target_commitish": SHA,
+            "prerelease": True,
+            "assets": [{"id": 100 + i, "name": name} for i, name in enumerate(names)],
+        }
         self.tag_exists = True
 
     def github(self, *args):
@@ -211,7 +241,7 @@ def test_new_snapshot_uses_create_response_until_downloaded_assets_verify(snapsh
     assert set(remote.uploads) == {bundle.ARCHIVE, bundle.MANIFEST}
     assert len([c for c in remote.calls if "/commits/" in c[1]]) == 1
     created = next(i for i, c in enumerate(remote.calls) if "POST" in c)
-    assert not any("/releases/tags/" in c[1] or "--paginate" in c for c in remote.calls[created + 1:])
+    assert not any("/releases/tags/" in c[1] or "--paginate" in c for c in remote.calls[created + 1 :])
 
 
 def test_corrupt_new_upload_keeps_verified_draft_unpublished(snapshot, remote):
@@ -266,6 +296,7 @@ def test_release_identity_must_be_a_positive_integer(identity):
 
 def test_upload_targets_fixed_host_without_redirecting_credentials(tmp_path, monkeypatch):
     import io
+
     path = tmp_path / bundle.ARCHIVE
     path.write_bytes(b"verified bytes")
     monkeypatch.setenv("GH_TOKEN", "synthetic-test-token")
@@ -274,7 +305,10 @@ def test_upload_targets_fixed_host_without_redirecting_credentials(tmp_path, mon
     class Opener:
         def open(self, request, timeout):
             calls.append(request)
-            assert request.full_url == f"https://uploads.github.com/repos/{publisher.REPOSITORY}/releases/123/assets?name={bundle.ARCHIVE}"
+            assert (
+                request.full_url
+                == f"https://uploads.github.com/repos/{publisher.REPOSITORY}/releases/123/assets?name={bundle.ARCHIVE}"
+            )
             assert request.get_header("Authorization") == "Bearer synthetic-test-token"
             assert request.data == b"verified bytes" and timeout == 120
             return io.BytesIO(json.dumps({"id": 456, "name": path.name}).encode())
@@ -294,8 +328,11 @@ def test_asset_download_preserves_binary_bytes_and_uses_numeric_id(tmp_path, mon
 
     def run(args, **kwargs):
         assert args == [
-            "gh", "api", f"repos/{publisher.REPOSITORY}/releases/assets/456",
-            "--header", "Accept: application/octet-stream",
+            "gh",
+            "api",
+            f"repos/{publisher.REPOSITORY}/releases/assets/456",
+            "--header",
+            "Accept: application/octet-stream",
         ]
         assert kwargs["timeout"] == 120
         kwargs["stdout"].write(b"binary\xff\x00")

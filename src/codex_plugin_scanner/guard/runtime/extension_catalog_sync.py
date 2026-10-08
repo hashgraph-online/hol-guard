@@ -15,16 +15,20 @@ from .extension_control_limits import (
     MAX_INPUT_TEXT_LENGTH,
     MAX_PERMISSIONS_PER_EXTENSION,
 )
+from .managed_controls_posture_wire import (
+    EXTENSION_CONTROL_WIRE_SCHEMA_VERSION as EXTENSION_CONTROL_WIRE_SCHEMA_VERSION,
+)
+from .managed_controls_posture_wire import (
+    MANAGED_CONTROLS_RUNTIME_CAPABILITIES as MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
+)
+from .managed_controls_posture_wire import (
+    ManagedControlsRuntimePostureWire as ManagedControlsRuntimePostureWire,
+)
+from .managed_controls_posture_wire import (
+    build_managed_controls_runtime_posture as build_managed_controls_runtime_posture,
+)
 
 EXTENSION_CATALOG_SCHEMA_VERSION = "guard.extension-catalog.v1"
-EXTENSION_CONTROL_WIRE_SCHEMA_VERSION = "guard.extension-controls.v1"
-MANAGED_CONTROLS_RUNTIME_CAPABILITIES = (
-    "extension-catalog.v1",
-    "extension-control-layer.v1",
-    "policy-extension-targets.v1",
-    "managed-controls-atomic-apply.v1",
-    "custom-extension-continuity.v2",
-)
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _WIRE_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -82,14 +86,6 @@ class ExtensionCatalogWire(TypedDict):
     generatedAt: str
     limits: dict[str, int]
     extensions: list[ExtensionCatalogEntryWire]
-
-
-class ManagedControlsRuntimePostureWire(TypedDict):
-    extensionCatalogDigest: str
-    extensionControlSchemaVersions: list[str]
-    extensionAuthorityRevision: int | None
-    effectiveProjectionDigest: str | None
-    managedControlsCapabilities: list[str]
 
 
 class PermissionLike(Protocol):
@@ -469,30 +465,3 @@ def build_builtin_extension_catalog_wire(
         guard_version=guard_version,
         generated_at=generated_at,
     )
-
-
-def build_managed_controls_runtime_posture(
-    *,
-    catalog_digest: str,
-    extension_authority_revision: int | None = None,
-    effective_projection_digest: str | None = None,
-    capabilities: Iterable[str] = MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
-) -> ManagedControlsRuntimePostureWire:
-    """Build bounded runtime posture for the existing runtime-session sync channel."""
-
-    if _SHA256.fullmatch(catalog_digest) is None:
-        raise ValueError("catalog_digest must be a lowercase SHA-256 digest")
-    if extension_authority_revision is not None and extension_authority_revision < 0:
-        raise ValueError("extension_authority_revision cannot be negative")
-    if effective_projection_digest is not None and _WIRE_SHA256.fullmatch(effective_projection_digest) is None:
-        raise ValueError("effective_projection_digest must be a sha256-prefixed lowercase digest")
-    requested = frozenset(capabilities)
-    return {
-        "extensionCatalogDigest": catalog_digest,
-        "extensionControlSchemaVersions": [EXTENSION_CONTROL_WIRE_SCHEMA_VERSION],
-        "extensionAuthorityRevision": extension_authority_revision,
-        "effectiveProjectionDigest": effective_projection_digest,
-        "managedControlsCapabilities": [
-            capability for capability in MANAGED_CONTROLS_RUNTIME_CAPABILITIES if capability in requested
-        ],
-    }

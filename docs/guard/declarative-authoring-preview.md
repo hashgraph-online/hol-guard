@@ -30,8 +30,8 @@ Installed builder calls resolve `guard-command-source` from the native wheel and
 The example source is `rust/crates/guard-command/tests/fixtures/command-source-example.v1.json`. Assemble a development envelope with the separately reviewed trust map:
 
 ```sh
-rust/target/release/guard-command-source export-trust > contracts/extensions/trust-class-map.v1.json
-jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
+rust/target/release/guard-command-source export-trust > contracts/extensions/build-trust-class-map.v1.json
+jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
 rust/target/release/guard-command-source validate < source-build.json
 rust/target/release/guard-command-source compile < source-build.json > source-compiled.json

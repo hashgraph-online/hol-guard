@@ -339,8 +339,9 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
             vec![SeccompRule::new(vec![condition]).expect("non-empty rule")],
         )
     }
-    // Linux aarch64 uses the asm-generic syscall ABI. libc 0.2.189 exposes
-    // number 294 for GNU but omits it for musl; keep the denial on both.
+    // ARM64 uses Linux's asm-generic syscall table. musl's libc bindings omit
+    // this constant, but the syscall must remain in the containment deny list.
+    // include/uapi/asm-generic/unistd.h defines __NR_kexec_file_load as 294.
     #[cfg(target_arch = "aarch64")]
     const KEXEC_FILE_LOAD: libc::c_long = 294;
     #[cfg(not(target_arch = "aarch64"))]
