@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from pathlib import Path
 
 from ..adapters import copilot, devin, hermes, kimi, openclaw_support, zcode
 from ..adapters.base import HarnessContext
@@ -24,6 +25,17 @@ _BOUNDED_HOOK_TIMEOUTS: tuple[tuple[str, str, float], ...] = (
 )
 
 
+def _crosses_symlink(guard_home: Path, script_path: Path) -> bool:
+    """Return whether any path component below the Guard home is a symlink."""
+
+    current = guard_home
+    for part in script_path.relative_to(guard_home).parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
 def refresh_bounded_hook_clients(
     *,
     context: HarnessContext,
@@ -41,7 +53,7 @@ def refresh_bounded_hook_clients(
         if managed_install is None or not bool(managed_install.get("active")):
             continue
         script_path = bounded_hook_script_path(context.guard_home, harness)
-        if script_path is None or script_path.is_symlink() or not script_path.is_file():
+        if script_path is None or _crosses_symlink(context.guard_home, script_path) or not script_path.is_file():
             continue
         expected = _render_bounded_hook_script(
             guard_home=context.guard_home,

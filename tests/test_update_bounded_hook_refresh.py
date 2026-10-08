@@ -102,6 +102,26 @@ def test_refresh_does_not_create_or_follow_client_paths(tmp_path: Path) -> None:
     assert not kimi_path.exists()
 
 
+def test_refresh_does_not_write_through_symlinked_client_directory(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    store.set_managed_install("zcode", True, None, {"harness": "zcode"}, NOW)
+    zcode_path = bounded_hook_script_path(context.guard_home, "zcode")
+    assert zcode_path is not None
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_client = outside_dir / zcode_path.name
+    outside_client.write_text("outside\n", encoding="utf-8")
+    zcode_path.parent.parent.mkdir(parents=True, exist_ok=True)
+    zcode_path.parent.symlink_to(outside_dir, target_is_directory=True)
+
+    refreshed, warnings = refresh_bounded_hook_clients(context=context, store=store)
+
+    assert refreshed == []
+    assert warnings == []
+    assert outside_client.read_text(encoding="utf-8") == "outside\n"
+
+
 def test_update_repair_refreshes_stale_bounded_client(tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
