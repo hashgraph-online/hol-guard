@@ -13735,7 +13735,7 @@
       ]
     },
     {
-      "id": "gws-biz020-v2-permissions-insert",
+      "id": "gws-route-v2-permissions-insert",
       "command": "gws drive permissions insert --api-version v2 --params '{\"fileId\":\"f\"}'",
       "rule_id": "command.google-workspace.gws.share",
       "enabled_extensions": [
@@ -13748,7 +13748,7 @@
       ]
     },
     {
-      "id": "gws-biz020-v2-permissions-patch-eq",
+      "id": "gws-route-v2-permissions-patch-eq",
       "command": "gws --api-version=v2 drive permissions patch --params '{\"fileId\":\"f\",\"permissionId\":\"p\"}'",
       "rule_id": "command.google-workspace.gws.share",
       "enabled_extensions": [
@@ -13761,7 +13761,7 @@
       ]
     },
     {
-      "id": "gws-biz020-v2-files-trash",
+      "id": "gws-route-v2-files-trash",
       "command": "gws drive files trash --api-version v2 --params '{\"fileId\":\"f\"}'",
       "rule_id": "command.google-workspace.gws.delete",
       "enabled_extensions": [
@@ -13774,7 +13774,7 @@
       ]
     },
     {
-      "id": "gws-biz020-teamdrives-delete",
+      "id": "gws-route-teamdrives-delete",
       "command": "gws drive teamdrives delete --params '{\"teamDriveId\":\"d\"}'",
       "rule_id": "command.google-workspace.gws.delete",
       "enabled_extensions": [
@@ -13787,7 +13787,7 @@
       ]
     },
     {
-      "id": "gws-biz020-versioned-drive-v2-insert",
+      "id": "gws-route-versioned-drive-v2-insert",
       "command": "gws drive:v2 permissions insert --params '{\"fileId\":\"f\"}'",
       "rule_id": "command.google-workspace.gws.share",
       "enabled_extensions": [
@@ -13800,7 +13800,7 @@
       ]
     },
     {
-      "id": "gws-biz020-versioned-drive-v3-create",
+      "id": "gws-route-versioned-drive-v3-create",
       "command": "gws drive:v3 permissions create --params '{\"fileId\":\"f\"}'",
       "rule_id": "command.google-workspace.gws.share",
       "enabled_extensions": [
@@ -13813,7 +13813,7 @@
       ]
     },
     {
-      "id": "gws-biz020-versioned-gmail-send",
+      "id": "gws-route-versioned-gmail-send",
       "command": "gws gmail:v1 users messages send --params '{\"userId\":\"me\"}'",
       "rule_id": "command.google-workspace.gws.send",
       "enabled_extensions": [
@@ -13826,7 +13826,7 @@
       ]
     },
     {
-      "id": "gws-biz020-versioned-gmail-forwarding",
+      "id": "gws-route-versioned-gmail-forwarding",
       "command": "gws gmail:v1 users settings updateAutoForwarding --params '{\"userId\":\"me\"}'",
       "rule_id": "command.google-workspace.gws.share",
       "enabled_extensions": [
@@ -13839,7 +13839,7 @@
       ]
     },
     {
-      "id": "gws-biz020-versioned-calendar-acl",
+      "id": "gws-route-versioned-calendar-acl",
       "command": "gws calendar:v3 acl insert --params '{\"calendarId\":\"primary\"}'",
       "rule_id": "command.google-workspace.gws.share",
       "enabled_extensions": [
@@ -13852,7 +13852,7 @@
       ]
     },
     {
-      "id": "gws-biz020-versioned-calendar-event",
+      "id": "gws-route-versioned-calendar-event",
       "command": "gws calendar:v3 events insert --params '{\"calendarId\":\"primary\"}'",
       "rule_id": "command.google-workspace.gws.calendar",
       "enabled_extensions": [
@@ -13865,8 +13865,8 @@
       ]
     },
     {
-      "id": "gws-biz020-env-config-dir-blocks",
-      "command": "GOOGLE_WORKSPACE_CLI_CONFIG_DIR=/tmp/gws drive files list",
+      "id": "gws-route-env-config-dir-blocks",
+      "command": "GOOGLE_WORKSPACE_CLI_CONFIG_DIR=/tmp/gws gws drive files list",
       "rule_id": "command.google-workspace.gws.auth",
       "enabled_extensions": [
         "command.google-workspace.gws"
@@ -13876,7 +13876,7 @@
       "expected_effective_segments": []
     },
     {
-      "id": "gws-biz020-env-token-blocks",
+      "id": "gws-route-env-token-blocks",
       "command": "GOOGLE_WORKSPACE_CLI_TOKEN=redacted gws gmail users messages list",
       "rule_id": "command.google-workspace.gws.auth",
       "enabled_extensions": [
@@ -13887,7 +13887,7 @@
       "expected_effective_segments": []
     },
     {
-      "id": "gws-biz020-env-credentials-file-blocks",
+      "id": "gws-route-env-credentials-file-blocks",
       "command": "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE=/tmp/c.json gws calendar events list",
       "rule_id": "command.google-workspace.gws.auth",
       "enabled_extensions": [
@@ -13898,7 +13898,7 @@
       "expected_effective_segments": []
     },
     {
-      "id": "gws-biz020-env-adc-blocks",
+      "id": "gws-route-env-adc-blocks",
       "command": "GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json gws drive files list",
       "rule_id": "command.google-workspace.gws.auth",
       "enabled_extensions": [
@@ -13909,7 +13909,7 @@
       "expected_effective_segments": []
     },
     {
-      "id": "gws-biz020-env-wrapper-config-dir-blocks",
+      "id": "gws-route-env-wrapper-config-dir-blocks",
       "command": "env GOOGLE_WORKSPACE_CLI_CONFIG_DIR=/tmp/gws gws drive files list",
       "rule_id": "command.google-workspace.gws.auth",
       "enabled_extensions": [
@@ -13920,7 +13920,7 @@
       "expected_effective_segments": []
     },
     {
-      "id": "gws-biz020-v2-files-list-safe",
+      "id": "gws-route-v2-files-list-safe",
       "command": "gws drive files list --api-version v2",
       "rule_id": "command.google-workspace.gws.delete",
       "enabled_extensions": [
@@ -13931,7 +13931,7 @@
       "expected_effective_segments": []
     },
     {
-      "id": "gws-biz020-v2-permissions-list-safe",
+      "id": "gws-route-v2-permissions-list-safe",
       "command": "gws drive permissions list --api-version v2 --params '{\"fileId\":\"f\"}'",
       "rule_id": "command.google-workspace.gws.share",
       "enabled_extensions": [
@@ -13942,7 +13942,7 @@
       "expected_effective_segments": []
     },
     {
-      "id": "gws-biz020-versioned-gmail-list-safe",
+      "id": "gws-route-versioned-gmail-list-safe",
       "command": "gws gmail:v1 users messages list --params '{\"userId\":\"me\"}'",
       "rule_id": "command.google-workspace.gws.send",
       "enabled_extensions": [
@@ -13953,7 +13953,7 @@
       "expected_effective_segments": []
     },
     {
-      "id": "gws-biz020-versioned-drive-insert-help-safe",
+      "id": "gws-route-versioned-drive-insert-help-safe",
       "command": "gws drive:v2 permissions insert --help",
       "rule_id": "command.google-workspace.gws.share",
       "enabled_extensions": [
