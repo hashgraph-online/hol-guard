@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "extension": "command.shellroute",
+  "trustClass": "external"
+}
