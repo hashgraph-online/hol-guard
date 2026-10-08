@@ -292,6 +292,10 @@ def synthetic_native_consent_authority(
         raise NativeCloudReviewConsentError("native_cloud_review_consent_invalid")
 
     monkeypatch.setattr(exact, "native_cloud_review_consent", authority)
+    # The dispatch module re-binds the same name for pre-read consent checks
+    # before connect-time enablement; keep both namespaces in sync.
+    from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_review
+    monkeypatch.setattr(commands_dispatch_cloud_review, "native_cloud_review_consent", authority)
     return state
 
 

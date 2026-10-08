@@ -219,7 +219,7 @@ def test_exact_cloud_review_rejects_durable_binding_drift(tmp_path: Path) -> Non
         now=datetime.now(timezone.utc).isoformat(),
     )
     store.set_sync_payload("guard_exact_cloud_review_capability", capability, datetime.now(timezone.utc).isoformat())
-    with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
+    with pytest.raises(ExactCloudReviewError, match="native_cloud_review_consent_disabled"):
         apply_exact_cloud_review(
             store,
             remote_approval=restored_approval,

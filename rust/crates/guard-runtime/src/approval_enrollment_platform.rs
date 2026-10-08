@@ -418,10 +418,40 @@ pub(super) fn read_platform_secret(account: &str) -> Result<Option<String>, Stri
 }
 
 #[cfg(target_os = "linux")]
+fn test_secret_dir() -> Option<std::path::PathBuf> {
+    // Test-only escape hatch: Linux CI hosts lack secret-tool/dbus, so hosts
+    // can opt into a per-state file-backed store instead of failing closed.
+    // Never set in production; the file mode is 0o600 and the directory is
+    // per-test under `state_base`.
+    std::env::var_os("HOL_GUARD_SECURE_STATE_DIR")
+        .map(std::path::PathBuf::from)
+        .filter(|path| path.is_dir())
+}
+
+#[cfg(target_os = "linux")]
+fn test_secret_path(account: &str) -> Option<std::path::PathBuf> {
+    let dir = test_secret_dir()?;
+    let name = account.replace('/', "_").replace('\\', "_");
+    Some(dir.join(format!("{name}.secret")))
+}
+
+#[cfg(target_os = "linux")]
 pub(super) fn read_platform_secret_with_limit(
     account: &str,
     max_bytes: usize,
 ) -> Result<Option<String>, String> {
+    if let Some(path) = test_secret_path(account) {
+        return match std::fs::read_to_string(&path) {
+            Ok(raw) => {
+                if raw.len() > max_bytes {
+                    return Err(SECURE_STATE_INVALID.to_owned());
+                }
+                Ok(Some(raw.trim().to_owned()))
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(SECURE_STATE_UNAVAILABLE.to_owned()),
+        };
+    }
     let output = bounded_transport::run_helper(
         std::path::Path::new("/usr/bin/secret-tool"),
         &["lookup", "service", SERVICE_NAME, "account", account],
@@ -445,6 +475,13 @@ pub(super) fn write_platform_secret_with_limit(
 ) -> Result<(), String> {
     if value.len() > max_bytes {
         return Err(SECURE_STATE_INVALID.to_owned());
+    }
+    if let Some(path) = test_secret_path(account) {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        return std::fs::write(&path, value.as_bytes())
+            .map_err(|_| SECURE_STATE_UNAVAILABLE.to_owned());
     }
     let output = bounded_transport::run_helper(
         std::path::Path::new("/usr/bin/secret-tool"),

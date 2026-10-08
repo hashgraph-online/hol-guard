@@ -224,6 +224,7 @@ jobs:
           HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
           HOL_GUARD_NATIVE_REGRESSION: "1"
+          HOL_GUARD_SECURE_STATE_DIR: ${{ runner.temp }}/hol-guard-secure-state
         run: |
           uv run --no-sync pytest -q --tb=short \
             ci/package_size \
@@ -343,7 +344,7 @@ jobs:
           echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
-      - name: Run coverage shard ${{ matrix.shard-index }}
+          echo "HOL_GUARD_SECURE_STATE_DIR=$RUNNER_TEMP/hol-guard-secure-state" >> "$GITHUB_ENV"
         shell: bash
         run: |
           shard_file=$(printf 'pytest-shards/shard-%03d.txt' "${{ matrix.shard-index }}")
