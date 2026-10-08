@@ -24,6 +24,7 @@ fn wrangler_metadata_and_identity_reads_are_explicitly_benign() {
             "wrangler --help",
             "wrangler deploy --help",
             "wrangler kv:namespace list --help",
+            "wrangler d1 execute -h",
         ] {
             let (decision, minimum_action) = evaluate(harness, command);
             assert_eq!(decision, "allow", "{harness}: {command}");
@@ -40,6 +41,7 @@ fn wrangler_effects_and_unbound_launches_stay_reviewed() {
             "wrangler dev",
             "wrangler login",
             "wrangler whoami --account other",
+            "wrangler --version --config other.toml",
             "wrangler deploy --dry-run --help",
             "wrangler d1 execute db --command 'DROP TABLE users' --help",
             "./node_modules/.bin/wrangler --version",
