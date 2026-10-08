@@ -25,7 +25,6 @@ def executable_matcher(
     allow_leading_options: bool = False,
     leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     options_with_values: frozenset[str] = _EMPTY_STRING_SET,
-    required_option_values: tuple[tuple[str, frozenset[str]], ...] = (),
     fail_secure_unknown_options: bool = False,
 ) -> ExecutableMatcher:
     """Build a portable executable matcher with structured option handling."""
@@ -40,7 +39,6 @@ def executable_matcher(
         allow_leading_options=allow_leading_options,
         leading_options_with_values=leading_options_with_values,
         options_with_values=options_with_values,
-        required_option_values=required_option_values,
         fail_secure_unknown_options=fail_secure_unknown_options,
     )
 
