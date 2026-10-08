@@ -70,11 +70,22 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           BASE_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
-          if [[ -n "$VERSION" ]]; then test "$VERSION" = "$BASE_VERSION"; fi
-          echo "VERSION=$BASE_VERSION" >> "$GITHUB_ENV"
-          echo "HOL_GUARD_PACKAGE_VERSION=$BASE_VERSION" >> "$GITHUB_ENV"
+          RELEASE_VERSION="${VERSION:-$BASE_VERSION}"
+          if [[ "$RELEASE_VERSION" != "$BASE_VERSION" ]]; then
+            [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$RELEASE_VERSION"
+          fi
+          while IFS= read -r changed_path; do
+            case "$changed_path" in
+              pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock) ;;
+              *) echo "Version stamping changed an unexpected file" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only)
+          echo "VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_PACKAGE_VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
           echo "HOL_GUARD_BUILD_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
-          python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
+      - name: Verify release enrollment root
+        run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
       - name: Install pinned Rust target
         shell: bash
         run: |

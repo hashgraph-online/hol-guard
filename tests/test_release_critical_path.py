@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -15,6 +18,61 @@ from scripts.release.wait_for_core_publication import publication_ready
 from tests.release_workflow_helpers import load_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_path):
+    for name in ("pyproject.toml", "uv.lock", "src/codex_plugin_scanner/version.py", "scripts/sync_repo_version.py"):
+        destination = tmp_path / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / name, destination)
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, env=env, check=True)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, env=env, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "fixture"],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+    )
+    source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=tmp_path, env=env, text=True).strip()
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    uv = tools / "uv"
+    uv.write_text(
+        f"#!{sys.executable}\nimport subprocess,sys\n"
+        "index=sys.argv.index('scripts/sync_repo_version.py')\n"
+        "subprocess.run([sys.executable,*sys.argv[index:]],check=True)\n"
+    )
+    uv.chmod(0o755)
+    source_version = subprocess.check_output(
+        [sys.executable, "scripts/sync_repo_version.py", "--check"], cwd=tmp_path, text=True
+    ).strip()
+    major, minor, patch = source_version.split(".")
+    requested = f"{major}.{minor}.{int(patch) + 1}"
+    job = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
+    identity = next(step for step in job["steps"] if step.get("name") == "Bind exact source and version")
+    output = tmp_path / "environment"
+    subprocess.run(
+        ["bash", "-c", identity["run"]],
+        cwd=tmp_path,
+        check=True,
+        env={
+            **env,
+            "PATH": f"{tools}{os.pathsep}{env['PATH']}",
+            "SOURCE_SHA": source_sha,
+            "VERSION": requested,
+            "GITHUB_ENV": str(output),
+        },
+    )
+    recorded = output.read_text()
+    assert f"VERSION={requested}\n" in recorded
+    assert f"HOL_GUARD_PACKAGE_VERSION={requested}\n" in recorded
+    assert (
+        subprocess.check_output(
+            [sys.executable, "scripts/sync_repo_version.py", "--check"], cwd=tmp_path, text=True
+        ).strip()
+        == requested
+    )
 
 
 def native_environment(tmp_path, monkeypatch):
@@ -95,12 +153,19 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
         ("desktop-core-linux-feed.yml", "publish-linux-x64"),
     ]:
         steps = load_workflow(ROOT / ".github/workflows" / name)["jobs"][publisher]["steps"]
-        gate = next(i for i, step in enumerate(steps) if "wait_for_core_publication.py" in step.get("run", ""))
+        gate = next(
+            i
+            for i, step in enumerate(steps)
+            if step.get("name") == "Require verified registry publication before updater upload"
+        )
+        readiness = next(i for i, step in enumerate(steps) if step.get("id") == "registry")
         upload = next(i for i, step in enumerate(steps) if step.get("name") == "Publish immutable Core assets")
         signing = next(
             i for i, step in enumerate(steps) if step.get("name") == "Attest complete hardened Core asset set"
         )
         assert signing < gate < upload
+        assert readiness < signing
+        assert "steps.registry.outputs.registry_ready == 'true'" in steps[signing]["if"]
 
 
 def test_early_asset_publication_rejects_a_different_tag_before_upload(tmp_path, monkeypatch):

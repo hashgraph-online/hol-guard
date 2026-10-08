@@ -152,7 +152,9 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     assert "json.sig" not in text
     assert "minisign" not in helper.lower()
     assert "bunx @tauri-apps/cli" not in text
-    assert steps["Import Apple signing identity"]["if"] == "steps.release.outputs.available == 'true'"
+    assert steps["Import Apple signing identity"]["if"] == (
+        "steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'"
+    )
     assert "security find-identity -v -p codesigning" in text
     assert "apple-signing-fingerprint.txt" in text
     assert 'CERT_DIR="$RUNNER_TEMP/codesign-certs"' in text

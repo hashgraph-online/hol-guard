@@ -161,8 +161,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: bash scripts/release/authorize_macos_core_source.sh
-      - name: Inspect immutable Core asset state
+      - name: Check registry readiness before scheduled or backfill builds
         if: steps.release.outputs.available == 'true'
+        id: registry
+        env:
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$PUBLICATION_RUN_ID" ]]; then
+            echo registry_ready=true >> "$GITHUB_OUTPUT"
+          else
+            python3 -I scripts/release/wait_for_core_publication.py --check-only \
+              --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Defer a build whose registry publication is not ready
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready != 'true'
+        run: echo "Registry publication is pending; no Core build or signing is needed yet."
+      - name: Inspect immutable Core asset state
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         id: existing
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
@@ -177,18 +195,18 @@ jobs:
           python3 -I scripts/release/desktop_core_alpha_feed.py inspect-assets \
             --assets "$RUNNER_TEMP/release-assets.txt" --base "$BASE" >> "$GITHUB_OUTPUT"
       - name: Set up Python
-        if: steps.release.outputs.available == 'true'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
       - name: Set up uv
-        if: steps.release.outputs.available == 'true'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
       - name: Fetch exact authorized Core source
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
@@ -206,7 +224,7 @@ jobs:
           test "$(git -C "$SOURCE" rev-parse 'HEAD^{commit}')" = "$SOURCE_SHA"
           test -z "$(git -C "$SOURCE" status --porcelain)"
       - name: Download existing Core assets
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'build'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode != 'build'
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
@@ -226,7 +244,7 @@ jobs:
             gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.onedir.attested.json" --dir "$DIST"
           fi
       - name: Verify prior feed provenance before reusing assets
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'verify_existing'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'verify_existing'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
@@ -260,7 +278,7 @@ jobs:
               --apple-signing-identity "$APPLE_SIGNING_IDENTITY" --apple-team-id "$APPLE_TEAM_ID"
           fi
       - name: Import Apple signing identity
-        if: steps.release.outputs.available == 'true'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -297,7 +315,7 @@ jobs:
           (root / "apple-signing-fingerprint.txt").write_text(matches[0].upper() + "\n", encoding="ascii")
           PY
       - name: Build standalone Core executable
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -450,7 +468,7 @@ jobs:
           ditto -c -k --norsrc --noextattr --keepParent "$ONEDIR" \
             "$DIST/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.onedir.zip"
       - name: Sign and notarize new Core sidecar
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -482,7 +500,7 @@ jobs:
             exit 1
           }
       - name: Onedir activation under onefile load
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
@@ -496,7 +514,7 @@ jobs:
             --version "$CORE_VERSION" \
             --summary "$RUNNER_TEMP/onedir-contract.json"
       - name: Verify exact Apple identity, notarization, and Core contract
-        if: steps.release.outputs.available == 'true'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -584,7 +602,7 @@ jobs:
               --payload "$RUNNER_TEMP/bootstrap-onedir.json" --version "$CORE_VERSION" --subject "Immutable onedir Core"
           fi
       - name: Create or validate update manifest
-        if: steps.release.outputs.available == 'true'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
@@ -620,7 +638,7 @@ jobs:
             python3 -I scripts/release/desktop_core_alpha_feed.py validate-onedir-manifest "${OCOMMON[@]}"
           fi
       - name: Create or validate immutable marker
-        if: steps.release.outputs.available == 'true'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
@@ -660,7 +678,7 @@ jobs:
               --team-id "$APPLE_TEAM_ID" --output "$RUNNER_TEMP/desktop-core-onedir-evidence.json"
           fi
       - name: Attest complete hardened Core asset set
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: |
@@ -671,7 +689,7 @@ jobs:
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.onedir.json
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.onedir.attested.json
       - name: Require verified registry publication before updater upload
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
@@ -679,7 +697,7 @@ jobs:
           CORE_VERSION: ${{ steps.release.outputs.version }}
         run: python3 -I scripts/release/wait_for_core_publication.py --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-macos-arm64.whl"
       - name: Publish immutable Core assets
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
@@ -692,7 +710,7 @@ jobs:
             "$BASE.onedir.zip" "$BASE.onedir.json" "$BASE.onedir.attested.json" \
             --repo "$GITHUB_REPOSITORY"
       - name: Verify final release assets and provenance
-        if: steps.release.outputs.available == 'true'
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
