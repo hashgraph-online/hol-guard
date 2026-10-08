@@ -23,6 +23,7 @@ from .agent_prompt import fixture_authorization, scenario_prompt
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
 from .evidence import assess_case, public_events, read_events, sha256_bytes
+from .extension_adapters import ExtensionAdapter, extension_adapter
 from .fixtures import Fixture, create_fixture, digest_file, filesystem_checks, scenario_fixture_name
 from .host_process import clean_environment, run_process
 from .input_evidence import (
@@ -73,8 +74,8 @@ def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
     return labels
 
 
-def _configure_ollama_permission_denial(daemon: Any, guard_home: Path) -> dict[str, Any]:
-    """Install a signed synthetic extension control for the one denial case."""
+def _configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter: ExtensionAdapter) -> dict[str, Any]:
+    """Install a signed synthetic extension control for one denial case."""
     from ci.native_runtime.probe_installed_native_extensions import commit_controls, control, provision
     from codex_plugin_scanner.guard.approval_gate import update_settings
     from codex_plugin_scanner.guard.config import update_guard_settings
@@ -89,18 +90,18 @@ def _configure_ollama_permission_denial(daemon: Any, guard_home: Path) -> dict[s
     )
     store = daemon._server.store
     provision(store)
-    permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id("command.ollama.rm")
-    if permission is None:
-        raise RuntimeError("installed extension catalog lacks command.ollama.rm permission")
-    enabled = control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.ENABLED)
+    permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id(adapter.rule_id)
+    if permission is None or permission.permission_id != adapter.permission_id:
+        raise RuntimeError(f"installed extension catalog lacks the reviewed {adapter.rule_id} permission")
+    enabled = control(ControlTargetKind.EXTENSION, adapter.extension_id, ControlState.ENABLED)
     revision = commit_controls(
         store,
         password,
         (enabled, control(ControlTargetKind.PERMISSION, permission.permission_id, ControlState.DISABLED)),
     )
     return {
-        "extension_id": "command.ollama",
-        "rule_id": "command.ollama.rm",
+        "extension_id": adapter.extension_id,
+        "rule_id": adapter.rule_id,
         "permission_id": permission.permission_id,
         "permission_state": "disabled",
         "control_revision": revision,
@@ -224,7 +225,9 @@ def run_case(
                 identity=identity,
             )
             if scenario.oracle == "blocked-extension":
-                case["extension_control"] = _configure_ollama_permission_denial(daemon, fixture.root / "guard-home")
+                case["extension_control"] = _configure_extension_permission_denial(
+                    daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
+                )
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
             worker = daemon._server.hook_worker
             if scenario.oracle == "watch-command":
