@@ -10,6 +10,7 @@ pub struct PathContext<'a> {
     pub cwd: Option<&'a str>,
 }
 
+mod contained_wrapper;
 pub(crate) mod directory_targets;
 pub(crate) use directory_targets::safe_directory_target;
 mod git_config;

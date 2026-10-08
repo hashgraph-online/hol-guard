@@ -24,9 +24,10 @@ from .restricted_pytest_validation import _normalized_command, _path_is_within
 
 
 def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str, ...]] | None:
-    """Recognize only Bun's direct x wrapper, optionally with a leading cwd."""
-    if not command or Path(command[0]).name != "bun":
+    """Recognize Bun's direct x wrapper, optionally with a leading cwd, or bunx with one."""
+    if not command or Path(command[0]).name not in {"bun", "bunx"}:
         return None
+    bunx = Path(command[0]).name == "bunx"
     args = tuple(command[1:])
     directory = None
     if args and args[0] == "--cwd":
@@ -37,9 +38,13 @@ def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str
         directory, args = args[0][6:], args[1:]
         if not directory:
             return None
-    if not args or args[0] != "x":
+    if bunx:
+        if directory is None:
+            return None
+    elif not args or args[0] != "x":
         return None
-    args = args[1:]
+    else:
+        args = args[1:]
     if args and args[0] == "--no-install":
         args = args[1:]
     if len(args) < 2 or args[:2] != ("vitest", "run"):
@@ -51,7 +56,7 @@ def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
     argv = _normalized_command(command)
     name = Path(argv[0]).name
     runtime_args = _node_runtime_args(argv)
-    if name == "bun" and (invocation := bun_vitest_invocation(argv)) is not None:
+    if name in {"bun", "bunx"} and (invocation := bun_vitest_invocation(argv)) is not None:
         args = invocation[1]
     elif name in {"bunx", "npx"}:
         args = argv[1:]
@@ -86,9 +91,12 @@ def prepare_restricted_vitest(
         if not target.is_absolute():
             target = (cwd or workspace) / target
         try:
+            original = workspace.resolve(strict=True)
             workspace = target.resolve(strict=True)
             if not workspace.is_dir():
                 raise OSError("not a directory")
+            if Path(command[0]).name == "bunx" and not _path_is_within(workspace, original):
+                raise OSError("outside the workspace")
         except (OSError, RuntimeError) as error:
             raise RestrictedPytestError(
                 "vitest_restricted_invalid_command", "Vitest working directory is unavailable."

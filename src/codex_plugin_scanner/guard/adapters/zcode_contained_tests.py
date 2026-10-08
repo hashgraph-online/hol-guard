@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from ..codex_hook_launch_runtime import isolated_guard_cli_command
+from ..runtime.contained_wrapper import output_filter_suffix
 
 _PROFILES = {
     "native_pytest_readonly_containment_required": "pytest-readonly-v2",
@@ -199,7 +200,10 @@ def contained_zcode_response(
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "allow",
-                "updatedInput": {**original, "command": shlex.join(command)},
+                "updatedInput": {
+                    **original,
+                    "command": shlex.join(command) + output_filter_suffix(original["command"]),
+                },
             },
         }
     except (OSError, ValueError, KeyError, IndexError, TypeError):

@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
+from .contained_wrapper import peel_contained_wrapper
 from .restricted_inline_eval import is_inline_eval, prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
     PACKAGE_TEST_PROFILE,
@@ -117,6 +118,29 @@ def run_authorized_contained_test(
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
         raise _reject()
+    try:
+        peeled = peel_contained_wrapper(tool_input["command"], workspace=workspace)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise _reject() from error
+    if peeled is not None:
+        # The wrapped original must carry the receipt; the core is then
+        # re-authorized in its resolved directory by the recursive call.
+        receipt = authorize(payload)
+        if (
+            not isinstance(receipt, Mapping)
+            or receipt.get("decision") != "deny"
+            or receipt.get("policy_action") != "sandbox-required"
+            or not isinstance(receipt.get("required_execution_profile"), str)
+            or receipt.get("observe_mode") is True
+        ):
+            raise _reject()
+        core, directory = peeled
+        return run_authorized_contained_test(
+            {**payload, "cwd": str(directory), "tool_input": {**tool_input, "command": core}},
+            workspace=directory,
+            authorize=authorize,
+            timeout_seconds=timeout_seconds,
+        )
     try:
         command = shlex.split(tool_input["command"], posix=True)
     except ValueError as error:
