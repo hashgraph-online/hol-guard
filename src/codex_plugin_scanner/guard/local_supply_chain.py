@@ -257,10 +257,6 @@ def _package_firewall_entitlement_module():
     return importlib.import_module(".package_firewall_entitlement", __package__)
 
 
-def _package_intent_parser_module():
-    return importlib.import_module(".runtime.package_intent_parser", __package__)
-
-
 def _native_package_authority_module():
     return importlib.import_module(".native_package_authority", __package__)
 
@@ -303,8 +299,11 @@ def _parse_package_intent_native(
     workspace: Path | None,
     guard_home: Path,
 ) -> PackageIntent | None:
-    """Try the resident ``package_intent_parse`` op; ``None`` falls back to
-    the Python parser."""
+    """Try the resident ``package_intent_parse`` op.
+
+    ``None`` means the resident was unreachable or found no intent —
+    ``parse_package_intent`` is resident-sole-authority, so no Python
+    re-parse exists to fall back to."""
     try:
         payload = _native_package_authority_module().package_intent_parse_native(
             raw_command,
@@ -1552,12 +1551,6 @@ def _build_package_protect_authority(
         workspace=launch_cwd,
         guard_home=store.guard_home,
     )
-    if intent is None:
-        intent = _package_intent_parser_module().parse_package_intent(
-            shlex.join(command),
-            workspace=launch_cwd,
-            environment=launch_environment,
-        )
     if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))

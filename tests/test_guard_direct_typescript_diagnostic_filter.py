@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,15 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
+
+
+@pytest.fixture(autouse=True)
+def _native_typescript_intents(
+    package_intent_native: Path,
+    native_mcp_probe: Callable[[Path], None],
+    tmp_path: Path,
+) -> None:
+    native_mcp_probe(tmp_path / "home" / ".guard")
 
 
 def _trusted_command(_command: str, *, cwd: Path, home_dir: Path) -> bool:

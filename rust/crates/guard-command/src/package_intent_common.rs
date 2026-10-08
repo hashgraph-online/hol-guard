@@ -1047,7 +1047,10 @@ pub fn redacted_command(tokens: &[String]) -> String {
             redacted.push("--hash=<hash>".to_owned());
             continue;
         }
-        if HTTP_SOURCE_IN_TOKEN_RE.is_match(token) || token.starts_with("git+") {
+        if HTTP_SOURCE_IN_TOKEN_RE.is_match(token)
+            || token.starts_with("git+")
+            || url_authority_contains_userinfo(token)
+        {
             redacted.push(sanitize_url(token));
             continue;
         }
@@ -2465,6 +2468,50 @@ mod tests {
             "http:<redacted-source>"
         );
         assert_eq!(sanitize_url("plain-token"), "plain-token");
+    }
+
+    #[test]
+    fn redacted_command_strips_non_http_url_userinfo() {
+        let tokens: Vec<String> = [
+            "cargo",
+            "install",
+            "--git",
+            "ssh://user:TOKEN@git.example.com/owner/repo.git",
+            "git+ssh://git@github.com/owner/repo2.git",
+            "--index-url",
+            "https://token@example.com/simple",
+            "--registry",
+            "https://crates.example.com/index",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(
+            redacted_command(&tokens),
+            concat!(
+                "cargo install --git ssh://git.example.com/owner/repo.git ",
+                "git+ssh://github.com/owner/repo2.git --index-url ",
+                "https://example.com/simple --registry https://crates.example.com/index"
+            )
+        );
+    }
+
+    #[test]
+    fn redacted_command_strips_url_userinfo_in_env_assignments() {
+        let tokens: Vec<String> = [
+            "PIP_INDEX_URL=ssh://user:TOKEN@index.example.com/simple",
+            "UV_DEFAULT_INDEX=not-a-url",
+            "pip",
+            "install",
+            "flask",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(
+            redacted_command(&tokens),
+            "PIP_INDEX_URL=ssh://index.example.com/simple UV_DEFAULT_INDEX=not-a-url pip install flask"
+        );
     }
 
     #[test]

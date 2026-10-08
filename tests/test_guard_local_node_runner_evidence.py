@@ -9,6 +9,14 @@ import pytest
 from codex_plugin_scanner.guard.runtime.local_node_runner_evidence import build_local_node_runner_evidence
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 
+
+@pytest.fixture(autouse=True)
+def _native_package_intent(package_intent_native):
+    """Parse intents through the resident authority."""
+
+    return package_intent_native
+
+
 _INTEGRITY = "sha512-" + base64.b64encode(bytes(64)).decode("ascii")
 
 

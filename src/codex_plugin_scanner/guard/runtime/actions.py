@@ -789,6 +789,7 @@ def _normalize_action_payload(
         _package_intent_parser_module().parse_package_intent(
             normalized_command,
             workspace=workspace_path,
+            home_dir=Path(home_dir) if home_dir is not None else None,
             guard_home=Path(guard_home) if guard_home is not None else None,
             deadline=deadline,
         )

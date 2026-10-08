@@ -111,7 +111,7 @@ def run_native_hook_pipeline(
         workspace_from_hook_payload=_workspace_from_hook_payload,
         handle_native_cursor_post_tool=handle_native_cursor_post_tool,
         resolve_copilot_workspace_root=_resolve_copilot_workspace_root,
-        action_envelope_for=_hook_action_envelope,
+        action_envelope_for=lambda **kwargs: _hook_action_envelope(guard_home=context.guard_home, **kwargs),
         copilot_hook_stage_for=_copilot_hook_stage,
         copilot_runtime_tool_call_for=_copilot_runtime_tool_call,
         config=config,

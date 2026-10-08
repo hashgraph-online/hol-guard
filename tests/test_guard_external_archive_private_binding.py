@@ -25,6 +25,8 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
+
 
 def _hook_inputs(
     tmp_path: Path,
@@ -151,7 +153,11 @@ def test_external_archive_private_source_mutation_fails_closed_before_scan(
     private_target = private_targets[0]
     assert isinstance(private_target, dict)
     private_target["source_url"] = "https://changed.example.com/demo.tgz"
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: pytest.fail("mutated private source reached archive scan"),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda *_args, **_kwargs: pytest.fail("mutated private source reached archive scan"),
+    )
 
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,
