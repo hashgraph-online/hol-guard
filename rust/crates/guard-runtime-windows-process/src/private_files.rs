@@ -150,6 +150,11 @@ pub fn is_single_link_file(path: &Path) -> io::Result<bool> {
         FILE_READ_ATTRIBUTES,
     )?;
     validate_handle(&file, false)?;
+    is_single_link_handle(&file)
+}
+
+/// Return whether an already-open file has exactly one directory entry.
+pub fn is_single_link_handle(file: &std::fs::File) -> io::Result<bool> {
     let mut information = unsafe { zeroed::<BY_HANDLE_FILE_INFORMATION>() };
     // SAFETY: The output buffer is correctly sized and the handle remains
     // open for the synchronous query.
