@@ -144,9 +144,9 @@ def _preserve_native_origin_snapshot(
         "queue_group_id": queue_group_id,
         "action_envelope_json": request.action_envelope_json,
     }
-    if not has_native_approval_origin_marker(current, include_unavailable=False) and not has_native_approval_origin_marker(
-        incoming, include_unavailable=False
-    ):
+    if not has_native_approval_origin_marker(
+        current, include_unavailable=False
+    ) and not has_native_approval_origin_marker(incoming, include_unavailable=False):
         return False
     origin = frozen_native_approval_origin(current)
     if origin is None or origin != frozen_native_approval_origin(incoming) or request_id != request.request_id:

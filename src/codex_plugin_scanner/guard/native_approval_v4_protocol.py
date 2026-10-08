@@ -168,12 +168,16 @@ _MAX_WEBAUTHN_SIGNATURE_BYTES = 256
 _MAX_WEBAUTHN_USER_HANDLE_BYTES = 256
 
 _RESULT_KEYS = _base._RESULT_KEYS
-_bounded_text = _base._bounded_text
 _lower_hex = _base._lower_hex
 _common_fields_valid = _base._common_fields_valid
 _receipt_fields_are_valid = _base._receipt_fields_are_valid
 _within_approval_bound = _base._within_approval_bound
 
+
+def _bounded_text(value: object, *, maximum: int, nonempty: bool = True) -> bool:
+    """Bound V4 transport strings through the shared protocol helper."""
+
+    return _base._bounded_text(value, maximum=maximum, nonempty=nonempty)
 
 def _base64url_transport(value: object, *, maximum: int) -> bool:
     """Bound a browser base64url member without interpreting its meaning."""

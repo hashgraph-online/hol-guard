@@ -31,13 +31,17 @@ def _retry_at(now: str, attempt_count: int) -> str:
 
 class StoreReviewEventOutboxMixin:
     def append_native_application_observation(
-        self, request_id: str, *, native_application_result: Mapping[str, object],
+        self,
+        request_id: str,
+        *,
+        native_application_result: Mapping[str, object],
         request_snapshot: Mapping[str, object],
     ) -> int:
         """Atomically project already-observed core consumption; never grant execution."""
         from .runtime.native_cloud_review_v4 import decode_native_application_result
         from .store_review_event_outbox_schema import REVIEW_REQUEST_SNAPSHOT_COLUMNS
-        from .store_review_event_outbox_writes import append_request_snapshot_event, request_snapshot as load_snapshot
+        from .store_review_event_outbox_writes import append_request_snapshot_event
+        from .store_review_event_outbox_writes import request_snapshot as load_snapshot
 
         application = decode_native_application_result(dict(native_application_result))
         if application is None or request_snapshot.get("request_id") != request_id:
@@ -46,29 +50,41 @@ class StoreReviewEventOutboxMixin:
         with self._connect() as connection:
             connection.execute("begin immediate")
             prior = connection.execute(
-                "select payload_json from sync_state where state_key = ?", (marker_key,),
+                "select payload_json from sync_state where state_key = ?",
+                (marker_key,),
             ).fetchone()
             if prior is not None:
                 marker = json.loads(prior["payload_json"])
-                if (not isinstance(marker, dict) or marker.get("application") != application
-                    or type(marker.get("stream_sequence")) is not int):
+                if (
+                    not isinstance(marker, dict)
+                    or marker.get("application") != application
+                    or type(marker.get("stream_sequence")) is not int
+                ):
                     raise ValueError("native_application_immutable_binding_conflict")
                 return marker["stream_sequence"]
             current = load_snapshot(connection, request_id)
             if current is None:
                 raise ValueError("native_application_pending_request_missing")
             mutable = {"status", "resolution_action", "resolution_scope", "resolved_at", "reason"}
-            if any(current.get(key) != request_snapshot.get(key)
-                   for key in REVIEW_REQUEST_SNAPSHOT_COLUMNS if key not in mutable):
+            if any(
+                current.get(key) != request_snapshot.get(key)
+                for key in REVIEW_REQUEST_SNAPSHOT_COLUMNS
+                if key not in mutable
+            ):
                 raise ValueError("native_application_pending_request_changed")
             binding = load_review_oauth_binding(connection, self._guard_source)
             prior_binding = connection.execute(
                 "select oauth_subject_hash, workspace_id, machine_id, machine_installation_id "
-                "from guard_review_outbox_request_sequences where local_request_id = ?", (request_id,),
+                "from guard_review_outbox_request_sequences where local_request_id = ?",
+                (request_id,),
             ).fetchone()
-            if binding is None or prior_binding is None or any(
-                prior_binding[key] != binding[key] for key in
-                ("oauth_subject_hash", "workspace_id", "machine_id", "machine_installation_id")
+            if (
+                binding is None
+                or prior_binding is None
+                or any(
+                    prior_binding[key] != binding[key]
+                    for key in ("oauth_subject_hash", "workspace_id", "machine_id", "machine_installation_id")
+                )
             ):
                 raise ValueError("native_application_delivery_cohort_changed")
             if current["status"] == "pending":
@@ -76,18 +92,32 @@ class StoreReviewEventOutboxMixin:
                     "update approval_requests set status = 'resolved', resolution_action = 'allow', "
                     "resolution_scope = 'once', resolved_at = ?, reason = ? "
                     "where request_id = ? and status = 'pending'",
-                    (application["consumedAt"], "native_approval_v4_consumed:" + application["decisionReceiptId"], request_id),
+                    (
+                        application["consumedAt"],
+                        "native_approval_v4_consumed:" + application["decisionReceiptId"],
+                        request_id,
+                    ),
                 )
             sequence = append_request_snapshot_event(
-                connection, request_id=request_id, event_type="review.native_application.applied",
-                oauth_source=self._guard_source, occurred_at=str(application["consumedAt"]),
-                native_application_result=application, request_snapshot=request_snapshot,
+                connection,
+                request_id=request_id,
+                event_type="review.native_application.applied",
+                oauth_source=self._guard_source,
+                occurred_at=str(application["consumedAt"]),
+                native_application_result=application,
+                request_snapshot=request_snapshot,
             )
             if sequence <= 0:
                 raise ValueError("native_application_outbox_append_failed")
             marker_json = json.dumps(
-                {"schema": "guard-native-application-observation.v4", "application": application, "stream_sequence": sequence},
-                sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                {
+                    "schema": "guard-native-application-observation.v4",
+                    "application": application,
+                    "stream_sequence": sequence,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
             )
             connection.execute(
                 "insert into sync_state (state_key,payload_json,updated_at) values (?,?,?)",

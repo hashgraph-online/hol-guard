@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 _SECURITY_NATIVE_CODES = frozenset(
     {
         "native_client_auth_rejected",

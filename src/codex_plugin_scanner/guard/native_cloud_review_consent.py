@@ -11,7 +11,6 @@ from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
 
 
-
 class NativeCloudReviewConsentState(TypedDict):
     schema: str
     version: int

@@ -265,9 +265,13 @@ def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
 
         native_application_result = decode_native_application_result(native_application_result)
         if native_application_result is None:
-            raise StoredReviewEventError("payload_native_application_invalid", "Stored native consumed evidence is invalid.")
+            raise StoredReviewEventError(
+                "payload_native_application_invalid", "Stored native consumed evidence is invalid."
+            )
     elif native_application_result is not None:
-        raise StoredReviewEventError("payload_native_application_invalid", "Native consumed evidence has the wrong event type.")
+        raise StoredReviewEventError(
+            "payload_native_application_invalid", "Native consumed evidence has the wrong event type."
+        )
     if snapshot["request_id"] != local_request_id:
         raise StoredReviewEventError(
             "payload_snapshot_request_mismatch",

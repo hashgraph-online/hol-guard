@@ -388,7 +388,7 @@ def test_review_live_codex_decision_returns_none_without_a_review_method(tmp_pat
 
 
 def test_daemon_revalidation_uses_the_in_process_worker(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon.server import (  # noqa: PLC0415
+    from codex_plugin_scanner.guard.daemon.server import (
         _GuardDaemonHandler,  # pyright: ignore[reportPrivateUsage]
     )
 

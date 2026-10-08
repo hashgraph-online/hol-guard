@@ -38,7 +38,10 @@ def _jobs() -> list[dict[str, object]]:
 
 
 def _run(
-    snapshots: list[list[dict[str, object]]], *, timeout_seconds: float = barrier._DEFAULT_TIMEOUT_SECONDS, plan_skippable: bool = False
+    snapshots: list[list[dict[str, object]]],
+    *,
+    timeout_seconds: float = barrier._DEFAULT_TIMEOUT_SECONDS,
+    plan_skippable: bool = False,
 ) -> tuple[list[str], list[str]]:
     now = [0.0]
     calls: list[str] = []
@@ -289,6 +292,7 @@ def test_missing_shard_and_partial_reruns_expire_without_accepting_old_coverage(
     with pytest.raises(barrier.ShardWaitError, match="Timed out"):
         _run([_jobs()[:completed_shards]], timeout_seconds=10)
 
+
 def _prereqs(plan_conclusion: str) -> list[dict[str, object]]:
     """The push-run job graph: plan is only scheduled on pull_request events."""
     return [
@@ -448,7 +452,10 @@ def test_sonar_accepts_only_complete_coverage_from_verified_same_run_executions(
     jobs = workflow["jobs"]
     assert barrier.SHARD_COUNT == 128
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
-    assert jobs["coverage"]["strategy"]["matrix"]["shard-index"] == "${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}"
+    assert (
+        jobs["coverage"]["strategy"]["matrix"]["shard-index"]
+        == "${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}"
+    )
     producer = next(
         step for step in jobs["coverage"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"
     )

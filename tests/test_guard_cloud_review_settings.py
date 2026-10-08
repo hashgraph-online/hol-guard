@@ -9,7 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.approval_gate import ApprovalGateError, update_settings
+from codex_plugin_scanner.guard.approval_gate import (
+    ApprovalGateInput,
+    require_high_risk,
+    update_settings,
+)
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
     CloudReviewSettingsError,
@@ -32,6 +36,7 @@ def _payload(**changes: object) -> dict[str, object]:
         "confirm": "cloud-review.enable",
         "workspace_id": "workspace-1",
         "source": "default",
+        "approval_password": "cloud-review-native-test-pass",
         **changes,
     }
 
@@ -45,7 +50,7 @@ def test_dashboard_reports_real_consent_not_cloud_connection(tmp_path: Path) -> 
     initial = cloud_review_settings_status(store)
     assert initial["connected"] is True
     assert initial["enabled"] is False
-    assert initial["reason"] == "cloud_review_capability_missing"
+    assert initial["reason"] == "native_cloud_review_consent_disabled"
     assert not any(secret in repr(initial) for secret in ("refresh-token", "dpop_private_key", "access_token"))
     changed = change_cloud_review_settings(store, _payload(), refresh_workers=_refresh)
     assert changed["enabled"] is True
@@ -133,9 +138,19 @@ def test_reauthorization_refreshes_existing_pending_request(tmp_path: Path) -> N
 
 def test_inline_recovery_requires_mfa_and_explicit_workspace_confirmation(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
-    update_settings(store.guard_home, {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"})
-    with pytest.raises(ApprovalGateError):
-        change_cloud_review_settings(store, _payload(), refresh_workers=_refresh)
+    settings_grant = require_high_risk(
+        store.guard_home,
+        purpose="settings_write",
+        approval_gate_input=ApprovalGateInput(password="cloud-review-native-test-pass"),
+        action="settings.write",
+        scope="local-protection",
+        subject="dashboard password rotation",
+    )
+    update_settings(
+        store.guard_home,
+        {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"},
+        approval_gate_grant=settings_grant,
+    )
     assert cloud_review_settings_status(store)["enabled"] is False
     with pytest.raises(CloudReviewSettingsError, match="workspace changed"):
         change_cloud_review_settings(
@@ -234,7 +249,19 @@ def test_quick_recovery_checks_the_request_history_identity(tmp_path: Path) -> N
 
 def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
-    update_settings(store.guard_home, {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"})
+    settings_grant = require_high_risk(
+        store.guard_home,
+        purpose="settings_write",
+        approval_gate_input=ApprovalGateInput(password="cloud-review-native-test-pass"),
+        action="settings.write",
+        scope="local-protection",
+        subject="dashboard password rotation",
+    )
+    update_settings(
+        store.guard_home,
+        {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"},
+        approval_gate_grant=settings_grant,
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -255,8 +282,8 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
             send({**headers, "Origin": "https://hol.org"}, _payload())
         assert remote_origin.value.code == 403
         with pytest.raises(urllib.error.HTTPError) as missing_proof:
-            send(headers, _payload())
-        assert missing_proof.value.code == 403
+            send(headers, {k: v for k, v in _payload().items() if k != "approval_password"})
+        assert missing_proof.value.code == 409
         assert send(headers)["enabled"] is False
         assert send(headers, _payload(approval_password="test-pass"))["enabled"] is True
         assert send(headers)["enabled"] is True

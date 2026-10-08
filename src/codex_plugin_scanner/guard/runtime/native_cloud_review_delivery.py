@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 
 def native_cloud_review_delivery_candidate(payload: object) -> bool:
     return isinstance(payload, Mapping) and bool(
-        {"nativeApprovalContext", "nativeApprovalProof", "nativeApprovalRenewal", "nativeDeliveryBinding"} & payload.keys()
+        {"nativeApprovalContext", "nativeApprovalProof", "nativeApprovalRenewal", "nativeDeliveryBinding"}
+        & payload.keys()
     )
 
 
@@ -30,7 +31,10 @@ def authorize_native_cloud_review_delivery(
 ) -> dict[str, object]:
     payload = job.get("payload")
     required_fields = {"harness", "nativeApprovalContext", "nativeApprovalProof"}
-    if not isinstance(payload, Mapping) or set(payload) not in (required_fields, required_fields | {"nativeApprovalRenewal"}):
+    if not isinstance(payload, Mapping) or set(payload) not in (
+        required_fields,
+        required_fields | {"nativeApprovalRenewal"},
+    ):
         raise ExactCloudReviewError("remote_exact_native_payload_invalid")
     context = payload["nativeApprovalContext"]
     if (
@@ -77,15 +81,19 @@ def authorize_native_cloud_review_delivery(
             raise ExactCloudReviewError("remote_exact_native_block_proof_invalid")
         try:
             protected_renewal = get_native_approval_renewal(
-                store.guard_home, request_id=cast(str, challenge["request_id"]),
-                decision_receipt_id=cast(str, context["decisionReceiptId"]), source_claim_hash=cast(str, claim["claimHash"]),
+                store.guard_home,
+                request_id=cast(str, challenge["request_id"]),
+                decision_receipt_id=cast(str, context["decisionReceiptId"]),
+                source_claim_hash=cast(str, claim["claimHash"]),
                 original_challenge=challenge,
             )
         except NativeCloudReviewV4Error as error:
             raise ExactCloudReviewError(error.code) from error
-        if (protected_renewal != payload["nativeApprovalRenewal"]
+        if (
+            protected_renewal != payload["nativeApprovalRenewal"]
             or protected_renewal["revocation_epoch"] != origin["revocation_epoch"]
-            or cast(int, protected_renewal["consent_revision"]) < cast(int, origin["consent_revision"])):
+            or cast(int, protected_renewal["consent_revision"]) < cast(int, origin["consent_revision"])
+        ):
             raise ExactCloudReviewError("remote_exact_native_renewal_mismatch")
         expected_challenge = cast(dict[str, object], protected_renewal["challenge"])
     proof = payload["nativeApprovalProof"]

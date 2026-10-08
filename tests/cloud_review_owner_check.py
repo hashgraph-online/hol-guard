@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import pytest
+import pytest  # noqa: E402 -- deliberate sys.path shim before pytest import
 
 NODES = (
     "tests/test_guard_review_event_outbox_delivery.py::test_unconnected_store_is_not_enrolled_and_does_not_deliver",

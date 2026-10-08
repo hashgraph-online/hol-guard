@@ -356,7 +356,17 @@ def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) 
         _verified_capability(store, now=now)
         return (EXACT_CLOUD_REVIEW_OPERATION,)
     except (AttributeError, ExactCloudReviewError):
+        pass
+    # Workspace-admin MFA approvals do not require a local consent capability;
+    # the operation stays reachable when OAuth metadata exists so the queue can
+    # deliver those jobs even with no consent bound.
+    if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
         return ()
+    try:
+        _oauth_metadata(store)
+    except (AttributeError, ExactCloudReviewError):
+        return ()
+    return (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
 def exact_cloud_review_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
@@ -404,14 +414,14 @@ def authorize_exact_cloud_review_job(
         CommandCapabilityError,
         _command_job_seen,
     )
+    from .native_cloud_review_delivery import (
+        authorize_native_cloud_review_delivery,
+        native_cloud_review_delivery_candidate,
+    )
     from .native_workspace_review_queue import (
         NativeWorkspaceReviewQueueError,
         native_workspace_review_payload,
         require_native_workspace_review_authority,
-    )
-    from .native_cloud_review_delivery import (
-        authorize_native_cloud_review_delivery,
-        native_cloud_review_delivery_candidate,
     )
 
     try:
@@ -442,7 +452,7 @@ def authorize_exact_cloud_review_job(
             except NativeWorkspaceReviewQueueError as error:
                 raise ExactCloudReviewError(error.code) from error
         else:
-            capability = _verified_capability(store, now=now)
+            capability: dict[str, object] | None = None
             remote_approval = payload.get("remoteApproval") if isinstance(payload, Mapping) else None
             if not isinstance(remote_approval, Mapping):
                 raise ExactCloudReviewError("remote_exact_job_invalid")
@@ -458,6 +468,7 @@ def authorize_exact_cloud_review_job(
                 if approval.get("grantId") != oauth.grant_id:
                     raise ExactCloudReviewError("remote_exact_job_wrong_grant")
             else:
+                capability = _verified_capability(store, now=now)
                 if identity["deviceId"] != capability["deviceId"]:
                     raise ExactCloudReviewError("remote_exact_job_wrong_target")
                 if identity["workspaceId"] != capability["workspaceId"]:

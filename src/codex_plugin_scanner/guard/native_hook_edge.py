@@ -163,7 +163,9 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
     if (
         not isinstance(result, dict)
         or not set(result).issuperset(_PRE_TOOL_RESULT_KEYS)
-        or set(result) - _PRE_TOOL_RESULT_KEYS - {"command_extensions", "prompt_risk_classes", "native_approval_consumption"}
+        or set(result)
+        - _PRE_TOOL_RESULT_KEYS
+        - {"command_extensions", "prompt_risk_classes", "native_approval_consumption"}
     ):
         return False
     if "prompt_risk_classes" in result and (
@@ -198,9 +200,13 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
         if observed is None:
             return False
         receipt = observed["receipt"]
-        if (receipt["harness"] != harness or decision != "allow"
-            or minimum_action != "allow" or result["explicitly_benign"] is not False
-            or result["reason_code"] != "native_approval_v4_consumed"):
+        if (
+            receipt["harness"] != harness
+            or decision != "allow"
+            or minimum_action != "allow"
+            or result["explicitly_benign"] is not False
+            or result["reason_code"] != "native_approval_v4_consumed"
+        ):
             return False
     elif result["explicitly_benign"] != (decision == "allow" and minimum_action == "allow"):
         return False
@@ -264,9 +270,13 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         from .runtime.native_cloud_review_v4 import decode_native_application_observation
 
         observed = decode_native_application_observation(application)
-        if (observed is None or observed["phase"] != "consumed" or not isinstance(consumed, Mapping)
+        if (
+            observed is None
+            or observed["phase"] != "consumed"
+            or not isinstance(consumed, Mapping)
             or observed["receipt"] != consumed.get("receipt")
-            or observed["request_id"] != payload["receipt"].get("request_id")):
+            or observed["request_id"] != payload["receipt"].get("request_id")
+        ):
             return None
     return payload
 
