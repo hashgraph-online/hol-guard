@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -12,6 +13,46 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+
+def attested_publication_identity(wheel: Path, bundle: Path, repo: str) -> tuple[str, str]:
+    # Verify the single signed statement before trusting its invocation identity.
+    subprocess.run(
+        [
+            "gh",
+            "attestation",
+            "verify",
+            str(wheel),
+            "--repo",
+            repo,
+            "--bundle",
+            str(bundle),
+            "--signer-workflow",
+            f"{repo}/.github/workflows/publish.yml",
+            "--deny-self-hosted-runners",
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        timeout=20,
+    )
+    lines = bundle.read_text().splitlines()
+    if len(lines) != 1:
+        raise ValueError("ambiguous publication provenance")
+    statement = json.loads(base64.b64decode(json.loads(lines[0])["dsseEnvelope"]["payload"]))
+    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    if not any(subject.get("digest", {}).get("sha256") == digest for subject in statement["subject"]):
+        raise ValueError("publication provenance does not bind the attested wheel")
+    invocation = statement["predicate"]["runDetails"]["metadata"]["invocationId"]
+    match = re.fullmatch(
+        rf"https://github\.com/{re.escape(repo)}/actions/runs/([1-9][0-9]*)/attempts/[1-9][0-9]*", invocation
+    )
+    if not match:
+        raise ValueError("publication provenance has an invalid invocation")
+    run_id = match[1]
+    run = json.loads(
+        subprocess.check_output(["gh", "api", f"repos/{repo}/actions/runs/{run_id}"], text=True, timeout=20)
+    )
+    return run_id, run["head_sha"]
 
 
 def publication_ready(repo: str, run_id: str, source_sha: str) -> bool:
@@ -87,9 +128,19 @@ if __name__ == "__main__":
     parser.add_argument("--version", required=True)
     parser.add_argument("--wheel", type=Path, required=True)
     parser.add_argument("--filename", help="Original distribution filename before copying the attested wheel")
+    parser.add_argument("--bundle", type=Path, help="Verified package provenance for scheduled publication checks")
     parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
+    if not os.environ.get("PUBLICATION_RUN_ID"):
+        if args.bundle is None:
+            raise ValueError("a publishing run or package provenance is required")
+        run_id, source_sha = attested_publication_identity(args.wheel, args.bundle, os.environ["GITHUB_REPOSITORY"])
+        os.environ["PUBLICATION_RUN_ID"] = run_id
+        os.environ["PUBLICATION_SOURCE_SHA"] = source_sha
     if args.check_only:
-        print("registry_ready=" + str(registry_ready(args.version, args.wheel, args.filename)).lower())
+        ready = publication_ready(
+            os.environ["GITHUB_REPOSITORY"], os.environ["PUBLICATION_RUN_ID"], os.environ["PUBLICATION_SOURCE_SHA"]
+        )
+        print("registry_ready=" + str(ready and registry_ready(args.version, args.wheel, args.filename)).lower())
     else:
         wait(args.version, args.wheel, filename=args.filename)

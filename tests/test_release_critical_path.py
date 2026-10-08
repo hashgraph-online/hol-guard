@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -16,7 +17,7 @@ import pytest
 from scripts.release import publish_core_inputs
 from scripts.release.prepared_native import transfer
 from scripts.release.ready_core_releases import ready_tags
-from scripts.release.wait_for_core_publication import publication_ready, registry_ready
+from scripts.release.wait_for_core_publication import attested_publication_identity, publication_ready, registry_ready
 from tests.release_workflow_helpers import load_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +39,46 @@ def test_feed_registry_checks_keep_the_authorized_distribution_filename(workflow
     checks = [step["run"] for step in steps if "wait_for_core_publication.py" in step.get("run", "")]
     assert len(checks) == 2
     assert all('--filename "$ATTESTED_WHEEL_FILENAME"' in check for check in checks)
+    assert all('--bundle "$RUNNER_TEMP/core-trust-assets/' in check for check in checks)
+
+
+def test_scheduled_publication_identity_comes_from_verified_wheel_provenance(tmp_path, monkeypatch):
+    wheel = tmp_path / "attested.whl"
+    wheel.write_bytes(b"wheel")
+    statement = {
+        "subject": [{"digest": {"sha256": hashlib.sha256(wheel.read_bytes()).hexdigest()}}],
+        "predicate": {
+            "runDetails": {
+                "metadata": {
+                    "invocationId": "https://github.com/hashgraph-online/hol-guard/actions/runs/123/attempts/1"
+                }
+            }
+        },
+    }
+    bundle = tmp_path / "proof.jsonl"
+    bundle.write_text(
+        json.dumps({"dsseEnvelope": {"payload": base64.b64encode(json.dumps(statement).encode()).decode()}})
+    )
+    calls = []
+
+    def verify(*args, **kwargs):
+        calls.append(args[0])
+        assert kwargs["check"] is True
+
+    monkeypatch.setattr(subprocess, "run", verify)
+    monkeypatch.setattr(subprocess, "check_output", lambda *args, **kwargs: json.dumps({"head_sha": "a" * 40}))
+    assert attested_publication_identity(wheel, bundle, "hashgraph-online/hol-guard") == ("123", "a" * 40)
+    assert "--signer-workflow" in calls[0]
+    wheel.write_bytes(b"wrong wheel")
+    with pytest.raises(ValueError, match="bind the attested wheel"):
+        attested_publication_identity(wheel, bundle, "hashgraph-online/hol-guard")
+
+    def reject(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, args[0])
+
+    monkeypatch.setattr(subprocess, "run", reject)
+    with pytest.raises(subprocess.CalledProcessError):
+        attested_publication_identity(wheel, bundle, "hashgraph-online/hol-guard")
 
 
 @pytest.mark.parametrize("renamed", [False, True])
