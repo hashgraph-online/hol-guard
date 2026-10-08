@@ -701,6 +701,103 @@
                 "required_option_values": [],
                 "inverse_flag_pairs": []
               }
+            },
+            {
+              "op": "executable-path-set.v1",
+              "config": {
+                "executables": [
+                  "gws",
+                  "gws.exe",
+                  "gws.cmd"
+                ],
+                "paths": [
+                  [
+                    "gmail:v1",
+                    "users",
+                    "messages",
+                    "send"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "drafts",
+                    "send"
+                  ]
+                ],
+                "allow_leading_options": true,
+                "fail_secure_unknown_options": true,
+                "leading_options_with_values": [
+                  "--params",
+                  "--json",
+                  "--output",
+                  "-o",
+                  "--upload",
+                  "--upload-content-type",
+                  "--format",
+                  "--sanitize",
+                  "--page-limit",
+                  "--page-delay",
+                  "--to",
+                  "--cc",
+                  "--bcc",
+                  "--subject",
+                  "--body",
+                  "--message-id",
+                  "--attachment",
+                  "-a",
+                  "--remove",
+                  "--api-version",
+                  "--scopes",
+                  "--services",
+                  "-s",
+                  "--project"
+                ],
+                "interspersed_options_with_values": [
+                  "--params",
+                  "--json",
+                  "--output",
+                  "-o",
+                  "--upload",
+                  "--upload-content-type",
+                  "--format",
+                  "--sanitize",
+                  "--page-limit",
+                  "--page-delay",
+                  "--to",
+                  "--cc",
+                  "--bcc",
+                  "--subject",
+                  "--body",
+                  "--message-id",
+                  "--attachment",
+                  "-a",
+                  "--remove",
+                  "--api-version",
+                  "--scopes",
+                  "--services",
+                  "-s",
+                  "--project"
+                ],
+                "options_with_values": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h",
+                  "--dry-run",
+                  "--page-all",
+                  "--html",
+                  "--draft",
+                  "--no-original-attachments",
+                  "--readonly",
+                  "--full",
+                  "--unmasked",
+                  "--login"
+                ],
+                "forbidden_flags": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "inverse_flag_pairs": []
+              }
             }
           ]
         },
@@ -1261,6 +1358,105 @@
                         "required_option_values": [],
                         "inverse_flag_pairs": []
                       }
+                    },
+                    {
+                      "op": "executable-path-set.v1",
+                      "config": {
+                        "executables": [
+                          "gws",
+                          "gws.exe",
+                          "gws.cmd"
+                        ],
+                        "paths": [
+                          [
+                            "gmail:v1",
+                            "users",
+                            "messages",
+                            "send"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "drafts",
+                            "send"
+                          ]
+                        ],
+                        "allow_leading_options": true,
+                        "fail_secure_unknown_options": true,
+                        "leading_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "interspersed_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "options_with_values": [],
+                        "interspersed_flags": [
+                          "--help",
+                          "-h",
+                          "--dry-run",
+                          "--page-all",
+                          "--html",
+                          "--draft",
+                          "--no-original-attachments",
+                          "--readonly",
+                          "--full",
+                          "--unmasked",
+                          "--login"
+                        ],
+                        "forbidden_flags": [],
+                        "required_flags": [
+                          "--help"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "required_option_values": [],
+                        "inverse_flag_pairs": []
+                      }
                     }
                   ]
                 },
@@ -1728,6 +1924,105 @@
                         "subcommands": [
                           "gmail",
                           "+forward"
+                        ],
+                        "allow_leading_options": true,
+                        "fail_secure_unknown_options": true,
+                        "leading_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "interspersed_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "options_with_values": [],
+                        "interspersed_flags": [
+                          "--help",
+                          "-h",
+                          "--dry-run",
+                          "--page-all",
+                          "--html",
+                          "--draft",
+                          "--no-original-attachments",
+                          "--readonly",
+                          "--full",
+                          "--unmasked",
+                          "--login"
+                        ],
+                        "forbidden_flags": [],
+                        "required_flags": [
+                          "-h"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "required_option_values": [],
+                        "inverse_flag_pairs": []
+                      }
+                    },
+                    {
+                      "op": "executable-path-set.v1",
+                      "config": {
+                        "executables": [
+                          "gws",
+                          "gws.exe",
+                          "gws.cmd"
+                        ],
+                        "paths": [
+                          [
+                            "gmail:v1",
+                            "users",
+                            "messages",
+                            "send"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "drafts",
+                            "send"
+                          ]
                         ],
                         "allow_leading_options": true,
                         "fail_secure_unknown_options": true,
@@ -2638,6 +2933,191 @@
                   "drive",
                   "drives",
                   "delete"
+                ],
+                "allow_leading_options": true,
+                "fail_secure_unknown_options": true,
+                "leading_options_with_values": [
+                  "--params",
+                  "--json",
+                  "--output",
+                  "-o",
+                  "--upload",
+                  "--upload-content-type",
+                  "--format",
+                  "--sanitize",
+                  "--page-limit",
+                  "--page-delay",
+                  "--to",
+                  "--cc",
+                  "--bcc",
+                  "--subject",
+                  "--body",
+                  "--message-id",
+                  "--attachment",
+                  "-a",
+                  "--remove",
+                  "--api-version",
+                  "--scopes",
+                  "--services",
+                  "-s",
+                  "--project"
+                ],
+                "interspersed_options_with_values": [
+                  "--params",
+                  "--json",
+                  "--output",
+                  "-o",
+                  "--upload",
+                  "--upload-content-type",
+                  "--format",
+                  "--sanitize",
+                  "--page-limit",
+                  "--page-delay",
+                  "--to",
+                  "--cc",
+                  "--bcc",
+                  "--subject",
+                  "--body",
+                  "--message-id",
+                  "--attachment",
+                  "-a",
+                  "--remove",
+                  "--api-version",
+                  "--scopes",
+                  "--services",
+                  "-s",
+                  "--project"
+                ],
+                "options_with_values": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h",
+                  "--dry-run",
+                  "--page-all",
+                  "--html",
+                  "--draft",
+                  "--no-original-attachments",
+                  "--readonly",
+                  "--full",
+                  "--unmasked",
+                  "--login"
+                ],
+                "forbidden_flags": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "inverse_flag_pairs": []
+              }
+            },
+            {
+              "op": "executable-path-set.v1",
+              "config": {
+                "executables": [
+                  "gws",
+                  "gws.exe",
+                  "gws.cmd"
+                ],
+                "paths": [
+                  [
+                    "drive",
+                    "files",
+                    "trash"
+                  ],
+                  [
+                    "drive",
+                    "teamdrives",
+                    "delete"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "messages",
+                    "delete"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "messages",
+                    "batchdelete"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "messages",
+                    "trash"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "threads",
+                    "delete"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "threads",
+                    "trash"
+                  ],
+                  [
+                    "drive:v3",
+                    "files",
+                    "delete"
+                  ],
+                  [
+                    "drive:v2",
+                    "files",
+                    "delete"
+                  ],
+                  [
+                    "calendar:v3",
+                    "calendars",
+                    "delete"
+                  ],
+                  [
+                    "calendar:v3",
+                    "calendars",
+                    "clear"
+                  ],
+                  [
+                    "drive:v3",
+                    "files",
+                    "emptytrash"
+                  ],
+                  [
+                    "drive:v2",
+                    "files",
+                    "emptytrash"
+                  ],
+                  [
+                    "drive:v3",
+                    "drives",
+                    "delete"
+                  ],
+                  [
+                    "drive:v2",
+                    "drives",
+                    "delete"
+                  ],
+                  [
+                    "drive:v3",
+                    "files",
+                    "trash"
+                  ],
+                  [
+                    "drive:v2",
+                    "files",
+                    "trash"
+                  ],
+                  [
+                    "drive:v3",
+                    "teamdrives",
+                    "delete"
+                  ],
+                  [
+                    "drive:v2",
+                    "teamdrives",
+                    "delete"
+                  ]
                 ],
                 "allow_leading_options": true,
                 "fail_secure_unknown_options": true,
@@ -3640,6 +4120,193 @@
                         "required_option_values": [],
                         "inverse_flag_pairs": []
                       }
+                    },
+                    {
+                      "op": "executable-path-set.v1",
+                      "config": {
+                        "executables": [
+                          "gws",
+                          "gws.exe",
+                          "gws.cmd"
+                        ],
+                        "paths": [
+                          [
+                            "drive",
+                            "files",
+                            "trash"
+                          ],
+                          [
+                            "drive",
+                            "teamdrives",
+                            "delete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "messages",
+                            "delete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "messages",
+                            "batchdelete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "messages",
+                            "trash"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "threads",
+                            "delete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "threads",
+                            "trash"
+                          ],
+                          [
+                            "drive:v3",
+                            "files",
+                            "delete"
+                          ],
+                          [
+                            "drive:v2",
+                            "files",
+                            "delete"
+                          ],
+                          [
+                            "calendar:v3",
+                            "calendars",
+                            "delete"
+                          ],
+                          [
+                            "calendar:v3",
+                            "calendars",
+                            "clear"
+                          ],
+                          [
+                            "drive:v3",
+                            "files",
+                            "emptytrash"
+                          ],
+                          [
+                            "drive:v2",
+                            "files",
+                            "emptytrash"
+                          ],
+                          [
+                            "drive:v3",
+                            "drives",
+                            "delete"
+                          ],
+                          [
+                            "drive:v2",
+                            "drives",
+                            "delete"
+                          ],
+                          [
+                            "drive:v3",
+                            "files",
+                            "trash"
+                          ],
+                          [
+                            "drive:v2",
+                            "files",
+                            "trash"
+                          ],
+                          [
+                            "drive:v3",
+                            "teamdrives",
+                            "delete"
+                          ],
+                          [
+                            "drive:v2",
+                            "teamdrives",
+                            "delete"
+                          ]
+                        ],
+                        "allow_leading_options": true,
+                        "fail_secure_unknown_options": true,
+                        "leading_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "interspersed_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "options_with_values": [],
+                        "interspersed_flags": [
+                          "--help",
+                          "-h",
+                          "--dry-run",
+                          "--page-all",
+                          "--html",
+                          "--draft",
+                          "--no-original-attachments",
+                          "--readonly",
+                          "--full",
+                          "--unmasked",
+                          "--login"
+                        ],
+                        "forbidden_flags": [],
+                        "required_flags": [
+                          "--help"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "required_option_values": [],
+                        "inverse_flag_pairs": []
+                      }
                     }
                   ]
                 },
@@ -4474,6 +5141,193 @@
                           "drive",
                           "drives",
                           "delete"
+                        ],
+                        "allow_leading_options": true,
+                        "fail_secure_unknown_options": true,
+                        "leading_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "interspersed_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "options_with_values": [],
+                        "interspersed_flags": [
+                          "--help",
+                          "-h",
+                          "--dry-run",
+                          "--page-all",
+                          "--html",
+                          "--draft",
+                          "--no-original-attachments",
+                          "--readonly",
+                          "--full",
+                          "--unmasked",
+                          "--login"
+                        ],
+                        "forbidden_flags": [],
+                        "required_flags": [
+                          "-h"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "required_option_values": [],
+                        "inverse_flag_pairs": []
+                      }
+                    },
+                    {
+                      "op": "executable-path-set.v1",
+                      "config": {
+                        "executables": [
+                          "gws",
+                          "gws.exe",
+                          "gws.cmd"
+                        ],
+                        "paths": [
+                          [
+                            "drive",
+                            "files",
+                            "trash"
+                          ],
+                          [
+                            "drive",
+                            "teamdrives",
+                            "delete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "messages",
+                            "delete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "messages",
+                            "batchdelete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "messages",
+                            "trash"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "threads",
+                            "delete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "threads",
+                            "trash"
+                          ],
+                          [
+                            "drive:v3",
+                            "files",
+                            "delete"
+                          ],
+                          [
+                            "drive:v2",
+                            "files",
+                            "delete"
+                          ],
+                          [
+                            "calendar:v3",
+                            "calendars",
+                            "delete"
+                          ],
+                          [
+                            "calendar:v3",
+                            "calendars",
+                            "clear"
+                          ],
+                          [
+                            "drive:v3",
+                            "files",
+                            "emptytrash"
+                          ],
+                          [
+                            "drive:v2",
+                            "files",
+                            "emptytrash"
+                          ],
+                          [
+                            "drive:v3",
+                            "drives",
+                            "delete"
+                          ],
+                          [
+                            "drive:v2",
+                            "drives",
+                            "delete"
+                          ],
+                          [
+                            "drive:v3",
+                            "files",
+                            "trash"
+                          ],
+                          [
+                            "drive:v2",
+                            "files",
+                            "trash"
+                          ],
+                          [
+                            "drive:v3",
+                            "teamdrives",
+                            "delete"
+                          ],
+                          [
+                            "drive:v2",
+                            "teamdrives",
+                            "delete"
+                          ]
                         ],
                         "allow_leading_options": true,
                         "fail_secure_unknown_options": true,
@@ -5474,6 +6328,198 @@
                   "settings",
                   "delegates",
                   "create"
+                ],
+                "allow_leading_options": true,
+                "fail_secure_unknown_options": true,
+                "leading_options_with_values": [
+                  "--params",
+                  "--json",
+                  "--output",
+                  "-o",
+                  "--upload",
+                  "--upload-content-type",
+                  "--format",
+                  "--sanitize",
+                  "--page-limit",
+                  "--page-delay",
+                  "--to",
+                  "--cc",
+                  "--bcc",
+                  "--subject",
+                  "--body",
+                  "--message-id",
+                  "--attachment",
+                  "-a",
+                  "--remove",
+                  "--api-version",
+                  "--scopes",
+                  "--services",
+                  "-s",
+                  "--project"
+                ],
+                "interspersed_options_with_values": [
+                  "--params",
+                  "--json",
+                  "--output",
+                  "-o",
+                  "--upload",
+                  "--upload-content-type",
+                  "--format",
+                  "--sanitize",
+                  "--page-limit",
+                  "--page-delay",
+                  "--to",
+                  "--cc",
+                  "--bcc",
+                  "--subject",
+                  "--body",
+                  "--message-id",
+                  "--attachment",
+                  "-a",
+                  "--remove",
+                  "--api-version",
+                  "--scopes",
+                  "--services",
+                  "-s",
+                  "--project"
+                ],
+                "options_with_values": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h",
+                  "--dry-run",
+                  "--page-all",
+                  "--html",
+                  "--draft",
+                  "--no-original-attachments",
+                  "--readonly",
+                  "--full",
+                  "--unmasked",
+                  "--login"
+                ],
+                "forbidden_flags": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "inverse_flag_pairs": []
+              }
+            },
+            {
+              "op": "executable-path-set.v1",
+              "config": {
+                "executables": [
+                  "gws",
+                  "gws.exe",
+                  "gws.cmd"
+                ],
+                "paths": [
+                  [
+                    "drive",
+                    "permissions",
+                    "insert"
+                  ],
+                  [
+                    "drive",
+                    "permissions",
+                    "patch"
+                  ],
+                  [
+                    "drive:v3",
+                    "permissions",
+                    "create"
+                  ],
+                  [
+                    "drive:v2",
+                    "permissions",
+                    "create"
+                  ],
+                  [
+                    "drive:v3",
+                    "permissions",
+                    "update"
+                  ],
+                  [
+                    "drive:v2",
+                    "permissions",
+                    "update"
+                  ],
+                  [
+                    "drive:v3",
+                    "permissions",
+                    "delete"
+                  ],
+                  [
+                    "drive:v2",
+                    "permissions",
+                    "delete"
+                  ],
+                  [
+                    "calendar:v3",
+                    "acl",
+                    "insert"
+                  ],
+                  [
+                    "calendar:v3",
+                    "acl",
+                    "update"
+                  ],
+                  [
+                    "calendar:v3",
+                    "acl",
+                    "patch"
+                  ],
+                  [
+                    "calendar:v3",
+                    "acl",
+                    "delete"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "settings",
+                    "forwardingaddresses",
+                    "create"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "settings",
+                    "updateautoforwarding"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "settings",
+                    "filters",
+                    "create"
+                  ],
+                  [
+                    "gmail:v1",
+                    "users",
+                    "settings",
+                    "delegates",
+                    "create"
+                  ],
+                  [
+                    "drive:v3",
+                    "permissions",
+                    "insert"
+                  ],
+                  [
+                    "drive:v2",
+                    "permissions",
+                    "insert"
+                  ],
+                  [
+                    "drive:v3",
+                    "permissions",
+                    "patch"
+                  ],
+                  [
+                    "drive:v2",
+                    "permissions",
+                    "patch"
+                  ]
                 ],
                 "allow_leading_options": true,
                 "fail_secure_unknown_options": true,
@@ -6568,6 +7614,200 @@
                         "required_option_values": [],
                         "inverse_flag_pairs": []
                       }
+                    },
+                    {
+                      "op": "executable-path-set.v1",
+                      "config": {
+                        "executables": [
+                          "gws",
+                          "gws.exe",
+                          "gws.cmd"
+                        ],
+                        "paths": [
+                          [
+                            "drive",
+                            "permissions",
+                            "insert"
+                          ],
+                          [
+                            "drive",
+                            "permissions",
+                            "patch"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "create"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "create"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "update"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "update"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "delete"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "delete"
+                          ],
+                          [
+                            "calendar:v3",
+                            "acl",
+                            "insert"
+                          ],
+                          [
+                            "calendar:v3",
+                            "acl",
+                            "update"
+                          ],
+                          [
+                            "calendar:v3",
+                            "acl",
+                            "patch"
+                          ],
+                          [
+                            "calendar:v3",
+                            "acl",
+                            "delete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "settings",
+                            "forwardingaddresses",
+                            "create"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "settings",
+                            "updateautoforwarding"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "settings",
+                            "filters",
+                            "create"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "settings",
+                            "delegates",
+                            "create"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "insert"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "insert"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "patch"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "patch"
+                          ]
+                        ],
+                        "allow_leading_options": true,
+                        "fail_secure_unknown_options": true,
+                        "leading_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "interspersed_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "options_with_values": [],
+                        "interspersed_flags": [
+                          "--help",
+                          "-h",
+                          "--dry-run",
+                          "--page-all",
+                          "--html",
+                          "--draft",
+                          "--no-original-attachments",
+                          "--readonly",
+                          "--full",
+                          "--unmasked",
+                          "--login"
+                        ],
+                        "forbidden_flags": [],
+                        "required_flags": [
+                          "--help"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "required_option_values": [],
+                        "inverse_flag_pairs": []
+                      }
                     }
                   ]
                 },
@@ -7571,6 +8811,200 @@
                         "required_option_values": [],
                         "inverse_flag_pairs": []
                       }
+                    },
+                    {
+                      "op": "executable-path-set.v1",
+                      "config": {
+                        "executables": [
+                          "gws",
+                          "gws.exe",
+                          "gws.cmd"
+                        ],
+                        "paths": [
+                          [
+                            "drive",
+                            "permissions",
+                            "insert"
+                          ],
+                          [
+                            "drive",
+                            "permissions",
+                            "patch"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "create"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "create"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "update"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "update"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "delete"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "delete"
+                          ],
+                          [
+                            "calendar:v3",
+                            "acl",
+                            "insert"
+                          ],
+                          [
+                            "calendar:v3",
+                            "acl",
+                            "update"
+                          ],
+                          [
+                            "calendar:v3",
+                            "acl",
+                            "patch"
+                          ],
+                          [
+                            "calendar:v3",
+                            "acl",
+                            "delete"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "settings",
+                            "forwardingaddresses",
+                            "create"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "settings",
+                            "updateautoforwarding"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "settings",
+                            "filters",
+                            "create"
+                          ],
+                          [
+                            "gmail:v1",
+                            "users",
+                            "settings",
+                            "delegates",
+                            "create"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "insert"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "insert"
+                          ],
+                          [
+                            "drive:v3",
+                            "permissions",
+                            "patch"
+                          ],
+                          [
+                            "drive:v2",
+                            "permissions",
+                            "patch"
+                          ]
+                        ],
+                        "allow_leading_options": true,
+                        "fail_secure_unknown_options": true,
+                        "leading_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "interspersed_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "options_with_values": [],
+                        "interspersed_flags": [
+                          "--help",
+                          "-h",
+                          "--dry-run",
+                          "--page-all",
+                          "--html",
+                          "--draft",
+                          "--no-original-attachments",
+                          "--readonly",
+                          "--full",
+                          "--unmasked",
+                          "--login"
+                        ],
+                        "forbidden_flags": [],
+                        "required_flags": [
+                          "-h"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "required_option_values": [],
+                        "inverse_flag_pairs": []
+                      }
                     }
                   ]
                 }
@@ -8047,6 +9481,121 @@
                   "calendar",
                   "events",
                   "import"
+                ],
+                "allow_leading_options": true,
+                "fail_secure_unknown_options": true,
+                "leading_options_with_values": [
+                  "--params",
+                  "--json",
+                  "--output",
+                  "-o",
+                  "--upload",
+                  "--upload-content-type",
+                  "--format",
+                  "--sanitize",
+                  "--page-limit",
+                  "--page-delay",
+                  "--to",
+                  "--cc",
+                  "--bcc",
+                  "--subject",
+                  "--body",
+                  "--message-id",
+                  "--attachment",
+                  "-a",
+                  "--remove",
+                  "--api-version",
+                  "--scopes",
+                  "--services",
+                  "-s",
+                  "--project"
+                ],
+                "interspersed_options_with_values": [
+                  "--params",
+                  "--json",
+                  "--output",
+                  "-o",
+                  "--upload",
+                  "--upload-content-type",
+                  "--format",
+                  "--sanitize",
+                  "--page-limit",
+                  "--page-delay",
+                  "--to",
+                  "--cc",
+                  "--bcc",
+                  "--subject",
+                  "--body",
+                  "--message-id",
+                  "--attachment",
+                  "-a",
+                  "--remove",
+                  "--api-version",
+                  "--scopes",
+                  "--services",
+                  "-s",
+                  "--project"
+                ],
+                "options_with_values": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h",
+                  "--dry-run",
+                  "--page-all",
+                  "--html",
+                  "--draft",
+                  "--no-original-attachments",
+                  "--readonly",
+                  "--full",
+                  "--unmasked",
+                  "--login"
+                ],
+                "forbidden_flags": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "inverse_flag_pairs": []
+              }
+            },
+            {
+              "op": "executable-path-set.v1",
+              "config": {
+                "executables": [
+                  "gws",
+                  "gws.exe",
+                  "gws.cmd"
+                ],
+                "paths": [
+                  [
+                    "calendar:v3",
+                    "events",
+                    "insert"
+                  ],
+                  [
+                    "calendar:v3",
+                    "events",
+                    "update"
+                  ],
+                  [
+                    "calendar:v3",
+                    "events",
+                    "patch"
+                  ],
+                  [
+                    "calendar:v3",
+                    "events",
+                    "delete"
+                  ],
+                  [
+                    "calendar:v3",
+                    "events",
+                    "move"
+                  ],
+                  [
+                    "calendar:v3",
+                    "events",
+                    "import"
+                  ]
                 ],
                 "allow_leading_options": true,
                 "fail_secure_unknown_options": true,
@@ -8684,6 +10233,123 @@
                         "required_option_values": [],
                         "inverse_flag_pairs": []
                       }
+                    },
+                    {
+                      "op": "executable-path-set.v1",
+                      "config": {
+                        "executables": [
+                          "gws",
+                          "gws.exe",
+                          "gws.cmd"
+                        ],
+                        "paths": [
+                          [
+                            "calendar:v3",
+                            "events",
+                            "insert"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "update"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "patch"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "delete"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "move"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "import"
+                          ]
+                        ],
+                        "allow_leading_options": true,
+                        "fail_secure_unknown_options": true,
+                        "leading_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "interspersed_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "options_with_values": [],
+                        "interspersed_flags": [
+                          "--help",
+                          "-h",
+                          "--dry-run",
+                          "--page-all",
+                          "--html",
+                          "--draft",
+                          "--no-original-attachments",
+                          "--readonly",
+                          "--full",
+                          "--unmasked",
+                          "--login"
+                        ],
+                        "forbidden_flags": [],
+                        "required_flags": [
+                          "--help"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "required_option_values": [],
+                        "inverse_flag_pairs": []
+                      }
                     }
                   ]
                 },
@@ -9153,6 +10819,123 @@
                           "calendar",
                           "events",
                           "import"
+                        ],
+                        "allow_leading_options": true,
+                        "fail_secure_unknown_options": true,
+                        "leading_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "interspersed_options_with_values": [
+                          "--params",
+                          "--json",
+                          "--output",
+                          "-o",
+                          "--upload",
+                          "--upload-content-type",
+                          "--format",
+                          "--sanitize",
+                          "--page-limit",
+                          "--page-delay",
+                          "--to",
+                          "--cc",
+                          "--bcc",
+                          "--subject",
+                          "--body",
+                          "--message-id",
+                          "--attachment",
+                          "-a",
+                          "--remove",
+                          "--api-version",
+                          "--scopes",
+                          "--services",
+                          "-s",
+                          "--project"
+                        ],
+                        "options_with_values": [],
+                        "interspersed_flags": [
+                          "--help",
+                          "-h",
+                          "--dry-run",
+                          "--page-all",
+                          "--html",
+                          "--draft",
+                          "--no-original-attachments",
+                          "--readonly",
+                          "--full",
+                          "--unmasked",
+                          "--login"
+                        ],
+                        "forbidden_flags": [],
+                        "required_flags": [
+                          "-h"
+                        ],
+                        "required_flags_in_all_arguments": true,
+                        "required_option_values": [],
+                        "inverse_flag_pairs": []
+                      }
+                    },
+                    {
+                      "op": "executable-path-set.v1",
+                      "config": {
+                        "executables": [
+                          "gws",
+                          "gws.exe",
+                          "gws.cmd"
+                        ],
+                        "paths": [
+                          [
+                            "calendar:v3",
+                            "events",
+                            "insert"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "update"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "patch"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "delete"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "move"
+                          ],
+                          [
+                            "calendar:v3",
+                            "events",
+                            "import"
+                          ]
                         ],
                         "allow_leading_options": true,
                         "fail_secure_unknown_options": true,

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { permittedWatchInput, WATCH_COMMAND } from "./watch_scope";
+import { cwdSpelling, permittedWatchInput, WATCH_COMMAND } from "./watch_scope";
 
 test("Watch scope allows only the fixed harmless bash command", () => {
   expect(permittedWatchInput("bash", { command: WATCH_COMMAND, timeout: 1 })).toBe(true);
@@ -52,4 +52,14 @@ test("Watch scope accepts system-root aliases but rejects mutable directory syml
   } finally {
     rmSync(root, { recursive: true });
   }
+});
+
+test("Watch scope spells Windows directories by platform rules only", () => {
+  const workspace = "C:\\Users\\tester\\work\\workspace";
+  for (const spelling of ["C:/Users/tester/work/workspace", "c:\\Users\\tester\\work\\workspace", "C:\\Users\\tester\\work\\.\\workspace"]) {
+    expect(cwdSpelling(spelling, "win32")).toBe(cwdSpelling(workspace, "win32"));
+  }
+  expect(cwdSpelling("C:/Users/tester/work/sibling", "win32")).not.toBe(cwdSpelling(workspace, "win32"));
+  expect(cwdSpelling("C:/Users/tester/work/workspace", "darwin")).not.toBe(cwdSpelling(workspace, "darwin"));
+  expect(cwdSpelling("/private/tmp/fixture", "darwin")).toBe("/tmp/fixture");
 });

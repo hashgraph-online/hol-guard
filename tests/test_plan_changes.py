@@ -43,14 +43,77 @@ def _write(root: Path, rel: str, body: str = "x") -> None:
     subprocess.run(["git", "-C", str(root), "add", rel], check=True)
 
 
-def test_contribution_source_only_selects_data_lane(repo: Path) -> None:
-    _write(repo, "contributions/extensions/command.foo.json")
+@pytest.mark.parametrize(
+    "path",
+    [
+        "contributions/extension-listings/mcp.filesystem.json",
+        "contributions/extension-listings/command.foo.json",
+        "tests/fixtures/extension-listings/mcp.filesystem.json",
+        "tests/fixtures/mcp-server-valid.v1.json",
+        "tests/fixtures/command-source-valid.v1.json",
+    ],
+)
+def test_listing_and_fixture_metadata_selects_data_lane(repo: Path, path: str) -> None:
+    _write(repo, path, '{"name": "Before"}')
     base = _commit(repo, "base")
-    _write(repo, "contributions/extensions/command.bar.json")
-    head = _commit(repo, "add ext")
+    _write(repo, path, '{"name": "After", "icon": {"name": "HiMiniFolder"}}')
+    head = _commit(repo, "metadata")
     result = plan(base, head, root=repo)
     assert result.lanes == [LANE_DATA]
     assert result.data_only is True
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "contributions/extensions/command.agentbridge.json",
+        "contributions/command-sources/command.agentbridge.json",
+        "contributions/command-sources/migration-manifest.json",
+        "contributions/command-sources/source-manifest.json",
+        "contributions/authoring/command.agentbridge/source.json",
+        "contributions/mcp-servers/mcp.filesystem.json",
+        "contracts/mcp-servers/contribution.v1.schema.json",
+        "contributions/new-policy/policy.json",
+        "contributions/extension-listings/policy.py",
+    ],
+)
+def test_standalone_authority_or_unknown_path_escalates(repo: Path, path: str) -> None:
+    _write(repo, path, "{}")
+    base = _commit(repo, "base")
+    _write(repo, path, '{"tools": [{"name": "write_file", "state": "allow"}]}')
+    head = _commit(repo, "policy-only change")
+    result = plan(base, head, root=repo)
+    assert result.lanes == [LANE_FULL]
+    assert result.data_only is False
+
+
+def test_listing_plus_policy_escalates(repo: Path) -> None:
+    base = _commit(repo, "base")
+    _write(repo, "contributions/extension-listings/mcp.filesystem.json", "{}")
+    _write(repo, "contributions/mcp-servers/mcp.filesystem.json", "{}")
+    head = _commit(repo, "listing and policy")
+    result = plan(base, head, root=repo)
+    assert result.lanes == [LANE_FULL]
+    assert result.data_only is False
+
+
+@pytest.mark.parametrize("rename", [False, True])
+def test_listing_deletion_or_rename_escalates(repo: Path, rename: bool) -> None:
+    old = "contributions/extension-listings/mcp.before.json"
+    _write(repo, old, "{}")
+    base = _commit(repo, "base")
+    if rename:
+        subprocess.run(
+            ["git", "-C", str(repo), "mv", old,
+             "contributions/extension-listings/mcp.after.json"],
+            check=True,
+        )
+    else:
+        subprocess.run(["git", "-C", str(repo), "rm", old], check=True)
+    head = _commit(repo, "remove old listing")
+    result = plan(base, head, root=repo)
+    assert result.lanes == [LANE_FULL]
+    assert result.data_only is False
 
 
 def test_workflow_change_escalates_to_full(repo: Path) -> None:
@@ -64,10 +127,10 @@ def test_workflow_change_escalates_to_full(repo: Path) -> None:
 
 
 def test_data_plus_code_mix_escalates(repo: Path) -> None:
-    _write(repo, "contributions/extensions/command.foo.json")
+    _write(repo, "contributions/extension-listings/command.foo.json")
     _write(repo, "src/codex_plugin_scanner/x.py")
     base = _commit(repo, "base")
-    _write(repo, "contributions/extensions/command.bar.json")
+    _write(repo, "contributions/extension-listings/command.bar.json")
     _write(repo, "src/codex_plugin_scanner/y.py")
     head = _commit(repo, "mixed")
     result = plan(base, head, root=repo)
@@ -128,11 +191,45 @@ def test_authority_catalog_escalates(repo: Path) -> None:
 
 def test_symlink_escalates(repo: Path) -> None:
     # A symlink under a data path must not ride the cheap lane.
-    _write(repo, "contributions/extensions/command.foo.json")
+    _write(repo, "contributions/extension-listings/command.foo.json")
     base = _commit(repo, "base")
-    (repo / "contributions/extensions/command.link.json").symlink_to("command.foo.json")
-    subprocess.run(["git", "-C", str(repo), "add", "contributions/extensions/command.link.json"], check=True)
+    (repo / "contributions/extension-listings/command.link.json").symlink_to("command.foo.json")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "contributions/extension-listings/command.link.json"],
+        check=True,
+    )
     head = _commit(repo, "symlink")
     result = plan(base, head, root=repo)
     assert result.lanes == [LANE_FULL]
     assert "unsafe-file-mode" in result.escalate_reason
+
+
+def test_listing_typechange_escalates(repo: Path) -> None:
+    path = "contributions/extension-listings/mcp.filesystem.json"
+    _write(repo, path, "{}")
+    base = _commit(repo, "base")
+    (repo / path).unlink()
+    (repo / path).symlink_to("mcp.other.json")
+    subprocess.run(["git", "-C", str(repo), "add", path], check=True)
+    head = _commit(repo, "typechange")
+    result = plan(base, head, root=repo)
+    assert result.lanes == [LANE_FULL]
+    assert result.data_only is False
+
+
+def test_policy_renamed_to_listing_escalates(repo: Path) -> None:
+    old = "contributions/extensions/command.agentbridge.json"
+    _write(repo, old, "{}")
+    base = _commit(repo, "base")
+    (repo / "contributions/extension-listings").mkdir()
+    subprocess.run(
+        [
+            "git", "-C", str(repo), "mv", old,
+            "contributions/extension-listings/command.agentbridge.json",
+        ],
+        check=True,
+    )
+    head = _commit(repo, "move policy to listing")
+    result = plan(base, head, root=repo)
+    assert result.lanes == [LANE_FULL]
+    assert result.data_only is False

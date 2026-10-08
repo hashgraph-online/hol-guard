@@ -14,7 +14,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
@@ -131,11 +133,38 @@ def assert_adversarial_nodeids_resolve() -> None:
             raise AssertionError(f"missing adversarial nodeid: {nodeid}")
 
 
+def _run_client_reviews(
+    clients: list[ClientSpec],
+    review: Callable[[str, str, int], None],
+    *,
+    timeout_seconds: float,
+) -> None:
+    """Keep each client bounded while starting their review streams together."""
+
+    start = threading.Event()
+
+    def review_when_ready(client: ClientSpec, index: int) -> None:
+        _ = start.wait()
+        review(client["harness"], client["client"], index)
+
+    with ExitStack() as stack:
+        futures: list[Future[None]] = []
+        try:
+            for client in clients:
+                executor = stack.enter_context(ThreadPoolExecutor(max_workers=client["concurrency"]))
+                futures.extend(executor.submit(review_when_ready, client, index) for index in range(client["requests"]))
+        finally:
+            # Prime every client before releasing any timed request; one client's
+            # queued work must not consume another client's declared concurrency.
+            start.set()
+        for future in futures:
+            future.result(timeout=timeout_seconds)
+
+
 def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
     """Run a bounded workload through authenticated production hook endpoints."""
 
     request_count = sum(client["requests"] for client in spec["clients"])
-    max_workers = sum(client["concurrency"] for client in spec["clients"])
     guard_home = root / "guard-home"
     workspace = root / "workspace"
     workspace.mkdir(parents=True)
@@ -350,20 +379,11 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
 
     browser_calls: list[str] = []
     try:
-        with (
-            patch(
-                "codex_plugin_scanner.guard.daemon.server.open_browser_url",
-                side_effect=lambda url: browser_calls.append(str(url)) or False,
-            ),
-            ThreadPoolExecutor(max_workers=max_workers) as executor,
+        with patch(
+            "codex_plugin_scanner.guard.daemon.server.open_browser_url",
+            side_effect=lambda url: browser_calls.append(str(url)) or False,
         ):
-            futures = [
-                executor.submit(review, client["harness"], client["client"], index)
-                for client in spec["clients"]
-                for index in range(client["requests"])
-            ]
-            for future in futures:
-                future.result(timeout=review_timeout_seconds)
+            _run_client_reviews(spec["clients"], review, timeout_seconds=review_timeout_seconds)
         worker_stats = daemon._server.hook_process_runner.stats()
         scheduler_stats = daemon._server.runtime_hook_scheduler.stats()
         final_inbox = len(store.list_approval_requests(status=None, limit=None))
