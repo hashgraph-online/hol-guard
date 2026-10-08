@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import secrets
 import shutil
 import signal
 import subprocess
@@ -22,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 ADAPTER = Path(__file__).with_name("luna_adapter.ts")
+PINNED_PACKAGE = Path(__file__).resolve().parents[1] / "pi-exact-continuation" / "package.json"
 ADAPTER_ID = "pinned-omp-native-luna-stream-v2"
 REQUEST_MODEL = "native-luna-high"
 BACKEND = ("openai-codex", "gpt-5.6-luna")
@@ -42,8 +44,12 @@ def sdk_root_for(omp: str | None, override: Path | None = None) -> Path:
             raise RuntimeError("install the repository-pinned Oh My Pi CLI or pass --sdk-root")
         # <root>/node_modules/.bin/omp
         root = Path(executable).absolute().parents[2]
-    if not (root / "node_modules" / "@oh-my-pi" / "pi-agent-core").is_dir():
+    package = root / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json"
+    if not (root / "node_modules" / "@oh-my-pi" / "pi-agent-core").is_dir() or not package.is_file():
         raise RuntimeError("the SDK root does not contain the pinned Oh My Pi packages; pass --sdk-root")
+    pinned = json.loads(PINNED_PACKAGE.read_text())["dependencies"]["@oh-my-pi/pi-coding-agent"]
+    if json.loads(package.read_text()).get("version") != pinned:
+        raise RuntimeError("the SDK root is not the repository-pinned Oh My Pi version")
     return root
 
 
@@ -53,7 +59,11 @@ def validate_ready(line: str) -> dict[str, Any]:
         ready = json.loads(line)
     except ValueError as exc:
         raise RuntimeError("Luna adapter did not report readiness") from exc
-    port = ready.get("port") if isinstance(ready, dict) else None
+    if not isinstance(ready, dict):
+        raise RuntimeError("Luna adapter did not report readiness")
+    if isinstance(ready.get("error"), str):
+        raise RuntimeError("Luna adapter failed to start: " + ready["error"][:200])
+    port = ready.get("port")
     if (
         ready.get("adapter") != ADAPTER_ID
         or (ready.get("provider"), ready.get("model")) != BACKEND
@@ -71,9 +81,11 @@ class NativeLunaRoute:
     def __init__(self, *, omp: str | None = None, sdk_root: Path | None = None):
         """Resolve the SDK root and the Bun executable without starting anything."""
         self.sdk_root = sdk_root_for(omp, sdk_root)
-        self.bun = shutil.which("bun")
-        if not self.bun:
+        found = shutil.which("bun")
+        if not found:
             raise RuntimeError("Gauntlet prerequisite is missing: bun")
+        self.bun = Path(found).absolute()
+        self._token = secrets.token_urlsafe(32)
         self.process: subprocess.Popen[str] | None = None
         self.port = 0
 
@@ -82,7 +94,7 @@ class NativeLunaRoute:
         return {
             "base_url": f"http://127.0.0.1:{self.port}/v1",
             "model": REQUEST_MODEL,
-            "api_key": None,
+            "api_key": self._token,
             "identity": IDENTITY,
             "allow_loopback": True,
             "max_rounds": max_rounds,
@@ -93,9 +105,10 @@ class NativeLunaRoute:
     def __enter__(self) -> NativeLunaRoute:
         """Start the adapter and wait for its loopback readiness record."""
         environment = {key: os.environ[key] for key in _ENVIRONMENT_KEYS if key in os.environ}
+        environment["GUARD_GAUNTLET_ROUTE_TOKEN"] = self._token
         self.process = subprocess.Popen(
             [str(self.bun), "run", str(ADAPTER), str(self.sdk_root)],
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             env=environment,
@@ -129,6 +142,9 @@ class NativeLunaRoute:
         if process is None:
             return
         group = process.pid
+        if process.stdin is not None:
+            with suppress(OSError):
+                process.stdin.close()
         with suppress(ProcessLookupError, PermissionError):
             os.killpg(group, signal.SIGTERM)
         try:
@@ -137,5 +153,7 @@ class NativeLunaRoute:
             with suppress(ProcessLookupError, PermissionError):
                 os.killpg(group, signal.SIGKILL)
             process.wait(timeout=STOP_SECONDS)
-        if process.stdout is not None:
-            process.stdout.close()
+        for stream in (process.stdin, process.stdout):
+            if stream is not None:
+                with suppress(OSError):
+                    stream.close()

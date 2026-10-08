@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -141,6 +142,10 @@ def main() -> int:
         with contextlib.ExitStack() as stack:
             if args.native_luna_route:
                 from .luna_route import NativeLunaRoute
+
+                # Unwind the context manager on SIGTERM/SIGHUP so the adapter is always reaped.
+                for name in (signal.SIGTERM, signal.SIGHUP):
+                    signal.signal(name, lambda number, _frame: sys.exit(128 + number))
 
                 route = stack.enter_context(NativeLunaRoute(omp=args.omp, sdk_root=args.sdk_root))
                 provider = route.provider(max_rounds=args.max_inference_rounds, timeout=min(args.timeout, 120))

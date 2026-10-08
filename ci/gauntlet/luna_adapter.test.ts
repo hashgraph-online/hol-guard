@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { convertMessages, eventDelta, setModel, WireArguments } from './luna_adapter';
+import { authorized, convertMessages, finishReason, eventDelta, setModel, WireArguments } from './luna_adapter';
 
 test('native streaming tool argument bytes are preserved across arbitrary splits', () => {
   const indices = new Map<number, number>();
@@ -52,4 +52,35 @@ test('conversation conversion drops system text, keeps call ids and rejects orph
   expect(converted[2].toolName).toBe('read');
   expect(() => convertMessages([{ role: 'tool', tool_call_id: 'x', content: '' }])).toThrow();
   expect(() => convertMessages([{ role: 'function', content: '' }])).toThrow();
+});
+
+test('only the per-run bearer token is authorized', () => {
+  const token = 'a'.repeat(32);
+  expect(authorized(`Bearer ${token}`, token)).toBe(true);
+  for (const header of [null, '', token, `Bearer ${'b'.repeat(32)}`, `Bearer ${token} `, 'Bearer '])
+    expect(authorized(header, token)).toBe(false);
+  expect(authorized('Bearer ', '')).toBe(false);
+});
+
+test('finish reasons map without nesting', () => {
+  expect(finishReason('toolUse')).toBe('tool_calls');
+  expect(finishReason('length')).toBe('length');
+  expect(finishReason('stop')).toBe('stop');
+});
+
+// Needs the pinned SDK; CI does not install it, so this runs only when pointed at one.
+test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned SDK exposes the Luna model and agent hooks', async () => {
+  const root = process.env.GUARD_GAUNTLET_SDK_ROOT!;
+  const load = (name: string) => import(Bun.resolveSync(name, root));
+  const { Agent } = await load('@oh-my-pi/pi-agent-core');
+  const { discoverAuthStorage, ModelRegistry } = await load('@oh-my-pi/pi-coding-agent');
+  const registry = new ModelRegistry(await discoverAuthStorage());
+  const model = registry.find('openai-codex', 'gpt-5.6-luna');
+  expect(model?.id).toBe('gpt-5.6-luna');
+  const seen: unknown[] = [];
+  const agent = new Agent({ initialState: { model, thinkingLevel: 'high', systemPrompt: '', tools: [], messages: [] },
+    onSseEvent: (event: unknown) => seen.push(event) });
+  expect(typeof agent.prompt).toBe('function');
+  expect(typeof agent.abort).toBe('function');
+  expect(typeof registry.resolver).toBe('function');
 });

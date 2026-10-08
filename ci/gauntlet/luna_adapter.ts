@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 
 // Outer transport only. The Gauntlet agent still executes every selected tool
@@ -41,6 +42,21 @@ export function convertMessages(messages: any[]) {
     } else throw new Error('Unsupported message role');
   }
   return converted;
+}
+
+export function finishReason(stopReason: string) {
+  if (stopReason === 'toolUse') return 'tool_calls';
+  if (stopReason === 'length') return 'length';
+  return 'stop';
+}
+
+// The relay presents a per-run bearer token, so no other local process can use
+// the adapter's ChatGPT login. The token is never a provider credential.
+export function authorized(header: string | null, token: string) {
+  if (!token || !header) return false;
+  const expected = Buffer.from(`Bearer ${token}`);
+  const given = Buffer.from(header);
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
 export class WireArguments {
@@ -98,6 +114,9 @@ export function eventDelta(event: any, indices: Map<number, number>, wire?: Wire
 
 async function main() {
 
+const token = process.env.GUARD_GAUNTLET_ROUTE_TOKEN ?? '';
+delete process.env.GUARD_GAUNTLET_ROUTE_TOKEN;
+if (token.length < 32) throw new Error('Missing per-run route token');
 const sdkRoot = process.argv[2];
 if (!sdkRoot || !isAbsolute(sdkRoot)) throw new Error('Usage: luna_adapter.ts ABSOLUTE_SDK_ROOT');
 const load = (name: string) => import(Bun.resolveSync(name, sdkRoot));
@@ -111,6 +130,8 @@ if (!model) throw new Error('Pinned native Luna model unavailable');
 const active = new Set<any>();
 const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
   async fetch(request) {
+    if (!authorized(request.headers.get('authorization'), token))
+      return new Response('Unauthorized', { status: 401 });
     if (request.method !== 'POST' || new URL(request.url).pathname !== '/v1/chat/completions')
       return new Response('Not found', { status: 404 });
     const text = await request.text();
@@ -164,8 +185,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
                 throw new Error('Backend identity changed');
               if (event.message.stopReason === 'error' || event.message.stopReason === 'aborted')
                 throw new Error('Native inference incomplete');
-              send({}, event.message.stopReason === 'toolUse' ? 'tool_calls' :
-                event.message.stopReason === 'length' ? 'length' : 'stop');
+              send({}, finishReason(event.message.stopReason));
               sink.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
               finished = true;
               sink.close();
@@ -196,10 +216,23 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
 });
 console.log(JSON.stringify({ pid: process.pid, port: server.port, adapter: ADAPTER_ID,
   provider: model.provider, model: model.id, thinking: 'high' }));
-for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {
+const shutdown = () => {
   for (const agent of active) agent.abort();
   server.stop(true);
   process.exit(0);
-});
+};
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, shutdown);
+// The runner holds our stdin. If it dies without cleanup, the pipe closes and we stop.
+void (async () => {
+  for await (const _chunk of Bun.stdin.stream()) { /* discard */ }
+  shutdown();
+})();
 }
-if (import.meta.main) await main();
+if (import.meta.main) {
+  try { await main(); }
+  catch (error) {
+    // One bounded line so the runner can report why startup failed.
+    console.log(JSON.stringify({ error: String((error as Error)?.message ?? error).slice(0, 200) }));
+    process.exit(1);
+  }
+}

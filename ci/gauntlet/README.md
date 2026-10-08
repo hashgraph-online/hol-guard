@@ -129,8 +129,8 @@ python -m ci.gauntlet run \
 - The route fixes the provider, model and effort itself. Combining it with `--provider-url`, `--model`, `--provider-identity` or `--allow-loopback-provider`, or with an effort other than `high`, is rejected. The adapter rejects any request that does not name `native-luna-high` with `reasoning_effort: high`.
 - Evidence records the provider identity `openai-codex/gpt-5.6-luna/high via pinned-omp-native-luna-stream-v2`, and every round's `response_models` is the real backend `openai-codex/gpt-5.6-luna`.
 - Credentials are resolved inside the adapter process by Oh My Pi's normal auth storage. They are never read by the runner, put in arguments or evidence, or exported, and the adapter's environment carries no provider keys. Sign in to Oh My Pi with ChatGPT beforehand; no `GUARD_GAUNTLET_API_KEY` is needed.
-- The adapter binds `127.0.0.1` on an ephemeral port in its own process group. It is stopped, and reaped, when the run ends, fails or is interrupted.
-- The SDK tree is found from `--omp` (or `omp` on `PATH`), whose usual location is `<sdk-root>/node_modules/.bin/omp`. Pass `--sdk-root` to name it explicitly. The pinned catalog must contain the model.
+- The adapter binds `127.0.0.1` on an ephemeral port and accepts only requests carrying a random per-run bearer token that the relay holds, so no other local process can use the login. It runs in its own process group and is stopped and reaped when the run ends, fails, or the runner receives SIGTERM or SIGHUP. It also exits if the runner dies without cleanup.
+- The SDK tree is found from `--omp` (or `omp` on `PATH`), whose usual location is `<sdk-root>/node_modules/.bin/omp`. Pass `--sdk-root` to name it explicitly; its Oh My Pi version must equal the repository pin. The pinned catalog must contain the model. Set `GUARD_GAUNTLET_SDK_ROOT` to run the adapter's optional SDK check in `luna_adapter.test.ts`.
 
 ## Publish evidence in the pull request
 

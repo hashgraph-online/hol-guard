@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,10 @@ READY = {
 def _sdk(tmp_path):
     root = tmp_path / "sdk"
     (root / "node_modules" / "@oh-my-pi" / "pi-agent-core").mkdir(parents=True)
+    pinned = json.loads(luna_route.PINNED_PACKAGE.read_text())["dependencies"]["@oh-my-pi/pi-coding-agent"]
+    coding = root / "node_modules" / "@oh-my-pi" / "pi-coding-agent"
+    coding.mkdir()
+    (coding / "package.json").write_text(json.dumps({"version": pinned}))
     (root / "node_modules" / ".bin").mkdir()
     omp = root / "node_modules" / ".bin" / "omp"
     omp.write_text("#!/bin/sh\n")
@@ -72,7 +77,7 @@ def test_route_provider_is_loopback_high_with_real_identity(tmp_path, monkeypatc
     route.port = 40123
     provider = route.provider(max_rounds=32, timeout=120)
     assert provider["base_url"] == "http://127.0.0.1:40123/v1"
-    assert provider["allow_loopback"] is True and provider["api_key"] is None
+    assert provider["allow_loopback"] is True and bool(provider["api_key"])
     assert provider["reasoning_effort"] == "high"
     assert "openai-codex/gpt-5.6-luna/high" in provider["identity"]
 
@@ -137,3 +142,65 @@ def test_adapter_unit_tests_pass():
         check=False,
     )
     assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+
+
+def test_non_object_and_error_readiness_lines_fail_with_runtime_error():
+    for line in ("[]", "1", '"x"', "null"):
+        with pytest.raises(RuntimeError):
+            validate_ready(line)
+    with pytest.raises(RuntimeError, match="model unavailable"):
+        validate_ready(json.dumps({"error": "model unavailable"}))
+
+
+def test_sdk_root_must_match_the_pinned_version(tmp_path):
+    root, omp = _sdk(tmp_path)
+    (root / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json").write_text('{"version": "0.0.1"}')
+    with pytest.raises(RuntimeError, match="pinned"):
+        sdk_root_for(str(omp))
+    with pytest.raises(RuntimeError, match="pinned"):
+        sdk_root_for(None, root)
+
+
+def test_route_authenticates_the_relay_with_a_per_run_token(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 0\n")) + os.pathsep + os.environ["PATH"])
+    first, second = NativeLunaRoute(omp=str(omp)), NativeLunaRoute(omp=str(omp))
+    assert len(first.provider(max_rounds=1, timeout=1)["api_key"]) >= 32
+    assert first.provider(max_rounds=1, timeout=1)["api_key"] != second.provider(max_rounds=1, timeout=1)["api_key"]
+    assert first.bun.is_absolute()
+
+
+def test_sigterm_to_the_runner_stops_the_adapter(tmp_path):
+    _root, omp = _sdk(tmp_path)
+    ready = json.dumps(READY)
+    pidfile = tmp_path / "adapter.pid"
+    bin_dir = _fake_bun(tmp_path, f"echo $$ > {pidfile}\necho '{ready}'\nexec sleep 300\n")
+    script = tmp_path / "hold.py"
+    script.write_text(
+        "import signal, sys, time\n"
+        "from ci.gauntlet.luna_route import NativeLunaRoute\n"
+        "signal.signal(signal.SIGTERM, lambda n, f: sys.exit(143))\n"
+        f"with NativeLunaRoute(omp={str(omp)!r}):\n    print('up', flush=True)\n    time.sleep(300)\n"
+    )
+    environment = {
+        **os.environ,
+        "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+        "PYTHONPATH": str(Path(__file__).parents[1]),
+    }
+    runner = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, text=True, env=environment)
+    try:
+        assert runner.stdout.readline().strip() == "up"
+        pid = int(pidfile.read_text())
+        runner.terminate()
+        runner.wait(timeout=20)
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("adapter survived the runner")
+    finally:
+        runner.kill()
+        runner.wait()
