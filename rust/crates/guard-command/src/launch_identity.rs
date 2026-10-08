@@ -29,8 +29,8 @@ use serde_json::{json, Map, Value};
 use crate::command_tokens::executable_name;
 use crate::env_wrapper::parse_env_wrapper;
 use crate::launch_identity_common::{
-    canonical_material_bytes, context_opaque_digest_strict, expand_user, launch_argv_digest,
-    normalized_launch_cwd, runtime_launch_argv, sha256_hex, RuntimeLaunchArgv,
+    context_opaque_digest_strict, expand_user, launch_argv_digest, normalized_launch_cwd,
+    runtime_launch_argv, sha256_hex, RuntimeLaunchArgv,
 };
 use crate::shell_tokens;
 
@@ -81,11 +81,6 @@ fn token_hex(bytes: usize) -> String {
         "0".repeat(bytes * 2)
     }
 }
-// Native authority hashes canonical structured material.
-fn context_sha256_digest_strict(material: &Value) -> String {
-    sha256_hex(&canonical_material_bytes(material))
-}
-
 // Hash raw UTF-8 identity material.
 fn opaque_identity_digest(material: &str) -> String {
     context_opaque_digest_strict(material)
@@ -831,7 +826,7 @@ fn runtime_launch_verification_digest(identity: &Value) -> Option<String> {
     if write_canonical_json(&material, &mut bytes).is_err() {
         return None;
     }
-    Some(context_sha256_digest_strict(&material))
+    Some(sha256_hex(&bytes))
 }
 
 // `_verified_identity_path` (:1720-1727).
