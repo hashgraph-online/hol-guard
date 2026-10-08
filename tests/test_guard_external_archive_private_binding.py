@@ -27,6 +27,8 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
+
 
 def _hook_inputs(
     tmp_path: Path,

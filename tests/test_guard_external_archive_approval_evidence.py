@@ -24,6 +24,8 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
+
 
 def _hook_inputs(
     tmp_path: Path,
@@ -241,17 +243,12 @@ def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_pat
     assert secret not in repr(result.to_dict())
 
 
-@pytest.mark.parametrize("parser", ["resident", "local"])
+@pytest.mark.parametrize("explicit_guard_home", (False, True))
 def test_external_archive_credentials_stay_private_across_artifact_and_receipt_surfaces(
     tmp_path: Path,
-    native_context_digest: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    parser: str,
+    archive_package_intent_native: Path,
+    explicit_guard_home: bool,
 ) -> None:
-    if parser == "local":
-        from codex_plugin_scanner.guard.runtime import package_intent_parser
-
-        monkeypatch.setattr(package_intent_parser, "_native_package_intent", lambda *args, **kwargs: None)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "package.json").write_text("{}\n", encoding="utf-8")
@@ -259,8 +256,15 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     password = "VERY_SECRET_PASSWORD"
     source_url = f"https://user:{password}@packages.example.com/demo.tgz?token={secret}"
     command = ["npm", "install", f"demo@{source_url}"]
-    intent = parse_package_intent(shlex.join(command), workspace=workspace, guard_home=native_context_digest)
+    intent = parse_package_intent(
+        shlex.join(command),
+        workspace=workspace,
+        guard_home=archive_package_intent_native if explicit_guard_home else None,
+    )
     assert intent is not None
+    assert intent.command_tokens == tuple(command)
+    assert intent.targets[0].raw_spec == command[-1]
+    assert intent.targets[0].source_url == source_url
     artifact = build_package_request_artifact(
         "guard-cli",
         intent,

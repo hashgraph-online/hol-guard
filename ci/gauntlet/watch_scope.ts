@@ -25,11 +25,8 @@ export function permittedWatchInput(toolName: string, input: unknown, cwd = proc
       return false;
     }
   }
-  // Zero disables only OMP's command timer. The runner's independent host
-  // deadline still bounds this exact fixed print command and reaps its group.
-  return args.timeout === undefined || (
-    typeof args.timeout === "number" && Number.isFinite(args.timeout) && args.timeout >= 0 && args.timeout <= 120
-  );
+  // OMP defaults an omitted timeout to 300 seconds; require the fixture's explicit bound.
+  return typeof args.timeout === "number" && Number.isFinite(args.timeout) && args.timeout > 0 && args.timeout <= 120;
 }
 
 type ToolCall = { toolName: string; input: unknown };

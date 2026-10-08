@@ -39,6 +39,7 @@ from .runtime.approval_reuse import (
     ApprovalReuseDecision,
     ApprovalReuseStatus,
     ApprovalReuseValidationFailure,
+    approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
 )
 from .runtime.browser_mcp_intent import browser_intent_display_target, normalize_browser_mcp_intent
@@ -587,6 +588,10 @@ def _revalidate_claimed_tool_call_approval(
             )
         ),
     )
+    if reuse is None:
+        # Resident unreachable after the claim was consumed: keep the claimed
+        # approval decision the user granted rather than dropping it.
+        reuse = approval_reuse_authority_unavailable(post_claim_current.action)
     return replace(
         _tool_call_decision_with_reuse(post_claim_current, reuse),
         approval_reuse_claim_disposition=claim_disposition,
@@ -631,6 +636,8 @@ def claim_deferred_tool_call_approval(
             saved_decision_present=True,
             validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
         )
+        if reuse is None:
+            reuse = approval_reuse_authority_unavailable(current.action)
         return replace(
             _tool_call_decision_with_reuse(current, reuse),
             approval_reuse_claim_disposition=decision.approval_reuse_claim_disposition,
@@ -649,6 +656,8 @@ def claim_deferred_tool_call_approval(
         saved_decision_present=True,
         validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
     )
+    if reuse is None:
+        reuse = approval_reuse_authority_unavailable(current.action)
     return _tool_call_decision_with_reuse(current, reuse)
 
 

@@ -31,6 +31,8 @@ from codex_plugin_scanner.guard.runtime.restricted_archive_download import Restr
 from codex_plugin_scanner.guard.runtime.supply_chain_package_services import _TARBALL_SCAN_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
+
 
 def _hook_inputs(
     tmp_path: Path,
@@ -95,7 +97,6 @@ def _package_artifact(workspace: Path, command: str) -> GuardArtifact:
 def test_package_firewall_reuses_one_review_to_inspect_then_launch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    native_hook_force: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

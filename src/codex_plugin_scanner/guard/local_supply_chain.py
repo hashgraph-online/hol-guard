@@ -257,10 +257,6 @@ def _package_firewall_entitlement_module():
     return importlib.import_module(".package_firewall_entitlement", __package__)
 
 
-def _package_intent_parser_module():
-    return importlib.import_module(".runtime.package_intent_parser", __package__)
-
-
 def _native_package_authority_module():
     return importlib.import_module(".native_package_authority", __package__)
 
@@ -303,8 +299,11 @@ def _parse_package_intent_native(
     workspace: Path | None,
     guard_home: Path,
 ) -> PackageIntent | None:
-    """Try the resident ``package_intent_parse`` op; ``None`` falls back to
-    the Python parser."""
+    """Try the resident ``package_intent_parse`` op.
+
+    ``None`` means the resident was unreachable or found no intent —
+    ``parse_package_intent`` is resident-sole-authority, so no Python
+    re-parse exists to fall back to."""
     try:
         intent = _native_package_authority_module().package_intent_parse_native(
             raw_command,
@@ -1548,12 +1547,6 @@ def _build_package_protect_authority(
         guard_home=store.guard_home,
     )
     if intent is None:
-        intent = _package_intent_parser_module().parse_package_intent(
-            shlex.join(command),
-            workspace=launch_cwd,
-            environment=launch_environment,
-        )
-    if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
     artifact = build_package_request_artifact(
@@ -1732,6 +1725,10 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason="approval_reuse_identity_changed",
         )
+        if reuse is None:
+            # Resident unreachable: preserve the initial evaluation unchanged —
+            # no saved approval is claimed.
+            return initial, initial.evaluation
         return initial, _package_evaluation_with_rejected_reuse(initial.evaluation, reuse)
     validation_reason: ApprovalReuseValidationFailure | None
     if current.artifact.artifact_id != initial.artifact.artifact_id:
@@ -1760,6 +1757,8 @@ def _final_package_protect_authority(
                 saved_decision_present=True,
                 validation_reason=validation_reason,
             )
+            if reuse is None:
+                return current, current_evaluation
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
         refreshed_saved_policy = _apply_stored_package_policy_override(
             current_evaluation,
@@ -1783,6 +1782,8 @@ def _final_package_protect_authority(
                 saved_decision_present=True,
                 validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
             )
+            if reuse is None:
+                return current, current_evaluation
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
         reuse = evaluate_approval_reuse(
             current.current_action,
@@ -1790,6 +1791,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             fresh_local_approval=True,
         )
+        if reuse is None:
+            return current, current_evaluation
         if reuse.accepted and reuse.saved_action == "allow":
             return current, _package_policy_override_evaluation(
                 current_evaluation,
@@ -1813,6 +1816,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=validation_reason,
         )
+        if reuse is None:
+            return current, current_evaluation
         return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     resolved = _apply_stored_package_policy_override(
         current_evaluation,
@@ -1832,7 +1837,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
         )
-        resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
+        if reuse is not None:
+            resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     return current, resolved
 
 
@@ -2148,7 +2154,11 @@ def build_package_protect_payload(
             saved_decision_present=True,
             validation_reason="approval_reuse_identity_changed",
         )
-        denied_evaluation = _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
+        denied_evaluation = (
+            final_authority.evaluation
+            if reuse is None
+            else _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
+        )
         denied = _package_protect_denied_after_final_boundary(
             payload=payload,
             authority=final_authority,
@@ -2428,15 +2438,20 @@ def _resolve_stored_package_policy_override(
         _is_fresh_artifact_approval(decision, store=store) or legacy_local_approval
     )
     durable_exact_approval = isinstance(decision, dict) and _is_durable_exact_artifact_approval(decision)
+    reuse_native = evaluate_approval_reuse(
+        effective_current_action,
+        action,
+        saved_decision_present=True,
+        validation_reason=validation_reason,
+        fresh_local_approval=fresh_local_approval,
+        durable_exact_approval=durable_exact_approval,
+    )
+    if reuse_native is None:
+        # Resident unreachable: preserve the caller's evaluation unchanged —
+        # the saved approval is not claimed or consumed.
+        return _StoredPackagePolicyResolution(current_evaluation)
     reuse = with_saved_artifact_hash_provenance(
-        evaluate_approval_reuse(
-            effective_current_action,
-            action,
-            saved_decision_present=True,
-            validation_reason=validation_reason,
-            fresh_local_approval=fresh_local_approval,
-            durable_exact_approval=durable_exact_approval,
-        ),
+        reuse_native,
         decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
     )
     claim_disposition: _PackageApprovalClaimDisposition | None = None
@@ -2464,28 +2479,36 @@ def _resolve_stored_package_policy_override(
         else:
             claim_succeeded = store.claim_approval_reuse_decision(decision, now=now)
     if claim_saved_approval and reuse.should_claim and not claim_succeeded:
+        claim_failed_reuse = evaluate_approval_reuse(
+            effective_current_action,
+            action,
+            saved_decision_present=True,
+            validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+        )
+        if claim_failed_reuse is None:
+            # Resident unreachable after a failed claim: the claim already
+            # failed, so preserve the caller's evaluation unchanged.
+            return _StoredPackagePolicyResolution(current_evaluation)
         reuse = with_saved_artifact_hash_provenance(
-            evaluate_approval_reuse(
-                effective_current_action,
-                action,
-                saved_decision_present=True,
-                validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-            ),
+            claim_failed_reuse,
             decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
         )
     if reuse.accepted and reuse.saved_action == "allow":
         if not isinstance(decision, dict) or decision.get("action") != "allow":
-            failed_reuse = with_saved_artifact_hash_provenance(
-                evaluate_approval_reuse(
-                    most_restrictive_guard_action(
-                        effective_current_action,
-                        "require-reapproval",
-                        unknown_action="block",
-                    ),
-                    "allow",
-                    saved_decision_present=True,
-                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+            failed_reuse_native = evaluate_approval_reuse(
+                most_restrictive_guard_action(
+                    effective_current_action,
+                    "require-reapproval",
+                    unknown_action="block",
                 ),
+                "allow",
+                saved_decision_present=True,
+                validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+            )
+            if failed_reuse_native is None:
+                return _StoredPackagePolicyResolution(current_evaluation)
+            failed_reuse = with_saved_artifact_hash_provenance(
+                failed_reuse_native,
                 decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
             )
             return _StoredPackagePolicyResolution(

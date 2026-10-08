@@ -78,6 +78,32 @@ def test_complete_fixture_outputs_are_accepted(identifier):
     assert assess_case(CATALOG[identifier], _observed(identifier))["outcome"] == "pass"
 
 
+def test_windows_recursive_grep_separators_bind_only_the_path():
+    """Windows grep joins recursive paths with a backslash; matched text stays exact."""
+    identifier = "absolute-recursive-source-grep"
+    windows = OUTPUTS[identifier][0].replace("{{workspace}}/src/", "{{workspace}}/src\\")
+    assert "\\" in windows
+    case = _observed(identifier)
+    ends = [event for event in case["events"] if event["type"] == "tool_execution_end"]
+    ends[0]["result"] = {"content": [{"type": "text", "text": windows}]}
+    assert assess_case(CATALOG[identifier], case)["outcome"] == "pass"
+    altered = windows.replace(":ordinary", ":ordinary\\", 1)
+    ends[0]["result"] = {"content": [{"type": "text", "text": altered}]}
+    assert assess_case(CATALOG[identifier], case)["outcome"] == "task-incomplete"
+
+
+def test_windows_discovery_separators_still_bind_every_source():
+    """Windows find joins paths with a backslash; the discovered set stays exact."""
+    identifier = "bounded-source-discovery"
+    case = _observed(identifier)
+    ends = [event for event in case["events"] if event["type"] == "tool_execution_end"]
+    for end, text in zip(ends, OUTPUTS[identifier], strict=True):
+        end["result"] = {"content": [{"type": "text", "text": text.replace("src/", "src\\")}]}
+    assert assess_case(CATALOG[identifier], case)["outcome"] == "pass"
+    ends[2]["result"] = {"content": [{"type": "text", "text": "src\\one.ts\n" * 5}]}
+    assert assess_case(CATALOG[identifier], case)["outcome"] == "task-incomplete"
+
+
 @pytest.mark.parametrize("identifier", OUTPUTS)
 def test_pinned_omp_timing_notice_preserves_required_stdout(identifier):
     """OMP 18.1.18 appends timing after stdout, including its trailing newline."""

@@ -29,6 +29,8 @@ from tests.test_guard_js_supply_chain_phase11 import (
 )
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def test_lockfile_parser_rejects_invalid_utf8_bytes() -> None:
     result = parse_lockfile_text(

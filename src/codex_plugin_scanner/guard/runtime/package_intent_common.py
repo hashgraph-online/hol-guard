@@ -133,23 +133,31 @@ class PackageIntent:
         *,
         runtime_private_metadata: Mapping[str, object] | None = None,
     ) -> PackageIntent:
-        """Hydrate exact execution targets without rehashing redacted sources."""
+        """Hydrate exact private targets and argv without rehashing redacted sources."""
 
         if not isinstance(payload.get("package_manager"), str):
             raise ValueError("package intent payload missing package_manager")
         intent_kind = payload.get("intent_kind")
         if intent_kind not in ("install", "execute", "sync"):
             raise ValueError("package intent payload missing intent_kind")
+        targets = _package_intent_targets_from_dict(payload.get("targets"), runtime_private_metadata)
         redacted_command = payload.get("redacted_command")
-        command_tokens = payload.get("command_tokens")
-        if not isinstance(command_tokens, (list, tuple)) and isinstance(redacted_command, str):
-            command_tokens = shlex.split(redacted_command)
+        if runtime_private_metadata is not None:
+            command_tokens = runtime_private_metadata.get("command_tokens")
+            if not isinstance(command_tokens, (list, tuple)) or any(
+                not isinstance(token, str) for token in command_tokens
+            ):
+                raise ValueError("package intent exact command metadata missing")
+        else:
+            command_tokens = payload.get("command_tokens")
+            if not isinstance(command_tokens, (list, tuple)) and isinstance(redacted_command, str):
+                command_tokens = shlex.split(redacted_command)
         return cls(
             package_manager=str(payload["package_manager"]),
             intent_kind=cast(IntentKind, intent_kind),
             command_tokens=_str_tuple(command_tokens),
             redacted_command=str(redacted_command) if isinstance(redacted_command, str) else "",
-            targets=_package_intent_targets_from_dict(payload.get("targets"), runtime_private_metadata),
+            targets=targets,
             manifest_paths=_str_tuple(payload.get("manifest_paths")),
             lockfile_paths=_str_tuple(payload.get("lockfile_paths")),
             flags=_str_tuple(payload.get("flags")),

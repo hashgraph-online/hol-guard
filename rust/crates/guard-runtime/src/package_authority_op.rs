@@ -2579,6 +2579,7 @@ pub(crate) fn evaluate_package_intent_parse(
     let (payload, runtime_private_metadata) = match intent {
         Some(intent) => {
             let mut private_metadata = Map::new();
+            private_metadata.insert("command_tokens".to_owned(), json!(intent.command_tokens));
             private_metadata.insert(
                 "package_targets".to_owned(),
                 Value::Array(
