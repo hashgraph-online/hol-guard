@@ -31,6 +31,15 @@ Protocol v1 may remain only as an explicit shadow or migration bridge. It must n
 
 The local operating-system boundary remains defense in depth, not the sole trust decision. Same-user clients are untrusted until they prove possession of the per-process secret. No client payload is sent before server authentication succeeds. No expensive evaluation begins before authentication, admission, framing, and structural validation.
 
+## Native process custody
+
+`guard-contained-process` exposes pinned executable/current-directory capture with a caller-owned monotonic deadline and cancellation token. Native handles bind source identity; private images, descriptor inheritance barriers, bounded streams, resource ceilings, and kill-before-reap ownership avoid selecting released process IDs. Sandbox profiles and isolation policy remain the protected caller's responsibility; process capture alone is not whole-product containment certification.
+
+On macOS, original executable images are adopted only when held-file filesystem metadata proves the actual read-only root filesystem (`FSID` equality with `/`, `MNT_ROOTFS`, and `MNT_RDONLY`). Other images are copied into canonical private staging and rehashed. This is not a path-name or code-signature exemption, and immutable system parents are never chmodded.
+
+The macOS supervisor reports foreign completion over its private channel, stays live until the daemon kills the group, and is then reaped. Self-termination before cleanup leaves a zombie-only group that Darwin refuses to signal. Windows capture uses owned suspended-process, pipe, and job handles; compilation does not establish live AppContainer or ARM64 enforcement.
+
+
 ## Overload semantics
 
 Overload is a first-class bounded result, distinct from corruption, authentication failure, timeout, crash, or incompatibility. Overload cannot default to allow and cannot trigger unbounded one-shot or Python process spawning.

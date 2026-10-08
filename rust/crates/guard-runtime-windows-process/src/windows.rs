@@ -37,17 +37,28 @@ use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE
 
 #[path = "bound_open.rs"]
 mod bound_open;
+#[path = "windows/capture.rs"]
+mod capture;
 #[path = "directory_binding.rs"]
 mod directory_binding;
+#[path = "windows/job_guard.rs"]
+mod job_guard;
 #[path = "private_files.rs"]
 mod private_files;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
-pub use bound_open::{handle_file_id, open_bound_regular_file, regular_file_id, FileId};
-pub use directory_binding::{
-    bind_directory, bind_private_directory, create_private_directory, path_is_within,
-    PrivateDirectoryBinding,
+pub use bound_open::{
+    handle_file_id, open_bound_executable_file, open_bound_regular_file, regular_file_id, FileId,
 };
+pub use capture::{
+    capture as capture_managed_child, capture_owned_child, capture_pipes, CapturePipes,
+    CapturedOutput,
+};
+pub use directory_binding::{
+    bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
+    path_is_within, PrivateDirectoryBinding,
+};
+pub use job_guard::{attach_suspended_process, ChildJobGuard, ResourceLimits};
 pub use private_files::{
     create_private_file, delete_private_file_handle, is_single_link_file, open_private_directory,
     open_private_file, remove_file_if_same,

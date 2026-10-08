@@ -156,6 +156,37 @@ where
     )
 }
 
+/// Hold an existing read-only directory and its checked ancestry without
+/// requesting file creation, ACL repair, or delete rights.
+pub fn bind_readonly_directory(path: &Path) -> io::Result<PrivateDirectoryBinding> {
+    if !path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "readonly directory path must be absolute",
+        ));
+    }
+    let path = normalize_absolute_path(path)?;
+    let mut current = PathBuf::new();
+    let mut handles = Vec::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        if matches!(component, Component::Normal(_)) {
+            handles.push(open_directory_bound(&current, false, false)?);
+        }
+    }
+    if handles.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "readonly directory path must identify a directory below its root",
+        ));
+    }
+    Ok(PrivateDirectoryBinding {
+        path,
+        handles,
+        created_final: false,
+    })
+}
+
 /// Bind an existing directory tree without changing its ACL.
 pub fn bind_directory<F>(
     path: &Path,
