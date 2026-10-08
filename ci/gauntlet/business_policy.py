@@ -99,7 +99,8 @@ def bind_business_snapshot(installed: dict[str, Any], snapshot: object, prepared
         "snapshot_policy_digest": snapshot.get("policy_digest"),
         "snapshot_source_digest": binding.get("sourceDocumentDigest"),
         "snapshot_default_action": binding.get("defaultAction"),
-        "snapshot_rule_ids": [rule.get("id") for rule in rules if isinstance(rule, Mapping)]
+        # Keep malformed entries as None so they cannot be filtered into a match.
+        "snapshot_rule_ids": [rule.get("id") if isinstance(rule, Mapping) else None for rule in rules]
         if isinstance(rules, list)
         else None,
     }

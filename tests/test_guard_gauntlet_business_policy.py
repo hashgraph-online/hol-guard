@@ -107,6 +107,15 @@ def test_deny_under_another_snapshot_is_not_a_pass(receipt):
     assert result["reason"] == "the deny was not decided under the bound business snapshot"
 
 
+def test_malformed_snapshot_rule_is_not_a_pass():
+    scenario = _scenario()
+    case = observed_case(scenario.commands[0], blocked=True)
+    snapshot = _snapshot()
+    snapshot["business_policy"]["rules"].append("not-a-rule")
+    case["business_policy"] = bind_business_snapshot(_installed(), snapshot, PREPARED)
+    assert assess_case(scenario, case)["outcome"] == "harness-error"
+
+
 def test_missing_business_policy_is_not_a_pass():
     scenario, case = _case()
     del case["business_policy"]
