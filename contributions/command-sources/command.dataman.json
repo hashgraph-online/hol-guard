@@ -279,7 +279,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -324,7 +324,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -376,7 +376,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -423,7 +423,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -468,7 +468,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -517,7 +517,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -563,7 +563,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -609,7 +609,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -659,7 +659,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
@@ -715,7 +715,7 @@
               "dataman.exe",
               "dataman.cmd"
             ],
-            "fail_secure_unknown_options": false,
+            "fail_secure_unknown_options": true,
             "forbidden_flags": [],
             "interspersed_flags": [],
             "interspersed_options_with_values": [],
