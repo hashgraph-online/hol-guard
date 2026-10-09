@@ -33,3 +33,7 @@ The legacy v1 route stays supported and keeps its shape. In-repo callers move to
 ## Consequences
 
 A wheel without a native runtime still serves v1. A resident restart, or a binary with a different catalog, changes `snapshot_id`. Cursors from the old snapshot then return 409 `catalog_snapshot_expired`, and clients restart the traversal once. The snapshot is immutable for the life of the process, so there is no replacement race; a new catalog arrives only with a new native binary.
+
+Older clients are bounded by their own v1 read limit. Clients released before the catalog limit split read the v1 catalog with a 1,000,000-byte cap. The packaged catalog is about 990 KB of compact JSON, so those clients fail closed with a response-too-large error once it grows past the cap. They do not truncate it. Upgrading the client moves `extension-controls list`, `show` and `patterns` onto bounded v2 pages. Against a daemon without v2, upgraded clients read v1 within the separate daemon response limit.
+
+On a daemon that serves v2, `extension-controls list` returns index summaries (`guard.cli.extension-catalog-list.v2`) rather than full extension objects. `show` still returns the full v1 extension object, rebuilt from detail plus complete collection traversals.
