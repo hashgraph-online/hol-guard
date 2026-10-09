@@ -70,10 +70,13 @@ def matching_local_cli_grant(
         cwd=cwd,
         home_dir=home_dir,
     )
-    if command_state == "allow":
-        return identity, "allowed"
     if command_state == "block":
         return identity, "blocked"
+    # A registry fetch runs whatever the registry serves, so only blocks bind.
+    if identity.is_registry_package:
+        return None
+    if command_state == "allow":
+        return identity, "allowed"
     if (
         state == "allowed"
         and command_state == "inherit"

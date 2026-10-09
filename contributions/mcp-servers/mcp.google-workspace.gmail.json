@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.google-workspace.gmail",
+  "version": "1.0.0",
+  "name": "Gmail MCP (Google Workspace developer preview)",
+  "description": "Reviews draft creation and label changes on Google's hosted Gmail MCP server and leaves search and reads on Guard's usual handling. The server is a Workspace developer-preview product and documents no send tool.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "developers.google.com",
+    "displayName": "Google Workspace",
+    "url": "https://developers.google.com/workspace"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#1F2937"
+  },
+  "homepage": "https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://gmailmcp.googleapis.com/mcp/v1",
+    "serverNames": [
+      "gmail",
+      "gmail-mcp",
+      "google-gmail"
+    ]
+  },
+  "riskClasses": [
+    "account-mailbox-write",
+    "external-content-draft"
+  ],
+  "tools": [
+    {
+      "name": "create_draft",
+      "state": "review"
+    },
+    {
+      "name": "label_thread",
+      "state": "review"
+    },
+    {
+      "name": "unlabel_thread",
+      "state": "review"
+    },
+    {
+      "name": "label_message",
+      "state": "review"
+    },
+    {
+      "name": "unlabel_message",
+      "state": "review"
+    },
+    {
+      "name": "create_label",
+      "state": "review"
+    },
+    {
+      "name": "list_drafts",
+      "state": "inherit"
+    },
+    {
+      "name": "get_thread",
+      "state": "inherit"
+    },
+    {
+      "name": "get_message",
+      "state": "inherit"
+    },
+    {
+      "name": "search_threads",
+      "state": "inherit"
+    },
+    {
+      "name": "list_labels",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server",
+    "https://developers.google.com/workspace/guides/configure-mcp-servers",
+    "https://developers.google.com/workspace/guides/configure-mcp-security"
+  ],
+  "saferAlternatives": [
+    "Use search_threads, get_thread, get_message, list_drafts and list_labels to read mail without changing the mailbox.",
+    "Grant only the gmail.readonly scope when the task needs no drafts or label changes."
+  ]
+}

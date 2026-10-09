@@ -226,20 +226,26 @@ def _coordinator_report() -> dict[str, object]:
     native_contract_groups: defaultdict[str, list[str]] = defaultdict(list)
     native_error_groups: defaultdict[str, list[str]] = defaultdict(list)
     started = time.perf_counter()
-    reports = tuple(_iter_reports())
+    worker_rss: list[float] = []
+    worker_elapsed: list[float] = []
+    for report in _iter_reports():
+        worker_rss.append(report["rss_mib"])
+        worker_elapsed.append(report["elapsed"])
+        for destination, source in (
+            (groups, report["groups"]),
+            (native_contract_groups, report["native_contract_groups"]),
+            (native_error_groups, report["native_error_groups"]),
+        ):
+            for key, case_ids in source.items():
+                if key in destination:
+                    destination[key].extend(case_ids)
+                else:
+                    destination[key] = case_ids
     elapsed = time.perf_counter() - started
-    for report in reports:
-        for key, case_ids in report["groups"].items():
-            groups[key].extend(case_ids)
-        for key, case_ids in report["native_contract_groups"].items():
-            native_contract_groups[key].extend(case_ids)
-        for key, case_ids in report["native_error_groups"].items():
-            native_error_groups[key].extend(case_ids)
     actual = {
         key: [len(ids), hashlib.sha256(("\n".join(sorted(ids)) + "\n").encode()).hexdigest()]
         for key, ids in groups.items()
     }
-    worker_rss = [report["rss_mib"] for report in reports]
     active_worker_rss = sum(sorted(worker_rss, reverse=True)[:MAX_CONCURRENT_WORKERS])
     observed_contract = {key: (len(ids), _framed_ids_sha256(ids)) for key, ids in native_contract_groups.items()}
     if observed_contract != expected_native_groups():
@@ -260,7 +266,7 @@ def _coordinator_report() -> dict[str, object]:
         "original_oracle_above_count": sum(len(ids) for key, ids in groups.items() if "|overclassified|" in key),
         "elapsed": elapsed,
         "rss_mib": peak_rss_mib() + active_worker_rss,
-        "worker_elapsed": [report["elapsed"] for report in reports],
+        "worker_elapsed": worker_elapsed,
     }
 
 

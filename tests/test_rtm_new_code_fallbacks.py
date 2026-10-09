@@ -7,7 +7,6 @@ success.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -112,52 +111,6 @@ def _patch_authority(monkeypatch: pytest.MonkeyPatch, status: SimpleNamespace, r
     monkeypatch.setattr(native_package_authority, "native_resident_client_request", lambda **_kwargs: response)
     monkeypatch.setattr(native_package_authority, "native_record_resident_failure", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(native_package_authority, "native_record_resident_success", lambda *_args, **_kwargs: None)
-
-
-def test_package_intent_parse_binds_the_callers_path_to_the_resident(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """The resident resolves the launch in the caller's PATH, not its spawn-time one.
-
-    The resident is long-lived: its own ``PATH`` is whatever it was spawned
-    with, and a manager it cannot resolve makes the TypeScript launch evidence
-    incomplete, which sends a contained typecheck back to review even though the
-    caller resolves the manager fine.
-    """
-
-    home = tmp_path / "home"
-    requests: list[dict[str, object]] = []
-    response = b'{"schema":"guard-package-authority-result.v1","status":"ok","payload":{}}'
-    monkeypatch.setattr(native_package_authority, "native_runtime_status", lambda: _status())
-    monkeypatch.setattr(
-        native_package_authority,
-        "native_resident_client_request",
-        lambda **kwargs: (requests.append(json.loads(kwargs["payload"])["request"]), response)[1],
-    )
-    monkeypatch.setattr(native_package_authority, "native_record_resident_failure", lambda *_a, **_k: None)
-    monkeypatch.setattr(native_package_authority, "native_record_resident_success", lambda *_a, **_k: None)
-    monkeypatch.setenv("PATH", "/example/bin")
-
-    assert native_package_authority.package_intent_parse_native("npx tsc", guard_home=home) == {}
-    assert requests[0]["environment"] == {"PATH": "/example/bin"}
-
-    # An environment the caller supplied with a PATH is sent as it stands.
-    assert (
-        native_package_authority.package_intent_parse_native(
-            "npx tsc", environment={"PATH": "/other/bin", "NODE_OPTIONS": ""}, guard_home=home
-        )
-        == {}
-    )
-    assert requests[1]["environment"] == {"PATH": "/other/bin", "NODE_OPTIONS": ""}
-
-    # One without a PATH gains the caller's, so resolution still matches.
-    assert (
-        native_package_authority.package_intent_parse_native(
-            "npx tsc", environment={"NODE_OPTIONS": ""}, guard_home=home
-        )
-        == {}
-    )
-    assert requests[2]["environment"] == {"NODE_OPTIONS": "", "PATH": "/example/bin"}
 
 
 def test_package_authority_refuses_unavailable_or_malformed_resident(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -53,7 +54,7 @@ def test_server_deadline_includes_elapsed_admission_and_missing_policy_blocks(
     monkeypatch.setattr(server, "_native_mode_requires_rust", lambda: True)
     daemon = SimpleNamespace(
         request_deadline=lambda request, cap: caps.append(cap) or 100.0 + cap,
-        store=SimpleNamespace(get_managed_install=lambda _: {"active": True}),
+        store=SimpleNamespace(get_managed_install=lambda _: {"active": True}, connection_scope=nullcontext),
         hook_worker=SimpleNamespace(
             prepare_workspace_policy=lambda workspace, *, deadline: captured.append(deadline),
             metrics=SimpleNamespace(record_route=lambda _: None),

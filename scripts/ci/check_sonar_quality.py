@@ -12,8 +12,8 @@ from pathlib import Path
 
 from scripts.ci.sonar_quality_client import SonarClient, metadata_task
 from scripts.ci.sonar_quality_policy import conditions, number
+from scripts.ci.sonar_scan_context import REPOSITORY, checkout_revision, read_context
 
-REPOSITORY = "hashgraph-online/hol-guard"
 ANCHOR_COVERAGE = Decimal("61.7")
 
 
@@ -101,15 +101,19 @@ def evidence(report: dict, environment: dict[str, str]) -> None:
 
 
 def main() -> int:
+    environment = dict(os.environ)
     report = {"decision": "blocked", "policy_version": 2, "revision": os.environ.get("GITHUB_SHA")}
     passed = False
     try:
-        client = SonarClient(os.environ.get("SONAR_TOKEN", ""))
-        analysis_id = client.analysis(metadata_task(Path(".scannerwork/report-task.txt")))
-        passed = evaluate(client, analysis_id, dict(os.environ), report)
+        task_id = metadata_task(Path(".scannerwork/report-task.txt"))
+        context = read_context(environment, checkout_revision())
+        report.update(context=context, task_id=task_id)
+        client = SonarClient(environment.get("SONAR_TOKEN", ""))
+        analysis_id = client.analysis(task_id, context)
+        passed = evaluate(client, analysis_id, environment, report)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         report["error"] = f"{type(error).__name__}: {error}"
-    evidence(report, dict(os.environ))
+    evidence(report, environment)
     if not passed:
         print("::error::Sonar quality policy failed. See the job summary and sonar-quality-evidence artifact.")
     elif report["decision"] == "main-coverage-debt-reported":

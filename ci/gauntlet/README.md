@@ -26,7 +26,7 @@ The runner appends verified fixture provenance to the agent's system context: ge
 
 The model must use actual native `read`, `write`, `edit` and `bash` tools. The judge correlates model call IDs, host starts/completions, native pre/post responses, native route counts, approvals, physical file contents and local collector observations. It does not count a model's refusal as a Guard block.
 
-The current core catalog contains 37 scenarios, including the two existing linked-destination protection cases. Its paired checks cover the exact seven-call settings task with independent byte checks, absolute sibling-project anchor replacement, sibling copy plus native readback, quoted/Unicode/source-search/pipeline/Git/OD work, recursive and byte-oriented secret searches, secret aliases/copies, local egress and environment protections, deletion sentinels, an explicitly disabled Ollama permission, and nonblocking Watch recording. Exact-command cases require one model-selected attempt; native receipt/control evidence and filesystem or egress outcomes are checked independently. The Ollama case proves a real OMP Guard attempt and a harmless sentinel that was not executed; it does not claim contact with a real Ollama service.
+The current core catalog contains 40 scenarios, including the two existing linked-destination protection cases. Its paired checks cover the exact seven-call settings task with independent byte checks, absolute sibling-project anchor replacement, sibling copy plus native readback, quoted/Unicode/source-search/pipeline/Git/OD work, recursive and byte-oriented secret searches, secret aliases/copies, local egress and environment protections, deletion sentinels, explicitly disabled Ollama remove, Google Workspace `gws` send and Salesforce `sf` delete permissions, nonblocking Watch recording, and the deletion floor under an installed business policy. Exact-command cases require one model-selected attempt; native receipt/control evidence and filesystem or egress outcomes are checked independently. Each disabled-permission case proves a real OMP Guard attempt and a harmless sentinel that was not executed. It does not claim contact with a real Ollama service, Google account or Salesforce org. `extension_adapters.py` pins each executable to its reviewed extension, rule and permission. The oracle checks native evidence against that table, not against the installed catalog. The business-policy deletion case imports a signed, approval-gated business source whose default allows business actions; it passes only when the ACKed native snapshot is bound to that source digest and the delete is still denied.
 
 The added workflow pairs exercise file predicates versus secret reads; bounded `find` discovery versus deletion; quoted `cp --` versus secret copies; absolute `cd` with directory/file creation versus secret copying; routed Git inspection versus metadata overwrite; and stdin substitution versus writing into `.env`. Copied bytes, real generated directories, empty created files and unchanged `.git/config` are independently checked. A successful tool status without the required physical result cannot pass. These cases extend the existing workflow matrix into model-selected calls; they do not replace its remaining command inventory.
 
@@ -111,7 +111,45 @@ Its report is labeled `contained-bun-vitest-extended`, requires all seven review
 
 The default per-scenario host deadline is 300 seconds with at most 32 provider rounds. `--timeout` and `--max-inference-rounds` are explicit bounded controls. `--case ID` runs a targeted investigation but **cannot qualify the full profile**. Every run uses a fresh output directory and fresh disposable fixture; failed evidence is not overwritten. Qualification requires the entire Git working tree to be clean, including untracked files. Put downloaded wheels, public reports and scratch files outside the checkout. The start/end source snapshots detect drift during the run; publication independently rechecks immutable source bindings. `--work-root` accepts a private parent directory, including spaces and Unicode. Command placeholders are shell-quoted separately from native file paths.
 
+### Run cases in parallel (`--jobs N`)
+
+A full core run executes every catalog case against live inference, which takes roughly 20-25 minutes sequentially. `--jobs N` (1-8, default 1) runs up to N cases concurrently. `--jobs 4` is the recommended starting point; raise it only if your provider's rate limits and the machine's CPU headroom allow.
+
+```sh
+python -m ci.gauntlet run --jobs 4 \
+  --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-evidence
+```
+
+- `--jobs 1` is the existing in-process sequential path, unchanged. With `--jobs` above 1 the runner starts one worker process per case (`ci/gauntlet/case_worker.py`); each worker calls the same `run_case`, so the per-case procedure and the judge are identical.
+- Each case is fully private to its worker: fixture directory (named from the scenario id), Guard home, in-process daemon and native resident, loopback collector, inference relay (its own ephemeral port, session id and round budget), generated extension, agent directory, OMP process group and private evidence. Daemon, relay and collector ports are ephemeral. The in-process daemon and native resident client hold process-global state, which is why workers are separate interpreters rather than threads.
+- Shared and read-only: the installed Guard build and the pinned OMP executable (each worker re-checks the native binary digest and build SHA the runner verified), the repository checkout, and, with `--native-luna-route`, the single loopback Luna adapter, which is transport only and keeps no per-case state. Shared and writable by every case: only the OMP agents' ordinary temporary directory (`/tmp`), which holds randomly named files. Cases never share a `HOME`.
+- Evidence and `summary.json` are byte-for-byte the same shape as a sequential run and always list cases in catalog order, whatever order they finish in. Only the informational `jobs` field is added; `verify` and `pack` do not change and do not read it. A parallel run is a full run: full-profile qualification still requires every catalog case, and `--case` selections remain non-qualifying.
+- Concurrency only changes timing. Hook-latency percentiles and per-case wall time reflect a loaded machine, and an overloaded machine can push a case past `--timeout` (`task-incomplete`). Do not use a parallel run to establish a latency baseline.
+- A provider 429 or 5xx ends that case's inference round as failed, which the judge classifies as `inference-error`; it is never a pass and never a product failure. There are no retries, and no model output is replayed. If you see these, lower `--jobs` and rerun the whole profile in a fresh output directory.
+- SIGINT, SIGTERM and SIGHUP cancel every in-flight worker: each worker unwinds its own agent process group, daemon and resident, and the runner then force-terminates the process group of any worker that has not exited within 90 seconds. A worker also unwinds itself if the runner dies. Processes are only ever terminated through handles the runner started, never by name. If a runner or worker is killed with SIGKILL, check for leftover processes under the work root before the next run.
+- `--jobs` is rejected with `--profile contained-bun-vitest`.
+
 A local live inference server can be selected with `--provider-url http://127.0.0.1:PORT/v1 --allow-loopback-provider --model MODEL --provider-identity ID`. The identity must truthfully describe the actual backend. Do not label an opaque helper as DeepSeek, Codex or another model whose identity was not verified.
+
+### Luna high through an Oh My Pi ChatGPT login
+
+Oh My Pi's `openai-codex` lane uses the Responses API through an existing ChatGPT login, so the Chat Completions relay cannot reach it directly. `--native-luna-route` starts a small loopback adapter (`luna_adapter.ts`, run with Bun from the pinned SDK tree) that translates one streaming Chat Completions request into one `openai-codex/gpt-5.6-luna` request at `medium` thinking and streams the result back. Pass `--reasoning-effort high` to run Luna high instead.
+
+```sh
+python -m ci.gauntlet run \
+  --native-luna-route \
+  --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-evidence
+```
+
+- The adapter is transport only. It never executes a tool: tools stay in the Gauntlet agent and run through the installed Guard extension. It stops the outer SDK turn before any tool dispatch.
+- Tool-call argument bytes are forwarded exactly as the model produced them (no parse and re-encode). If the original bytes cannot be bound, the request fails.
+- The route fixes the provider, model and effort itself. Combining it with `--provider-url`, `--model`, `--provider-identity` or `--allow-loopback-provider`, or with an effort other than `medium` or `high`, is rejected. The adapter rejects any request that does not name `native-luna` with the run's `reasoning_effort`.
+- Evidence records the provider identity `openai-codex/gpt-5.6-luna/<effort> via pinned-omp-native-luna-stream-v2`, and every round's `response_models` is the real backend `openai-codex/gpt-5.6-luna`.
+- Credentials are resolved inside the adapter process by Oh My Pi's normal auth storage. They are never read by the runner, put in arguments or evidence, or exported, and the adapter's environment carries no provider keys. Sign in to Oh My Pi with ChatGPT beforehand; no `GUARD_GAUNTLET_API_KEY` is needed.
+- The adapter binds `127.0.0.1` on an ephemeral port and accepts only requests carrying a random per-run bearer token that the relay holds, so no other local process can use the login. It runs in its own process group and is stopped and reaped when the run ends, fails, or the runner receives SIGTERM or SIGHUP. It also exits if the runner dies without cleanup.
+- The SDK tree is found from `--omp` (or `omp` on `PATH`), whose usual location is `<sdk-root>/node_modules/.bin/omp`. Pass `--sdk-root` to name it explicitly; its Oh My Pi version must equal the repository pin. The pinned catalog must contain the model. Set `GUARD_GAUNTLET_SDK_ROOT` to run the adapter's optional SDK check in `luna_adapter.test.ts`.
 
 ## Publish evidence in the pull request
 

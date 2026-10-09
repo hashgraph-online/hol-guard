@@ -1,0 +1,148 @@
+name: Prepare trusted release compilation
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-native-prepare.yml
+      - scripts/release/prepared_native.py
+      - rust/**
+      - contracts/**
+      - contributions/command-sources/**
+      - contributions/mcp-servers/**
+      - pyproject.toml
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  compile:
+    name: Compile release (${{ matrix.target }})
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            suffix: ''
+          # Intel binaries are cross-compiled on Apple silicon; the native
+          # macos-15-intel wheel job self-tests and verifies them before packaging.
+          - runner: macos-15
+            target: x86_64-apple-darwin
+            suffix: ''
+            cross: true
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            suffix: ''
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+            rustflags: -C link-arg=/Brepro
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+      VERSION: ${{ inputs.version }}
+      RUST_TARGET: ${{ matrix.target }}
+      RUSTFLAGS: ${{ matrix.rustflags }}
+      CROSS_COMPILED: ${{ matrix.cross == true }}
+      RUNTIME: rust/target/${{ matrix.target }}/release/hol-guard-runtime${{ matrix.suffix }}
+      SOURCE_COMPILER: rust/target/${{ matrix.target }}/release/guard-command-source${{ matrix.suffix }}
+      HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+      HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: true
+      - name: Bind exact source and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          BASE_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
+          RELEASE_VERSION="${VERSION:-$BASE_VERSION}"
+          if [[ "$RELEASE_VERSION" != "$BASE_VERSION" ]]; then
+            [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$RELEASE_VERSION"
+          fi
+          while IFS= read -r changed_path; do
+            case "$changed_path" in
+              pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock) ;;
+              *) echo "Version stamping changed an unexpected file" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only)
+          echo "VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_PACKAGE_VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_BUILD_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+      - name: Verify release enrollment root
+        run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
+      - name: Install pinned Rust target
+        shell: bash
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+          rustup target add "$RUST_TARGET"
+      - name: Install Linux static toolchain
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Cache trusted release compilation
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          prefix-key: release-native-v1
+          workspaces: rust
+          shared-key: release-${{ matrix.target }}
+          # Fresh checkouts reset source mtimes, so cached workspace crates are
+          # always stale; content-addressed sccache below covers them instead.
+          cache-workspace-crates: false
+          cache-bin: false
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
+      - name: Compile canonical release inputs
+        shell: bash
+        env:
+          # Only workspace members are wrapped; third-party crates come from rust-cache.
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'on'
+          SCCACHE_GHA_VERSION: release-native-v1
+          # Only trusted main pushes may write; every other run is read-only.
+          SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
+        run: |
+          set -euo pipefail
+          # One invocation keeps nix feature unification identical for both binaries,
+          # so shared workspace crates compile once. The generator only writes files
+          # that no build script reads, so it can verify the finished compiler.
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          if [[ "$CROSS_COMPILED" != "true" ]]; then
+            python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
+            "$RUNTIME" self-test --json
+          fi
+          python scripts/release/prepared_native.py pack --directory prepared-native
+          "$SCCACHE_PATH" --show-stats
+      - name: Upload exact-run binaries
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-native-${{ matrix.target }}
+          path: prepared-native/*
+          if-no-files-found: error
+          retention-days: 3

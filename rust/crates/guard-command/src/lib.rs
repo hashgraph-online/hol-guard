@@ -390,6 +390,7 @@ pub mod local_mcp_stdio;
 #[cfg(all(unix, test))]
 mod local_mcp_stdio_tests;
 pub mod mcp_decision;
+mod mcp_package_sources;
 #[cfg(unix)]
 pub mod mcp_stdio_session;
 pub mod pep440;
