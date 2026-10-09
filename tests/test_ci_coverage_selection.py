@@ -256,7 +256,7 @@ def test_workflow_downloads_only_proven_ids_and_checks_files_before_combine():
     assert "pattern" not in download["with"] and "run-id" not in download["with"]
     prepare = (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
     assert prepare.index("--verify-downloads") < prepare.index("parallel_coverage_combine.py")
-    assert '"${#reports[@]}" -eq 128' in prepare
+    assert '"${#reports[@]}" -eq "${CI_PYTEST_COVERAGE_SHARDS:-128}"' in prepare
 
 
 def test_retry_budget_applies_only_to_read_consistency(monkeypatch):
