@@ -57,6 +57,7 @@ def attempt_argv(
     jobs: int,
     host_slots: int,
     max_load: float,
+    max_load_wait: float,
     sha: str,
     candidate_sha: str | None,
     evidence: Path,
@@ -81,6 +82,8 @@ def attempt_argv(
         str(host_slots),
         "--max-load",
         str(max_load),
+        "--max-load-wait",
+        str(max_load_wait),
         "--fail-fast",
         "--expected-source-sha",
         sha,
@@ -257,6 +260,8 @@ def main(args: Any) -> int:
         raise ValueError("--host-slots must be from 1 to 64")
     if not args.max_load > 0:
         raise ValueError("--max-load must be positive")
+    if args.max_load_wait < 0:
+        raise ValueError("--max-load-wait must be >= 0")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_root = (args.run_root or Path("/tmp/hol-guard-gauntlet") / f"{sha[:12]}-{stamp}").resolve()
     if run_root.exists():
@@ -304,6 +309,7 @@ def main(args: Any) -> int:
                     jobs=args.jobs,
                     host_slots=args.host_slots,
                     max_load=args.max_load,
+                    max_load_wait=args.max_load_wait,
                     sha=sha,
                     candidate_sha=args.candidate_sha,
                     evidence=evidence,
@@ -374,6 +380,7 @@ def main(args: Any) -> int:
             "jobs": args.jobs,
             "host_slots": args.host_slots,
             "max_load": args.max_load,
+            "max_load_wait": args.max_load_wait,
             "attempts": attempts,
             "verify": verify_result,
             "elapsed_seconds": round(time.monotonic() - started, 3),

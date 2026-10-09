@@ -302,6 +302,7 @@ def run_suite(
     host_slots: int | None = None,
     slot_dir: Path | None = None,
     max_load: float | None = None,
+    max_load_wait: float = 600.0,
 ) -> dict[str, Any]:
     """Run the complete profile or explicitly label a targeted exploratory run."""
     if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:
@@ -356,13 +357,14 @@ def run_suite(
         "fail_fast": fail_fast,
         "host_slots": host_slots,
         "max_load": max_load,
+        "max_load_wait": max_load_wait,
     }
     slot_pool = (
         HostSlots(slot_dir or Path.home() / ".cache" / "hol-guard-gauntlet" / "slots", host_slots)
         if host_slots is not None
         else None
     )
-    gate = LoadGate(max_load) if max_load is not None else None
+    gate = LoadGate(max_load, max_wait=max_load_wait) if max_load is not None else None
     completed: dict[str, dict[str, Any]] = {}
 
     def record(scenario: Scenario, case: dict[str, Any]) -> None:

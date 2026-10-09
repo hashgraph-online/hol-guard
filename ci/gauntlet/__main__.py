@@ -73,6 +73,12 @@ def main() -> int:
         default=os.environ.get("GUARD_GAUNTLET_MAX_LOAD"),
         help="Start new cases only while the 1-minute host load average is at or below this (POSIX only)",
     )
+    run.add_argument(
+        "--max-load-wait",
+        type=float,
+        default=os.environ.get("GUARD_GAUNTLET_MAX_LOAD_WAIT"),
+        help="Total seconds to wait on host load before proceeding anyway (default 600; requires --max-load)",
+    )
     run.add_argument("--omp", help="Path to the repository-pinned Oh My Pi executable")
     run.add_argument(
         "--harness",
@@ -128,6 +134,12 @@ def main() -> int:
         type=float,
         default=2.0 * (os.cpu_count() or 1),
         help="Start new cases only while the 1-minute host load average is at or below this",
+    )
+    qualify.add_argument(
+        "--max-load-wait",
+        type=float,
+        default=600.0,
+        help="Total seconds to wait on host load before proceeding anyway",
     )
     qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
     qualify.add_argument("--cache-root", type=Path, default=Path.home() / ".cache" / "hol-guard-gauntlet")
@@ -229,6 +241,10 @@ def main() -> int:
             raise ValueError("--max-load must be positive")
         if args.max_load is not None and os.name == "nt":
             raise ValueError("--max-load requires a POSIX host")
+        if args.max_load_wait is not None and args.max_load_wait < 0:
+            raise ValueError("--max-load-wait must be >= 0")
+        if args.max_load_wait is not None and args.max_load is None:
+            raise ValueError("--max-load-wait requires --max-load")
         api_key = os.environ.pop(args.api_key_env, None)
         if not api_key and not args.allow_loopback_provider and not args.native_luna_route:
             raise ValueError("configure a dedicated inference API key; missing inference cannot pass")
@@ -286,6 +302,7 @@ def main() -> int:
                     host_slots=args.host_slots,
                     slot_dir=args.slot_dir,
                     max_load=args.max_load,
+                    max_load_wait=args.max_load_wait if args.max_load_wait is not None else 600.0,
                 )
         print(
             json.dumps(

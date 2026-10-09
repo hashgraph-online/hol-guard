@@ -72,6 +72,7 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
         jobs=4,
         host_slots=8,
         max_load=32.0,
+        max_load_wait=600.0,
         sha=SHA,
         candidate_sha="b" * 40,
         evidence=tmp_path / "evidence" / "attempt-1",
@@ -83,6 +84,7 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
     for flag in ("--native-luna-route", "--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
         assert flag in argv
     assert argv[argv.index("--max-load") + 1] == "32.0"
+    assert argv[argv.index("--max-load-wait") + 1] == "600.0"
     assert "low" not in argv
     assert argv[argv.index("--candidate-sha") + 1] == "b" * 40
 
@@ -157,9 +159,7 @@ def test_wheel_cache_requires_a_matching_digest(tmp_path: Path, monkeypatch: pyt
     result = qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run")
     digest = hashlib.sha256(b"new wheel bytes").hexdigest()
     assert result == {"path": str(store / f"hol_guard-1.0.0-{tag}.whl"), "sha256": digest, "cached": False}
-    assert any(
-        argv[:3] == ["nice", "-n", "10"] and argv[-1].endswith("build-native-wheel-macos.sh") for argv in calls
-    )
+    assert any(argv[:3] == ["nice", "-n", "10"] and argv[-1].endswith("build-native-wheel-macos.sh") for argv in calls)
     assert (store / "wheel.sha256").read_text().strip() == digest
 
     calls.clear()
@@ -175,6 +175,7 @@ def _args(tmp_path: Path, **overrides: Any) -> SimpleNamespace:
         "jobs": 4,
         "host_slots": 8,
         "max_load": 32.0,
+        "max_load_wait": 600.0,
         "effort": "medium",
         "cache_root": tmp_path / "cache",
         "run_root": tmp_path / "run",

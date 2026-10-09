@@ -162,6 +162,63 @@ def test_load_gate_reports_once_per_wait_episode() -> None:
     ]
 
 
+def test_load_gate_proceeds_once_the_wait_budget_is_spent() -> None:
+    now = [0.0]
+    lines: list[str] = []
+    gate = parallel.LoadGate(
+        4.0, max_wait=600.0, clock=lambda: now[0], load=lambda: (9.0, 0.0, 0.0), notify=lines.append
+    )
+    assert gate() is False
+    now[0] = 599.9
+    assert gate() is False
+    now[0] = 600.0
+    assert gate() is True
+    # The budget is spent: the gate admits unconditionally without notifying again.
+    assert gate() is True
+    assert lines == [
+        "gauntlet: waiting for host load 9 <= 4",
+        "gauntlet: host load still 9; waited 600s, proceeding",
+    ]
+
+
+def test_load_gate_budget_is_cumulative_across_episodes() -> None:
+    now = [0.0]
+    load = [9.0]
+    lines: list[str] = []
+    gate = parallel.LoadGate(
+        4.0, max_wait=10.0, clock=lambda: now[0], load=lambda: (load[0], 0.0, 0.0), notify=lines.append
+    )
+    assert gate() is False
+    now[0] = 7.0
+    load[0] = 1.0
+    assert gate() is True  # episode one banked seven blocked seconds
+    load[0] = 9.0
+    now[0] = 20.0
+    assert gate() is False  # episode two resumes the same budget at 7s spent
+    now[0] = 23.0
+    assert gate() is True  # three more seconds exhaust the cumulative 10s
+    assert lines == [
+        "gauntlet: waiting for host load 9 <= 4",
+        "gauntlet: host load 1 <= 4; resuming",
+        "gauntlet: waiting for host load 9 <= 4",
+        "gauntlet: host load still 9; waited 10s, proceeding",
+    ]
+
+
+def test_load_gate_admits_normally_before_the_budget() -> None:
+    now = [0.0]
+    load = [9.0]
+    lines: list[str] = []
+    gate = parallel.LoadGate(
+        4.0, max_wait=10.0, clock=lambda: now[0], load=lambda: (load[0], 0.0, 0.0), notify=lines.append
+    )
+    assert gate() is False
+    now[0] = 5.0
+    load[0] = 1.0
+    assert gate() is True
+    assert lines == ["gauntlet: waiting for host load 9 <= 4", "gauntlet: host load 1 <= 4; resuming"]
+
+
 @pytest.mark.skipif(os.name != "posix", reason="flock host slots")
 def test_host_slots_share_one_inventory_and_release_on_collect(tmp_path: Path) -> None:
     slots_dir = tmp_path / "slots"

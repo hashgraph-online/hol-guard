@@ -177,32 +177,54 @@ class HostSlots:
 
 
 class LoadGate:
-    """Admit new work only while the host's one-minute load average is within budget."""
+    """Admit new work only while the host's one-minute load average is within budget.
+
+    Waiting is itself bounded: after ``max_wait`` cumulative seconds spent blocked
+    the gate admits unconditionally for the rest of its life, so a persistently
+    busy host cannot starve a run forever.
+    """
 
     def __init__(
         self,
         max_load: float,
         *,
+        max_wait: float = 600.0,
+        clock: Callable[[], float] = time.monotonic,
         load: Callable[[], tuple[float, float, float]] | None = None,
         notify: Callable[[str], None] | None = None,
     ):
         self.max_load = max_load
+        self.max_wait = max_wait
+        self._clock = clock
         self._load = load or os.getloadavg
         self._notify = notify or (lambda line: print(line, file=sys.stderr, flush=True))
         self._waiting = False
+        self._blocked_since: float | None = None
+        self._spent = 0.0
+        self._exhausted = False
 
     def __call__(self) -> bool:
-        """One notify line per wait episode: when it starts and when it ends."""
+        """One notify line per wait episode: when it starts, ends, or hits the budget."""
+        if self._exhausted:
+            return True
+        now = self._clock()
         current = self._load()[0]
         if current <= self.max_load:
             if self._waiting:
+                self._spent += now - (self._blocked_since if self._blocked_since is not None else now)
                 self._waiting = False
                 self._notify(f"gauntlet: host load {current:g} <= {self.max_load:g}; resuming")
             return True
         if not self._waiting:
             self._waiting = True
-            self._notify(f"gauntlet: waiting for host load {current:g} <= {self.max_load:g}")
-        return False
+            self._blocked_since = now
+            if self._spent < self.max_wait:
+                self._notify(f"gauntlet: waiting for host load {current:g} <= {self.max_load:g}")
+        waited = self._spent + now - (self._blocked_since if self._blocked_since is not None else now)
+        if waited >= self.max_wait:
+            self._exhausted = True
+            self._notify(f"gauntlet: host load still {current:g}; waited {waited:g}s, proceeding")
+        return self._exhausted
 
 
 def run_scheduled(
