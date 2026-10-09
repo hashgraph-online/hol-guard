@@ -155,6 +155,7 @@ def run_harness_case(
             before = worker.store.count_approval_requests(status=None)
             environment = clean_environment(fixture.home, private / "agent", fixture.canary)
             environment.update(spec.extra_env)
+            environment.update(spec.home_environment(fixture.home))
             environment.update(login_environment)
             if scenario.oracle == "blocked-extension":
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
