@@ -655,3 +655,35 @@ def test_package_shims_install_requires_local_approval_gate_proof(
     assert payload["entitlement"]["tier"] == "pro"
     assert payload["installed_managers"] == ["npm"]
     assert shim_path.exists()
+
+
+def test_package_shims_test_probes_with_the_calling_shell_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    guard_home = tmp_path / "guard-home"
+    _seed_paid_oauth_entitlement(guard_home)
+    context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
+    install_package_shims(context, managers=("npm",))
+    shim_dir = guard_home / "package-shims" / "bin"
+
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    rc = main(["guard", "package-shims", "test", "--manager", "npm", "--home", str(guard_home), "--json"])
+    inactive = json.loads(capsys.readouterr().out)
+
+    monkeypatch.setenv("PATH", f"{shim_dir}:/usr/bin:/bin")
+    active_rc = main(["guard", "package-shims", "test", "--manager", "npm", "--home", str(guard_home), "--json"])
+    active = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert inactive["path_repair_required"] == ["npm"]
+    assert inactive["manager_results"][0]["skipped_reason"] == "path_inactive"
+    assert active_rc == 0
+    assert active["path_repair_required"] == []
+    assert active["manager_results"][0]["evaluator_invoked"] is True
+    assert active["intercept_proved"] is True

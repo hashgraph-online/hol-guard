@@ -251,14 +251,18 @@ def test_package_shim_intercept_skips_tampered_shim(tmp_path: Path, monkeypatch:
     ]
 
 
-def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
+def _run_daemon_package_shim_install_and_test(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    *,
+    strip_profile_block: bool,
+) -> tuple[int, dict[str, object], dict[str, object]]:
     home_dir = tmp_path / "home"
     home_dir.mkdir()
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("SHELL", "/bin/zsh")
+    monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
+    monkeypatch.setattr(shims_module, "_is_transient_path", lambda _path: False)
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload(
@@ -278,6 +282,14 @@ def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
                 payload={"managers": ["npm"]},
             ),
         )
+        assert install_status == 200
+        if strip_profile_block:
+            for profile in home_dir.iterdir():
+                if profile.is_file():
+                    profile.write_text("", encoding="utf-8")
+        _cards_status, cards_payload = _read_json_response(
+            _request(daemon.port, "/v1/supply-chain/package-shims", method="GET", token=token),
+        )
         test_status, test_payload = _read_json_response(
             _request(
                 daemon.port,
@@ -288,9 +300,43 @@ def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
         )
     finally:
         daemon.stop()
+    return test_status, test_payload, cards_payload
 
-    assert install_status == 200
+
+def test_daemon_package_shim_test_uses_projected_shell_profile_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The daemon PATH never contains the shim dir; Test must agree with the Protected cards."""
+
+    test_status, test_payload, cards_payload = _run_daemon_package_shim_install_and_test(
+        tmp_path,
+        monkeypatch,
+        strip_profile_block=False,
+    )
+
+    assert cards_payload["package_shims"]["protected_managers"] == ["npm"]
+    assert test_status == 200
+    result = test_payload["result"]
+    assert result["path_repair_required"] == []
+    assert result["manager_results"][0]["manager"] == "npm"
+    assert "skipped_reason" not in result["manager_results"][0]
+    assert result["manager_results"][0]["evaluator_invoked"] is True
+    assert result["intercept_proved"] is True
+
+
+def test_daemon_package_shim_test_reports_path_inactive_without_profile_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_status, test_payload, _cards_payload = _run_daemon_package_shim_install_and_test(
+        tmp_path,
+        monkeypatch,
+        strip_profile_block=True,
+    )
+
     assert test_status == 200
     assert test_payload["result"]["intercept_proved"] is False
+    assert test_payload["result"]["path_repair_required"] == ["npm"]
     assert test_payload["result"]["manager_results"][0]["skipped_reason"] == "path_inactive"
     assert test_payload["result"]["manager_results"][0]["evaluator_invoked"] is False

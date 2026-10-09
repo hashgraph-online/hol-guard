@@ -1547,11 +1547,17 @@ def probe_package_shim_intercepts(
     managers: tuple[str, ...] | None = None,
     workspace_dir: Path | None = None,
     allow_inactive_path: bool = False,
+    project_shell_profile: bool = False,
     timeout_seconds: int = _PACKAGE_SHIM_PROBE_TIMEOUT_SECONDS,
 ) -> dict[str, object]:
-    """Execute installed package-manager shims to prove intercept wiring is live."""
+    """Execute installed package-manager shims to prove intercept wiring is live.
 
-    status = package_shim_status(context)
+    ``project_shell_profile`` judges PATH activation with the same projection the
+    dashboard cards use, for callers such as the resident daemon whose own PATH
+    never includes the shell-profile block.
+    """
+
+    status = package_shim_dashboard_status(context) if project_shell_profile else package_shim_status(context)
     installed = set(_string_items(status.get("installed_managers")))
     protected = set(_string_items(status.get("protected_managers")))
     tested_managers = list(managers or tuple(sorted(installed)))
