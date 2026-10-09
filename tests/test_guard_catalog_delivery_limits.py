@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.daemon.client import (
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime import extension_control_limits as limits_module
+from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
 from codex_plugin_scanner.guard.runtime.extension_catalog_handshake import prepare_extension_catalog_handshake
 from codex_plugin_scanner.guard.runtime.extension_control_limits import (
@@ -201,3 +202,46 @@ def test_valid_catalog_over_one_mebibyte_round_trips_real_daemon_and_client(tmp_
     limits = payload["limits"]
     assert isinstance(extensions_wire, list) and len(extensions_wire) == MAX_CATALOG_EXTENSIONS
     assert isinstance(limits, dict) and limits["max_body_bytes"] == MAX_DAEMON_CATALOG_RESPONSE_BYTES
+
+
+def test_known_digest_never_builds_or_uploads_catalog() -> None:
+    def factory(_generated_at: str) -> Mapping[str, object]:
+        pytest.fail("a known catalog must not be built")
+
+    status, upload = prepare_extension_catalog_handshake(
+        runtime_sync_url="https://cloud.example/api/guard/runtime/sync",
+        runtime_response={
+            "extensionCatalogSync": {
+                "catalogDigest": _DIGEST,
+                "catalogKnown": True,
+                "uploadRequired": False,
+                "uploadPath": _UPLOAD_PATH,
+            }
+        },
+        session_payload={"extensionCatalogDigest": _DIGEST},
+        catalog_factory=factory,
+        fallback_generated_at="2026-10-09T00:00:00Z",
+    )
+    assert upload is None
+    assert status == {"extension_catalog_sync_status": "already_known", "extension_catalog_sync_digest": _DIGEST}
+
+
+def test_runtime_sync_sends_nothing_when_upload_exceeds_cloud_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    oversized = _catalog_with_upload_size(CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES + 1)
+    monkeypatch.setattr(runner, "build_builtin_extension_catalog_wire", lambda **_kwargs: oversized)
+    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: pytest.fail("must not upload"))
+    summary = runner._sync_extension_catalog_from_runtime_handshake(
+        auth_context={},
+        runtime_sync_url="https://cloud.example/api/guard/runtime/sessions/sync",
+        runtime_response={
+            "extensionCatalogSync": {
+                "catalogDigest": _DIGEST,
+                "catalogKnown": False,
+                "uploadRequired": True,
+                "uploadPath": _UPLOAD_PATH,
+            }
+        },
+        session_payload={"extensionCatalogDigest": _DIGEST, "updatedAt": "2026-10-09T00:00:00Z"},
+    )
+    assert summary["extension_catalog_sync_status"] == "downgraded"
+    assert summary["managedControlsCapabilities"] == []
