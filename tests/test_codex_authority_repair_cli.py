@@ -33,7 +33,9 @@ def _args(*extra):
     return parser.parse_args(["apps", "repair", "codex", "--restore-authority", "--json", *extra])
 
 
-def _tree_without_resident_lease_timestamps(root):
+def _tree_without_resident_lease_state(root):
+    # A live resident client creates its lease file and then writes it, so a snapshot can
+    # land between the two. Keep the lease path, mode and inode; ignore its time and body.
     tree = _tree(root)
     for relative_path, metadata in tree.items():
         path = Path(relative_path)
@@ -43,7 +45,7 @@ def _tree_without_resident_lease_timestamps(root):
             and path.name.startswith("client-")
             and path.suffix == ".lease"
         ):
-            tree[relative_path] = (*metadata[:2], None, metadata[3])
+            tree[relative_path] = (*metadata[:2], None, None)
     return tree
 
 
@@ -143,7 +145,7 @@ def test_approval_prompt_does_not_restart_expired_parent_budget(prepared_repair,
 def test_dry_run_prepares_without_factors_or_publication(prepared_repair, tmp_path, monkeypatch):  # noqa: F811
     context, _config, manifest, _plan = prepared_repair
     store = GuardStore(context.guard_home)
-    before = _tree_without_resident_lease_timestamps(tmp_path)
+    before = _tree_without_resident_lease_state(tmp_path)
     factors = []
     monkeypatch.setattr(command, "consume_desktop_lifecycle_env", lambda **kwargs: factors.append(kwargs))
     code, payload = command.run_codex_authority_repair(_args("--dry-run"), context, store, None)
@@ -152,7 +154,7 @@ def test_dry_run_prepares_without_factors_or_publication(prepared_repair, tmp_pa
     assert payload["verified"] is False
     assert factors == []
     assert not manifest.exists()
-    assert _tree_without_resident_lease_timestamps(tmp_path) == before
+    assert _tree_without_resident_lease_state(tmp_path) == before
 
 
 @pytest.mark.usefixtures("native_hook_force")

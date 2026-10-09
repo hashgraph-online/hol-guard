@@ -1,7 +1,7 @@
 import { useCallback, type RefObject } from "react";
 import { HiMiniXMark } from "react-icons/hi2";
 
-import { guardAwareHref } from "../guard-api";
+import { extensionPatternHref } from "../extension-pattern-href";
 import { commitDashboardLocation } from "../dashboard-location";
 import { Badge, SectionLabel } from "../approval-center-primitives";
 import {
@@ -74,17 +74,6 @@ function CommandValue(props: { preview: string | null }) {
       </dd>
     </div>
   );
-}
-
-function extensionPatternHref(extensionId: string, ruleId: string): string {
-  // guardAwareHref carries the dashboard session in the fragment; append the
-  // rule anchor as one more fragment parameter instead of replacing it.
-  const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
-  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
-  const params = new URLSearchParams(fragment);
-  params.set("rule", ruleId);
-  url.hash = params.toString();
-  return url.toString();
 }
 
 function MatchEvidence(props: { match: CommandActivityItem["matches"][number]; controlling: boolean }) {

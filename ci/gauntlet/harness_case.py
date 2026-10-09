@@ -12,7 +12,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_prompt import fixture_authorization
-from .business_policy import BUSINESS_DIRECTORY_DELETE, bind_business_snapshot, install_business_policy
+from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
 from .cleanup import cleanup_case_resources
 from .evidence import sha256_bytes
@@ -145,10 +145,10 @@ def run_harness_case(
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, guard_home, extension_adapter(scenario.commands[0])
                 )
-            if scenario.id == BUSINESS_DIRECTORY_DELETE:
+            if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, guard_home)
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
-            if scenario.id == BUSINESS_DIRECTORY_DELETE:
+            if scenario.id in BUSINESS_CASES:
                 publisher = daemon._server.hook_worker.policy_snapshot_publisher
                 case["business_policy"] = bind_business_snapshot(
                     case["business_policy"], publisher.current_snapshot(), policy_snapshot
@@ -165,7 +165,7 @@ def run_harness_case(
             )
             before = worker.store.count_approval_requests(status=None)
             environment = harness_environment(spec, fixture.home, private / "agent", fixture.canary, login_environment)
-            if scenario.oracle == "blocked-extension":
+            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES:
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             spec.prepare_context(fixture.workspace, context)
             command = spec.command(
