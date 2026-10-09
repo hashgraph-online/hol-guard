@@ -88,6 +88,7 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
 # single --deselect operand.
 SCHEDULING_ONLY_FILES = frozenset(
     {
+        "tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms",
         "tests/test_codex_daemon_hook_bridge.py",
     }
 )
