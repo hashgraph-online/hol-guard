@@ -14,11 +14,10 @@ import {
   formatRelativeTime,
   harnessDisplayName,
   isWatchOnlyObservation,
-  receiptDescribesRequest,
   requestResolutionBlockReason,
-  retryCannotReuseApproval,
-  retryCannotReuseApprovalHint,
 } from "./approval-center-utils";
+import { receiptDescribesRequest, retryCannotReuseApproval, retryCannotReuseApprovalHint } from "./approval-retry-guidance";
+import { approvalGateRefreshNeeded, resolvedStateForItem, useShownRequestCheck } from "./review-decision-state";
 import { GuardRequestResolutionError } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import {
@@ -58,21 +57,6 @@ import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
-/** Lock and missing-code errors mean the gate snapshot is stale; refresh it before retrying. */
-export function approvalGateRefreshNeeded(err: unknown): boolean {
-  if (!(err instanceof GuardRequestResolutionError)) return false;
-  const code = err.payload?.["error"];
-  return (err.status === 423 && code === "approval_gate_locked") || code === "approval_gate_totp_required";
-}
-
-/** A decision only describes the request it was made on, never the request shown after it. */
-export function resolvedStateForItem<T extends { requestId: string }>(
-  state: T | null,
-  item: Pick<GuardApprovalRequest, "request_id"> | null,
-): T | null {
-  return item !== null && state?.requestId === item.request_id ? state : null;
-}
-
 function resolvedActionCopy(
   item: GuardApprovalRequest | null,
   action: "allow" | "block",
@@ -109,6 +93,7 @@ export function ReviewDecisionCard(props: {
     persistedExactAction: boolean;
   } | null>(null);
   const resolved = resolvedStateForItem(resolvedState, item);
+  const isStillShown = useShownRequestCheck(item?.request_id ?? null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
@@ -185,6 +170,7 @@ export function ReviewDecisionCard(props: {
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
       if (!item || resolutionBlockReason !== null) return;
+      const requestId = item.request_id;
       const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = approvalGate;
       const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
@@ -225,13 +211,16 @@ export function ReviewDecisionCard(props: {
           ...proof,
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
         });
-        setResolved({ requestId: item.request_id, action, persistedExactAction: persistExactAction });
+        // The next request may already be on screen; never reset its form for this decision.
+        if (!isStillShown(requestId)) return;
+        setResolved({ requestId, action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
         setPendingAction(null);
         setPendingContractKey(null);
       } catch (err) {
+        if (!isStillShown(requestId)) return;
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
         if (approvalGateRefreshNeeded(err)) {
@@ -244,11 +233,12 @@ export function ReviewDecisionCard(props: {
           }
         }
       } finally {
-        setSubmitting(null);
+        if (isStillShown(requestId)) setSubmitting(null);
       }
     },
     [
       item,
+      isStillShown,
       allowScope,
       blockScope,
       watchOnlyObservation,

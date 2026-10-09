@@ -10,6 +10,7 @@ import type {
 } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
 import { resolveQueueCategory } from "./queue-state";
+import { bulkLineCommand, retryBlockedApprovalCopy, retryCannotReuseApproval } from "./approval-retry-guidance";
 import { whyPaused } from "./evidence/plain-english";
 import { guardActionPresentation, isGuardAction } from "./guard-action";
 import {
@@ -125,37 +126,6 @@ function resolveDataFlowSinkLabel(signal: RiskSignalV2): string {
   return "External sink";
 }
 
-/** True when the daemon reports that a retry of this native command can never reuse its approval. */
-export function retryCannotReuseApproval(item: GuardApprovalRequest): boolean {
-  return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
-}
-
-/** Explain, before approval, what actually lets the agent run a command whose one-time approval cannot. */
-export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
-  const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
-  return item.exact_action_persistence_eligible === true
-    ? `${base} To let ${harness} run this exact command, choose "Always allow exact action".`
-    : `${base} To let ${harness} run commands like this, set the matching command pattern to Allow in Extensions, or copy the command and run it yourself.`;
-}
-
-/**
- * Receipts are looked up by harness and artifact id. For native tool calls that id names
- * the tool (for example `omp:native-pretool:bash`), so only a receipt for the same action
- * hash or the same command text describes this request.
- */
-export function receiptDescribesRequest(
-  item: GuardApprovalRequest,
-  receipt: { artifact_hash: string; raw_command_text?: string | null },
-): boolean {
-  if (!item.artifact_id.includes(":native-pretool:")) return true;
-  if (receipt.artifact_hash === item.artifact_hash) return true;
-  // A bound review's hash is its action identity: a different hash is a different action.
-  if (item.artifact_hash.startsWith("native-review-v4:")) return false;
-  // Unbound reviews get a fresh hash per request, so a repeat of the same command matches by its text.
-  const receiptCommand = receipt.raw_command_text?.trim();
-  return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
-}
-
 export function buildRetryAfterApprovalCopy(
   item: GuardApprovalRequest,
   action: "allow" | "block",
@@ -173,11 +143,7 @@ export function buildRetryAfterApprovalCopy(
     if (persistedExactAction) {
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
-    if (retryCannotReuseApproval(item)) {
-      return item.exact_action_persistence_eligible === true
-        ? `Decision recorded. ${harness} will still be blocked on this command. To let it run this exact command, approve it with "Always allow exact action", or run it yourself.`
-        : `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
-    }
+    if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
     return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
@@ -787,7 +753,7 @@ export function summarizeBulkApproveSelection(
       requestId: group.primary.request_id,
       title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
       path: resolveFileReadPath(group.primary),
-      command: group.primary.raw_command_text?.trim() || group.primary.action_envelope_json?.command?.trim() || null,
+      command: bulkLineCommand(group.primary),
       harnessLabel: harnessDisplayName(group.primary.harness),
       duplicateCount: group.duplicateCount,
       summary: buildQueueSummary(group.primary),

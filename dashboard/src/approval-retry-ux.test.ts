@@ -1,18 +1,18 @@
 import { normalizeApprovalRequest } from "./guard-api";
+import { buildBulkApproveConsequenceCopy, buildRetryAfterApprovalCopy, summarizeBulkApproveSelection } from "./approval-center-utils";
 import {
-  buildRetryAfterApprovalCopy,
+  bulkApproveConsequenceCopyForSelection,
+  countRetryBlockedActions,
   receiptDescribesRequest,
   retryCannotReuseApproval,
   retryCannotReuseApprovalHint,
-  summarizeBulkApproveSelection,
-} from "./approval-center-utils";
+} from "./approval-retry-guidance";
 import { GuardRequestResolutionError } from "./guard-api";
 import { bulkApprovalRiskTier, groupDuplicates } from "./queue-state";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-card";
+import { approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-state";
 import { ReviewScopeControls } from "./review-scope-controls";
-import { countRetryBlockedActions } from "./use-queue-bulk-approve";
 import { buildBulkRiskDisclosure } from "./queue-bulk-risk-disclosure";
 
 function assert(condition: boolean, message: string): void {
@@ -214,6 +214,17 @@ assert(
 assert(
   countRetryBlockedActions([{ primary: unbound, duplicateCount: 2, duplicateIds: [blockedTwin.request_id] }], [unbound, blockedTwin]) === 3,
   "a fully blocked group counts every action, matching the bulk action count",
+);
+
+// Review feedback: the bulk confirmation never promises a retry for commands that stay blocked.
+const restrictedConsequence = bulkApproveConsequenceCopyForSelection(3, 2, buildBulkApproveConsequenceCopy);
+assert(
+  !restrictedConsequence.includes("retry") && restrictedConsequence.includes("still be blocked"),
+  "restricted bulk confirmation drops the retry promise",
+);
+assert(
+  bulkApproveConsequenceCopyForSelection(3, 0, buildBulkApproveConsequenceCopy) === buildBulkApproveConsequenceCopy(3),
+  "unrestricted bulk confirmation keeps the existing copy",
 );
 
 // Review feedback: the bulk preview falls back to the action-envelope command.

@@ -14213,6 +14213,41 @@ function searchQueue(items, term) {
     return parts.join(" ").toLowerCase().includes(normalized);
   });
 }
+function retryCannotReuseApproval(item) {
+  return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
+}
+function retryCannotReuseApprovalHint(item, harness) {
+  const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
+  return item.exact_action_persistence_eligible === true ? `${base} To let ${harness} run this exact command, choose "Always allow exact action".` : `${base} To let ${harness} run commands like this, set the matching command pattern to Allow in Extensions, or copy the command and run it yourself.`;
+}
+function retryBlockedApprovalCopy(item, harness) {
+  return item.exact_action_persistence_eligible === true ? `Decision recorded. ${harness} will still be blocked on this command. To let it run this exact command, approve it with "Always allow exact action", or run it yourself.` : `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
+}
+function receiptDescribesRequest(item, receipt) {
+  if (!item.artifact_id.includes(":native-pretool:")) return true;
+  if (receipt.artifact_hash === item.artifact_hash) return true;
+  if (item.artifact_hash.startsWith("native-review-v4:")) return false;
+  const receiptCommand = receipt.raw_command_text?.trim();
+  return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
+}
+function bulkLineCommand(item) {
+  return item.raw_command_text?.trim() || item.action_envelope_json?.command?.trim() || null;
+}
+function countRetryBlockedActions(groups, items) {
+  const byId = new Map(items.map((item) => [item.request_id, item]));
+  let total = 0;
+  for (const group of groups) {
+    const members = [group.primary, ...group.duplicateIds.map((id) => byId.get(id)).filter((item) => item !== void 0)];
+    const blocked = members.filter((member) => retryCannotReuseApproval(member)).length;
+    total += blocked === members.length ? 1 + group.duplicateCount : blocked;
+  }
+  return total;
+}
+function bulkApproveConsequenceCopyForSelection(actionCount, retryBlockedActionCount, defaultCopy) {
+  if (retryBlockedActionCount <= 0) return defaultCopy(actionCount);
+  const blocked = `${retryBlockedActionCount} of them ${retryBlockedActionCount === 1 ? "is a command" : "are commands"} the agent will still be blocked on.`;
+  return `Guard will record your decision for ${actionCount} ${actionCount === 1 ? "action" : "actions"} once and won't remember it. ${blocked} Mass approval skips opening each request, so an unexpected action is harder to catch.`;
+}
 const AUTHORITATIVE_DECISION_INCONSISTENT = "authoritative_decision_inconsistent";
 const ACTION_PRESENTATIONS = {
   allow: {
@@ -14898,20 +14933,6 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
-function retryCannotReuseApproval(item) {
-  return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
-}
-function retryCannotReuseApprovalHint(item, harness) {
-  const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
-  return item.exact_action_persistence_eligible === true ? `${base} To let ${harness} run this exact command, choose "Always allow exact action".` : `${base} To let ${harness} run commands like this, set the matching command pattern to Allow in Extensions, or copy the command and run it yourself.`;
-}
-function receiptDescribesRequest(item, receipt) {
-  if (!item.artifact_id.includes(":native-pretool:")) return true;
-  if (receipt.artifact_hash === item.artifact_hash) return true;
-  if (item.artifact_hash.startsWith("native-review-v4:")) return false;
-  const receiptCommand = receipt.raw_command_text?.trim();
-  return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
-}
 function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false) {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
@@ -14925,9 +14946,7 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
     if (persistedExactAction) {
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
-    if (retryCannotReuseApproval(item)) {
-      return item.exact_action_persistence_eligible === true ? `Decision recorded. ${harness} will still be blocked on this command. To let it run this exact command, approve it with "Always allow exact action", or run it yourself.` : `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
-    }
+    if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
     return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
@@ -15257,7 +15276,7 @@ function summarizeBulkApproveSelection(groups) {
       requestId: group.primary.request_id,
       title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
       path: resolveFileReadPath(group.primary),
-      command: group.primary.raw_command_text?.trim() || group.primary.action_envelope_json?.command?.trim() || null,
+      command: bulkLineCommand(group.primary),
       harnessLabel: harnessDisplayName(group.primary.harness),
       duplicateCount: group.duplicateCount,
       summary: buildQueueSummary(group.primary),
@@ -28768,7 +28787,11 @@ function QueueBulkDrawer(props) {
                 }
               )
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-4 text-muted-foreground", children: buildBulkApproveConsequenceCopy(props.selectedActionCount) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-4 text-muted-foreground", children: bulkApproveConsequenceCopyForSelection(
+              props.selectedActionCount,
+              props.retryBlockedActionCount ?? 0,
+              buildBulkApproveConsequenceCopy
+            ) })
           ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Approval password required" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up your local approval gate before approving multiple actions at once." }),
@@ -28913,16 +28936,6 @@ function buildBulkRiskDisclosure(stats) {
     requiresTypedConfirm: false,
     confirmPhrase: phrase
   };
-}
-function countRetryBlockedActions(groups, items) {
-  const byId = new Map(items.map((item) => [item.request_id, item]));
-  let total = 0;
-  for (const group of groups) {
-    const members = [group.primary, ...group.duplicateIds.map((id) => byId.get(id)).filter((item) => item !== void 0)];
-    const blocked = members.filter((member) => retryCannotReuseApproval(member)).length;
-    total += blocked === members.length ? 1 + group.duplicateCount : blocked;
-  }
-  return total;
 }
 function useQueueBulkApprove(props) {
   const [drawerOpen, setDrawerOpen] = reactExports.useState(false);
@@ -29206,6 +29219,7 @@ function useQueueBulkApprove(props) {
       step: drawerStep,
       selectedGroups: selectedBulkGroups,
       selectedActionCount,
+      retryBlockedActionCount: selectionStats.retryBlockedActionCount ?? 0,
       sensitiveFileReadCount,
       riskDisclosure,
       approvalGate: props.approvalGate ?? null,
@@ -29233,6 +29247,21 @@ function useQueueBulkApprove(props) {
       settingsHref: props.settingsHref
     }
   };
+}
+function resolvedStateForItem(state, item) {
+  return item !== null && state?.requestId === item.request_id ? state : null;
+}
+function approvalGateRefreshNeeded(err) {
+  if (!(err instanceof GuardRequestResolutionError)) return false;
+  const code = err.payload?.["error"];
+  return err.status === 423 && code === "approval_gate_locked" || code === "approval_gate_totp_required";
+}
+function useShownRequestCheck(requestId) {
+  const shown = reactExports.useRef(requestId);
+  reactExports.useLayoutEffect(() => {
+    shown.current = requestId;
+  }, [requestId]);
+  return reactExports.useCallback((expected) => shown.current === expected, []);
 }
 function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
   if (locked) return "Approval gate temporarily locked";
@@ -30145,14 +30174,6 @@ function BusinessReviewSummaryPanel({ requestId }) {
   return state.summary ? /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryDetails, { summary: state.summary }) : null;
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
-function approvalGateRefreshNeeded(err) {
-  if (!(err instanceof GuardRequestResolutionError)) return false;
-  const code = err.payload?.["error"];
-  return err.status === 423 && code === "approval_gate_locked" || code === "approval_gate_totp_required";
-}
-function resolvedStateForItem(state, item) {
-  return item !== null && state?.requestId === item.request_id ? state : null;
-}
 function resolvedActionCopy(item, action, persistedExactAction) {
   if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
   if (action === "allow") return "Approved: action can proceed";
@@ -30170,6 +30191,7 @@ function ReviewDecisionCard(props) {
   const [submitting, setSubmitting] = reactExports.useState(null);
   const [resolvedState, setResolved] = reactExports.useState(null);
   const resolved = resolvedStateForItem(resolvedState, item);
+  const isStillShown = useShownRequestCheck(item?.request_id ?? null);
   const [showConsequences, setShowConsequences] = reactExports.useState(false);
   const [showEvidence, setShowEvidence] = reactExports.useState(false);
   const [lastAction, setLastAction] = reactExports.useState(null);
@@ -30242,6 +30264,7 @@ function ReviewDecisionCard(props) {
   const handleResolve = reactExports.useCallback(
     async (action) => {
       if (!item || resolutionBlockReason !== null) return;
+      const requestId = item.request_id;
       const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = approvalGate;
       const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
@@ -30277,13 +30300,15 @@ function ReviewDecisionCard(props) {
           ...proof,
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
-        setResolved({ requestId: item.request_id, action, persistedExactAction: persistExactAction });
+        if (!isStillShown(requestId)) return;
+        setResolved({ requestId, action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
         setPendingAction(null);
         setPendingContractKey(null);
       } catch (err) {
+        if (!isStillShown(requestId)) return;
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
         if (approvalGateRefreshNeeded(err)) {
@@ -30296,11 +30321,12 @@ function ReviewDecisionCard(props) {
           }
         }
       } finally {
-        setSubmitting(null);
+        if (isStillShown(requestId)) setSubmitting(null);
       }
     },
     [
       item,
+      isStillShown,
       allowScope,
       blockScope,
       watchOnlyObservation,

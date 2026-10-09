@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, cast
 
+from .approval_scope_native_retry import native_retry_cannot_reuse_approval
 from .models import DECISION_SCOPE_VALUES, DecisionScope
 from .package_execution_context import (
     PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND,
@@ -170,7 +171,7 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
             block_scopes.append("publisher")
         block_scopes.extend(("harness", "global"))
     restrictions = ["reusable_allow_is_action_bound"]
-    if _native_retry_cannot_reuse_approval(request):
+    if native_retry_cannot_reuse_approval(request):
         restrictions.append("retry_cannot_reuse_approval")
     if _unverified_provider_execution(request):
         restrictions.append("provider_account_unverified_once_only")
@@ -246,20 +247,6 @@ def _reusable_allow_scopes(
     if artifact_type == "tool_action_request" and _tool_action_has_exact_context(request):
         scopes.extend(("harness", "global"))
     return tuple(scopes)
-
-
-# Native pre-tool reviews bind a retry to the Rust request digest only for the small set of
-# commands that daemon/hook_native_review_approval.py treats as reusable. Every other command
-# is queued with a per-request artifact hash, so a later attempt can never match its approval.
-_NATIVE_REVIEW_BINDING_PREFIX: Final = "native-review-v4:"
-
-
-def _native_retry_cannot_reuse_approval(request: Mapping[str, object]) -> bool:
-    artifact_id = _string_or_none(request.get("artifact_id"))
-    if artifact_id is None or ":native-pretool:" not in artifact_id:
-        return False
-    artifact_hash = _string_or_none(request.get("artifact_hash")) or ""
-    return not artifact_hash.startswith(_NATIVE_REVIEW_BINDING_PREFIX)
 
 
 def _unverified_provider_execution(request: Mapping[str, object]) -> bool:

@@ -1,4 +1,5 @@
 import { useMemo, type ChangeEvent } from "react";
+import { bulkApproveConsequenceCopyForSelection } from "./approval-retry-guidance";
 import { BulkDrawerShell } from "./queue-bulk-drawer-shell";
 import { toneRing, toneChip, toneIcon } from "./queue-bulk-risk-presentation";
 import { isBulkApproveGateReady } from "./queue-bulk-approval-credentials";
@@ -146,6 +147,8 @@ export type QueueBulkDrawerProps = {
   step: "review" | "submitting" | "completed";
   selectedGroups: QueueGroup[];
   selectedActionCount: number;
+  /** Selected actions the agent stays blocked on after approval. */
+  retryBlockedActionCount?: number;
   sensitiveFileReadCount: number;
   riskDisclosure: BulkRiskDisclosure;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -453,7 +456,11 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
               </div>
             )}
             <p className="text-[11px] leading-4 text-muted-foreground">
-              {buildBulkApproveConsequenceCopy(props.selectedActionCount)}
+              {bulkApproveConsequenceCopyForSelection(
+                props.selectedActionCount,
+                props.retryBlockedActionCount ?? 0,
+                buildBulkApproveConsequenceCopy,
+              )}
             </p>
           </div>
         ) : (

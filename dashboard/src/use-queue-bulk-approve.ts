@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
 import type { BulkGateCredentials } from "./approval-gate-utils";
-import { retryCannotReuseApproval } from "./approval-center-utils";
+import { countRetryBlockedActions } from "./approval-retry-guidance";
 import type { GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import {
   bulkApproveActionCount,
@@ -25,22 +25,6 @@ import {
   type BulkRiskTier,
   type BulkSelectionStats,
 } from "./queue-bulk-risk-disclosure";
-
-/**
- * Count selected actions the agent stays blocked on after approval. Group members can come
- * from different sources with different restrictions, so check every member, not just the
- * primary. A fully blocked group counts all of its actions, matching the bulk action count.
- */
-export function countRetryBlockedActions(groups: QueueGroup[], items: GuardApprovalRequest[]): number {
-  const byId = new Map(items.map((item) => [item.request_id, item]));
-  let total = 0;
-  for (const group of groups) {
-    const members = [group.primary, ...group.duplicateIds.map((id) => byId.get(id)).filter((item) => item !== undefined)];
-    const blocked = members.filter((member) => retryCannotReuseApproval(member)).length;
-    total += blocked === members.length ? 1 + group.duplicateCount : blocked;
-  }
-  return total;
-}
 
 export function resolveBulkSelectionGroupId(
   item: GuardApprovalRequest,
@@ -90,6 +74,7 @@ export type QueueBulkDrawerProps = {
   step: QueueBulkDrawerStep;
   selectedGroups: QueueGroup[];
   selectedActionCount: number;
+  retryBlockedActionCount?: number;
   sensitiveFileReadCount: number;
   riskDisclosure: BulkRiskDisclosure;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -473,6 +458,7 @@ export function useQueueBulkApprove(props: {
       step: drawerStep,
       selectedGroups: selectedBulkGroups,
       selectedActionCount,
+      retryBlockedActionCount: selectionStats.retryBlockedActionCount ?? 0,
       sensitiveFileReadCount,
       riskDisclosure,
       approvalGate: props.approvalGate ?? null,
