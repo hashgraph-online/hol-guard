@@ -227,7 +227,9 @@ fn installs_packages(program: &str, arguments: &[String]) -> bool {
     if !matches!(name, "npm" | "pnpm" | "yarn" | "bun") {
         return false;
     }
-    let Some(subcommand) = arguments.iter().find(|argument| !argument.starts_with('-')) else {
+    // An option ahead of the subcommand may take the install word as its value
+    // (`npm --prefix install exec gws`), so only a leading subcommand counts.
+    let Some(subcommand) = arguments.first() else {
         return false;
     };
     matches!(

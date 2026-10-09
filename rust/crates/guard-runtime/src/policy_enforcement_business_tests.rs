@@ -296,6 +296,9 @@ fn workspace_local_paths_and_windows_shims_cannot_skip_business_context() {
         "pnpm exec sh -c 'gog gmail send'",
         "yarn exec bash -c \"cd /tmp && gws gmail users messages send\"",
         "npm install -c 'gws gmail users messages send'",
+        "npm --prefix install exec gws gmail users messages send",
+        "pnpm -C install exec gog gmail send",
+        "yarn --cwd install exec gws gmail users messages send",
     ] {
         let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
         let result = super::super::tests::generic_result("allow");
