@@ -92,6 +92,51 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.37.0](https://github.com/hashgraph-online/hol-guard/compare/v3.36.1...v3.37.0) (2026-10-09)
+
+
+### Features
+
+* **business:** classify business operations and add Drive export ([#3798](https://github.com/hashgraph-online/hol-guard/issues/3798)) ([9cc3b01](https://github.com/hashgraph-online/hol-guard/commit/9cc3b0152a4b3b62501df5121a4070d72e619c44))
+* **extension:** add Formicx agent command safety extension ([#2914](https://github.com/hashgraph-online/hol-guard/issues/2914)) ([890037b](https://github.com/hashgraph-online/hol-guard/commit/890037b32b3aa4992c210d7ad567618c1deebd26))
+* **extensions:** add mcp-mail-server publisher listing ([#3805](https://github.com/hashgraph-online/hol-guard/issues/3805)) ([4736564](https://github.com/hashgraph-online/hol-guard/commit/4736564cf782ae5c70f2ac9275742a3c97655b1d))
+* **extensions:** add pyrig command protection ([#3674](https://github.com/hashgraph-online/hol-guard/issues/3674)) ([2431b20](https://github.com/hashgraph-online/hol-guard/commit/2431b20d8f3887395a114a7cf795b99dc1b378d8))
+* **extensions:** require review for mcp-mail-server deletion ([#3278](https://github.com/hashgraph-online/hol-guard/issues/3278)) ([526d5b7](https://github.com/hashgraph-online/hol-guard/commit/526d5b79e67c9fc0b78411da558dfb28e4054623))
+* **gauntlet:** run the catalog through Claude Code, Codex and Cursor ([#3818](https://github.com/hashgraph-online/hol-guard/issues/3818)) ([dba20ac](https://github.com/hashgraph-online/hol-guard/commit/dba20acc9aa9696a59acc812fbcf878ea14aaf1e))
+* **guard:** add agi-memory command safety extension ([#2921](https://github.com/hashgraph-online/hol-guard/issues/2921)) ([10b0c36](https://github.com/hashgraph-online/hol-guard/commit/10b0c36bcb614fb28a7d00c724f0c651c839c10d))
+* **guard:** add rungs command classification extension ([#2818](https://github.com/hashgraph-online/hol-guard/issues/2818)) ([1493513](https://github.com/hashgraph-online/hol-guard/commit/14935137911b54033590a49fa62f0dc17d452ff1))
+* **guard:** detect package-runner CLIs such as npx wrangler ([#3792](https://github.com/hashgraph-online/hol-guard/issues/3792)) ([d5b645c](https://github.com/hashgraph-online/hol-guard/commit/d5b645ca58cd93550eafe699ea089887bb2922e1))
+* **guard:** list detected CLIs and add a Cloudflare Wrangler profile ([#3795](https://github.com/hashgraph-online/hol-guard/issues/3795)) ([e1627da](https://github.com/hashgraph-online/hol-guard/commit/e1627daa9711e155296ba482daab5b1b09c55f05))
+* **guard:** review Dispat release starts with an opt-in extension ([#2813](https://github.com/hashgraph-online/hol-guard/issues/2813)) ([de01030](https://github.com/hashgraph-online/hol-guard/commit/de01030a831a13c6cc60fa4b7acd6f28feeb282b))
+
+
+### Bug Fixes
+
+* **codex:** read app inventory from native daemons and bound tool summaries ([9ed4ba2](https://github.com/hashgraph-online/hol-guard/commit/9ed4ba2fbb5cc65ce09e800d6d93cd9617892bbc))
+* **codex:** stop holding ordinary Codex Git reads and skill reads, and explain authority repair ([#3808](https://github.com/hashgraph-online/hol-guard/issues/3808)) ([e01a885](https://github.com/hashgraph-online/hol-guard/commit/e01a885efd7fa5c2775a2f3cd8c60895726df019))
+* **contracts:** raise managed-controls catalog payload cap to 8MB ([#3816](https://github.com/hashgraph-online/hol-guard/issues/3816)) ([2eba910](https://github.com/hashgraph-online/hol-guard/commit/2eba910efced8e1c4fcccfb0836c11aadfe31f73))
+* **daemon:** read camelCase toolInput from ZCode, Devin and Grok hooks ([#3820](https://github.com/hashgraph-online/hol-guard/issues/3820)) ([8e071fe](https://github.com/hashgraph-online/hol-guard/commit/8e071fea40431d98b7fe5857afa6e9f63011b2fd))
+* **daemon:** retire a superseded same-install daemon after a native-only upgrade ([#3815](https://github.com/hashgraph-online/hol-guard/issues/3815)) ([4b48d35](https://github.com/hashgraph-online/hol-guard/commit/4b48d35875d891773a366fb30b75ecf5ebe15946))
+* **dashboard:** keep extension inventory rendering when a launch kind is unknown ([#3811](https://github.com/hashgraph-online/hol-guard/issues/3811)) ([6c227f5](https://github.com/hashgraph-online/hol-guard/commit/6c227f5e1a9389b477501b21a6f32b0cf9190afb))
+* **guard:** let routine Codex apply_patch edits pass native review ([#3821](https://github.com/hashgraph-online/hol-guard/issues/3821)) ([9b23c49](https://github.com/hashgraph-online/hol-guard/commit/9b23c4980554ca7da24bde123b59076da9739872))
+* **guard:** load Cursor hooks by replacing unsupported beforeWriteFile ([#3825](https://github.com/hashgraph-online/hol-guard/issues/3825)) ([e80f605](https://github.com/hashgraph-online/hol-guard/commit/e80f6051806787ea89e3fd646a185d5da471a181))
+* **guard:** recognize npx wrangler as a CLI and parse yargs help rows ([#3809](https://github.com/hashgraph-online/hol-guard/issues/3809)) ([f58b83e](https://github.com/hashgraph-online/hol-guard/commit/f58b83e8250b275c64a42c8f8e334e1a07379ce1))
+* **guard:** repair extension-control catalog bound and error type ([#3817](https://github.com/hashgraph-online/hol-guard/issues/3817)) ([d8c0cda](https://github.com/hashgraph-online/hol-guard/commit/d8c0cda4a33237c16cf99faffe97a09b3e42254f))
+* **package-shims:** judge the dashboard intercept test by shell-profile PATH ([#3827](https://github.com/hashgraph-online/hol-guard/issues/3827)) ([01f73f8](https://github.com/hashgraph-online/hol-guard/commit/01f73f8f3f2011b27b2ad33e73b15546063c4784))
+* **runtime:** name the business context floor for shell-wrapped Workspace CLIs ([#3826](https://github.com/hashgraph-online/hol-guard/issues/3826)) ([329a7ea](https://github.com/hashgraph-online/hol-guard/commit/329a7ea63fb1e9ee8e38361b176d890c1558a560))
+* **runtime:** recover a stale resident-update marker and report the real native failure ([#3812](https://github.com/hashgraph-online/hol-guard/issues/3812)) ([d7bfce7](https://github.com/hashgraph-online/hol-guard/commit/d7bfce750159df25a0f1de72f5bbcb4c2fb12bea))
+* **runtime:** refuse multi-record business dispatch ([#3800](https://github.com/hashgraph-online/hol-guard/issues/3800)) ([77e849e](https://github.com/hashgraph-online/hol-guard/commit/77e849eef8cb5eb236f0578097ff0849e35d271c))
+* **runtime:** require business context for local, Windows and launcher Google CLIs ([#3799](https://github.com/hashgraph-online/hol-guard/issues/3799)) ([94661ea](https://github.com/hashgraph-online/hol-guard/commit/94661ead768daa952ffd018bbe3da583c4b64018))
+* **runtime:** retire the managed resident when its Guard home is deleted ([#3822](https://github.com/hashgraph-online/hol-guard/issues/3822)) ([d5cec22](https://github.com/hashgraph-online/hol-guard/commit/d5cec22eeddd6014a2df8ccc40eca1789aac994c))
+* **supply-chain:** restore paid first-time protection without approval loops ([#3814](https://github.com/hashgraph-online/hol-guard/issues/3814)) ([29d9e6b](https://github.com/hashgraph-online/hol-guard/commit/29d9e6b985e8ad582a03764e04796e7085e9e535))
+* **sync:** scrub CLI credential arguments from synced receipt commands ([#3824](https://github.com/hashgraph-online/hol-guard/issues/3824)) ([fe371f4](https://github.com/hashgraph-online/hol-guard/commit/fe371f48c3499c9d919a1a594b5b04ffa957d0bb))
+* **uninstall:** rewrite group-writable user files and run self-uninstall from the desktop core ([#3813](https://github.com/hashgraph-online/hol-guard/issues/3813)) ([253cb46](https://github.com/hashgraph-online/hol-guard/commit/253cb4603e6bfa6bc968ffb409771e60586ce46b))
+
+
+### Documentation
+
+* **guard:** list business app compatibility by command and mode ([#3803](https://github.com/hashgraph-online/hol-guard/issues/3803)) ([3f37b9f](https://github.com/hashgraph-online/hol-guard/commit/3f37b9fed54da6d19ff9ed2c96c69344f7c072f0))
+
 ## [3.36.1](https://github.com/hashgraph-online/hol-guard/compare/v3.36.0...v3.36.1) (2026-10-09)
 
 
