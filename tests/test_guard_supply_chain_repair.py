@@ -275,7 +275,7 @@ def test_local_recovery_without_cloud_access_does_not_install_new_managers(
             "installed_managers": ["npm"],
             "detected_managers": ["npm", "pip3"],
             "missing_managers": ["pip3"],
-            "manager_details": [{"manager": "npm", "integrity": "ok"}],
+            "manager_details": [{"manager": "npm", "integrity": "ok"}, {"manager": "pip3", "integrity": "missing"}],
         },
     )
     monkeypatch.setattr(
@@ -283,6 +283,25 @@ def test_local_recovery_without_cloud_access_does_not_install_new_managers(
         lambda context, *, managers, repair: observed.append(managers) or {},
     )
 
-    _repair_detected_package_shims(context, install_missing=False)
+    result = coordinate_supply_chain_repair(
+        repair_package_shims=lambda: _repair_detected_package_shims(context, install_missing=False),
+        activate_runtime=lambda: (200, {}),
+        sync_intelligence=lambda: None,
+    )
 
     assert observed == [("npm",)]
+    assert result["repaired"] is False
+    assert result["failed_steps"] == []
+    assert result["completed_steps"] == ["runtime_activation", "intelligence_sync"]
+    assert result["remaining_steps"] == [
+        {
+            "step": "package_shims",
+            "code": "paid_guard_cloud_required",
+            "action": "check_access",
+            "message": "Existing package tools were repaired. Check Cloud access to protect additional detected tools: pip3.",
+        }
+    ]
+    assert (
+        result["message"]
+        == "Existing protection was repaired. Check Cloud access before protecting additional package tools."
+    )

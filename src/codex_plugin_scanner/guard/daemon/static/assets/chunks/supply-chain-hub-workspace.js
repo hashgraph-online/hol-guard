@@ -1549,9 +1549,9 @@ function supplyChainFixAllNeedsCloudConnect(state) {
   return state.remainingAction === "connect" && state.failedSteps.length === 0;
 }
 function supplyChainFixAllStateFromRepair(result) {
-  const remainingAction = result.remaining_steps.some((step) => step.action === "connect") ? "connect" : null;
+  const remainingAction = result.remaining_steps.some((step) => step.action === "check_access") ? "check_access" : result.remaining_steps.some((step) => step.action === "connect") ? "connect" : null;
   return {
-    phase: result.repaired ? "success" : "incomplete",
+    phase: result.repaired ? "success" : remainingAction === "check_access" ? "access_required" : "incomplete",
     message: result.message,
     completedSteps: result.completed_steps,
     failedSteps: result.failed_steps.map((failure) => failure.message),
@@ -1675,6 +1675,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const rootRef = reactExports.useRef(null);
   const recoveryConnectHandledRef = reactExports.useRef(false);
   const repairNeedsCloudConnectRef = reactExports.useRef(false);
+  const repairNeedsCloudAccessRef = reactExports.useRef(false);
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [refreshError, setRefreshError] = reactExports.useState(null);
   const [sharedRefreshError, setSharedRefreshError] = reactExports.useState(null);
@@ -1771,6 +1772,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     void refreshSharedState();
   }, [refreshAfterOp, refreshSharedState]);
   reactExports.useEffect(() => {
+    if (pendingOp?.op === "fix_all") return;
     if (panelLoad.phase !== "loaded") {
       return;
     }
@@ -1782,7 +1784,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       void refreshAfterOp();
     }, flow.poll_after_ms ?? 1500);
     return () => window.clearTimeout(handle);
-  }, [panelLoad, refreshAfterOp]);
+  }, [panelLoad, refreshAfterOp, pendingOp?.op]);
   const openAuditConnectGate = reactExports.useCallback((resumeAfterConnect) => {
     setAuditConnectGateActive(true);
     setResumeAuditAfterConnect(resumeAfterConnect);
@@ -2016,13 +2018,15 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
           return;
         }
         repairNeedsCloudConnectRef.current = false;
-        if (!supplyChainFixAllCanRepair(latest)) {
+        if (!supplyChainFixAllCanRepair(latest) || repairNeedsCloudAccessRef.current && !latest.entitlement.allowed) {
           onFixAllStateChange?.(supplyChainFixAllAccessState());
           return;
         }
+        repairNeedsCloudAccessRef.current = false;
         onFixAllStateChange?.(supplyChainFixAllWorkingState());
         const result = await repairSupplyChainProtection(credentials);
         const nextState = supplyChainFixAllStateFromRepair(result);
+        repairNeedsCloudAccessRef.current = nextState.remainingAction === "check_access";
         repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
         onFixAllStateChange?.(nextState);
         refreshInBackground();

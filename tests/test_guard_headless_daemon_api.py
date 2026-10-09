@@ -313,7 +313,7 @@ def test_supply_chain_package_firewall_status_reports_connect_gate_when_cloud_is
     assert payload["connect_flow"]["state"] == "idle"
     assert payload["actions"] == {
         "install": "connect_required",
-        "repair": "disabled",
+        "repair": "connect_required",
         "test": "connect_required",
         "audit": "connect_required",
         "sync": "connect_required",
@@ -1050,7 +1050,7 @@ def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired
         "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
     }
     assert payload["actions"]["install"] == "reconnect_required"
-    assert payload["actions"]["repair"] == "disabled"
+    assert payload["actions"]["repair"] == "reconnect_required"
     assert payload["actions"]["remove"] == "disabled"
 
 
@@ -1443,7 +1443,7 @@ def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp
     }
     assert payload["actions"] == {
         "install": "available",
-        "repair": "disabled",
+        "repair": "available",
         "test": "available",
         "audit": "available",
         "sync": "available",

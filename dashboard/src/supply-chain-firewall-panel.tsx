@@ -205,6 +205,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const rootRef = useRef<HTMLDivElement>(null);
   const recoveryConnectHandledRef = useRef(false);
   const repairNeedsCloudConnectRef = useRef(false);
+  const repairNeedsCloudAccessRef = useRef(false);
   const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [sharedRefreshError, setSharedRefreshError] = useState<string | null>(null);
@@ -312,6 +313,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   }, [refreshAfterOp, refreshSharedState]);
 
   useEffect(() => {
+    if (pendingOp?.op === "fix_all") return;
     if (panelLoad.phase !== "loaded") {
       return;
     }
@@ -323,7 +325,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       void refreshAfterOp();
     }, flow.poll_after_ms ?? 1500);
     return () => window.clearTimeout(handle);
-  }, [panelLoad, refreshAfterOp]);
+  }, [panelLoad, refreshAfterOp, pendingOp?.op]);
 
   const openAuditConnectGate = useCallback((resumeAfterConnect: boolean) => {
     setAuditConnectGateActive(true);
@@ -569,13 +571,15 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           return;
         }
         repairNeedsCloudConnectRef.current = false;
-        if (!supplyChainFixAllCanRepair(latest)) {
+        if (!supplyChainFixAllCanRepair(latest) || (repairNeedsCloudAccessRef.current && !latest.entitlement.allowed)) {
           onFixAllStateChange?.(supplyChainFixAllAccessState());
           return;
         }
+        repairNeedsCloudAccessRef.current = false;
         onFixAllStateChange?.(supplyChainFixAllWorkingState());
         const result = await repairSupplyChainProtection(credentials);
         const nextState = supplyChainFixAllStateFromRepair(result);
+        repairNeedsCloudAccessRef.current = nextState.remainingAction === "check_access";
         repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
         onFixAllStateChange?.(nextState);
         refreshInBackground();

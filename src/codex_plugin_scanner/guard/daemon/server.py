@@ -245,7 +245,11 @@ from ..store_evidence import (
     list_evidence,
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
-from ..supply_chain_repair import coordinate_supply_chain_repair, repair_sync_intelligence
+from ..supply_chain_repair import (
+    SupplyChainRepairDeferredError,
+    coordinate_supply_chain_repair,
+    repair_sync_intelligence,
+)
 from .aibom_inventory_persist import persist_aibom_inventory_context
 from .bounded_http import BoundedThreadingHTTPServer
 from .command_activity_api import (
@@ -1995,12 +1999,27 @@ def _repair_detected_package_shims(
     detected = {str(value) for value in verified_detected} if install_missing else set(managers)
     manager_details = verified.get("manager_details")
     invalid_integrity = (
-        [detail for detail in manager_details if isinstance(detail, dict) and detail.get("integrity") != "ok"]
+        [
+            detail
+            for detail in manager_details
+            if isinstance(detail, dict)
+            and detail.get("integrity") != "ok"
+            and (install_missing or detail.get("manager") in managers)
+        ]
         if isinstance(manager_details, list)
         else ["missing manager details"]
     )
     if not detected.issubset(installed) or (install_missing and verified.get("missing_managers")) or invalid_integrity:
         raise RuntimeError("package shim verification failed")
+    unprotected = {str(value) for value in verified_detected} - installed
+    if not install_missing and unprotected:
+        raise SupplyChainRepairDeferredError(
+            code="paid_guard_cloud_required",
+            message="Existing package tools were repaired. Check Cloud access to protect additional detected tools: "
+            + ", ".join(sorted(unprotected))
+            + ".",
+            action="check_access",
+        )
     return result
 
 

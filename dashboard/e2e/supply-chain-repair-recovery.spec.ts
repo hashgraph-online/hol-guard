@@ -161,8 +161,9 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
   });
 }
 
-for (const scenario of ["missing-shim", "local-disconnection", "newer-status"] as const) {
+for (const scenario of ["missing-shim", "local-disconnection", "connect-flow-poll", "additional-tool"] as const) {
   test(`recovery distinguishes ${scenario} without billing or approval loops`, async ({ page }) => {
+    if (scenario === "connect-flow-poll") await page.clock.install();
     let statuses = 0;
     let repairs = 0;
     let releaseOldStatus: () => void = () => undefined;
@@ -176,11 +177,11 @@ for (const scenario of ["missing-shim", "local-disconnection", "newer-status"] a
           await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
           return;
         }
-        if (scenario === "newer-status" && statuses === 2) await oldStatus;
+        if (scenario === "connect-flow-poll" && statuses === 2) await oldStatus;
         payload = {
           ...packageStatus,
           entitlement: { allowed: false, reason: "paid_guard_cloud_required", tier: "free" },
-          connect_flow: scenario === "newer-status" && statuses === 1
+          connect_flow: scenario === "connect-flow-poll" && statuses === 1
             ? { state: "running", poll_after_ms: 1000, title: "Checking sign-in",
               detail: "Waiting for this test connection.", action_label: "Connect",
               connect_url: "https://example.test/connect" } : null,
@@ -190,8 +191,9 @@ for (const scenario of ["missing-shim", "local-disconnection", "newer-status"] a
       } else if (path === "/v1/supply-chain/repair") {
         repairs += 1;
         payload = { status: "completed", operation: "repair_all", result: {
-          repaired: true, completed_steps: ["package_shims"], failed_steps: [], remaining_steps: [],
-          message: "Existing package protection restored.",
+          repaired: scenario !== "additional-tool", completed_steps: ["runtime_activation"], failed_steps: [],
+          remaining_steps: scenario === "additional-tool" ? [{ step: "package_shims", action: "check_access", message: "Check Cloud access to protect pip3." }] : [],
+          message: scenario === "additional-tool" ? "Existing protection was repaired. Check Cloud access before protecting additional package tools." : "Existing package protection restored.",
         } };
       } else if (path === "/v1/runtime") {
         payload = { ...paidStateSnapshot, supply_chain: { package_manager_protection: { installed_managers: [], active_managers: [], supported_managers: ["npm"] } } };
@@ -205,17 +207,24 @@ for (const scenario of ["missing-shim", "local-disconnection", "newer-status"] a
       await page.goto("/supply-chain?guard-token=e2e-token&guardDaemon=http://127.0.0.1:4175");
       const recovery = page.getByTestId("supply-chain-recovery");
       await recovery.getByRole("button", { name: "Restore protection", exact: true }).click();
-      if (scenario === "newer-status") {
-        await expect.poll(() => statuses).toBeGreaterThanOrEqual(3);
+      if (scenario === "connect-flow-poll") {
+        await expect.poll(() => statuses).toBe(2);
+        await page.clock.runFor(1500);
+        expect(statuses).toBe(2);
         releaseOldStatus();
-        await expect(recovery.getByText("Package status changed while checking. Check again before restoring protection.", { exact: true })).toBeVisible();
+        await expect(recovery.getByText("Existing package protection restored.", { exact: true })).toBeVisible();
       } else if (scenario === "local-disconnection") {
         await expect(recovery.getByText("Could not check package status. No repair was attempted. Check that Guard is running, then try again.", { exact: true })).toBeVisible();
+      } else if (scenario === "additional-tool") {
+        await expect(recovery.getByText("Existing protection was repaired. Check Cloud access before protecting additional package tools.", { exact: true })).toBeVisible();
+        await recovery.getByRole("button", { name: "Check Cloud access", exact: true }).click();
+        await expect(recovery.getByRole("button", { name: "Check Cloud access", exact: true })).toBeEnabled();
+        await expect(recovery.getByText("Supply-chain protection restored and refreshed.", { exact: true })).toHaveCount(0);
       } else {
         await expect(recovery.getByText("Existing package protection restored.", { exact: true })).toBeVisible();
       }
-      expect(repairs).toBe(scenario === "missing-shim" ? 1 : 0);
-      await expect(recovery.getByRole("link", { name: "Review Cloud plan" })).toHaveCount(0);
+      expect(repairs).toBe(scenario === "local-disconnection" ? 0 : 1);
+      if (scenario !== "additional-tool") await expect(recovery.getByRole("link", { name: "Review Cloud plan" })).toHaveCount(0);
       await expect(page.getByRole("dialog", { name: "Restore package protection" })).toHaveCount(0);
     } finally {
       releaseOldStatus();

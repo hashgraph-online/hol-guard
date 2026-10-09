@@ -44,11 +44,13 @@ export function supplyChainFixAllNeedsCloudConnect(state: SupplyChainFixAllState
 }
 
 export function supplyChainFixAllStateFromRepair(result: SupplyChainRepairResult): SupplyChainFixAllState {
-  const remainingAction = result.remaining_steps.some((step) => step.action === "connect")
+  const remainingAction = result.remaining_steps.some((step) => step.action === "check_access")
+    ? "check_access"
+    : result.remaining_steps.some((step) => step.action === "connect")
     ? "connect"
     : null;
   return {
-    phase: result.repaired ? "success" : "incomplete",
+    phase: result.repaired ? "success" : remainingAction === "check_access" ? "access_required" : "incomplete",
     message: result.message,
     completedSteps: result.completed_steps,
     failedSteps: result.failed_steps.map((failure) => failure.message),
