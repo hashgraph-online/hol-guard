@@ -81,6 +81,9 @@ export type McpToolDefaultState = "inherit" | "allow" | "review" | "block";
 
 export type McpLaunch =
   | {
+      kind: "unsupported";
+    }
+  | {
       kind: "direct-command";
       command: string;
     }

@@ -7699,6 +7699,12 @@ function McpServerDefaults({ extension }) {
   if (extension.surface !== "mcp") return null;
   const launch = extension.mcp_launch;
   const tools = extension.mcp_tools ?? [];
+  if (launch?.kind === "unsupported") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "MCP server defaults" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", "data-testid": "mcp-launch-unsupported", children: "This server uses a launch type this version of Guard does not recognize, so its launch details are unavailable. Update Guard to see them." })
+    ] });
+  }
   const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
   const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
   const directLaunch = launch?.kind === "direct-command" ? launch : null;
