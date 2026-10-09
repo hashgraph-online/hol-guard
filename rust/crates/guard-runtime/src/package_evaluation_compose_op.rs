@@ -135,6 +135,30 @@ fn with_evidence(mut out: Map<String, Value>, evidence: Option<&Value>) -> Map<S
     out
 }
 
+/// Saved allow/block overrides drop prior reasons equal to the new one
+/// (Python `item != reason`). The equality must be judged against the reason
+/// as Python builds it (verbatim evidence, nulls, original types), so the
+/// caller's evidence is attached first and the prior reasons are re-filtered.
+fn with_evidence_deduped(
+    out: Map<String, Value>,
+    evidence: Option<&Value>,
+    original: &Map<String, Value>,
+) -> Map<String, Value> {
+    let mut out = with_evidence(out, evidence);
+    let Some(Value::Array(reasons)) = out.get("reasons") else {
+        return out;
+    };
+    let Some(first) = reasons.first().cloned() else {
+        return out;
+    };
+    let mut deduped = vec![first.clone()];
+    if let Some(prior) = original.get("reasons").and_then(Value::as_array) {
+        deduped.extend(prior.iter().filter(|item| **item != first).cloned());
+    }
+    out.insert("reasons".to_owned(), Value::Array(deduped));
+    out
+}
+
 fn reject_unused(
     request: &PackageEvaluationComposeRequestV1,
     used: [bool; 5],
@@ -251,7 +275,11 @@ fn compose(request: &PackageEvaluationComposeRequestV1) -> Result<Map<String, Va
                 Some(&reuse),
                 disposition,
             );
-            Ok(with_evidence(out, request.approval_reuse.as_ref()))
+            Ok(with_evidence_deduped(
+                out,
+                request.approval_reuse.as_ref(),
+                &map,
+            ))
         }
         "saved_block" => {
             reject_unused(request, [false, true, false, false, true])?;
@@ -274,7 +302,11 @@ fn compose(request: &PackageEvaluationComposeRequestV1) -> Result<Map<String, Va
                 Some(&reuse),
                 None,
             );
-            Ok(with_evidence(out, request.approval_reuse.as_ref()))
+            Ok(with_evidence_deduped(
+                out,
+                request.approval_reuse.as_ref(),
+                &map,
+            ))
         }
         "external_archive_override" => {
             reject_unused(request, [false, false, true, false, false])?;

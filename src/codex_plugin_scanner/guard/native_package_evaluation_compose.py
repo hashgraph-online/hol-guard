@@ -24,6 +24,10 @@ _PATCH_KEYS = frozenset(
     {"decision", "policy_action", "reasons", "packages", "risk_summary", "user_copy", "record_monitor_evidence"}
 )
 _USER_COPY_KEYS = frozenset({"title", "summary", "next_step", "dashboard_url", "harness_message"})
+_GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
+_PACKAGE_DECISIONS = frozenset({"allow", "warn", "ask", "block"})
+_VERDICT_KEYS = frozenset({"decision", "risk_summary", "user_copy", "record_monitor_evidence"})
+_BLOCK_VARIANTS = frozenset({"launch_unbound", "mcp_unbound", "binding_unavailable"})
 
 
 class NativePackageEvaluationComposeError(RuntimeError):
@@ -34,6 +38,106 @@ def _dict_list(value: object) -> list[dict[str, object]]:
     if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
         raise NativePackageEvaluationComposeError("Native package composition patch invalid")
     return [dict(item) for item in value]
+
+
+def _expected_policy_action(kind: str, facts: Mapping[str, object]) -> str | None:
+    """The action the reply must leave in force; echoes the request, never computes a verdict."""
+
+    if kind == "current_policy_action":
+        action = facts.get("current_action")
+        return action if isinstance(action, str) else None
+    if kind == "rejected_reuse":
+        reuse = facts.get("approval_reuse")
+        action = reuse.get("action") if isinstance(reuse, Mapping) else None
+        return action if isinstance(action, str) else None
+    if kind == "saved_allow":
+        return "allow"
+    if kind == "saved_block":
+        return "block"
+    if kind == "external_archive_override":
+        variant = facts.get("variant")
+        if variant in _BLOCK_VARIANTS:
+            return "block"
+        return "allow" if variant == "shim_delegated" else None
+    return None
+
+
+def _invalid() -> NativePackageEvaluationComposeError:
+    return NativePackageEvaluationComposeError("Native package composition patch invalid")
+
+
+def _validate_patch(kind: str, evaluation: Any, patch: Mapping[str, Any], facts: Mapping[str, object]) -> None:
+    """Reject empty, partial, or out-of-vocabulary replies for ``kind``."""
+
+    if not set(patch) <= _PATCH_KEYS:
+        raise _invalid()
+    expected = _expected_policy_action(kind, facts)
+    if expected is None or expected not in _GUARD_ACTIONS:
+        raise _invalid()
+    effective = patch.get("policy_action", evaluation.policy_action)
+    if effective not in _GUARD_ACTIONS or effective != expected:
+        raise _invalid()
+    if "decision" in patch and patch["decision"] not in _PACKAGE_DECISIONS:
+        raise _invalid()
+    if kind == "rejected_reuse" and evaluation.policy_action == expected:
+        # Same action: only the reason list is rewritten.
+        if not set(patch) <= {"reasons"}:
+            raise _invalid()
+        return
+    if kind == "current_policy_action" and evaluation.policy_action == expected:
+        raise _invalid()  # callers skip identity rewrites; an empty reply cannot be trusted
+    if not set(patch) >= _VERDICT_KEYS:
+        raise _invalid()
+    copy = patch["user_copy"]
+    if not isinstance(copy, Mapping) or set(copy) != _USER_COPY_KEYS:
+        raise _invalid()
+    for key, value in copy.items():
+        if not (isinstance(value, str) or (value is None and key in {"next_step", "dashboard_url"})):
+            raise _invalid()
+    if not isinstance(copy["title"], str) or not isinstance(copy["summary"], str):
+        raise _invalid()
+
+
+def native_unavailable_block_evaluation(evaluation: Any) -> Any:
+    """Terminal fail-closed block used when the resident cannot answer.
+
+    This is a constant block, not a verdict computation: it can only tighten
+    an evaluation and never allows anything.
+    """
+
+    message = "HOL Guard blocked this package request because its native policy engine was unavailable."
+    reason = {
+        "code": "native_package_evaluation_unavailable",
+        "message": message,
+        "severity": "high",
+        "source": "guard-local",
+    }
+    copy_type = type(evaluation.user_copy)
+    return replace(
+        evaluation,
+        decision="block",
+        policy_action="block",
+        reasons=(reason, *(dict(item) for item in evaluation.reasons)),
+        packages=tuple({**dict(item), "decision": "block"} for item in evaluation.packages),
+        risk_summary=message,
+        user_copy=copy_type(
+            title="Package request blocked",
+            summary=message,
+            next_step="Restart HOL Guard or run `hol-guard doctor`, then retry.",
+            dashboard_url=None,
+            harness_message=message,
+        ),
+        record_monitor_evidence=False,
+    )
+
+
+def compose_blocking_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
+    """Compose on a path whose outcome blocks; a resident failure still blocks."""
+
+    try:
+        return compose_package_evaluation(kind, evaluation, **facts)
+    except NativePackageEvaluationComposeError:
+        return native_unavailable_block_evaluation(evaluation)
 
 
 def compose_package_evaluation_patch(
@@ -80,8 +184,9 @@ def compose_package_evaluation_patch(
         raise NativePackageEvaluationComposeError("Native package composition unavailable or invalid")
     payload = response.get("payload")
     patch = payload.get("patch") if isinstance(payload, dict) else None
-    if not isinstance(patch, dict) or not set(patch) <= _PATCH_KEYS:
-        raise NativePackageEvaluationComposeError("Native package composition patch invalid")
+    if not isinstance(patch, dict):
+        raise _invalid()
+    _validate_patch(kind, evaluation, patch, facts)
     return patch
 
 

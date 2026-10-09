@@ -268,6 +268,13 @@ def compose_package_evaluation(kind: str, evaluation: Any, **facts: object) -> A
     return module.compose_package_evaluation(kind, evaluation, **facts)
 
 
+def compose_blocking_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
+    """Resident-owned rewrite on a blocking path; a resident failure yields a terminal block."""
+
+    module = importlib.import_module(".native_package_evaluation_compose", __package__)
+    return module.compose_blocking_package_evaluation(kind, evaluation, **facts)
+
+
 def _supply_chain_package_eval_module():
     return importlib.import_module(".runtime.supply_chain_package_eval", __package__)
 
@@ -2156,17 +2163,21 @@ def build_package_protect_payload(
         denied_evaluation = (
             final_authority.evaluation
             if reuse is None
-            else _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
+            else compose_blocking_package_evaluation(
+                "rejected_reuse", final_authority.evaluation, approval_reuse=reuse.to_evidence()
+            )
         )
-        denied = _package_protect_denied_after_final_boundary(
-            payload=payload,
-            authority=final_authority,
-            evaluation=denied_evaluation,
-            command=command,
-            store=store,
-            now=now,
-        )
-        _cleanup_external_archive_downloads(final_evaluation)
+        try:
+            denied = _package_protect_denied_after_final_boundary(
+                payload=payload,
+                authority=final_authority,
+                evaluation=denied_evaluation,
+                command=command,
+                store=store,
+                now=now,
+            )
+        finally:
+            _cleanup_external_archive_downloads(final_evaluation)
         return denied
     bound_launch_command = _bound_external_archive_launch_command(
         launch_command,
@@ -2174,15 +2185,17 @@ def build_package_protect_payload(
     )
     if bound_launch_command is None:
         denied_evaluation = package_external_archive_override(final_evaluation, variant="launch_unbound")
-        denied = _package_protect_denied_after_final_boundary(
-            payload=payload,
-            authority=final_authority,
-            evaluation=denied_evaluation,
-            command=command,
-            store=store,
-            now=now,
-        )
-        _cleanup_external_archive_downloads(final_evaluation)
+        try:
+            denied = _package_protect_denied_after_final_boundary(
+                payload=payload,
+                authority=final_authority,
+                evaluation=denied_evaluation,
+                command=command,
+                store=store,
+                now=now,
+            )
+        finally:
+            _cleanup_external_archive_downloads(final_evaluation)
         return denied
     authority = final_authority
     artifact = authority.artifact
@@ -2524,7 +2537,7 @@ def _resolve_stored_package_policy_override(
             workspace_dir=workspace_dir,
         )
         return _StoredPackagePolicyResolution(
-            compose_package_evaluation(
+            compose_blocking_package_evaluation(
                 "saved_block",
                 current_evaluation,
                 approval_reuse=reuse.to_evidence(),
@@ -2619,6 +2632,8 @@ def _package_evaluation_with_current_policy_action(
     The resident owns the rewrite; an unavailable resident raises.
     """
 
+    if current_action == evaluation.policy_action:
+        return evaluation
     return compose_package_evaluation("current_policy_action", evaluation, current_action=current_action)
 
 
@@ -2632,9 +2647,12 @@ def _package_evaluation_with_rejected_reuse(
 
 
 def package_external_archive_override(evaluation: Any, *, variant: str) -> Any:
-    """Resident-owned external-archive binding verdict (block or shim delegation)."""
+    """Resident-owned external-archive binding verdict (block or shim delegation).
 
-    return compose_package_evaluation("external_archive_override", evaluation, variant=variant)
+    Every variant fails closed: an unavailable resident yields a terminal block.
+    """
+
+    return compose_blocking_package_evaluation("external_archive_override", evaluation, variant=variant)
 
 
 def _package_policy_workspace_candidates(

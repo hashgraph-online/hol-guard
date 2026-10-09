@@ -175,3 +175,33 @@ fn archive_block_always_blocks() {
         assert_eq!(patch["packages"][0]["decision"], "block");
     }
 }
+
+#[test]
+fn repeated_saved_overrides_do_not_stack_reasons() {
+    // Evidence exactly as Python's `to_evidence()` emits it: explicit nulls,
+    // the context-token flag, and non-default original types.
+    let evidence = json!({"action": "allow", "status": "accepted",
+        "reason_code": "approval_reuse_accepted", "current_action": "allow",
+        "saved_action": "allow", "should_claim": true,
+        "current_normalization_reason_code": null, "saved_normalization_reason_code": null,
+        "original_current_action": null, "original_saved_action": null,
+        "original_current_type": "GuardAction", "original_saved_type": "str",
+        "saved_artifact_hash_is_context_token": true});
+    let other = json!({"code": "other", "message": "m"});
+    for (kind, variant, clear) in [
+        ("saved_allow", Some("reused"), None),
+        ("saved_block", None, Some("hol-guard policies clear")),
+    ] {
+        let mut req = request(kind, base());
+        req.approval_reuse = Some(evidence.clone());
+        req.variant = variant.map(str::to_owned);
+        req.clear_command = clear.map(str::to_owned);
+        let first = run(&req).unwrap()["payload"]["patch"]["reasons"][0].clone();
+        assert_eq!(first["approval_reuse"], evidence);
+        let mut again = req.clone();
+        again.evaluation = json!({"policy_action": "review", "packages": [{"name": "a"}],
+            "reasons": [first.clone(), other.clone(), first.clone()]});
+        let patch = &run(&again).unwrap()["payload"]["patch"];
+        assert_eq!(patch["reasons"], json!([first, other]), "{kind}");
+    }
+}

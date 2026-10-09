@@ -2380,22 +2380,23 @@ class RuntimeMcpGuardProxy:
             evaluation=fresh_package_resolution.evaluation,
         )
         if bound_request is None:
-            binding_failure = package_external_archive_override(
-                fresh_package_resolution.evaluation,
-                variant="mcp_unbound",
-            )
-            response = self._terminal_package_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=fresh_package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=binding_failure,
-                policy_action="block",
-                scanner_evidence=fresh_scanner_evidence,
-            )
-            _cleanup_external_archive_downloads(fresh_package_resolution.evaluation)
-            return response
+            try:
+                binding_failure = package_external_archive_override(
+                    fresh_package_resolution.evaluation,
+                    variant="mcp_unbound",
+                )
+                return self._terminal_package_response(
+                    message_id=message.get("id"),
+                    artifact=artifact,
+                    artifact_hash=fresh_package_resolution.artifact_digest,
+                    tool_name=tool_name,
+                    params=params,
+                    package_evaluation=binding_failure,
+                    policy_action="block",
+                    scanner_evidence=fresh_scanner_evidence,
+                )
+            finally:
+                _cleanup_external_archive_downloads(fresh_package_resolution.evaluation)
         bound_message, bound_params = bound_request
         try:
             return self._record_package_forward(
