@@ -3,6 +3,14 @@ description: Run the quality checks inside the existing CI job.
 runs:
   using: composite
   steps:
+  - name: Require generated command descriptors to remain untracked
+    shell: bash
+    run: |
+      tracked=$(git ls-files -- contributions/extensions)
+      if [ -n "$tracked" ]; then
+        printf '%s\n' '::error::Command descriptors are build outputs. Remove them from the Git index and submit authored command sources instead.' "$tracked"
+        exit 1
+      fi
   - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
     with:
       python-version: '3.12'

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import re
@@ -228,3 +229,53 @@ def test_generated_descriptors_are_untracked_build_outputs():
         check=True,
     )
     assert result.stdout.strip() == "contributions/extensions/command.new.json"
+
+
+@pytest.mark.parametrize("tracked", [False, True])
+def test_required_quality_rejects_tracked_descriptors_before_preparation(tmp_path, tracked):
+    """Scratch regeneration cannot conceal a committed projection in any PR."""
+    root = Path(__file__).parents[1]
+    action = yaml.safe_load((root / ".github/actions/ci-job-quality/action.yml").read_text())
+    steps = action["runs"]["steps"]
+    gate = steps[0]
+    assert gate["name"] == "Require generated command descriptors to remain untracked"
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text("/contributions/extensions/\n")
+    descriptor = tmp_path / "contributions/extensions/command.example.json"
+    descriptor.parent.mkdir(parents=True)
+    descriptor.write_text("{}\n")
+    if tracked:
+        subprocess.run(["git", "add", "--force", str(descriptor)], cwd=tmp_path, check=True)
+    before = subprocess.check_output(["git", "status", "--porcelain"], cwd=tmp_path)
+    result = subprocess.run(["bash", "-e", "-c", gate["run"]], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == (1 if tracked else 0)
+    if tracked:
+        assert "Command descriptors are build outputs" in result.stdout
+        assert "contributions/extensions/command.example.json" in result.stdout
+    assert subprocess.check_output(["git", "status", "--porcelain"], cwd=tmp_path) == before
+    assert descriptor.read_text() == "{}\n"
+
+
+def test_contribution_intake_stages_authored_files_without_ignored_path_errors(tmp_path):
+    """Intake's real path list stages inputs without explicitly adding an ignored directory."""
+    root = Path(__file__).parents[1]
+    tree = ast.parse((root / "scripts/intake_contribution_pr.py").read_text())
+    commands = [
+        ast.literal_eval(node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.List) and all(isinstance(item, ast.Constant) for item in node.elts)
+    ]
+    command = next(c for c in commands if c[:3] == ["git", "add", "-A"] and "contracts/extensions" in c)
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text("/contributions/extensions/\n")
+    for path in command[3:]:
+        directory = tmp_path / path
+        directory.mkdir(parents=True)
+        (directory / "authored.txt").write_text("input\n")
+    ignored = tmp_path / "contributions/extensions/command.example.json"
+    ignored.parent.mkdir(parents=True)
+    ignored.write_text("{}\n")
+    subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=True)
+    staged = subprocess.check_output(["git", "diff", "--cached", "--name-only"], cwd=tmp_path, text=True).splitlines()
+    assert "contracts/extensions/authored.txt" in staged
+    assert all(not p.startswith("contributions/extensions/") for p in staged)

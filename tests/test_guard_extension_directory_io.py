@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ import pytest
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from tests.extension_builder_support import REPOSITORY
+from tests.support.extension_contributions import command_descriptor_fixture
 
 spec = importlib.util.spec_from_file_location(
     "guard_directory_io_export", REPOSITORY / "scripts/export_extension_directory.py"
@@ -26,7 +28,7 @@ def one_source(tmp_path: Path) -> tuple[Path, bytes]:
     parent = tmp_path / "contributions/extensions"
     parent.mkdir(parents=True)
     path = parent / "command.blitcp.json"
-    content = (REPOSITORY / "contributions/extensions/command.blitcp.json").read_bytes()
+    content = json.dumps(command_descriptor_fixture("command.blitcp")).encode()
     path.write_bytes(content)
     return path, content
 
