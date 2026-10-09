@@ -84,6 +84,17 @@ impl PolicySnapshotStore {
         Ok(Arc::clone(current))
     }
 
+    /// Rejects a request that names a Guard home other than the one this
+    /// resident serves. Operations open stores, secrets and integrity state
+    /// under the named home, so a caller-supplied path is never authority.
+    pub(crate) fn require_guard_home(&self, guard_home: &str) -> Result<(), String> {
+        if canonical_scope_text(guard_home) == self.expected_guard_home {
+            Ok(())
+        } else {
+            Err("native_guard_home_mismatch".to_owned())
+        }
+    }
+
     pub(crate) fn current_snapshot(&self) -> Result<PolicySnapshotV3, String> {
         let now = now_ms()?;
         if self.authority_changed.load(Ordering::SeqCst)
