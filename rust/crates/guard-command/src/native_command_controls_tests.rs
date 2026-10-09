@@ -265,6 +265,23 @@ fn diagnostic_shell_commands_preserve_an_approvable_review() {
             None,
         );
         assert_eq!(result.minimum_action, "block", "{health}");
+        assert_eq!(
+            result.reason_code, "native_command_control_authority_block",
+            "{health}"
+        );
+        assert!(
+            result
+                .reason
+                .contains("hol-guard command controls recover-authority"),
+            "{health}: {}",
+            result.reason
+        );
+        assert_eq!(
+            result.reason.contains("acknowledge-degraded"),
+            health == "degraded-unacknowledged",
+            "{health}: {}",
+            result.reason
+        );
     }
     let payload = serde_json::json!({"tool_name": "Bash", "tool_input": {
         "command": "timeout 120 git reset --hard"

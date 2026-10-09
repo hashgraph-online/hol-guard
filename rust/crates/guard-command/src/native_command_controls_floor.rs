@@ -56,3 +56,21 @@ pub(super) fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &st
         .to_owned();
     }
 }
+
+/// Tell the user how to restore protection when an unhealthy local authority,
+/// not an administrator lockdown, is what blocks every command.
+pub(super) fn add_authority_repair_hint(result: &mut PreToolResultV1, health: &str) {
+    if result.reason_code != "native_command_control_authority_block" {
+        return;
+    }
+    let hint = match health {
+        "degraded-unacknowledged" => {
+            " Review the warning and run `hol-guard command controls acknowledge-degraded`, or run `hol-guard command controls recover-authority` in a terminal to restore protection."
+        }
+        "degraded-acknowledged" | "tampered" | "recovery-required" => {
+            " Run `hol-guard command controls recover-authority` in a terminal to restore protection."
+        }
+        _ => return,
+    };
+    result.reason.push_str(hint);
+}
