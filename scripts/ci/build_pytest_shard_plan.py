@@ -83,6 +83,15 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
     }
 )
 
+# Whole files routed to the scheduling-sensitive lane. File paths (no "::") cover
+# every node, including parametrized ids whose argv-hostile text cannot be a
+# single --deselect operand.
+SCHEDULING_ONLY_FILES = frozenset(
+    {
+        "tests/test_codex_daemon_hook_bridge.py",
+    }
+)
+
 
 class _Arguments(Protocol):
     shard_count: int
@@ -179,7 +188,9 @@ def build_affinity_node_shards(
     nodes = [
         node_id
         for node_id in node_ids
-        if node_id not in SCHEDULING_ONLY_NODE_IDS and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+        if node_id not in SCHEDULING_ONLY_NODE_IDS
+        and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+        and node_file(node_id) not in SCHEDULING_ONLY_FILES
     ]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")
