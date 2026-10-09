@@ -462,6 +462,17 @@ fn intrinsic_blocks_keep_their_reason_and_oversized_commands_fail_without_echo()
             "{command}"
         );
     }
+    for command in ["sh -c 'echo hi'", "npx -c 'echo hello'"] {
+        let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
+        let mut result = super::super::tests::generic_result("block");
+        result.reason_code = "native_command_extension_evaluation_failed".into();
+        let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
+        assert_eq!(output.minimum_action, "block", "{command}");
+        assert_eq!(
+            output.reason_code, "native_command_extension_evaluation_failed",
+            "{command}"
+        );
+    }
     let huge = json!({"tool_name":"bash","tool_input":{"command":"x".repeat(guard_command::MAX_COMMAND_BYTES+1)}});
     assert_eq!(
         requires_business_context(&huge, PreToolActionTypeV1::Command),
