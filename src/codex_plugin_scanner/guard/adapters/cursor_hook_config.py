@@ -25,8 +25,14 @@ _BLOCKING_MANAGED_HOOK_EVENTS = (
     "beforeShellExecution",
     "beforeMCPExecution",
     "beforeReadFile",
-    "beforeWriteFile",
+    "preToolUse",
 )
+# Cursor has no pre-write event; its native write, edit and delete tools reach preToolUse.
+# The matcher is a regex on tool_name, so shell, MCP and read calls keep their own hooks.
+_CURSOR_FILE_MUTATION_TOOL_MATCHER = "^(Write|Edit|StrReplace|MultiEdit|Delete)$"
+# Cursor rejects the whole hooks.json when it names an event it does not know, so
+# reinstalling removes Guard entries for events earlier releases wrote.
+_RETIRED_MANAGED_HOOK_EVENTS = ("beforeWriteFile",)
 _OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution", "afterMCPExecution")
 _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
@@ -172,7 +178,22 @@ def _managed_hook_entry(
         "timeout": _MANAGED_HOOK_TIMEOUT_SECONDS,
         "failClosed": event_name in _BLOCKING_MANAGED_HOOK_EVENTS,
     }
+    if event_name == "preToolUse":
+        entry["matcher"] = _CURSOR_FILE_MUTATION_TOOL_MATCHER
     return entry
+
+
+def _retire_managed_hook_events(hooks: dict[str, object], *, script_path: Path) -> None:
+    """Drop Guard entries for events Cursor does not accept; keep third-party entries."""
+
+    for event_name in _RETIRED_MANAGED_HOOK_EVENTS:
+        if event_name not in hooks:
+            continue
+        remaining = _strip_managed_hook_entries(hooks[event_name], script_path=script_path)
+        if remaining:
+            hooks[event_name] = remaining
+        else:
+            hooks.pop(event_name, None)
 
 
 def _strip_managed_hook_entries(entries: object, *, script_path: Path) -> list[object]:

@@ -28,6 +28,7 @@ from .cursor_hook_config import (
     _managed_hook_entry,
     _managed_hooks_payload,
     _merge_hook_entries,
+    _retire_managed_hook_events,
     _strip_managed_hook_entries,
 )
 from .cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
@@ -140,12 +141,7 @@ def _prepare_cursor_hooks(context: HarnessContext) -> PreparedHarnessInstall:
             context, script_path=script_path, event_name=event, python_executable=python_executable
         )
         hooks[event] = _merge_hook_entries(hooks.get(event), entry, event_name=event)
-    if hooks.get("preToolUse") is not None:
-        stripped = _strip_managed_hook_entries(hooks["preToolUse"], script_path=script_path)
-        if stripped:
-            hooks["preToolUse"] = stripped
-        else:
-            hooks.pop("preToolUse", None)
+    _retire_managed_hook_events(hooks, script_path=script_path)
     payload["hooks"] = hooks
     source = cursor_hook_script_source(
         context, guard_cli=list(guard_cli.command), recovery_command=_cursor_recovery_command(context, guard_cli.python)
@@ -312,13 +308,7 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
             python_executable=python_executable,
         )
         hooks[event_name] = _merge_hook_entries(hooks.get(event_name), entry, event_name=event_name)
-    pre_tool_use = hooks.get("preToolUse")
-    if pre_tool_use is not None:
-        stripped = _strip_managed_hook_entries(pre_tool_use, script_path=script_path)
-        if stripped:
-            hooks["preToolUse"] = stripped
-        else:
-            hooks.pop("preToolUse", None)
+    _retire_managed_hook_events(hooks, script_path=script_path)
     payload["hooks"] = hooks
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
     write_text_at_authorized_path(hooks_path, json.dumps(payload, indent=2) + "\n")

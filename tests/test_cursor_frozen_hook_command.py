@@ -31,7 +31,7 @@ def _blocking_cursor_hooks(command: str) -> dict[str, list[dict[str, str]]]:
         "beforeShellExecution": entry,
         "beforeMCPExecution": entry,
         "beforeReadFile": entry,
-        "beforeWriteFile": entry,
+        "preToolUse": entry,
     }
 
 
@@ -207,11 +207,11 @@ def test_managed_python_executable_runs_isolated(tmp_path: Path) -> None:
     command = _managed_hook_command(
         python_executable=Path("/opt/guard/bin/python"),
         script_path=script,
-        event_name="beforeWriteFile",
+        event_name="preToolUse",
     )
     tokens = shlex.split(command)
     assert tokens[:3] == ["/opt/guard/bin/python", "-I", str(script.resolve())]
-    assert tokens[-2:] == ["--cursor-hook-event", "beforeWriteFile"]
+    assert tokens[-2:] == ["--cursor-hook-event", "preToolUse"]
 
 
 def test_run_frozen_cursor_hook_executes_managed_script(tmp_path: Path) -> None:

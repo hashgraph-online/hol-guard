@@ -114,13 +114,13 @@ def _trusted_cursor_after_shell_env(
     }
 
 
-def test_managed_hook_events_exclude_pretooluse() -> None:
-    assert "preToolUse" not in _MANAGED_HOOK_EVENTS
+def test_managed_hook_events_use_pretooluse_for_writes() -> None:
+    assert "beforeWriteFile" not in _MANAGED_HOOK_EVENTS
     assert _MANAGED_HOOK_EVENTS == (
         "beforeShellExecution",
         "beforeMCPExecution",
         "beforeReadFile",
-        "beforeWriteFile",
+        "preToolUse",
         "afterShellExecution",
         "afterMCPExecution",
     )
@@ -1119,7 +1119,7 @@ def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path)
     assert stripped == [{"command": "lean-ctx hook rewrite", "matcher": "Shell"}]
 
 
-def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_install_cursor_hooks_replaces_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home = tmp_path / "home"
     guard_home = tmp_path / "guard"
     workspace = tmp_path / "workspace"
@@ -1157,9 +1157,12 @@ def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, mon
     context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
     result = install_cursor_hooks(context)
     installed = json.loads(hooks_path.read_text(encoding="utf-8"))
-    pre_tool_use = installed["hooks"].get("preToolUse")
-    if pre_tool_use is not None:
-        assert all("hol-guard-cursor-hook.py" not in str(entry.get("command", "")) for entry in pre_tool_use)
+    pre_tool_use = installed["hooks"]["preToolUse"]
+    assert pre_tool_use[0] == {"command": "lean-ctx hook rewrite", "matcher": "Shell"}
+    managed = [entry for entry in pre_tool_use if "hol-guard-cursor-hook.py" in str(entry.get("command", ""))]
+    assert len(managed) == 1
+    assert managed[0]["matcher"] == "^(Write|Edit|StrReplace|MultiEdit|Delete)$"
+    assert managed[0]["failClosed"] is True
     assert "beforeShellExecution" in installed["hooks"]
     assert result["managed_hook_events"] == list(_MANAGED_HOOK_EVENTS)
     for event_name in _MANAGED_HOOK_EVENTS:
