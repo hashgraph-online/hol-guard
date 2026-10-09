@@ -74,8 +74,8 @@ assert(!unboundCopy.includes("within 15 minutes"), "unbound approval copy drops 
 assert(unboundCopy.includes("will still be blocked"), "unbound approval copy says the agent stays blocked");
 assert(unboundCopy.includes("Allow in Extensions"), "unbound approval copy points to the extension pattern");
 assert(
-  buildRetryAfterApprovalCopy(bound, "allow").includes("retry within 15 minutes"),
-  "bound approval copy keeps the retry instruction",
+  buildRetryAfterApprovalCopy(bound, "allow").includes("retry within 5 minutes"),
+  "bound native approval copy uses the native 5-minute retry window",
 );
 
 // #3838: where "Always allow exact action" is offered, point to it instead of extension patterns.
@@ -129,9 +129,24 @@ assert(
 );
 
 // Review feedback: the same command text matches a prior receipt even with a fresh per-request hash.
+const inProject = (item: typeof unbound, workspaceHash: string) =>
+  ({ ...item, action_envelope_json: { ...(item.action_envelope_json ?? {}), workspace_hash: workspaceHash } }) as never;
+const projectReceipt = (workspaceHash: string) => ({
+  artifact_hash: "fresh-hash",
+  raw_command_text: pythonChain,
+  action_envelope_json: { workspace_hash: workspaceHash },
+});
 assert(
-  receiptDescribesRequest(unbound, { artifact_hash: "fresh-hash", raw_command_text: pythonChain }),
-  "repeat of the same command keeps its Last time receipt",
+  receiptDescribesRequest(inProject(unbound, "ws-a"), projectReceipt("ws-a")),
+  "repeat of the same command in the same project keeps its Last time receipt",
+);
+assert(
+  !receiptDescribesRequest(inProject(unbound, "ws-a"), projectReceipt("ws-b")),
+  "the same command text in another project does not show its receipt",
+);
+assert(
+  !receiptDescribesRequest(unbound, { artifact_hash: "fresh-hash", raw_command_text: pythonChain }),
+  "a receipt without a comparable project stays hidden",
 );
 assert(
   !receiptDescribesRequest(otherGit, { artifact_hash: "fresh-hash", raw_command_text: pythonChain }),
@@ -167,7 +182,7 @@ assert(
   scopeControls(true).includes("the agent stays blocked") && !scopeControls(true).includes("Retry within 15 minutes"),
   "restricted requests describe This time without a retry promise",
 );
-assert(scopeControls(false).includes("Retry within 15 minutes"), "reusable requests keep the retry window");
+assert(scopeControls(false).includes("Retry within 15 minutes"), "reusable requests keep the default retry window");
 
 // Review feedback: bulk approval warns when selected commands stay blocked for the agent.
 const bulkStats = {

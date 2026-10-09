@@ -16,7 +16,12 @@ import {
   isWatchOnlyObservation,
   requestResolutionBlockReason,
 } from "./approval-center-utils";
-import { receiptDescribesRequest, retryCannotReuseApproval, retryCannotReuseApprovalHint } from "./approval-retry-guidance";
+import {
+  oneTimeRetryWindowMinutes,
+  receiptDescribesRequest,
+  retryCannotReuseApproval,
+  retryCannotReuseApprovalHint,
+} from "./approval-retry-guidance";
 import { approvalGateRefreshNeeded, resolvedStateForItem, useShownRequestCheck } from "./review-decision-state";
 import { GuardRequestResolutionError } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
@@ -556,6 +561,7 @@ export function ReviewDecisionCard(props: {
             exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
             rememberExactAction={rememberExactAction}
             oneTimeRetryBlocked={retryCannotReuseApproval(item)}
+            retryWindowMinutes={oneTimeRetryWindowMinutes(item)}
             allowScope={allowScope}
             blockScope={blockScope}
             onAllowScopeChange={setAllowScope}

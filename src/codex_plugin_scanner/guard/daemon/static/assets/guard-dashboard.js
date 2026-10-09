@@ -14216,6 +14216,9 @@ function searchQueue(items, term) {
 function retryCannotReuseApproval(item) {
   return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
+function oneTimeRetryWindowMinutes(item) {
+  return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
+}
 function retryCannotReuseApprovalHint(item, harness) {
   const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
   return item.exact_action_persistence_eligible === true ? `${base} To let ${harness} run this exact command, choose "Always allow exact action".` : `${base} To let ${harness} run commands like this, set the matching command pattern to Allow in Extensions, or copy the command and run it yourself.`;
@@ -14227,6 +14230,8 @@ function receiptDescribesRequest(item, receipt) {
   if (!item.artifact_id.includes(":native-pretool:")) return true;
   if (receipt.artifact_hash === item.artifact_hash) return true;
   if (item.artifact_hash.startsWith("native-review-v4:")) return false;
+  const receiptWorkspace = receipt.action_envelope_json?.workspace_hash;
+  if (!receiptWorkspace || receiptWorkspace !== item.action_envelope_json?.workspace_hash) return false;
   const receiptCommand = receipt.raw_command_text?.trim();
   return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
 }
@@ -14947,7 +14952,7 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
-    return `Approved once. Return to ${harness} and retry within 15 minutes.`;
+    return `Approved once. Return to ${harness} and retry within ${oneTimeRetryWindowMinutes(item)} minutes.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
@@ -28890,7 +28895,7 @@ function buildBulkRiskDisclosure(stats) {
   }
   if (retryBlocked > 0) {
     bullets.push(
-      `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${retryBlocked === 1 ? "is a command the agent" : "are commands the agent"} will still be blocked on after approval. Approving records your decision only; use "Always allow exact action" or an Extensions pattern to let the agent run ${retryBlocked === 1 ? "it" : "them"}.`
+      `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${retryBlocked === 1 ? "is a command the agent" : "are commands the agent"} will still be blocked on after approval. Approving records your decision only. To let the agent run ${retryBlocked === 1 ? "it" : "them"}, open ${retryBlocked === 1 ? "it" : "each one"} and use "Always allow exact action" where Guard offers it, set a matching Extensions pattern to Allow, or run ${retryBlocked === 1 ? "it" : "them"} yourself.`
     );
   }
   if (stats.duplicateActionCount > 0) {
@@ -29782,7 +29787,8 @@ function ReviewScopeControls(props) {
       {
         checked: props.rememberExactAction,
         onChange: props.onRememberExactActionChange,
-        oneTimeRetryBlocked: props.oneTimeRetryBlocked === true
+        oneTimeRetryBlocked: props.oneTimeRetryBlocked === true,
+        retryWindowMinutes: props.retryWindowMinutes ?? 15
       }
     ),
     props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
@@ -29849,7 +29855,7 @@ function ExactActionPersistenceChoice(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "This time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: props.oneTimeRetryBlocked ? "Records your decision; the agent stays blocked." : "Retry within 15 minutes." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: props.oneTimeRetryBlocked ? "Records your decision; the agent stays blocked." : `Retry within ${props.retryWindowMinutes} minutes.` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -30599,6 +30605,7 @@ function ReviewDecisionCard(props) {
           exactActionPersistenceEligible: item.exact_action_persistence_eligible === true,
           rememberExactAction,
           oneTimeRetryBlocked: retryCannotReuseApproval(item),
+          retryWindowMinutes: oneTimeRetryWindowMinutes(item),
           allowScope,
           blockScope,
           onAllowScopeChange: setAllowScope,

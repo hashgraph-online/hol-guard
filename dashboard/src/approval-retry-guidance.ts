@@ -8,6 +8,11 @@ export function retryCannotReuseApproval(item: GuardApprovalRequest): boolean {
   return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 
+/** Native one-time approvals are honoured for 5 minutes (store_native_review_approvals.py); others for 15. */
+export function oneTimeRetryWindowMinutes(item: GuardApprovalRequest): number {
+  return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
+}
+
 /** Explain, before approval, what actually lets the agent run a command whose one-time approval cannot. */
 export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
   const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
@@ -30,13 +35,20 @@ export function retryBlockedApprovalCopy(item: GuardApprovalRequest, harness: st
  */
 export function receiptDescribesRequest(
   item: GuardApprovalRequest,
-  receipt: { artifact_hash: string; raw_command_text?: string | null },
+  receipt: {
+    artifact_hash: string;
+    raw_command_text?: string | null;
+    action_envelope_json?: { workspace_hash?: string | null } | null;
+  },
 ): boolean {
   if (!item.artifact_id.includes(":native-pretool:")) return true;
   if (receipt.artifact_hash === item.artifact_hash) return true;
   // A bound review's hash is its action identity: a different hash is a different action.
   if (item.artifact_hash.startsWith("native-review-v4:")) return false;
-  // Unbound reviews get a fresh hash per request, so a repeat of the same command matches by its text.
+  // Unbound reviews get a fresh hash per request, so a repeat of the same command in the same
+  // project matches by its text. Without a comparable project the receipt stays hidden.
+  const receiptWorkspace = receipt.action_envelope_json?.workspace_hash;
+  if (!receiptWorkspace || receiptWorkspace !== item.action_envelope_json?.workspace_hash) return false;
   const receiptCommand = receipt.raw_command_text?.trim();
   return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
 }

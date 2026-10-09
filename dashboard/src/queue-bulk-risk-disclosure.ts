@@ -182,7 +182,9 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     bullets.push(
       `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${
         retryBlocked === 1 ? "is a command the agent" : "are commands the agent"
-      } will still be blocked on after approval. Approving records your decision only; use "Always allow exact action" or an Extensions pattern to let the agent run ${retryBlocked === 1 ? "it" : "them"}.`,
+      } will still be blocked on after approval. Approving records your decision only. To let the agent run ${
+        retryBlocked === 1 ? "it" : "them"
+      }, open ${retryBlocked === 1 ? "it" : "each one"} and use "Always allow exact action" where Guard offers it, set a matching Extensions pattern to Allow, or run ${retryBlocked === 1 ? "it" : "them"} yourself.`,
     );
   }
 
