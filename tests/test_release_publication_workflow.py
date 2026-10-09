@@ -383,10 +383,11 @@ def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> 
     assert names.index(reuse_name) < names.index("Record aggregate immutable hashes")
     step = steps[names.index(reuse_name)]
     assert "release_repair == 'true'" in step["if"]
+    assert step["working-directory"] == "${{ runner.temp }}"
     script = step["run"]
     assert 'gh release download "$tag"' in script
     assert 'gh attestation verify "$release_file"' in script
     assert '--source-digest "$SOURCE_SHA"' in script
     assert "refusing to publish unverified wheels" in script
     assert "Release wheel set does not match" in script
-    assert script.index("gh attestation verify") < script.index('cp -f "${release_files[@]}" dist/')
+    assert script.index("gh attestation verify") < script.index('cp -f "${release_files[@]}" "$DIST_DIR/"')

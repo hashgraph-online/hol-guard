@@ -836,8 +836,11 @@ jobs:
           merge-multiple: true
       - name: Reuse attested GitHub release wheels for a repair run
         if: needs.build.outputs.release_repair == 'true' && needs.build.outputs.channel == 'stable'
+        # Run outside the checked-out source so no workspace file can influence this step.
+        working-directory: ${{ runner.temp }}
         env:
           GH_TOKEN: ${{ github.token }}
+          DIST_DIR: ${{ github.workspace }}/dist
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
@@ -845,7 +848,7 @@ jobs:
           # the exact wheels already attested on the release, never a rebuild.
           set -euo pipefail
           tag="v${VERSION}"
-          if ! release_json=$(gh release view "$tag" --json isDraft,isPrerelease,assets 2>/dev/null); then
+          if ! release_json=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets 2>/dev/null); then
             echo "No GitHub release for ${tag}; keeping freshly built distributions."
             exit 0
           fi
@@ -856,7 +859,7 @@ jobs:
             exit 0
           fi
           release_dir=$(mktemp -d)
-          gh release download "$tag" --dir "$release_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$release_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl"
           bundle="$release_dir/hol-guard-v${VERSION}.intoto.jsonl"
           [[ -s "$bundle" ]] || { echo "Release ${tag} has no provenance bundle; refusing to publish unverified wheels" >&2; exit 1; }
           shopt -s nullglob
@@ -868,11 +871,11 @@ jobs:
               exit 1
             }
           done
-          diff <(cd "$release_dir" && ls hol_guard-*.whl) <(cd dist && ls hol_guard-*.whl) >/dev/null || {
+          diff <(cd "$release_dir" && ls hol_guard-*.whl) <(cd "$DIST_DIR" && ls hol_guard-*.whl) >/dev/null || {
             echo "Release wheel set does not match the rebuilt wheel set" >&2
             exit 1
           }
-          cp -f "${release_files[@]}" dist/
+          cp -f "${release_files[@]}" "$DIST_DIR/"
           echo "Reusing ${#release_files[@]} attested release assets for ${tag}." >> "$GITHUB_STEP_SUMMARY"
       - name: Validate exact native artifact set
         env:
@@ -2036,7 +2039,7 @@ jobs:
           fi
           mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
           [[ "${#local_files[@]}" -gt 0 ]]
-          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease,assets 2>/dev/null); then
+          if release_json=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets 2>/dev/null); then
             if ! jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null; then
               echo "Existing stable release is a draft or prerelease" >&2
               exit 1
@@ -2243,7 +2246,7 @@ jobs:
             echo "Alpha tag does not target the published source" >&2
             exit 1
           fi
-          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease 2>/dev/null); then
+          if release_json=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease 2>/dev/null); then
             jq -e '.isDraft == false and .isPrerelease == true' <<< "$release_json" >/dev/null
             existing_dir=$(mktemp -d)
             gh release download "$tag" --dir "$existing_dir"
