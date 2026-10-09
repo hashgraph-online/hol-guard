@@ -2039,7 +2039,7 @@ jobs:
           fi
           mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
           [[ "${#local_files[@]}" -gt 0 ]]
-          if release_json=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets 2>/dev/null); then
+          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease,assets 2>/dev/null); then
             if ! jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null; then
               echo "Existing stable release is a draft or prerelease" >&2
               exit 1
@@ -2246,7 +2246,7 @@ jobs:
             echo "Alpha tag does not target the published source" >&2
             exit 1
           fi
-          if release_json=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease 2>/dev/null); then
+          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease 2>/dev/null); then
             jq -e '.isDraft == false and .isPrerelease == true' <<< "$release_json" >/dev/null
             existing_dir=$(mktemp -d)
             gh release download "$tag" --dir "$existing_dir"
