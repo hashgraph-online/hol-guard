@@ -117,3 +117,37 @@ def test_frozen_bridge_forwards_original_input_when_hints_leave_no_room() -> Non
 
     assert len(text) <= entry._CODEX_HOOK_MAX_INPUT_BYTES
     assert hinted == text
+
+
+def test_all_senders_keep_present_but_empty_pager_names(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    script = guard_home / "zcode.py"
+    script.write_text(
+        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
+        encoding="utf-8",
+    )
+    generated = _load(script, "generated_zcode_empty_pager_hook")
+    entry = _load(FROZEN_ENTRYPOINT, "hol_guard_entry_empty_pager_test")
+    monkeypatch.setenv("GIT_PAGER", "")
+    monkeypatch.setenv("PAGER", "delta")
+
+    contexts = [
+        json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
+        json.loads(generated._stamp_hook_input("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
+        entry._codex_execution_environment(),
+    ]
+    for context in contexts:
+        assert "GIT_PAGER" in context["environment_names"]
+        assert "PAGER" in context["environment_names"]
+        assert context["git_pager_disabled"] is True
+        assert context["pager_disabled"] is False
+    assert len({tuple(c["environment_names"]) for c in contexts}) == 1
+    assert len({c["environment_digest"] for c in contexts}) == 1
+
+    monkeypatch.delenv("GIT_PAGER")
+    unset = json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY]
+    assert "GIT_PAGER" not in unset["environment_names"]
