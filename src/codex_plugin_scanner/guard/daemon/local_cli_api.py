@@ -61,6 +61,7 @@ from ..runtime.local_skill_index import (
     public_skill_page,
 )
 from ..runtime.mcp_protection import build_mcp_server_identity
+from ..runtime.observed_local_clis import backfill_observed_local_clis
 from ..runtime.observed_mcp_tools import discover_observed_mcp_tools
 from ..runtime.package_json_script_memory import (
     _package_item_available,
@@ -75,6 +76,7 @@ from .local_cli_api_contract import LOCAL_CLI_API_SCHEMA as _LOCAL_CLI_API_SCHEM
 from .local_cli_api_contract import LocalCliApiError
 from .local_cli_continuity_api import decorate_local_cli_continuity
 from .local_cli_mcp_store import bound_mcp_observation, stored_mcp_recognition
+from .local_cli_profiles_api import annotate_cli_profiles, merge_profile_commands, seeded_profile_items
 from .local_cli_registry_setup import registry_setup as reviewed_registry_setup
 from .mcp_discovery_jobs import DiscoveryJobError, DiscoveryStageError, McpDiscoveryJobs
 from .mcp_registry_undo import RegistrySetupUndo
@@ -335,6 +337,7 @@ class LocalCliApiService:
                             raise DiscoveryStageError("catalog_limit_reached") from None
                         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
                             raise DiscoveryStageError("observed_provider_scan_failed") from None
+                        backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
                         if saturated:
                             raise DiscoveryStageError("catalog_limit_reached")
 
@@ -481,6 +484,7 @@ class LocalCliApiService:
                 discovery_issue = "catalog_limit_reached"
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
             discovery_issue = "observed_provider_scan_failed"
+        backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
         try:
             labels = self._observe_harness_mcp_servers(strict=True)
         except DiscoveryStageError:
@@ -526,11 +530,13 @@ class LocalCliApiService:
         from ..native_policy_snapshot import local_cli_publication_status
 
         revision = self._store.read_local_cli_revision()
+        items = annotate_cli_profiles(items)
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "revision": revision,
             "native_publication": local_cli_publication_status(self._store.guard_home, revision),
             "items": items,
+            "seeded_items": seeded_profile_items(items, authority_revision=revision),
             "host_inventory": self._codex_host_inventory.read(),
             "cloud": decorate_local_cli_continuity(self._store, items),
         }
@@ -598,6 +604,7 @@ class LocalCliApiService:
         if identity is None:
             raise LocalCliApiError(400, code, message)
         commands, help_status, source_path = _discover_from_command(command, identity, operator_cwd, home_dir)
+        commands = merge_profile_commands(identity.name, commands)
         self._store.record_local_cli_observation(
             identity,
             seen_at=utc_now(),

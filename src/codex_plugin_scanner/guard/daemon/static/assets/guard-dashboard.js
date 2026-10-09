@@ -14128,7 +14128,7 @@ function processControlCommand(command) {
 }
 function containerOrDeployCommand(command) {
   const normalized = command.toLowerCase();
-  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az)\b/.test(normalized);
+  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az|wrangler)\b/.test(normalized);
 }
 function packageInstallCommand(command) {
   const normalized = command.toLowerCase();
