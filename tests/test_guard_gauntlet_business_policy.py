@@ -1,4 +1,4 @@
-"""Business-mode destructive-floor case: judge contract and native fixture compilation."""
+"""Business-mode cases: judge contract and native fixture compilation."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from ci.gauntlet.business_policy import (
+    BUSINESS_CASES,
+    BUSINESS_CLI_CASES,
     BUSINESS_DIRECTORY_DELETE,
     BUSINESS_POLICY_DOCUMENT,
     BUSINESS_RULE_IDS,
@@ -16,13 +18,14 @@ from ci.gauntlet.business_policy import (
 )
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.evidence import assess_case
+from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from tests.test_guard_gauntlet import observed_case
 
 DIGEST = "a" * 64
 
 
-def _scenario():
-    return next(s for s in load_catalog() if s.id == BUSINESS_DIRECTORY_DELETE)
+def _scenario(scenario_id=BUSINESS_DIRECTORY_DELETE):
+    return next(s for s in load_catalog() if s.id == scenario_id)
 
 
 def _installed():
@@ -48,9 +51,9 @@ def _snapshot():
     }
 
 
-def _case():
-    scenario = _scenario()
-    case = observed_case(scenario.commands[0], blocked=True)
+def _case(scenario_id=BUSINESS_DIRECTORY_DELETE, *, blocked=True):
+    scenario = _scenario(scenario_id)
+    case = observed_case(scenario.commands[0], blocked=blocked)
     case["business_policy"] = bind_business_snapshot(_installed(), _snapshot(), PREPARED)
     receipt = {"policy_generation": PREPARED["generation"], "policy_digest": PREPARED["policy_digest"]}
     case["guard_observations"][0]["native_observation"] = {"native_receipt": receipt}
@@ -142,6 +145,63 @@ def test_snapshot_from_another_generation_fails_the_run():
 def test_unacknowledged_snapshot_fails_the_run():
     with pytest.raises(RuntimeError, match="was not acknowledged"):
         bind_business_snapshot(_installed(), None, PREPARED)
+
+
+def _cli_case(scenario_id, reason="native_business_context_unavailable"):
+    scenario, case = _case(scenario_id)
+    case["guard_observations"][0]["reason_code"] = reason
+    case["filesystem"]["business-cli-executed-absent"] = True
+    return scenario, case
+
+
+def test_every_business_case_is_in_the_catalog():
+    assert {s.id for s in load_catalog()} >= BUSINESS_CASES
+
+
+@pytest.mark.parametrize("scenario_id", sorted(BUSINESS_CLI_CASES))
+@pytest.mark.parametrize("reason", ["native_business_context_unavailable", "native_command_review_required"])
+def test_business_cli_floor_deny_passes(scenario_id, reason):
+    scenario, case = _cli_case(scenario_id, reason)
+    assert assess_case(scenario, case)["outcome"] == "pass"
+
+
+@pytest.mark.parametrize("scenario_id", sorted(BUSINESS_CLI_CASES))
+@pytest.mark.parametrize(
+    "reason", ["native_policy_blocked", "native_policy_review_required", "native_destructive_command"]
+)
+def test_business_cli_deny_from_another_source_is_not_a_pass(scenario_id, reason):
+    scenario, case = _cli_case(scenario_id, reason)
+    result = assess_case(scenario, case)
+    assert result["outcome"] == "harness-error"
+    assert result["reason"] == "the deny did not come from the business context floor"
+
+
+@pytest.mark.parametrize("scenario_id", sorted(BUSINESS_CLI_CASES))
+def test_business_cli_case_requires_the_sentinel_check(scenario_id):
+    scenario, case = _cli_case(scenario_id)
+    del case["filesystem"]["business-cli-executed-absent"]
+    assert assess_case(scenario, case)["outcome"] != "pass"
+
+
+def test_business_cli_sentinel_records_execution(tmp_path: Path):
+    fixture = create_fixture(tmp_path / "fixture")
+    scenario_id = sorted(BUSINESS_CLI_CASES)[0]
+    assert filesystem_checks(fixture, "blocked-command", scenario_id)["business-cli-executed-absent"]
+    for executable in ("gws", "gog"):
+        assert (fixture.root / "bin" / executable).exists()
+    (fixture.workspace / "output/extension-executed.flag").write_text("executed\n", encoding="utf-8")
+    assert not filesystem_checks(fixture, "blocked-command", scenario_id)["business-cli-executed-absent"]
+
+
+def test_business_ordinary_read_passes_under_the_bound_policy():
+    scenario, case = _case("business-policy-ordinary-read", blocked=False)
+    assert assess_case(scenario, case)["outcome"] == "pass"
+
+
+def test_business_ordinary_read_needs_the_bound_policy():
+    scenario, case = _case("business-policy-ordinary-read", blocked=False)
+    del case["business_policy"]
+    assert assess_case(scenario, case)["outcome"] == "harness-error"
 
 
 def test_native_compiler_accepts_the_fixture_document(native_hook_force: Path):

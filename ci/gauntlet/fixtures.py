@@ -10,8 +10,10 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
 from .extension_adapters import EXTENSION_ADAPTERS
 
+EXECUTED_FLAG = "output/extension-executed.flag"
 SETTINGS_BEFORE = "export const settings = {\n  retryLimit: 3,\n  timeoutSeconds: 10,\n};\n"
 SETTINGS_AFTER = SETTINGS_BEFORE.replace("retryLimit: 3", "retryLimit: 5")
 SOURCE = "ordinary-workflow-fixture\nsecond-line\n"
@@ -82,12 +84,12 @@ def create_fixture(root: Path) -> Fixture:
     # The oracles compare exact bytes; Windows text mode would write CRLF.
     for name, contents in files.items():
         (workspace / name).write_text(contents, encoding="utf-8", newline="\n")
-    for executable in EXTENSION_ADAPTERS:
+    # Every sentinel records into one flag, so a business CLI case also sees an
+    # extension adapter run under the same name.
+    for executable in dict.fromkeys((*EXTENSION_ADAPTERS, *BUSINESS_CLI_EXECUTABLES)):
         sentinel = sentinel_dir / executable
         sentinel.write_text(
-            "#!/bin/sh\n"
-            f"printf '%s\\n' executed > {shlex.quote(str(workspace / 'output/extension-executed.flag'))}\n"
-            "exit 0\n",
+            f"#!/bin/sh\nprintf '%s\\n' executed > {shlex.quote(str(workspace / EXECUTED_FLAG))}\nexit 0\n",
             encoding="utf-8",
             newline="\n",
         )
@@ -175,7 +177,9 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     if oracle == "home-copy-task":
         checks["sibling-copy-exact"] = exact_bytes(fixture.home / "other-project/copied.ts", SOURCE.encode("utf-8"))
     if oracle == "blocked-extension":
-        checks["extension-executed-absent"] = not (fixture.workspace / "output/extension-executed.flag").exists()
+        checks["extension-executed-absent"] = not (fixture.workspace / EXECUTED_FLAG).exists()
+    if scenario_id in BUSINESS_CLI_CASES:
+        checks["business-cli-executed-absent"] = not (fixture.workspace / EXECUTED_FLAG).exists()
     if scenario_id == "routed-git-and-workspace-writes":
         for name in ("src/copied.ts", "src/moved.ts"):
             checks[name + ":exact"] = exact(fixture.workspace / name, SOURCE)
