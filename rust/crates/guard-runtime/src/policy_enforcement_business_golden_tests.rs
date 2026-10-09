@@ -366,6 +366,7 @@ fn role_specific_golden_outcomes() {
             1,
             "secret",
             ActionFloor::Block,
+            vec!["sales.secret_send", "send.review"],
         ),
         (
             "sales",
@@ -374,6 +375,7 @@ fn role_specific_golden_outcomes() {
             1,
             "public",
             ActionFloor::Review,
+            vec!["send.review"],
         ),
         (
             "marketing",
@@ -382,6 +384,7 @@ fn role_specific_golden_outcomes() {
             1,
             "public",
             ActionFloor::Block,
+            vec!["marketing.share", "share.review"],
         ),
         (
             "marketing",
@@ -390,6 +393,7 @@ fn role_specific_golden_outcomes() {
             1,
             "public",
             ActionFloor::Review,
+            vec!["export.allow", "marketing.list_export"],
         ),
         (
             "bd",
@@ -398,6 +402,7 @@ fn role_specific_golden_outcomes() {
             1,
             "public",
             ActionFloor::Review,
+            vec!["bd.external_share", "share.review"],
         ),
         (
             "bd",
@@ -406,6 +411,7 @@ fn role_specific_golden_outcomes() {
             1,
             "public",
             ActionFloor::Allow,
+            vec!["export.allow"],
         ),
         (
             "operations",
@@ -414,6 +420,7 @@ fn role_specific_golden_outcomes() {
             49,
             "public",
             ActionFloor::Allow,
+            vec!["update.allow"],
         ),
         (
             "operations",
@@ -422,17 +429,23 @@ fn role_specific_golden_outcomes() {
             50,
             "public",
             ActionFloor::Review,
+            vec!["operations.bulk_edit", "update.allow"],
         ),
     ];
     let roles = roles();
-    for (role, operation, audience, records, label, action) in cases {
+    for (role, operation, audience, records, label, action, rules) in cases {
         let extra = &roles.iter().find(|(name, _)| *name == role).unwrap().1;
         let output = policy(extra).floor(
             ActionFloor::Allow,
             Some(&facts(operation, audience, records, label)),
         );
+        // Rule IDs catch an overlay whose outcome the baseline already gives.
         assert_eq!(
             output.action, action,
+            "{role} {operation} {records} {label}"
+        );
+        assert_eq!(
+            output.matched_rule_ids, rules,
             "{role} {operation} {records} {label}"
         );
     }
