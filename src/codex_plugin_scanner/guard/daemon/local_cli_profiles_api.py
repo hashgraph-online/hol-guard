@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Iterable, Mapping, Sequence
 
 from ..runtime.custom_extension_profiles import (
@@ -16,8 +17,10 @@ from ..runtime.local_cli_commands import (
     LocalCliCommand,
     merge_discovered_commands,
 )
+from ..runtime.local_cli_runner import runner_name, runner_target
 
 SEEDED_PROFILE_PREFIX = "local-cli.profile-"
+_VERSION_OR_TAG = re.compile(r"[A-Za-z0-9.^~<>=*+_-]+")
 
 
 def seeded_profile_cli_id(profile: KnownCliProfile) -> str:
@@ -35,6 +38,28 @@ def merge_profile_commands(tool_name: str, discovered: Sequence[LocalCliCommand]
     if profile is None:
         return tuple(discovered)
     return merge_discovered_commands(tool_name, (*discovered, *profile.local_cli_commands()))
+
+
+def profiled_cli_package_launch(tokens: Sequence[str]) -> bool:
+    """Return True when a package runner directly launches a profiled CLI.
+
+    ``npx wrangler`` is a CLI call, not an MCP server; probing it over stdio
+    would spawn the CLI and then reject the paste as a built-in launcher.
+    Selector forms (``npx --package wrangler other``) and scoped packages
+    (``@other/wrangler``) are not the profiled CLI, so they keep MCP discovery.
+    """
+
+    if not tokens:
+        return False
+    runner = runner_name(tokens[0])
+    target = runner_target(runner, tuple(tokens[1:])) if runner is not None else None
+    if target is None:
+        return False
+    package_name, _, version_spec = target.rpartition("@") if target.rfind("@") > 0 else (target, "", "")
+    # ``wrangler@npm:other`` or a URL spec can install a different package.
+    if version_spec and not _VERSION_OR_TAG.fullmatch(version_spec):
+        return False
+    return profile_for_executable(package_name) is not None
 
 
 _MCP_CLI_ID_PREFIX = "local-cli.mcp-"
