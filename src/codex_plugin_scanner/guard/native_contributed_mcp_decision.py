@@ -10,14 +10,13 @@ treat as "no authoritative answer", never as an allow.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from .native_context import _canonical_request_sha256
 from .native_execution import _resident_request
 
 CONTRIBUTED_MCP_DECISION_FEATURE = "contributed-mcp-decision-v1"
@@ -63,12 +62,7 @@ def native_contributed_mcp_decision(
         "layers": [dict(layer) for layer in layers],
     }
     try:
-        digest = (
-            "sha256:"
-            + hashlib.sha256(
-                json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-            ).hexdigest()
-        )
+        digest = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError):
         return None
     response = _resident_request(

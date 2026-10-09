@@ -66,6 +66,7 @@ fn store_error(error: StoreReadError) -> &'static str {
     match error {
         StoreReadError::PathInvalid => "native_contributed_mcp_path_invalid",
         StoreReadError::StoreUnavailable => "native_contributed_mcp_store_unavailable",
+        StoreReadError::SchemaInvalid => "native_contributed_mcp_schema_invalid",
     }
 }
 
