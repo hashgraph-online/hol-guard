@@ -141,6 +141,18 @@ def _sync_aggregate_map() -> bool:
     return True
 
 
+def check_authored_trust() -> None:
+    """Check canonical ownership before CI can create missing defaults."""
+    missing = sorted(set(contribution_ids()) - _read_binding_ids())
+    if missing:
+        raise SystemExit(
+            "canonical contributions lack authored trust bindings: "
+            + ", ".join(missing)
+            + "; run `python scripts/refresh_extension_artifacts.py --trust-only` "
+            "and include the new contracts/extensions/trust/*.v1.json files in this PR"
+        )
+
+
 def sync_trust_map() -> bool:
     """Add contribution ids missing a trust binding as ``external`` files.
 
@@ -200,12 +212,22 @@ def verify() -> None:
 def main(argv: list[str] | None = None) -> int:
     """Refresh maintainer-owned product artifacts without replacing independent test expectations."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--trust-only",
         action="store_true",
         help="Stage missing contribution ids as external before dependency installation and native compilation.",
     )
+    mode.add_argument(
+        "--check-trust",
+        action="store_true",
+        help="Check authored bindings for all canonical contributions without generating or changing files.",
+    )
     args = parser.parse_args(argv)
+    if args.check_trust:
+        check_authored_trust()
+        print(json.dumps({"ok": True, "authored_trust_complete": True}, sort_keys=True))
+        return 0
     if args.trust_only:
         changed = sync_trust_map()
         print(json.dumps({"ok": True, "trust_map_changed": changed}, sort_keys=True))

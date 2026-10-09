@@ -51,13 +51,17 @@ For a command extension, contributors submit these files together in the same ch
    expected effective segments. Cases are data; they never invoke the target
    executable.
 
-Extension builder CI adds a per-extension `contracts/extensions/trust/`
-binding for any missing ID as external/opt-in before installing dependencies
-and compiling Rust, then regenerates the ignored
-`contracts/extensions/build-trust-class-map.v1.json` projection.
+3. `contracts/extensions/trust/command.<name>.v1.json`, the reviewed trust
+   binding. Run `python scripts/refresh_extension_artifacts.py --trust-only`
+   to create missing bindings as external/opt-in and include the new binding
+   in the same PR. The Extension Builder integration plan also creates it.
+
+Required CI checks that every canonical command and MCP source has an authored
+binding before preparation can generate defaults. Preparation then regenerates
+the ignored `contracts/extensions/build-trust-class-map.v1.json` projection.
 Because each extension's trust binding is its own file, parallel
 contributions do not collide on a shared map. Contributors do not need to edit
-trust state or pull unrelated main changes to refresh generated catalogs.
+the shared trust map or pull unrelated main changes to refresh generated catalogs.
 Existing reviewed trust classifications are never promoted or changed by this
 preparation step.
 
@@ -69,12 +73,14 @@ them as independent inputs:
 - `contracts/extensions/native-command-program.v1.json`;
 - `contracts/extensions/command-catalog.v1.json`.
 
-After source review, a maintainer stages missing external defaults, then runs
-the preparation command to validate the exact source/fixture binding and
-synchronize the derived files. CI does this on the PR merge checkout:
+Before submitting, create the external binding and verify the authored inventory.
+After source review, preparation validates the exact source/fixture binding and
+synchronizes the derived files. CI verifies ownership before preparing the PR
+merge checkout:
 
 ```sh
 python scripts/refresh_extension_artifacts.py --trust-only
+python scripts/refresh_extension_artifacts.py --check-trust
 uv run --no-sync python scripts/prepare_extension_contribution.py \
   --source contributions/command-sources/command.<name>.json \
   --fixture tests/fixtures/command-source-<slug>.v1.json
