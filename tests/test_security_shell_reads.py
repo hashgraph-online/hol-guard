@@ -39,6 +39,21 @@ def test_inline_shell_branches_and_multiple_reads():
     assert _first_hardcoded_secret_line(Path("scripts/start.sh"), content) is None
 
 
+def test_newline_after_a_logical_operator_starts_a_recognized_assignment():
+    # A physical newline is supported even when the preceding command uses &&.
+    content = 'true &&\nTOKEN="$(printenv TOKEN)"\n'
+    assert len(_shell_credential_read_spans(Path("scripts/start.sh"), content)) == 1
+    assert _first_hardcoded_secret_line(Path("scripts/start.sh"), content) is None
+
+
+@pytest.mark.parametrize("operator", ["&&", "||"])
+def test_same_line_logical_chains_keep_conservative_findings(operator):
+    # Same-line chains are outside this patch's line/semicolon assignment grammar.
+    content = f'true {operator} TOKEN="$(printenv TOKEN)"\n'
+    assert not _shell_credential_read_spans(Path("scripts/start.sh"), content)
+    assert _first_hardcoded_secret_line(Path("scripts/start.sh"), content) == 1
+
+
 @pytest.mark.parametrize(
     "content",
     [
