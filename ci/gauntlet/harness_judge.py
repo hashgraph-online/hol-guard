@@ -19,10 +19,23 @@ from .proofs import BLOCK_REASONS, required_checks
 
 _PRE_EVENTS = frozenset({"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"})
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
-# Lifecycle callbacks Guard only observes. The resident worker answers them
-# with no receipt and counts that answer under the native_fail_safe route.
+# Lifecycle callbacks Guard only observes (its LIFECYCLE_OBSERVE_EVENTS, plus
+# Cursor's lowercase stop). The resident worker answers them with no receipt and
+# counts that answer under the native_fail_safe route.
 _LIFECYCLE_EVENTS = frozenset(
-    {"SessionStart", "SessionEnd", "SubagentStart", "SubagentStop", "Stop", "Notification", "stop"}
+    {
+        "SessionStart",
+        "SessionEnd",
+        "SubagentStart",
+        "SubagentStop",
+        "Stop",
+        "Notification",
+        "TaskStart",
+        "TaskError",
+        "SessionShutdown",
+        "PermissionDenied",
+        "stop",
+    }
 )
 _EXTENSION_REASON = "native_command_permission_disabled"
 # Normalized transcript tools whose calls every supported harness routes through a Guard pre-tool hook.
