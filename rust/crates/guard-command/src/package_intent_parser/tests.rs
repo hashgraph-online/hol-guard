@@ -198,6 +198,12 @@ fn which_on_path_uses_windows_separator_and_launcher_extensions() {
         Some(expected.as_str())
     );
     assert_eq!(which_on_path("missing", &path), None);
+    // A direct path picks the launcher too, never the extensionless sh shim.
+    let direct = dir.join("bin").join("npx").to_string_lossy().into_owned();
+    assert_eq!(
+        which_on_path(&direct, &path).as_deref(),
+        Some(expected.as_str())
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
