@@ -86,3 +86,51 @@ def test_github_outputs_use_multiline_protocol_for_untrusted_newlines(tmp_path: 
     assert lines[0].startswith("report_path<<HOL_GUARD_")
     assert lines[1:3] == ["report.json", "policy_pass=false"]
     assert lines[-1] == lines[0].split("<<", 1)[1]
+
+
+class _SharingViolationApi:
+    def __init__(self, busy_opens: int) -> None:
+        self.busy_opens = busy_opens
+        self.opens = 0
+
+    def create_file(self, path, access, sharing, creation, flags):
+        from codex_plugin_scanner import safe_output_windows
+
+        self.opens += 1
+        if self.opens <= self.busy_opens:
+            return safe_output_windows._INVALID_HANDLE_VALUE
+        return 7
+
+    def inspect_file(self, handle, info):
+        info.file_attributes = 0
+        return True
+
+    def close_handle(self, handle):
+        raise AssertionError("an accepted directory handle must stay open")
+
+
+def _fake_sharing_violation(monkeypatch, wait_seconds: float) -> None:
+    from codex_plugin_scanner import safe_output_windows
+
+    monkeypatch.setattr(safe_output_windows.ctypes, "get_last_error", lambda: 32, raising=False)
+    monkeypatch.setattr(safe_output_windows.ctypes, "FormatError", lambda code: "in use", raising=False)
+    monkeypatch.setattr(safe_output_windows, "_SHARING_VIOLATION_WAIT_SECONDS", wait_seconds)
+
+
+def test_windows_directory_lock_waits_out_a_short_lived_writer(tmp_path: Path, monkeypatch):
+    from codex_plugin_scanner import safe_output_windows
+
+    _fake_sharing_violation(monkeypatch, 3.0)
+    api = _SharingViolationApi(busy_opens=3)
+    assert safe_output_windows._open_locked_directory(api, tmp_path) == 7
+    assert api.opens == 4
+
+
+def test_windows_directory_lock_gives_up_on_a_held_writer(tmp_path: Path, monkeypatch):
+    from codex_plugin_scanner import safe_output_windows
+
+    _fake_sharing_violation(monkeypatch, 0.0)
+    api = _SharingViolationApi(busy_opens=1_000)
+    with pytest.raises(OSError, match="unable to lock output directory"):
+        safe_output_windows._open_locked_directory(api, tmp_path)
+    assert api.opens == 1
