@@ -3066,6 +3066,9 @@ def _runtime_identity_paths(source_root: Path) -> list[Path]:
     package_root = source_root / "codex_plugin_scanner"
     static_root = package_root / "guard" / "daemon" / "static"
     paths = [*package_root.rglob("*.py")]
+    native_manifest = package_root / "_native" / "runtime-manifest.json"
+    if native_manifest.is_file():
+        paths.append(native_manifest)
     if static_root.is_dir():
         paths.extend(path for path in static_root.rglob("*") if path.is_file())
     return paths
