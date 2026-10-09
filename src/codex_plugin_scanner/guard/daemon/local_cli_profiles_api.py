@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from ..runtime.custom_extension_profiles import (
@@ -99,7 +99,7 @@ def _annotated(item: dict[str, object], profile: KnownCliProfile) -> dict[str, o
     return annotated
 
 
-def _with_suggestion(command: object, suggested: dict[str, str]) -> object:
+def _with_suggestion(command: object, suggested: Mapping[str, str]) -> object:
     if not isinstance(command, dict):
         return command
     state = suggested.get(str(command.get("command_id")))
