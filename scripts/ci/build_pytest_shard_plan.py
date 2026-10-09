@@ -53,6 +53,8 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_cloud_review_runtime_recovery.py::"
         "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
         "tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources",
+        "tests/test_guard_gauntlet_parallel.py::test_interrupt_during_spawn_still_reaps_the_started_worker",
+        "tests/test_guard_gauntlet_parallel.py::test_signal_during_cleanup_grace_still_force_kills",
     }
 )
 
