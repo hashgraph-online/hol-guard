@@ -93,12 +93,8 @@ class ExtensionControlApiService:
         self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
         self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
 
-    @property
-    def registry(self) -> CommandSafetyExtensionRegistry:
-        return self._registry
-
-    def snapshot(self) -> ExtensionControlRuntimeSnapshot:
-        return self._runtime.current()
+    def recommendation_inputs(self) -> tuple[CommandSafetyExtensionRegistry, ExtensionControlRuntimeSnapshot]:
+        return self._registry, self._runtime.current()
 
     def catalog(self) -> dict[str, object]:
         limits = advertised_extension_control_limits()

@@ -16129,13 +16129,18 @@ function joinLabels(labels) {
 function extensionNames(recommendation) {
   return joinLabels([...new Set(recommendation.permissions.map((permission2) => permission2.extension_name))]);
 }
+const CAUTION_REASON_COPY = {
+  critical: "is a critical-risk command",
+  destructive: "can destroy work or history",
+  sensitive: "touches sensitive data or access"
+};
 function approvalExtensionRecommendationCopy(recommendation) {
   const commands = recommendation.permissions.map(recommendationCommandLabel);
   const commandText = joinLabels(commands);
   const owner = extensionNames(recommendation);
   const cautionLines = recommendation.permissions.filter((permission2) => permission2.caution).map((permission2) => {
     const command = recommendationCommandLabel(permission2);
-    const reason = permission2.caution_reason === "critical" ? "is a critical-risk command" : permission2.caution_reason === "destructive" ? "can destroy work or history" : "touches sensitive data or access";
+    const reason = CAUTION_REASON_COPY[permission2.caution_reason ?? "sensitive"];
     return permission2.caution_detail ? `${command} ${reason}. ${permission2.caution_detail}` : `${command} ${reason}.`;
   });
   const firstExtension = recommendation.permissions[0]?.extension_name ?? owner;
@@ -31740,7 +31745,8 @@ function ReviewDecisionCard(props) {
           disabled: !hasAllowScope || submitting !== null || pendingAction !== null,
           onResolve: props.onResolve,
           onApproved: handleExtensionApproved
-        }
+        },
+        item.request_id
       ),
       resolutionBlockReason === null && resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewScopeControls,

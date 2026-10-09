@@ -7983,12 +7983,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
         from .approval_extension_recommendation import with_approval_extension_recommendation
 
+        include = not self._is_hosted_dashboard_origin()
         api = getattr(self._daemon_server(), "extension_control_api", None)
+        if not include or api is None:
+            return with_approval_extension_recommendation(approval, registry=None, snapshot=None, include=False)
+        registry, snapshot = api.recommendation_inputs()
+        hint = self._daemon_server().store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
         return with_approval_extension_recommendation(
-            approval,
-            registry=api.registry if api is not None else None,
-            snapshot=api.snapshot() if api is not None else None,
-            include=not self._is_hosted_dashboard_origin(),
+            {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
         )
 
     def _is_hosted_dashboard_origin(self) -> bool:

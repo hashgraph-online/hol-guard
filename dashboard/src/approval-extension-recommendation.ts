@@ -102,6 +102,12 @@ export type ApprovalExtensionRecommendationCopy = {
   successMessage: string;
 };
 
+const CAUTION_REASON_COPY: Record<NonNullable<GuardApprovalExtensionRecommendationPermission["caution_reason"]>, string> = {
+  critical: "is a critical-risk command",
+  destructive: "can destroy work or history",
+  sensitive: "touches sensitive data or access",
+};
+
 export function approvalExtensionRecommendationCopy(
   recommendation: GuardApprovalExtensionRecommendation,
 ): ApprovalExtensionRecommendationCopy {
@@ -112,12 +118,7 @@ export function approvalExtensionRecommendationCopy(
     .filter((permission) => permission.caution)
     .map((permission) => {
       const command = recommendationCommandLabel(permission);
-      const reason =
-        permission.caution_reason === "critical"
-          ? "is a critical-risk command"
-          : permission.caution_reason === "destructive"
-            ? "can destroy work or history"
-            : "touches sensitive data or access";
+      const reason = CAUTION_REASON_COPY[permission.caution_reason ?? "sensitive"];
       return permission.caution_detail ? `${command} ${reason}. ${permission.caution_detail}` : `${command} ${reason}.`;
     });
   const firstExtension = recommendation.permissions[0]?.extension_name ?? owner;

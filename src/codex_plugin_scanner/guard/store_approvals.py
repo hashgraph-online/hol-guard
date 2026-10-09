@@ -430,6 +430,18 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
     return payload
 
 
+def get_approval_extension_allow_hint(connection: sqlite3.Connection, request_id: str) -> dict[str, object] | None:
+    """Return the private queue-time hint; it never rides along on request payloads."""
+
+    if "extension_allow_hint_json" not in _approval_columns(connection):
+        return None
+    row = connection.execute(
+        "select extension_allow_hint_json from approval_requests where request_id = ?",
+        (request_id,),
+    ).fetchone()
+    return _json_object(row[0]) if row is not None else None
+
+
 def _approval_columns(connection: sqlite3.Connection) -> set[str]:
     rows = connection.execute("pragma table_info(approval_requests)").fetchall()
     return {str(row["name"]) for row in rows}
@@ -578,7 +590,6 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
         "browser_intent": _json_object(row["browser_intent_json"]),
         "continuation_snapshot": _json_object(row["continuation_snapshot_json"]),
-        "extension_allow_hint": _json_object(row["extension_allow_hint_json"]),
         "review_command": str(row["review_command"]),
         "approval_url": str(row["approval_url"]),
         "status": str(row["status"]),

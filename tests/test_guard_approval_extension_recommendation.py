@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.store_approvals import (
     add_approval_request,
     approval_index_statements,
     approval_schema_statement,
+    get_approval_extension_allow_hint,
     get_approval_request,
     list_approval_requests,
 )
@@ -130,25 +131,25 @@ def _connection() -> sqlite3.Connection:
 def test_store_round_trips_and_refreshes_hint_on_dedupe() -> None:
     connection = _connection()
     add_approval_request(connection, _request("req-1", hint=None), "2026-10-09T10:00:00+00:00")
-    assert get_approval_request(connection, "req-1")["extension_allow_hint"] is None
+    assert get_approval_extension_allow_hint(connection, "req-1") is None
 
     add_approval_request(connection, _request("req-2", hint=_hint(GIT_ADD)), "2026-10-09T10:01:00+00:00")
 
+    assert get_approval_extension_allow_hint(connection, "req-1") == _hint(GIT_ADD)
     stored = get_approval_request(connection, "req-1")
     assert stored is not None
-    assert stored["extension_allow_hint"] == _hint(GIT_ADD)
+    assert "extension_allow_hint" not in stored
     listed = list_approval_requests(connection)
-    assert [item["extension_allow_hint"] for item in listed] == [_hint(GIT_ADD)]
+    assert [item["request_id"] for item in listed] == ["req-1"]
+    assert all("extension_allow_hint" not in item for item in listed)
 
 
 def test_existing_store_gains_hint_column(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-1", hint=_hint(GIT_ADD)), "2026-10-09T10:00:00+00:00")
 
-    approval = store.get_approval_request("req-1")
-
-    assert approval is not None
-    assert approval["extension_allow_hint"] == _hint(GIT_ADD)
+    assert store.get_approval_extension_allow_hint("req-1") == _hint(GIT_ADD)
+    assert "extension_allow_hint" not in (store.get_approval_request("req-1") or {})
 
 
 def test_available_recommendation_for_git_add() -> None:

@@ -226,6 +226,10 @@ async function run(): Promise<void> {
 
   const cardSource = readFileSync(new URL("./review-decision-card.tsx", import.meta.url), "utf8");
   assert(cardSource.includes("<ApprovalExtensionRecommendationCard"), "review card renders the recommendation");
+  assert(
+    /<ApprovalExtensionRecommendationCard\s+key=\{item\.request_id\}/.test(cardSource),
+    "recommendation card state resets when the reviewed request changes",
+  );
   console.log("approval-extension-recommendation tests passed");
 }
 

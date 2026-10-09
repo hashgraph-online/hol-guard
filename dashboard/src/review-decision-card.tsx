@@ -539,6 +539,7 @@ export function ReviewDecisionCard(props: {
 
         {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
           <ApprovalExtensionRecommendationCard
+            key={item.request_id}
             item={item}
             approvalGate={approvalGate}
             allowScope={allowScope}
