@@ -23,7 +23,6 @@ if TYPE_CHECKING or sys.version_info >= (3, 11):
 else:  # pragma: no cover - exercised by the Python 3.10 CI job
     tomllib = importlib.import_module("tomli")
 
-TRUST_PATH = "contracts/extensions/trust-class-map.v1.json"
 BINDINGS_DIR = "contracts/extensions/trust"
 STAGING_PATH = "scripts/release/stage_guard_cloud_review_artifacts.py"
 PYPROJECT_PATH = "pyproject.toml"

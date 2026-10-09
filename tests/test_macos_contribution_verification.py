@@ -77,6 +77,13 @@ def _build(
     (scripts / "build_native_hol_guard_wheel.py").write_text(
         "from pathlib import Path\nPath('packaged').touch()\n", encoding="utf-8"
     )
+    (scripts / "ci/check_wheel_size.py").write_text(
+        "import sys\nfrom pathlib import Path\n"
+        "assert Path('packaged').exists()\n"
+        "assert sys.argv[1:] == ['--dist-dir', 'native-dist']\n"
+        "Path('size-checked').touch()\n",
+        encoding="utf-8",
+    )
     env = {
         **os.environ,
         "PATH": f"{bins}{os.pathsep}{os.environ['PATH']}",
@@ -110,6 +117,7 @@ def test_macos_routes_verification_through_the_shared_wrapper(
     assert arguments == expected
     assert not (tmp_path / "legacy-verification").exists()
     assert (tmp_path / "packaged").exists()
+    assert (tmp_path / "size-checked").exists()
 
 
 @pytest.mark.parametrize("target", TARGETS)

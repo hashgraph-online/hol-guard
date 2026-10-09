@@ -12,6 +12,10 @@ _MIN_BUDGET_SECONDS: Final = 0.1
 _MAX_BUDGET_SECONDS: Final = 4.0
 _MAX_EXPLICIT_BUDGET_SECONDS: Final = 10.0
 _DEFAULT_BUDGET_SECONDS: Final = 4.0
+# The first prompt in a new workspace waits for its policy overlay to publish,
+# which can outlast the tool-hook budget. Prompts arrive once per turn, so every
+# harness gets the longer prompt budget.
+PROMPT_ADMISSION_SECONDS: Final = 10.0
 _TRANSPORT_RESERVE_SECONDS: Final = 0.25
 _SERIALIZATION_RESERVE_SECONDS: Final = 0.05
 
@@ -38,6 +42,27 @@ class RuntimeHookDeadline:
             - _TRANSPORT_RESERVE_SECONDS,
         )
         return cls(expires_at=monotonic() + budget)
+
+    @classmethod
+    def for_admission(
+        cls,
+        remaining_hint: float,
+        *,
+        hint_missing: bool,
+        prompt_event: bool,
+        admission_seconds: float,
+        transport_deadline: float,
+    ) -> RuntimeHookDeadline:
+        """Bound the client's hint by the admitted request's transport deadline."""
+        if prompt_event:
+            hinted = cls.from_remaining_hint(
+                admission_seconds if hint_missing else remaining_hint,
+                monotonic=lambda: transport_deadline - admission_seconds,
+                maximum_budget_seconds=PROMPT_ADMISSION_SECONDS,
+            )
+        else:
+            hinted = cls.from_remaining_hint(remaining_hint)
+        return cls(expires_at=min(hinted.expires_at, transport_deadline))
 
     @staticmethod
     def clamp_budget(remaining_seconds: object, *, maximum_budget_seconds: float = _MAX_BUDGET_SECONDS) -> float:
@@ -69,4 +94,4 @@ class RuntimeHookDeadline:
         return predicted_seconds <= self.remaining_for_work(monotonic=monotonic)
 
 
-__all__ = ["RuntimeHookDeadline"]
+__all__ = ["PROMPT_ADMISSION_SECONDS", "RuntimeHookDeadline"]

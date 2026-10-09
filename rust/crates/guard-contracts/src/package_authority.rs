@@ -64,6 +64,9 @@ pub struct PackageIntentParseResultV1 {
     /// `intent.to_dict()` or `null` when no intent was parsed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
+    /// Exact targets for ephemeral enforcement, never public intent metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_private_metadata: Option<Value>,
 }
 
 // ---------------------------------------------------------------------------

@@ -16,27 +16,50 @@
       }
     ]
   },
-  "components": [],
+  "components": [
+    {
+      "name": "Business Review Summary",
+      "kind": "card",
+      "description": "Display-only factual summary for a saved native business request; it carries no approval or execution authority.",
+      "html": "<article class=\"ds-business-review-summary\"><header><div><h2>Send mail</h2><p>From Native business workflow</p></div><span class=\"ds-business-review-summary__badge\">Read-only</span></header><dl><div><dt>Audience</dt><dd>Named recipients</dd></div><div><dt>Recipients</dt><dd>1</dd></div><div><dt>Records</dt><dd>1</dd></div><div><dt>Attachments</dt><dd>0</dd></div><div><dt>Content size</dt><dd>34 bytes</dd></div><div><dt>Sensitivity</dt><dd>confidential</dd></div></dl><p class=\"ds-business-review-summary__copy\">These details describe the saved request. This summary does not verify the work account or confirm execution.</p><p class=\"ds-business-review-summary__note\">Message content, exact recipients and attachments are not shown in this summary.</p></article>",
+      "css": ".ds-business-review-summary { border: 1px solid #f1f5f9; border-radius: 12px; background: #fff; padding: 16px; color: #3f4174; font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-business-review-summary header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-business-review-summary h2 { margin: 0; font-size: 18px; font-weight: 600; } .ds-business-review-summary header p { margin: 4px 0 0; color: hsl(233 14% 46%); font-size: 14px; } .ds-business-review-summary__badge { flex: none; border-radius: 999px; background: rgb(59 130 246 / 0.1); padding: 5px 12px; color: #1d4ed8; font-size: 12px; } .ds-business-review-summary dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; margin: 20px 0 0; border-top: 1px solid #e2e8f0; padding-top: 16px; } .ds-business-review-summary dt { color: hsl(233 14% 46%); font-size: 14px; } .ds-business-review-summary dd { margin: 4px 0 0; overflow-wrap: anywhere; font-size: 14px; } .ds-business-review-summary__copy { margin: 16px 0 0; font-size: 14px; line-height: 1.7; } .ds-business-review-summary__note { margin: 8px 0 0; color: hsl(233 14% 46%); font-size: 12px; line-height: 1.6; } @media (max-width: 639px) { .ds-business-review-summary dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }"
+    },
+    {
+      "name": "Read-only Review Status",
+      "kind": "custom",
+      "description": "Truthful unavailable/recovery status for an unconnected native business review.",
+      "html": "<aside class=\"ds-readonly-review-status\" role=\"status\"><strong>Review is not connected yet</strong><p>This saved business request is read-only. Review decisions and execution are not connected yet.</p></aside>",
+      "css": ".ds-readonly-review-status { display: grid; gap: 4px; border: 1px solid rgb(124 140 253 / 0.3); border-radius: 12px; background: rgb(124 140 253 / 0.06); padding: 16px; color: #3f4174; font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-readonly-review-status strong { color: #7c8cfd; font-size: 14px; font-weight: 600; } .ds-readonly-review-status p { margin: 0; font-size: 14px; line-height: 1.55; }"
+    }
+  ],
   "narrative": {
     "northStar": "Operational clarity",
     "overview": "Trustworthy, precise and calm controls for local protection decisions.",
     "keyCharacteristics": [
       "Readable permission scope",
       "Quiet grouped controls",
-      "Touch-friendly responsive rows"
+      "Touch-friendly responsive rows",
+      "Display-only native business review facts"
     ],
     "rules": [
       {
         "name": "Explicit scope",
         "body": "Describe whether a choice affects listed tools or the whole connector.",
         "section": "components"
+      },
+      {
+        "name": "Native review boundary",
+        "body": "Keep the native business review display-only: show saved facts and truthful unavailable or recovery status without claiming provider-account verification or execution.",
+        "section": "components"
       }
     ],
     "dos": [
-      "Keep tool choices visible and keyboard accessible."
+      "Keep tool choices visible and keyboard accessible.",
+      "Keep the Inbox mobile scroll pane above fixed bottom navigation."
     ],
     "donts": [
-      "Do not imply that an observed catalog is a complete remote inventory."
+      "Do not imply that an observed catalog is a complete remote inventory.",
+      "Do not add a Saved request kicker or imply connected decision or execution surfaces to the native business review."
     ]
   }
 }

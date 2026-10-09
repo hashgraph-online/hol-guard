@@ -51,7 +51,12 @@ def test_native_binding_is_read_only_and_changes_approved_subject(native_binding
     _context, _config, manifest, plan, identity, workspace = native_binding
     before = _tree(tmp_path)
     prepared = _prepare(plan, identity, workspace)
-    assert _tree(tmp_path) == before
+    after = _tree(tmp_path)
+    # A live resident refreshes its client-lease mtime; that liveness marker is
+    # not a mutation of the protected native-binding inputs.
+    after = {rel: entry for rel, entry in after.items() if "resident-client-leases.v1" not in rel}
+    before = {rel: entry for rel, entry in before.items() if "resident-client-leases.v1" not in rel}
+    assert after == before
     assert not manifest.exists()
     assert prepared.subject() != plan.subject()
     assert prepared.payload()["native_runtime"] == {
@@ -140,7 +145,7 @@ def test_unpinned_native_identity_is_not_a_valid_repair_plan(native_binding):
     ],
 )
 def test_real_configured_hook_native_protection_commits_repair(
-    prepared_repair,
+    prepared_repair,  # noqa: F811 -- shared isolated fixture
     tmp_path,
     monkeypatch,
     boundary,
@@ -228,15 +233,19 @@ def test_real_configured_hook_native_protection_commits_repair(
                         repair.verify_and_commit_codex_hook_repair(pending, receipt_store=store)
                 assert recovery.hook_publication_pending(context.guard_home)
             elif boundary in {"wrong-native", "tampered-proof", "record-cap", "revoked-proof"}:
+                tampered_proof_observed = False
                 if boundary in {"tampered-proof", "revoked-proof"}:
                     from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
 
                     original_observe = observer.observe_configured_codex_hook
 
                     def tamper_proof(**kwargs):
+                        nonlocal tampered_proof_observed
                         proof = original_observe(**kwargs)
                         if boundary == "tampered-proof":
+                            assert proof.allow_receipt["decision"] == "allow"
                             proof.allow_receipt["decision"] = "deny"
+                            tampered_proof_observed = True
                         else:
                             from codex_plugin_scanner.guard.approval_gate import (
                                 ApprovalGateInput,
@@ -264,9 +273,14 @@ def test_real_configured_hook_native_protection_commits_repair(
                     with pytest.raises(ApprovalGateError):
                         repair.verify_and_commit_codex_hook_repair(pending, receipt_store=store)
                 else:
-                    reason = "admission_protection_failed" if boundary == "wrong-native" else "functional_proof_missing"
-                    with pytest.raises(TransitionError, match=reason):
+                    with pytest.raises(TransitionError) as failure:
                         repair.verify_and_commit_codex_hook_repair(pending, receipt_store=store)
+                    expected_reason = (
+                        "admission_protection_failed" if boundary == "wrong-native" else "functional_proof_missing"
+                    )
+                    assert failure.value.reason == expected_reason
+                    if boundary == "tampered-proof":
+                        assert tampered_proof_observed
             else:
                 proof = repair.verify_and_commit_codex_hook_repair(pending, receipt_store=store)
                 observation = verified_admission_payload(proof)

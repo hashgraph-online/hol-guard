@@ -25,6 +25,8 @@ pub(crate) fn evaluate_resident_bytes(
         Some(
             "workspace_review_authority_enroll"
                 | "workspace_review_context"
+                | "workspace_review_local_summary"
+                | "workspace_review_local_queue"
                 | "workspace_review_decision"
         )
     ) {
@@ -139,6 +141,22 @@ pub(crate) fn evaluate_resident_bytes(
                         &request.request_id,
                     )?;
                 encode_response(&context)
+            }
+            ResidentOperationV1::WorkspaceReviewLocalSummary(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let summary = crate::policy_store::workspace_review_local_summary::build(
+                    policy_store,
+                    &request.request_id,
+                )?;
+                encode_response(&summary)
+            }
+            ResidentOperationV1::WorkspaceReviewLocalQueue(_) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let queue =
+                    crate::policy_store::workspace_review_local_summary::queue(policy_store)?;
+                encode_response(&queue)
             }
             ResidentOperationV1::WorkspaceReviewDecision(request) => {
                 let policy_store =

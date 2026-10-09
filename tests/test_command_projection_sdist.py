@@ -13,6 +13,7 @@ import pytest
 @pytest.fixture
 def archive(tmp_path):
     """Create a minimal source archive with fingerprints for authored inputs and outputs."""
+    (tmp_path / "PKG-INFO").write_text("Metadata-Version: 2.1\n")
     root = Path(__file__).parents[1]
     spec = importlib.util.spec_from_file_location(
         "command_projection_sdist_test", root / "scripts/command_projection_sdist.py"
@@ -103,5 +104,39 @@ def test_new_canonical_source_is_rejected(archive):
     (root / "contributions/command-sources/command.added.json").write_text(
         json.dumps({"extension": {"extension_id": "command.added"}})
     )
+    with pytest.raises(ValueError, match="not match"):
+        module.verify_projection_manifest(root)
+
+
+def test_descriptor_projection_is_bound_in_new_archives(archive):
+    module, root = archive
+    descriptors = root / "contributions/extensions"
+    descriptors.mkdir()
+    descriptor = descriptors / "command.example.json"
+    descriptor.write_text('{"id":"command.example"}')
+    module.write_projection_manifest(root, descriptors=descriptors)
+    module.verify_projection_manifest(root)
+    descriptor.write_text('{"id":"command.changed"}')
     with pytest.raises(ValueError, match="do not match"):
         module.verify_projection_manifest(root)
+
+
+def test_generated_trust_map_is_bound_in_new_archives(archive):
+    module, root = archive
+    trust_map = root / "contracts/extensions/trust-class-map.v1.json"
+    module.write_projection_manifest(root, trust_map=trust_map)
+    module.verify_projection_manifest(root)
+    trust_map.write_text('{"classes":{"first-party":["command.example"]}}')
+    with pytest.raises(ValueError, match="not match"):
+        module.verify_projection_manifest(root)
+
+
+def test_unbound_canonical_contributions_default_to_external(archive):
+    module, root = archive
+    generator = module._generator(root)
+    request = generator.build_request()
+    request["sources"].append({"extension": {"extension_id": "command.new"}})
+    request["mcp_sources"].append({"id": "mcp.new-server"})
+    trust = generator.packaged_trust_map(request)
+    assert set(trust["classes"]["external"]) == {"command.example", "command.new", "command.mcp-new-server"}
+    assert request["trust"]["classes"]["external"] == ["command.example"]

@@ -397,6 +397,7 @@ def main(
             manifest_path=manifest_path,
             config_json=config_json,
             failure_causes=failure_causes,
+            event_name=event_name,
         )
         if response is None:
             if launch_integrity_failed:

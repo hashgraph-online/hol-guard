@@ -51,6 +51,7 @@ import {
 } from "./review-scope-controls";
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
+import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
@@ -70,6 +71,9 @@ export function approvalGateRefreshFailureMessage(message: string): string {
 
 export function ReviewDecisionCard(props: {
   detail: ReviewViewModel | null;
+  detailError?: string | null;
+  detailLoading?: boolean;
+  onRetryDetail?: () => void;
   onResolve: ReviewWorkspaceProps["onResolve"];
   onGoHome: () => void;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -376,6 +380,20 @@ export function ReviewDecisionCard(props: {
   }, []);
 
   if (!detail || !item) {
+    if (props.detailError) {
+      return <section role="alert" className="rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-5">
+        <h3 className="text-lg font-semibold text-brand-dark">Request details are unavailable</h3>
+        <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{props.detailError}</p>
+        {props.onRetryDetail && <ActionButton className="mt-4" variant="outline" onClick={props.onRetryDetail}>
+          Refresh request
+        </ActionButton>}
+      </section>;
+    }
+    if (props.detailLoading) {
+      return <div aria-busy="true" aria-live="polite" className="p-5 text-sm text-brand-dark/80">
+        Loading request details…
+      </div>;
+    }
     return (
       <EmptyState
         title="Select an action"
@@ -385,12 +403,22 @@ export function ReviewDecisionCard(props: {
     );
   }
 
-  const plainTitle = plainEnglishRequestTitle(item);
+  const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
-  const whatWouldHappen = buildWhatWouldHappen(item);
-  const topAlertItems = buildTopAlertItems(item);
-  const evidenceItems = buildEvidenceItems(item);
+  const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
+  const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
+  const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
+  let sectionLabel = "Paused action";
+  let badgeLabel = actionPresentation.label;
+  if (nativeDisplayOnly) {
+    sectionLabel = "Saved request";
+    badgeLabel = "Read-only";
+  } else if (watchOnlyObservation) {
+    sectionLabel = "Watch-only finding";
+    badgeLabel = "Would have stopped";
+  }
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
   const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
@@ -404,7 +432,7 @@ export function ReviewDecisionCard(props: {
     resolvedBlockButtonLabel = "Stop this next time";
   }
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       {resolved && (
         <div
           className={`guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
@@ -428,18 +456,19 @@ export function ReviewDecisionCard(props: {
       <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <SectionLabel>{watchOnlyObservation ? "Watch-only finding" : "Paused action"}</SectionLabel>
-            <h2 className="mt-2 text-lg font-semibold text-brand-dark">{plainTitle}</h2>
+            {!nativeDisplayOnly && <SectionLabel>{sectionLabel}</SectionLabel>}
+            <h2 className={`${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`}>{plainTitle}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               From {harnessName}
             </p>
           </div>
-          <Badge tone={watchOnlyObservation ? "info" : actionPresentation.tone}>
-            {watchOnlyObservation ? "Would have stopped" : actionPresentation.label}
+          <Badge tone={item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone}>
+            {badgeLabel}
           </Badge>
         </div>
 
-        <PrimaryActionCard item={item} />
+        {!nativeDisplayOnly && <PrimaryActionCard item={item} />}
+        {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
         {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable.
@@ -454,7 +483,9 @@ export function ReviewDecisionCard(props: {
                 aria-hidden="true"
               />
               <div>
-                <p className="text-sm font-semibold text-brand-attention">This decision cannot be overridden</p>
+                <p className="text-sm font-semibold text-brand-attention">
+                  {item.native_business_review_display_only ? "Review is not connected yet" : "This decision cannot be overridden"}
+                </p>
                 <p className="mt-1 text-sm text-brand-dark">{resolutionBlockReason}</p>
                 {item.superseded_by_request_id ? (
                   <a className="mt-3 inline-flex min-h-11 items-center font-semibold text-brand-blue underline"
