@@ -24,6 +24,7 @@ if __package__:
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from ..daemon.hook_availability_policy import hook_event_is_permission_request
     from ..daemon.hook_request_parsing import runtime_hook_event_name
+    from ..hook_execution_environment import stamp_hook_input_text
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -61,6 +62,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         hook_event_is_permission_request,
     )
     from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
+    from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -321,6 +323,9 @@ def _bound_hook_input(
         if event_name == "PreToolUse"
         else raw_data
     )
+    # Native Git-helper checks need the environment Codex will run the command
+    # in; without it every Git read is treated as unverifiable.
+    data = stamp_hook_input_text(data)
     if capture_guard_home is not None:
         with suppress(Exception):
             record_bridge_ingress(

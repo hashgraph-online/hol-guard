@@ -504,10 +504,16 @@ pub(super) fn agent_skill_document(canonical: &std::path::Path, home_dir: Option
         let Ok(relative) = canonical.strip_prefix(skills) else {
             continue;
         };
+        // Codex ships its bundled skills under `skills/.system`; that one
+        // top-level directory is a skill namespace, not hidden application state.
         let Some(parts) = relative
             .components()
-            .map(|component| match component {
-                std::path::Component::Normal(part) if !part.to_string_lossy().starts_with('.') => {
+            .enumerate()
+            .map(|(index, component)| match component {
+                std::path::Component::Normal(part)
+                    if !part.to_string_lossy().starts_with('.')
+                        || (root == ".codex/skills" && index == 0 && part == ".system") =>
+                {
                     Some(part)
                 }
                 _ => None,
