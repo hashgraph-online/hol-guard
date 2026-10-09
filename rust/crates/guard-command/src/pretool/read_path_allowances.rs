@@ -139,5 +139,5 @@ pub(in crate::pretool) fn guard_safety_doc(
 ) -> bool {
     home_dir
         .and_then(|root| std::fs::canonicalize(root).ok())
-        .is_some_and(|home| canonical == home.join(".hol-support/SAFETY.md"))
+        .is_some_and(|home| canonical == home.join(".hol-support").join("SAFETY.md"))
 }
