@@ -1,27 +1,39 @@
 """Render and parse Guard-managed Codex hook command lines.
 
-Codex hands a hook command to the session's user shell: ``$SHELL -c`` on
-POSIX, and on Windows usually ``powershell.exe -NoProfile -Command`` (or
-``cmd.exe /c`` when the session shell is cmd). Neither Windows shell accepts
-POSIX single-quote quoting, and Windows PowerShell 5.1 drops embedded double
-quotes when it passes arguments to a native program. Windows commands
-therefore carry the bridge config as unpadded base64url text and use plain
-tokens that both shells read the same way. A path that needs quoting falls
-back to PowerShell's call operator with single-quoted literals.
+Codex hands a hook command to the session's shell: ``$SHELL -c`` on POSIX. On
+Windows it uses the session shell when it knows it, usually
+``powershell.exe -NoProfile -Command``, and otherwise ``%COMSPEC% /C`` (falling
+back to ``cmd.exe``). A Windows hook command must therefore parse the same way
+in PowerShell and in ``cmd.exe``. Neither accepts POSIX single-quote quoting,
+Windows PowerShell 5.1 drops embedded double quotes when it passes arguments to
+a native program, and no quoting form means the same thing in both shells.
+
+Windows commands therefore use plain tokens only: the bridge config travels as
+unpadded base64url text, and a path that would need quoting (for example one
+under ``C:\\Program Files``) is replaced by its 8.3 short name when that name is
+itself a plain token. Parsing maps such a short name back to the long path, so
+integrity checks keep comparing the long argv. When a volume has no short
+names, the command falls back to PowerShell's call operator with single-quoted
+literals. That fallback only launches under a PowerShell session shell; a
+``cmd.exe`` hook shell cannot run it.
 """
 
 from __future__ import annotations
 
 import base64
+import ctypes
 import os
 import re
 import shlex
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from ctypes import wintypes
 from pathlib import Path, PureWindowsPath
 
 from .codex_hook_bridge_runtime import decode_bridge_config_argument
 
 _WINDOWS_BARE_TOKEN = re.compile(r"[A-Za-z0-9_.:\\/-]+")
+# An 8.3 name such as C:\PROGRA~1\python.exe; never a leading tilde.
+_WINDOWS_SHORT_PATH_TOKEN = re.compile(r"[A-Za-z]:[A-Za-z0-9_.~\\-]+")
 _WINDOWS_UNSAFE_CHARACTERS = frozenset("\r\n\x00")
 _POWERSHELL_TOKEN = re.compile(r"'((?:[^']|'')*)'|([^\s'\"`$;|&(){}@#<>,]+)")
 
@@ -57,6 +69,61 @@ def plain_json_hook_argv(argv: Sequence[str]) -> list[str]:
         return list(argv)
 
 
+def _windows_path_form(function_name: str, path: str) -> str | None:
+    """Return ``path`` converted by a kernel32 short/long path function, or ``None``."""
+
+    if os.name != "nt" or "\x00" in path:
+        return None
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if win_dll is None:
+        return None
+    try:
+        function = getattr(win_dll("kernel32", use_last_error=True), function_name)
+        function.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        function.restype = wintypes.DWORD
+        size = int(function(path, None, 0))
+        if size <= 0:
+            return None
+        buffer = ctypes.create_unicode_buffer(size)
+        written = int(function(path, buffer, size))
+    except (AttributeError, OSError):
+        return None
+    if written <= 0 or written >= size:
+        return None
+    return str(buffer.value)
+
+
+def _windows_short_path(path: str) -> str | None:
+    return _windows_path_form("GetShortPathNameW", path)
+
+
+def _windows_long_path(path: str) -> str | None:
+    return _windows_path_form("GetLongPathNameW", path)
+
+
+# Replaceable in tests, which run on hosts without 8.3 names.
+_short_path: Callable[[str], str | None] = _windows_short_path
+_long_path: Callable[[str], str | None] = _windows_long_path
+
+
+def _plain_windows_token(argument: str) -> str | None:
+    """Return a token both Windows shells read as ``argument``, or ``None``."""
+
+    if _WINDOWS_BARE_TOKEN.fullmatch(argument):
+        return argument
+    short = _short_path(argument)
+    # Use the short name only when parsing maps it back to exactly this path.
+    if short is None or not _WINDOWS_SHORT_PATH_TOKEN.fullmatch(short) or _long_path(short) != argument:
+        return None
+    return short
+
+
+def _expand_short_token(token: str) -> str:
+    if "~" not in token or not _WINDOWS_SHORT_PATH_TOKEN.fullmatch(token):
+        return token
+    return _long_path(token) or token
+
+
 def _powershell_literal(argument: str) -> str:
     return "'" + argument.replace("'", "''") + "'"
 
@@ -68,8 +135,10 @@ def render_hook_command(argv: Sequence[str], *, windows: bool | None = None) -> 
         return shlex.join(argv)
     if not argv or any(_WINDOWS_UNSAFE_CHARACTERS.intersection(argument) for argument in argv):
         raise ValueError("Codex hook arguments cannot be empty or contain line breaks or NUL on Windows.")
-    if not argv[0].startswith("-") and all(_WINDOWS_BARE_TOKEN.fullmatch(argument) for argument in argv):
-        return " ".join(argv)
+    if not argv[0].startswith("-"):
+        tokens = [_plain_windows_token(argument) for argument in argv]
+        if all(token is not None for token in tokens):
+            return " ".join(token for token in tokens if token is not None)
     return "& " + " ".join(_powershell_literal(argument) for argument in argv)
 
 
@@ -149,7 +218,8 @@ def split_hook_command_line(command: str, *, windows: bool | None = None) -> lis
             return None
     if command.lstrip().startswith("&"):
         return _split_powershell_call(command)
-    return _split_windows_command_line(command)
+    arguments = _split_windows_command_line(command)
+    return None if arguments is None else [_expand_short_token(argument) for argument in arguments]
 
 
 def hook_command_tokens(command: str, *, windows: bool | None = None) -> list[str]:

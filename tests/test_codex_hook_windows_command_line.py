@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_hook_command_line
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import bridge_config_from_argv, decode_bridge_config_argument
@@ -107,7 +108,71 @@ def test_windows_rendering_uses_plain_tokens_both_shells_read() -> None:
     assert not any(character in command for character in "\"'%!^&|<>$`;")
 
 
-def test_windows_rendering_quotes_paths_for_powershell_call() -> None:
+_SHORT_PYTHON = r"C:\PROGRA~1\HOLGUA~1\.venv\Scripts\python.exe"
+
+
+def _short_names(monkeypatch: pytest.MonkeyPatch, names: dict[str, str]) -> None:
+    longs = {short: long for long, short in names.items()}
+    monkeypatch.setattr(codex_hook_command_line, "_short_path", names.get)
+    monkeypatch.setattr(codex_hook_command_line, "_long_path", longs.get)
+
+
+def test_windows_rendering_uses_short_names_for_spaced_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    _short_names(monkeypatch, {_SPACED_PYTHON: _SHORT_PYTHON})
+    argv = [_SPACED_PYTHON, *_argv(windows=True)[1:]]
+    command = render_hook_command(argv, windows=True)
+
+    # Plain tokens read the same under PowerShell and under cmd.exe /C.
+    assert command == " ".join([_SHORT_PYTHON, *argv[1:]])
+    assert not any(character in command for character in "\"'%!^&|<>$`;")
+    assert split_hook_command_line(command, windows=True) == argv
+    assert split_hook_command(command, windows=True) == argv
+    assert hook_command_launchable(command, windows=True)
+
+    hooks = _hooks(command)
+    assert live_guard_codex_hooks_intercept(hooks, windows=True)
+    assert all(live_owned_codex_event_matches(hooks, windows=True).values())
+    with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
+        require_codex_hook_owner(command, ownership="unmanaged", windows=True)
+    expected = [{"event": event, "group": {"matcher": "Bash"}} for event in MANAGED_CODEX_HOOK_EVENTS]
+    bindings = exact_legacy_hook_bindings(
+        hooks,
+        expected_bindings=expected,
+        current_argv=argv,
+        legacy_argv=["C:\\old\\python.exe", *argv[1:]],
+        legacy_status_messages={_STATUS},
+        windows=True,
+    )
+    assert [binding["event"] for binding in bindings] == list(MANAGED_CODEX_HOOK_EVENTS)
+
+
+@pytest.mark.parametrize(
+    "short",
+    [
+        None,
+        r"C:\Program Files\HOLGUA~1\.venv\Scripts\python.exe",
+        r"C:\Program Files\HOL Guard's\.venv\Scripts\python.exe",
+    ],
+)
+def test_windows_rendering_skips_short_names_that_are_not_plain_or_exact(
+    monkeypatch: pytest.MonkeyPatch, short: str | None
+) -> None:
+    monkeypatch.setattr(codex_hook_command_line, "_short_path", lambda _path: short)
+    monkeypatch.setattr(codex_hook_command_line, "_long_path", lambda _path: _SPACED_PYTHON)
+    command = render_hook_command([_SPACED_PYTHON, *_argv(windows=True)[1:]], windows=True)
+
+    assert command.startswith("& 'C:\\Program Files\\HOL Guard''s\\")
+
+
+def test_windows_short_name_must_map_back_to_the_same_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(codex_hook_command_line, "_short_path", lambda _path: _SHORT_PYTHON)
+    monkeypatch.setattr(codex_hook_command_line, "_long_path", lambda _path: r"C:\Other\python.exe")
+
+    assert render_hook_command([_SPACED_PYTHON, "-I"], windows=True).startswith("& ")
+
+
+def test_windows_rendering_quotes_paths_for_powershell_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    _short_names(monkeypatch, {})
     argv = [_SPACED_PYTHON, *_argv(windows=True)[1:]]
     command = render_hook_command(argv, windows=True)
 
