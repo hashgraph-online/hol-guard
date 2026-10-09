@@ -25,6 +25,7 @@ from .security_secret_patterns import (
     _python_symbolic_reference_spans,
     _screen_route_map_spans,
 )
+from .security_shell_reads import _shell_credential_read_spans
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
 
@@ -464,6 +465,7 @@ def _should_skip_secret_match(
     offsets: tuple[int, ...] | None = None,
     field_name_spans: tuple[tuple[int, int], ...] = (),
     python_reference_spans: frozenset[tuple[int, int]] = frozenset(),
+    shell_read_spans: tuple[tuple[int, int], ...] = (),
 ) -> bool:
     """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
@@ -478,11 +480,12 @@ def _should_skip_secret_match(
             return True
         if _is_generated_token_expression(relative_path, content, match):
             return True
-        span_index = bisect.bisect_right(field_name_spans, (match.start(), len(content))) - 1
-        if span_index >= 0:
-            start, end = field_name_spans[span_index]
-            if start <= match.start() and match.end() <= end:
-                return True
+        for spans in (field_name_spans, shell_read_spans):
+            span_index = bisect.bisect_right(spans, (match.start(), len(content))) - 1
+            if span_index >= 0:
+                start, end = spans[span_index]
+                if start <= match.start() and match.end() <= end:
+                    return True
     if not _is_example_surface(relative_path):
         return False
     if _looks_like_placeholder_secret(candidate):
@@ -506,6 +509,7 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
     offsets = _newline_offsets(content)
     lines = content.splitlines()
     python_reference_spans = _python_symbolic_reference_spans(relative_path, content)
+    shell_read_spans = _shell_credential_read_spans(relative_path, content)
     field_name_spans = tuple(
         sorted(_field_name_map_spans(relative_path, content) + _screen_route_map_spans(relative_path, content))
     )
@@ -532,6 +536,7 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
                 offsets=offsets,
                 field_name_spans=field_name_spans,
                 python_reference_spans=python_reference_spans,
+                shell_read_spans=shell_read_spans,
             ):
                 continue
             first_offset = match.start()
