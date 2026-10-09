@@ -563,4 +563,4 @@ class TestRunSecurityChecks:
     def test_returns_tuple_of_correct_length(self):
         results = run_security_checks(FIXTURES / "good-plugin")
         assert isinstance(results, tuple)
-        assert len(results) == 6
+        assert len(results) == 7

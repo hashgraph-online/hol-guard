@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import bisect
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
-from .security_secret_patterns import DOCUMENTATION_EXTS
+from ..models import Finding, Severity
+from .security_secret_patterns import SECRET_PATTERNS
 
 _VARIABLE = r"(?:\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\})"
 _ENV_NAME = r"[A-Za-z_][A-Za-z0-9_]*"
@@ -29,6 +32,51 @@ _FENCE_RE = re.compile(r"^[ \t]{0,3}(?P<marker>`{3,}|~{3,})(?P<info>[^\r\n]*)$",
 _SHELL_LANGUAGES = frozenset({"bash", "sh", "shell"})
 _CONDITIONAL_PARAMETER = re.compile(rf"\$\{{{_ENV_NAME}:[+-]")
 _UNBRACED_VARIABLE = re.compile(rf"\${_ENV_NAME}")
+_CREDENTIAL_NAME = re.compile(
+    r"(?:^|_)(?:token|secret|password|passwd|credentials?|api_?key|private_?key|access_?key)(?:_|$)",
+    re.IGNORECASE,
+)
+_NAME_METADATA_SUFFIXES = ("_NAME", "_VAR", "_ENV", "_FILE", "_PATH")
+_IMPERSONATION_OPTION = re.compile(r"[ \t]+--impersonate-service-account(?:=|[ \t]+)")
+
+
+@dataclass(frozen=True, slots=True)
+class ShellCredentialRead:
+    """A recognized assignment; no command execution or credential values."""
+
+    span: tuple[int, int]
+    kind: Literal["environment", "gcloud", "gcloud_impersonation"]
+    credential_related: bool
+
+
+def _credential_name(name: str, *, indirect: bool = False) -> bool:
+    if not indirect and name.upper().endswith(_NAME_METADATA_SUFFIXES):
+        return False
+    return _CREDENTIAL_NAME.search(name) is not None
+
+
+def _assignment_read(match: re.Match[str]) -> ShellCredentialRead:
+    value = match.group("value")
+    span = (match.start("name"), match.end("value") + 1)
+    if value.startswith("$(gcloud"):
+        kind = "gcloud_impersonation" if _IMPERSONATION_OPTION.search(value) else "gcloud"
+        return ShellCredentialRead(span, kind, True)
+    # The assignment regex already proved this is a single allowlisted printenv
+    # argument. A variable argument identifies the name to read indirectly.
+    argument = re.match(rf"\$\(printenv[ \t]+({_ENV_ARG})", value)
+    assert argument is not None
+    name = argument.group(1).strip('"')
+    credential_related = (
+        _credential_name(match.group("name"))
+        or _credential_name(name.strip("${}"), indirect=name.startswith("$"))
+        # Every generic match removed by this assignment's exemption must retain
+        # a capability signal, including authToken/clientSecret-style names.
+        or any(
+            detector.kind == "generic" and detector.pattern.search(match.group(0)) is not None
+            for detector in SECRET_PATTERNS
+        )
+    )
+    return ShellCredentialRead(span, "environment", credential_related)
 
 
 @dataclass
@@ -39,7 +87,7 @@ class _ShellContext:
     parameter: bool = False
 
 
-def _statement_read_spans(content: str, start: int, end: int) -> list[tuple[int, int]]:
+def _statement_reads(content: str, start: int, end: int) -> list[ShellCredentialRead]:
     """Accept candidates only at unquoted, unescaped shell statement boundaries.
 
     Track nested command substitutions separately from their containing quotes.
@@ -52,7 +100,7 @@ def _statement_read_spans(content: str, start: int, end: int) -> list[tuple[int,
         return []
     contexts = [_ShellContext()]
     statement_start = start
-    spans: list[tuple[int, int]] = []
+    reads: list[ShellCredentialRead] = []
     index = start
     while index < end:
         context = contexts[-1]
@@ -60,7 +108,7 @@ def _statement_read_spans(content: str, start: int, end: int) -> list[tuple[int,
         top_level = len(contexts) == 1 and context.quote is None and context.parentheses == 0
         if top_level and (index == statement_start or char == ";") and index in candidates:
             match = candidates[index]
-            spans.append((match.start("name"), match.end("value") + 1))
+            reads.append(_assignment_read(match))
         if context.quote == "'":
             if char == "'":
                 context.quote = None
@@ -131,7 +179,7 @@ def _statement_read_spans(content: str, start: int, end: int) -> list[tuple[int,
                 statement_start = index + 1
             context.word_start = char in " \t\n;|&()<>"
         index += 1
-    return spans
+    return reads
 
 
 def _shell_code_ranges(relative_path: Path, content: str) -> tuple[tuple[int, int], ...]:
@@ -139,7 +187,7 @@ def _shell_code_ranges(relative_path: Path, content: str) -> tuple[tuple[int, in
     suffix = relative_path.suffix.lower()
     if suffix in {".sh", ".bash"}:
         return ((0, len(content)),)
-    if suffix not in DOCUMENTATION_EXTS:
+    if suffix not in {".md", ".mdx", ".markdown"}:
         return ()
     ranges: list[tuple[int, int]] = []
     opened: tuple[str, int, int, bool] | None = None
@@ -156,7 +204,7 @@ def _shell_code_ranges(relative_path: Path, content: str) -> tuple[tuple[int, in
     return tuple(ranges)
 
 
-def _shell_credential_read_spans(relative_path: Path, content: str) -> tuple[tuple[int, int], ...]:
+def _shell_credential_reads(relative_path: Path, content: str) -> tuple[ShellCredentialRead, ...]:
     """Prove complete assignments before exempting any generic detector match.
 
     This is a small allowlist, not a shell evaluator. It admits one environment
@@ -168,7 +216,63 @@ def _shell_credential_read_spans(relative_path: Path, content: str) -> tuple[tup
     if "$(" not in content:
         return ()
     return tuple(
-        span
+        read
         for start, end in _shell_code_ranges(relative_path, content)
-        for span in _statement_read_spans(content, start, end)
+        for read in _statement_reads(content, start, end)
     )
+
+
+def _shell_credential_read_spans(relative_path: Path, content: str) -> tuple[tuple[int, int], ...]:
+    return tuple(read.span for read in _shell_credential_reads(relative_path, content))
+
+
+def _runtime_credential_findings(
+    relative_path: Path, content: str, reads: tuple[ShellCredentialRead, ...]
+) -> tuple[Finding, ...]:
+    """Keep credential capabilities visible independently of literal detection.
+
+    LOW marks ordinary credential access for review, without asserting a leak.
+    Explicit impersonation is MEDIUM because it requests another identity.
+    Effective permissions/scope are unknown; documentation or project flags do
+    not establish least privilege. Findings never include values or commands.
+    """
+    offsets = tuple(match.start() for match in re.finditer("\n", content))
+    findings: list[Finding] = []
+    for read in reads:
+        if not read.credential_related:
+            continue
+        impersonation = read.kind == "gcloud_impersonation"
+        if impersonation:
+            description = (
+                "A supported gcloud command requests an access token for another service account. "
+                "Token minting requires the caller's impersonation permissions; those permissions, "
+                "the target account's access and successful execution have not been verified."
+            )
+        elif read.kind == "gcloud":
+            description = (
+                "A supported gcloud command requests an access token using the runtime identity. "
+                "Available credentials, effective permissions and token scope have not been verified."
+            )
+        else:
+            description = (
+                "A supported shell assignment reads an environment variable with a credential-related "
+                "source or destination name. Runtime contents and effective permissions have not been verified."
+            )
+        findings.append(
+            Finding(
+                rule_id="GCLOUD_SERVICE_ACCOUNT_IMPERSONATION" if impersonation else "RUNTIME_CREDENTIAL_ACCESS",
+                severity=Severity.MEDIUM if impersonation else Severity.LOW,
+                category="security",
+                title="Service-account impersonation requested" if impersonation else "Runtime credential access",
+                description=description,
+                remediation=(
+                    "Review the agent's shell access, credential handling, identity grants and effective scope. "
+                    "Use the least privilege required; a clean embedded-secret check does not prove limited access."
+                ),
+                file_path=relative_path.as_posix(),
+                line_number=bisect.bisect_left(offsets, read.span[0]) + 1,
+            )
+        )
+    # Equivalent branches on one line can expose the same capability twice.
+    # Preserve distinct kinds and locations without repeating identical output.
+    return tuple(dict.fromkeys(findings))

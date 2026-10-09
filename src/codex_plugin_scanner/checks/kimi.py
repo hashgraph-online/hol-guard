@@ -15,9 +15,9 @@ from .code_quality import check_no_eval, check_no_shell_injection
 from .kimi_support import looks_like_path, manifest_label, object_sequence
 from .security import (
     DANGEROUS_MCP_PATTERNS,
+    check_credential_access,
     check_license,
     check_no_approval_bypass_defaults,
-    check_no_hardcoded_secrets,
     check_security_md,
 )
 
@@ -483,7 +483,7 @@ def run_kimi_checks(package: NormalizedPackage) -> tuple[CheckResult, ...]:
         check_kimi_mcp_servers(package),
         check_security_md(package.root_path),
         check_license(package.root_path),
-        check_no_hardcoded_secrets(package.root_path, files),
+        *check_credential_access(package.root_path, files),
         check_no_approval_bypass_defaults(package.root_path, files),
         check_no_eval(package.root_path, files),
         check_no_shell_injection(package.root_path, files),

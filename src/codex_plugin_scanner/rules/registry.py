@@ -52,6 +52,10 @@ RULE_SPECS: tuple[RuleSpec, ...] = (
     _rule("SECURITY_MD_MISSING", "security", Severity.MEDIUM, 3, "security-md-missing", fixable=True),
     _rule("LICENSE_MISSING", "security", Severity.MEDIUM, 3, "license-missing", fixable=True),
     _rule("HARDCODED_SECRET", "security", Severity.CRITICAL, 7, "hardcoded-secret"),
+    _rule("RUNTIME_CREDENTIAL_ACCESS", "security", Severity.LOW, 0, "runtime-credential-access"),
+    _rule(
+        "GCLOUD_SERVICE_ACCOUNT_IMPERSONATION", "security", Severity.MEDIUM, 0, "gcloud-service-account-impersonation"
+    ),
     _rule("DANGEROUS_MCP_COMMAND", "security", Severity.HIGH, 4, "dangerous-mcp-command"),
     _rule("MCP_CONFIG_INVALID_JSON", "security", Severity.HIGH, 4, "mcp-config-invalid-json"),
     _rule("MCP_REMOTE_URL_INSECURE", "security", Severity.HIGH, 4, "mcp-remote-url-insecure"),
