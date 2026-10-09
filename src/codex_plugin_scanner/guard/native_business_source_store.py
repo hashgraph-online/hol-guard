@@ -59,6 +59,11 @@ ANCHOR_FILE_NAME = "business-source-anchor.v1.json"
 INSTALLATION_STATE_KEY = "business_source_installation_v1"
 CURRENT_FENCE_CAPABILITY = "native-business-source-current-fence-v2"
 _UNSPECIFIED_CURRENT = object()
+# An approved installation runs compile, status, build, verify and two anchor
+# builds as separate native processes, plus the caller's SQL transaction. Slow
+# process start (Windows on emulated x64, endpoint scanning) can exceed the
+# single-operation cap in total while every step is individually healthy.
+MUTATION_BUDGET_SECONDS = 30.0
 
 
 def _error(code: str = "native_business_source_installation_incoherent") -> NativePolicySnapshotError:
@@ -215,7 +220,7 @@ def approved_business_source_mutation(
     """
     if mode != "replace":
         raise _error("native_business_source_replace_required")
-    deadline = _deadline(deadline_monotonic)
+    deadline = _deadline(deadline_monotonic, budget_seconds=MUTATION_BUDGET_SECONDS)
     candidate = compile_business_policy_document(document, deadline_monotonic=deadline)
     status = _consumer(deadline, anchor=True)
     assert status.capabilities is not None
