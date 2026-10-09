@@ -15,6 +15,8 @@ from codex_plugin_scanner.guard.runtime.interpreter_options import shell_interpr
         (["bash", "-cOextglob", "sentinel"], "sentinel", 2),
         (["bash", "--noprofile", "-cl", "sentinel"], "sentinel", 3),
         (["bash", "--rcfile", "setup.rc", "-cl", "sentinel"], "sentinel", 4),
+        (["fish", "--command", "sentinel"], "sentinel", 2),
+        (["fish", "--command=sentinel"], "sentinel", 1),
     ],
 )
 def test_shell_interpreter_command_payload_parses_exact_command_operand(
@@ -37,6 +39,7 @@ def test_shell_interpreter_command_payload_parses_exact_command_operand(
         ["bash", "--rcfile"],
         ["bash", "-cl"],
         ["bash", "script.sh", "-cl", "sentinel"],
+        ["fish", "--command="],
     ],
 )
 def test_shell_interpreter_command_payload_rejects_non_command_operands(parts: list[str]) -> None:
