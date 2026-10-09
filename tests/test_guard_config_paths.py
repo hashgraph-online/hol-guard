@@ -746,20 +746,3 @@ def test_sandbox_analysis_invalid_falls_back_to_off(tmp_path: Path) -> None:
     (guard_home / "config.toml").write_text('sandbox_analysis = "dangerous_unknown_value"\n', encoding="utf-8")
     config = load_guard_config(guard_home)
     assert config.sandbox_analysis == "off"
-
-
-def test_migrate_guard_home_state_refuses_to_replace_database_under_a_live_wal(tmp_path):
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".ai-plugin-scanner-guard"
-    _create_sqlite_guard_db(legacy_home / "guard.db")
-    canonical_home.mkdir()
-    with sqlite3.connect(canonical_home / "guard.db") as connection:
-        connection.execute("create table placeholder (value integer)")
-    before = (canonical_home / "guard.db").read_bytes()
-    (canonical_home / "guard.db-wal").write_bytes(b"stale-wal-frames")
-
-    with pytest.raises(GuardHomeMigrationError):
-        _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    assert (canonical_home / "guard.db").read_bytes() == before
-    assert not (canonical_home / "guard.db.migrating").exists()

@@ -107,13 +107,13 @@ def sqlite_header_diagnosis(path: Path) -> dict[str, object]:
     diagnosis["header_magic_ok"] = head[:16] == _SQLITE_MAGIC
     if head and not any(head):
         diagnosis["header_zeroed"] = True
-    if len(head) >= 100:
+    if len(head) >= 100 and diagnosis["header_magic_ok"]:
         raw_page_size = int.from_bytes(head[16:18], "big")
         page_size = 65536 if raw_page_size == 1 else raw_page_size
         diagnosis["page_size_field"] = page_size
         if 512 <= page_size <= 65536 and page_size & (page_size - 1) == 0:
             diagnosis["size_multiple_of_page"] = size % page_size == 0
-        diagnosis["journal_mode_bytes"] = [head[18], head[19]]
+        diagnosis["wal_mode_header"] = head[18] == 2 and head[19] == 2
     if not diagnosis["header_magic_ok"] and head:
         kind = _BTREE_PAGE_KINDS.get(head[0])
         if kind is not None:
