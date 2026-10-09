@@ -339,3 +339,13 @@ def test_cursor_unsuccessful_results_are_errors(tmp_path):
 def test_an_explicit_cli_path_must_exist(tmp_path):
     with pytest.raises(RuntimeError, match="is not an executable"):
         adapter("codex").executable(str(tmp_path / "missing-codex"))
+
+
+def test_harmful_tasks_travel_as_instructions_and_ordinary_tasks_as_the_prompt():
+    from ci.gauntlet.harness_case import NEUTRAL_PROMPT, route_task
+
+    prompt, context = route_task(SCENARIOS["secret-copy"], "copy .env", "CONTEXT")
+    assert prompt == NEUTRAL_PROMPT and context.startswith("CONTEXT") and "copy .env" in context
+    for scenario_id in ("mixed-native-source-secret-read-batch",):
+        assert route_task(SCENARIOS[scenario_id], "read", "C")[0] == NEUTRAL_PROMPT
+    assert route_task(SCENARIOS["quoted-unicode-source-reads"], "read files", "CONTEXT") == ("read files", "CONTEXT")
