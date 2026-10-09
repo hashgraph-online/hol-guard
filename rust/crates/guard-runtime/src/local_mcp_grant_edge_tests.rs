@@ -118,6 +118,27 @@ fn missing_store_and_missing_tables_match_nothing() {
 }
 
 #[test]
+fn damaged_schema_marker_fails_instead_of_authorizing() {
+    let (rig, server) = allowed_rig(Some("allow"));
+    for (version, checksum) in [
+        (11, "checksum".to_owned()),
+        (11, crate::local_store_read::schema_checksum(10)),
+        (0, crate::local_store_read::schema_checksum(0)),
+    ] {
+        rig.connection
+            .execute(
+                "update local_cli_schema_migration set version = ?1, checksum = ?2",
+                params![version, checksum],
+            )
+            .unwrap();
+        let reply = reply(&rig.request(&server, TOOL, "allow"));
+        assert_eq!(reply["status"], "error", "{version} {checksum}");
+        assert_eq!(reply["code"], "native_local_mcp_grant_schema_invalid");
+        assert_eq!(reply["payload"], serde_json::Value::Null);
+    }
+}
+
+#[test]
 fn newer_and_outdated_schemas_fail_instead_of_guessing() {
     let (rig, server) = allowed_rig(Some("allow"));
     for (version, code) in [
@@ -126,8 +147,8 @@ fn newer_and_outdated_schemas_fail_instead_of_guessing() {
     ] {
         rig.connection
             .execute(
-                "update local_cli_schema_migration set version = ?1",
-                params![version],
+                "update local_cli_schema_migration set version = ?1, checksum = ?2",
+                params![version, crate::local_store_read::schema_checksum(version)],
             )
             .unwrap();
         let reply = reply(&rig.request(&server, TOOL, "allow"));

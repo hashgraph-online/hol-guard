@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -71,3 +72,100 @@ def test_native_answer_is_presented_not_recomputed(monkeypatch: pytest.MonkeyPat
     )
     assert calls[0]["current_action"] == "review"
     assert calls[0]["source"] == identity.identity_source
+
+
+def _grant_reply(monkeypatch: pytest.MonkeyPatch, status: str, code: object, *, prerequisite: bool = True):
+    from codex_plugin_scanner.guard import native_local_cli_grant as client
+    from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
+
+    calls: list[str] = []
+
+    def resident(*, operation: str, request: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        calls.append(operation)
+        return {
+            "schema": "guard-local-cli-grant-result.v1",
+            "request_id": request["request_id"],
+            "request_sha256": "sha256:" + _canonical_request_sha256(request),
+            "status": status,
+            "code": code,
+            "payload": None,
+        }
+
+    monkeypatch.setattr(client, "_resident_request", resident)
+    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda _home: prerequisite)
+    return client, calls
+
+
+def _ask(client, tmp_path: Path):
+    return client.native_local_cli_grant(
+        store_path=tmp_path / "guard.db",
+        guard_home=tmp_path,
+        current_action="review",
+        source={"source": "registry_package", "name": "cowsay", "package_name": "cowsay"},
+        command_id=None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("native_local_cli_grant_schema_invalid", "native_local_cli_grant_schema_invalid"),
+        ("native_local_cli_grant_store_unavailable", "native_local_cli_grant_store_unavailable"),
+        ("free text from a reply", "native_local_cli_grant_unavailable"),
+        (None, "native_local_cli_grant_unavailable"),
+    ],
+)
+def test_resident_refusal_reason_reaches_the_caller(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, code: object, expected: str
+) -> None:
+    from codex_plugin_scanner.guard.native_local_cli_grant import NativeLocalCliGrantFailure
+
+    client, _calls = _grant_reply(monkeypatch, "error", code)
+    assert _ask(client, tmp_path) == NativeLocalCliGrantFailure(expected)
+
+
+def test_grant_lookup_establishes_the_resident_prerequisite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.native_local_cli_grant import NativeLocalCliGrantFailure
+
+    client, calls = _grant_reply(monkeypatch, "ok", "ok", prerequisite=False)
+    assert _ask(client, tmp_path) == NativeLocalCliGrantFailure("native_local_cli_grant_prerequisite_unavailable")
+    assert calls == []
+
+
+def test_failure_code_is_raised_and_logged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from codex_plugin_scanner.guard.native_local_cli_grant import NativeLocalCliGrantFailure
+
+    store, command, _identity = _blocked_store(tmp_path)
+    failure = NativeLocalCliGrantFailure("native_local_cli_grant_schema_invalid")
+    monkeypatch.setattr(decision, "native_local_cli_grant", lambda **_kwargs: failure)
+
+    with (
+        caplog.at_level("WARNING", logger=decision.__name__),
+        pytest.raises(LocalCliIdentityUnavailableError, match="native_local_cli_grant_schema_invalid"),
+    ):
+        matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
+    assert "native_local_cli_grant_schema_invalid" in caplog.text
+
+
+def test_catalog_read_failure_holds_instead_of_dropping_a_block(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store, command, _identity = _blocked_store(tmp_path)
+
+    def broken_catalog(_cli_id: str) -> list[object]:
+        raise sqlite3.OperationalError("no such column: usage")
+
+    def native_must_not_run(**_kwargs: object) -> None:
+        raise AssertionError("the resident must not be asked without a resolved command")
+
+    monkeypatch.setattr(store, "read_local_cli_command_catalog", broken_catalog)
+    monkeypatch.setattr(decision, "native_local_cli_grant", native_must_not_run)
+
+    with pytest.raises(LocalCliIdentityUnavailableError, match="native_local_cli_grant_catalog_unavailable"):
+        matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
+    assert (
+        apply_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
+        == "review"
+    )

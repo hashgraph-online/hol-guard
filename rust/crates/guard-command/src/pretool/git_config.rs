@@ -239,11 +239,13 @@ fn probe(
                 matches!(operation, "log" | "show") && value.contains("%G")
             }
             "log.showsignature" => matches!(operation, "log" | "show") && !disabled,
-            // Deliberately conservative for custom verification programs:
-            // log/show pretty-format aliases may also invoke a GPG helper.
-            key if key.starts_with("gpg.") => {
-                matches!(operation, "log" | "show") && !value.is_empty()
-            }
+            // A configured verification program (a very common developer
+            // setting) runs only when signature verification is requested.
+            // Every such request is rejected above: --show-signature,
+            // log.showSignature, %G placeholders in the command line,
+            // format.pretty or any pretty.* alias. A bare gpg.* definition
+            // therefore cannot execute for the remaining reads.
+            key if key.starts_with("gpg.") => false,
             _ => return None,
         };
         if unsafe_value {

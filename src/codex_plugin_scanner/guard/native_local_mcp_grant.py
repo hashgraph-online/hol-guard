@@ -9,8 +9,6 @@ must treat as "no authoritative answer", never as an allow.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -18,6 +16,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from .native_context import _canonical_request_sha256
 from .native_execution import _resident_request
 
 LOCAL_MCP_GRANT_FEATURE = "local-mcp-grant-v1"
@@ -66,12 +65,7 @@ def native_local_mcp_grant(
         "launcher_home": launcher_home,
     }
     try:
-        digest = (
-            "sha256:"
-            + hashlib.sha256(
-                json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-            ).hexdigest()
-        )
+        digest = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError):
         return None
     response = _resident_request(

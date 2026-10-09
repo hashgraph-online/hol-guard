@@ -92,6 +92,29 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.38.0](https://github.com/hashgraph-online/hol-guard/compare/v3.37.0...v3.38.0) (2026-10-09)
+
+
+### Features
+
+* **native:** derive local CLI grant identity in the resident ([#3842](https://github.com/hashgraph-online/hol-guard/issues/3842)) ([8b5ff88](https://github.com/hashgraph-online/hol-guard/commit/8b5ff88861f4857d7738a8bacc2957646147a921))
+
+
+### Bug Fixes
+
+* **ci:** isolate Win32-descriptor test that poisons process-global os.lstat ([#3848](https://github.com/hashgraph-online/hol-guard/issues/3848)) ([5a092b6](https://github.com/hashgraph-online/hol-guard/commit/5a092b6a3ad80b5b7a4af23899dd61ecdfe0aff1))
+* **ci:** let xdist restart a crashed worker and bound corpus workers higher ([#3839](https://github.com/hashgraph-online/hol-guard/issues/3839)) ([f6e71e1](https://github.com/hashgraph-online/hol-guard/commit/f6e71e1275bc9f5ca341131a65ce0b72c9cb524c))
+* **ci:** queue main runs instead of cancelling in-flight ([#3852](https://github.com/hashgraph-online/hol-guard/issues/3852)) ([f4f993d](https://github.com/hashgraph-online/hol-guard/commit/f4f993dd367f64925aa9b17b08b0dfc1f525f754))
+* **codex:** stop Desktop installs from blocking plain Git reads and cd ([#3847](https://github.com/hashgraph-online/hol-guard/issues/3847)) ([d4e8b69](https://github.com/hashgraph-online/hol-guard/commit/d4e8b697957cc4ff6a6f0f0ded99c486f0524b87))
+* **custom-extensions:** let detected connections be forgotten and age out unused ones ([#3828](https://github.com/hashgraph-online/hol-guard/issues/3828)) ([0a18798](https://github.com/hashgraph-online/hol-guard/commit/0a187983c2a1860fa05f17836be732acb0dfbe17))
+* **daemon:** keep the daemon up while a request outlives the idle window ([#3845](https://github.com/hashgraph-online/hol-guard/issues/3845)) ([985e281](https://github.com/hashgraph-online/hol-guard/commit/985e28150ba5ae43c53b2076503606c70b8ab80b))
+* **doctor:** warn when Codex skips untrusted Guard hooks or OMP code mode routes tools through eval ([#3843](https://github.com/hashgraph-online/hol-guard/issues/3843)) ([b8c52ee](https://github.com/hashgraph-online/hol-guard/commit/b8c52ee19bc956cc6cc1070f83c8ed76fbd11f47))
+* **gauntlet:** accept Guard's observe-only answer to harness lifecycle hooks ([#3833](https://github.com/hashgraph-online/hol-guard/issues/3833)) ([99a6a82](https://github.com/hashgraph-online/hol-guard/commit/99a6a820bc79856959a4039e32dfe23454a644ce))
+* **gauntlet:** keep Codex harness cases on the fixture's Codex home ([#3831](https://github.com/hashgraph-online/hol-guard/issues/3831)) ([b81d2c2](https://github.com/hashgraph-online/hol-guard/commit/b81d2c21596a19a2d9f60eabb328c92e78399ff4))
+* **guard:** launch Codex hooks on Windows ([#3846](https://github.com/hashgraph-online/hol-guard/issues/3846)) ([60c6253](https://github.com/hashgraph-online/hol-guard/commit/60c6253533264731863fc3c6cecb6dc0f57c352a))
+* **runtime:** refuse resident operations for another Guard home ([#3832](https://github.com/hashgraph-online/hol-guard/issues/3832)) ([7d3390d](https://github.com/hashgraph-online/hol-guard/commit/7d3390dcdad57e4c89375c6d7ce77bf3bf05c7e1))
+* **sonar:** suppress S5856 false positive on fancy_regex lookbehind ([#3857](https://github.com/hashgraph-online/hol-guard/issues/3857)) ([9ed431e](https://github.com/hashgraph-online/hol-guard/commit/9ed431e3eb855fd9c74c7d35cc80b9571a07d130))
+
 ## [3.37.0](https://github.com/hashgraph-online/hol-guard/compare/v3.36.1...v3.37.0) (2026-10-09)
 
 

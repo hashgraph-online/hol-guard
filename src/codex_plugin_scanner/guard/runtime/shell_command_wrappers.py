@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .env_wrapper import parse_env_wrapper
+from .interpreter_options import shell_interpreter_command_payload
 
 SHELL_COMMAND_NORMALIZE_MAX_BYTES = 8192
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
@@ -203,21 +204,10 @@ def _unwrap_lean_ctx(parts: list[str]) -> tuple[str, list[str]] | None:
 
 
 def _unwrap_shell_string_wrapper(parts: list[str]) -> tuple[str, list[str]] | None:
-    index = 1
-    while index < len(parts):
-        token = parts[index]
-        if token == "--":
-            index += 1
-            break
-        if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:
-            if index + 1 >= len(parts):
-                return None
-            return parts[index + 1], parts[index + 2 :]
-        if token.startswith("-"):
-            index += 1
-            continue
+    payload = shell_interpreter_command_payload(parts, 0)
+    if payload is None:
         return None
-    return None
+    return payload.script_text, parts[payload.tokens_consumed + 1 :]
 
 
 def _strip_env_wrapper(parts: list[str], *, cwd: Path | None) -> tuple[list[str] | None, list[str]]:

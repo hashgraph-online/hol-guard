@@ -69,6 +69,17 @@ def install_harness_hooks(name: str, daemon: Any, *, home: Path, guard_home: Pat
     return {"harness": install.get("harness"), "active": True}
 
 
+def harness_environment(
+    spec: Any, home: Path, agent_dir: Path, canary: str, login_environment: dict[str, str]
+) -> dict[str, str]:
+    """The harness CLI's environment: clean, with its config home pinned inside the fixture."""
+    environment = clean_environment(home, agent_dir, canary)
+    environment.update(spec.extra_env)
+    environment.update(spec.home_environment(home))
+    environment.update(login_environment)
+    return environment
+
+
 def run_harness_case(
     scenario: Scenario,
     *,
@@ -153,9 +164,7 @@ def run_harness_case(
                 harness, daemon, home=fixture.home, guard_home=guard_home, workspace=fixture.workspace
             )
             before = worker.store.count_approval_requests(status=None)
-            environment = clean_environment(fixture.home, private / "agent", fixture.canary)
-            environment.update(spec.extra_env)
-            environment.update(login_environment)
+            environment = harness_environment(spec, fixture.home, private / "agent", fixture.canary, login_environment)
             if scenario.oracle == "blocked-extension":
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             spec.prepare_context(fixture.workspace, context)

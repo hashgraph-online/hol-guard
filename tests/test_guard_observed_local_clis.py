@@ -59,8 +59,10 @@ class _Store:
         source_path: str | None,
         surface: str,
         only_if_missing: bool = False,
+        replayed_at: str | None = None,
     ) -> None:
         assert only_if_missing
+        assert replayed_at is not None
         self.recorded.append((identity.cli_id, source_path, surface))
 
 
