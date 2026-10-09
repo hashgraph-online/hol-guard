@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
 import struct
 from pathlib import Path
 from types import ModuleType
@@ -224,3 +227,71 @@ def test_verifier_rejects_parent_traversal_cookie_runtime(
 
     with pytest.raises(ValueError, match="archive-relative"):
         module.verify(archive, "TEAM123")
+
+
+def _run_notarization(tmp_path: Path, outcomes: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    step = next(step for step in _publish_steps() if step.get("name") == "Sign and notarize new Core sidecar")
+    script = str(step["run"])
+    notarization = script[script.index('ONEDIR_ZIP="$RUNNER_TEMP') :]
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    xcrun = stubs / "xcrun"
+    # Each archive's outcome is keyed by file name: an Apple status, or "crash" for a failed submit.
+    xcrun.write_text(
+        "#!/bin/bash\n"
+        'archive=$(basename "$3")\n'
+        'echo "$archive" >> "$RUNNER_TEMP/submitted.txt"\n'
+        'outcome=$(jq -r --arg archive "$archive" \'.[$archive]\' "$OUTCOMES")\n'
+        'if [[ "$outcome" == "crash" ]]; then exit 3; fi\n'
+        'jq -n --arg status "$outcome" \'{status: $status}\'\n',
+        encoding="utf-8",
+    )
+    xcrun.chmod(0o755)
+    outcomes_file = tmp_path / "outcomes.json"
+    outcomes_file.write_text(json.dumps(outcomes), encoding="utf-8")
+    env = {
+        **os.environ,
+        "PATH": f"{stubs}{os.pathsep}{os.environ['PATH']}",
+        "RUNNER_TEMP": str(tmp_path),
+        "OUTCOMES": str(outcomes_file),
+        "CORE_VERSION": "1.2.3",
+        "RELEASE_TARGET": "aarch64-apple-darwin",
+        "APPLE_ID": "id",
+        "APPLE_PASSWORD": "password",
+        "APPLE_TEAM_ID": "TEAM123",
+    }
+    return subprocess.run(
+        ["bash", "-c", "set -euo pipefail\n" + notarization],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+ONEFILE_ZIP = "core-update-notary.zip"
+ONEDIR_ZIP = "hol-guard-core-1.2.3-aarch64-apple-darwin.onedir.zip"
+
+
+def test_notarization_submits_both_archives_and_requires_both_accepted(tmp_path: Path) -> None:
+    result = _run_notarization(tmp_path, {ONEFILE_ZIP: "Accepted", ONEDIR_ZIP: "Accepted"})
+    assert result.returncode == 0, result.stderr
+    submitted = (tmp_path / "submitted.txt").read_text(encoding="utf-8").split()
+    assert sorted(submitted) == sorted([ONEFILE_ZIP, ONEDIR_ZIP])
+    assert "--wait" in str(
+        next(step for step in _publish_steps() if step.get("name") == "Sign and notarize new Core sidecar")["run"]
+    )
+
+
+@pytest.mark.parametrize(
+    "outcomes",
+    [
+        {ONEFILE_ZIP: "Invalid", ONEDIR_ZIP: "Accepted"},
+        {ONEFILE_ZIP: "Accepted", ONEDIR_ZIP: "Invalid"},
+        {ONEFILE_ZIP: "crash", ONEDIR_ZIP: "Accepted"},
+        {ONEFILE_ZIP: "Accepted", ONEDIR_ZIP: "crash"},
+    ],
+)
+def test_notarization_fails_when_either_archive_is_not_accepted(tmp_path: Path, outcomes: dict[str, str]) -> None:
+    result = _run_notarization(tmp_path, outcomes)
+    assert result.returncode != 0
