@@ -130,7 +130,7 @@ def pause_native_pre_tool_for_approval(
         native_receipt,
         workspace,
     )
-    # Custom-extension and saved exact-action blocks win over any pending once approval.
+    # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
     custom = native_local_cli_grant_response(
         store,
         harness=harness,
@@ -139,8 +139,8 @@ def pause_native_pre_tool_for_approval(
         workspace=workspace,
         home_dir=home_dir,
     )
-    if custom is not None:
-        return custom
+    if custom is not None and custom[0]:
+        return custom[1]
     saved = native_saved_review_response(
         store,
         harness=harness,
@@ -154,6 +154,8 @@ def pause_native_pre_tool_for_approval(
     )
     if saved is not None:
         return saved
+    if custom is not None:
+        return custom[1]
     if claimed_saved_allow_hash is not None and native_review_claimed_allow(
         store,
         harness=harness,

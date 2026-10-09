@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
+from collections import OrderedDict
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -13,10 +15,15 @@ from .hook_request_parsing import pre_tool_command
 
 _LOGGER = logging.getLogger(__name__)
 _MAX_PENDING = 64
+# Repeats of the same command in the same folder add nothing new, so they are
+# skipped for a while to keep the observer from competing with hook decisions.
+_RECENT_TTL_SECONDS = 120.0
+_MAX_RECENT = 512
 
 _lock = threading.Lock()
 _pending: queue.Queue[tuple[object, str, Path, Path | None]] = queue.Queue(maxsize=_MAX_PENDING)
 _worker: threading.Thread | None = None
+_recent: OrderedDict[tuple[str, str], float] = OrderedDict()
 
 
 def observe_native_pre_tool_cli(
@@ -34,12 +41,27 @@ def observe_native_pre_tool_cli(
     cwd = _launch_cwd(payload, workspace)
     if cwd is None:
         return False
+    if _seen_recently((command, str(cwd))):
+        return False
     try:
         _pending.put_nowait((store, command, cwd, home_dir))
     except queue.Full:
         return False
     _ensure_worker()
     return True
+
+
+def _seen_recently(key: tuple[str, str]) -> bool:
+    now = time.monotonic()
+    with _lock:
+        seen_at = _recent.get(key)
+        if seen_at is not None and now - seen_at < _RECENT_TTL_SECONDS:
+            return True
+        _recent[key] = now
+        _recent.move_to_end(key)
+        while len(_recent) > _MAX_RECENT:
+            _recent.popitem(last=False)
+    return False
 
 
 def _ensure_worker() -> None:

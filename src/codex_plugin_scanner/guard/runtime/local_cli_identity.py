@@ -27,6 +27,7 @@ REGISTRY_PACKAGE_CLI_PREFIX = "local-cli.npm-"
 REGISTRY_PACKAGE_PATH_CLASS = "registry-package"
 _CLI_ID_PATTERN = re.compile(r"^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$")
 _SLUG_MAX = 32
+_SLUG_MAX_PARTS = 8
 _INTERPRETER_NAMES = frozenset(
     {
         "ash",
@@ -318,8 +319,9 @@ def _runner_identity(
     local_bin = invocation.local_bin
     if local_bin is None:
         package_fingerprint = _path_fingerprint(f"npm:{invocation.package_name}")
+        registry_slug = _slug(name, max_parts=_SLUG_MAX_PARTS - 1)
         return UnlistedCliIdentity(
-            cli_id=f"{REGISTRY_PACKAGE_CLI_PREFIX}{slug}-{package_fingerprint[:8]}",
+            cli_id=f"{REGISTRY_PACKAGE_CLI_PREFIX}{registry_slug}-{package_fingerprint[:8]}",
             name=name,
             kind="executable",
             identity_hash=_identity_digest({"kind": "registry-package", "package_name": invocation.package_name}),
@@ -376,12 +378,14 @@ def _example_label(interpreter_name: str | None, script_name: str) -> str:
     return script_name
 
 
-def _slug(value: str) -> str:
+def _slug(value: str, *, max_parts: int = _SLUG_MAX_PARTS) -> str:
     lowered = value.strip().lower()
     compact = re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
     if not compact:
         return "cli"
-    return compact[:_SLUG_MAX].strip("-") or "cli"
+    trimmed = compact[:_SLUG_MAX].strip("-")
+    # Ids allow nine hyphen-separated parts, and the fingerprint takes one.
+    return "-".join(trimmed.split("-")[:max_parts]) or "cli"
 
 
 def _path_fingerprint(path: str) -> str:
