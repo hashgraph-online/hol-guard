@@ -49,12 +49,27 @@ def test_unchanged_group_writable_file_is_not_rewritten_or_rejected(tmp_path: Pa
 
 
 @posix_only
-def test_world_writable_source_is_rejected_with_path(tmp_path: Path) -> None:
+def test_world_writable_source_is_published_privately(tmp_path: Path) -> None:
     target = tmp_path / ".bashrc"
+    assert TransitionFile(target, b"a", b"b", before_mode=0o666, after_mode=0o666).payload()["after_mode"] == 0o644
+    assert TransitionFile(target, b"a", b"b", before_mode=0o666, after_mode=0o600).payload()["after_mode"] == 0o600
+    assert TransitionFile(target, b"a", None, before_mode=0o666, after_mode=0o600).payload()["after_mode"] == 0o600
+
+
+@posix_only
+def test_direct_writers_see_the_normalized_mode(tmp_path: Path) -> None:
+    # Writers that publish change.after_mode themselves must agree with payload().
+    change = TransitionFile(tmp_path / ".zprofile", b"a", b"b", before_mode=0o664, after_mode=0o664)
+    assert change.after_mode == 0o644
+    assert change.payload()["after_mode"] == change.after_mode
+
+
+@posix_only
+def test_new_group_writable_file_request_is_rejected_with_path(tmp_path: Path) -> None:
+    target = tmp_path / "new"
     with pytest.raises(TransitionError, match="file_mode_invalid") as raised:
-        TransitionFile(target, b"a", b"b", before_mode=0o666, after_mode=0o666).payload()
+        TransitionFile(target, None, b"b", after_mode=0o664).payload()
     assert str(target) in str(raised.value)
-    assert raised.value.reason == "file_mode_invalid"
 
 
 @pytest.mark.parametrize("mode", [0o4755, 0o2755, 0o1755])
@@ -134,6 +149,8 @@ def test_frozen_self_uninstall_skips_pip_and_keeps_guard_home(monkeypatch: pytes
     _patch_uninstall(monkeypatch)
     context = _uninstall_context(tmp_path)
     store = GuardStore(context.guard_home)
+    cleared: list[bool] = []
+    monkeypatch.setattr(store, "clear_oauth_local_credentials", lambda: cleared.append(True))
     monkeypatch.setattr(uninstall_commands, "remove_guard_profile_blocks", lambda _c: {"changed": False})
     monkeypatch.setattr(
         uninstall_commands, "uninstall_package_shims", lambda _c, managers=None: {"removed_managers": []}
@@ -151,6 +168,53 @@ def test_frozen_self_uninstall_skips_pip_and_keeps_guard_home(monkeypatch: pytes
     assert payload["package_removed"] is False
     assert context.guard_home.exists()
     assert any("desktop" in str(note) for note in payload["notes"])  # type: ignore[union-attr]
+    assert payload["oauth_credentials_cleared"] is True
+    assert cleared == [True]
+
+
+@pytest.mark.parametrize("installer", ["uv", "pipx"])
+def test_frozen_self_uninstall_never_runs_a_package_manager(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, installer: str
+) -> None:
+    _frozen(monkeypatch)
+    _patch_uninstall(monkeypatch)
+    monkeypatch.setattr(uninstall_commands, "_installer_kind", lambda: installer)
+    context = _uninstall_context(tmp_path)
+    monkeypatch.setattr(uninstall_commands, "remove_guard_profile_blocks", lambda _c: {"changed": False})
+    monkeypatch.setattr(
+        uninstall_commands, "uninstall_package_shims", lambda _c, managers=None: {"removed_managers": []}
+    )
+    monkeypatch.setattr(uninstall_commands.subprocess, "run", lambda *_a, **_k: pytest.fail("no package manager"))
+    payload, code = uninstall_commands.run_guard_self_uninstall(
+        dry_run=False, context=context, store=GuardStore(context.guard_home), now="2026-01-01T00:00:00Z"
+    )
+    assert code == 0
+    assert payload["package_uninstall_skipped"] is True
+    assert payload["command"] == []
+
+
+def test_frozen_dry_run_does_not_promise_package_removal(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _frozen(monkeypatch)
+    _patch_uninstall(monkeypatch)
+    context = _uninstall_context(tmp_path)
+    payload, code = uninstall_commands.run_guard_self_uninstall(
+        dry_run=True, context=context, store=GuardStore(context.guard_home), now="2026-01-01T00:00:00Z"
+    )
+    assert code == 0
+    assert payload["command"] == []
+    assert "hol-guard package" not in str(payload["message"])
+    assert "desktop core" in str(payload["message"])
+
+
+def test_frozen_claude_bridge_recovers_through_the_frozen_core(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard import frozen_runtime_commands
+    from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge
+
+    monkeypatch.setattr(frozen_runtime_commands, "is_frozen_guard_runtime", lambda: True)
+    monkeypatch.setattr(frozen_runtime_commands, "resolve_frozen_guard_cli", lambda: "/opt/guard/hol-guard")
+    command = claude_daemon_hook_bridge._recovery_command(tmp_path / "guard-home" / "state.json", "home=/h")
+    assert command[:2] == ("/opt/guard/hol-guard", frozen_runtime_commands.FROZEN_DAEMON_RECOVER_ARG)
+    assert "-c" not in command
 
 
 def test_failed_harness_removal_reports_name_and_prior_removals(
