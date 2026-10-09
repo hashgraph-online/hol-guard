@@ -346,6 +346,39 @@ function extension(value, label) {
     ...mcpCatalogFields(item, label)
   };
 }
+function normalizeExtensionCatalogItem(value, label = "extension") {
+  return extension(value, label);
+}
+function normalizeExtensionPermission(value, label = "permission") {
+  return permission(value, id(record$1(value, label).extension_id, `${label}.extension_id`, EXTENSION_ID), label);
+}
+function normalizeExtensionCatalogSummary(value, label = "summary") {
+  const item = record$1(value, label);
+  const defaults = record$1(item.catalog_defaults, `${label}.catalog_defaults`);
+  const { surface } = mcpCatalogFields({ surface: item.surface }, label);
+  return {
+    extension_id: id(item.extension_id, `${label}.extension_id`, EXTENSION_ID),
+    name: string$1(item.name, `${label}.name`),
+    description: string$1(item.description, `${label}.description`),
+    enabled: bool$1(defaults.enabled, `${label}.catalog_defaults.enabled`),
+    required: bool$1(item.required, `${label}.required`),
+    trust_class: enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"]),
+    activation: enumValue(defaults.activation, `${label}.catalog_defaults.activation`, ["default-on", "opt-in"]),
+    publisher: publisher(item.publisher, `${label}.publisher`),
+    icon: icon(item.icon, `${label}.icon`),
+    source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
+    version: version(item.version, `${label}.version`),
+    aliases: idList$1(item.aliases, `${label}.aliases`, EXTENSION_ID),
+    ecosystem_ids: stringList(item.ecosystem_ids, `${label}.ecosystem_ids`),
+    executables: stringList(item.executables, `${label}.executables`),
+    action_classes: stringList(item.action_classes, `${label}.action_classes`),
+    risk_classes: stringList(item.risk_classes, `${label}.risk_classes`),
+    rule_count: integer$1(item.rule_count, `${label}.rule_count`),
+    permission_count: integer$1(item.permission_count, `${label}.permission_count`),
+    ...surface ? { surface } : {},
+    content_revision: string$1(item.content_revision, `${label}.content_revision`)
+  };
+}
 function normalizeExtensionControlLayer(value, label = "layer") {
   const item = record$1(value, label);
   const controls = array(item.controls, `${label}.controls`, EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
@@ -739,12 +772,16 @@ async function applyExtensionMutation(payload) {
   }
 }
 export {
-  ExtensionControlApiError as E,
-  applyExtensionMutation as a,
-  fetchEffectiveExtensionControls as b,
-  fetchExtensionControlHistory as c,
-  acknowledgeDegradedExtensionControlAuthority as d,
+  ExtensionControlProtocolError as E,
+  normalizeExtensionPermission as a,
+  ExtensionControlApiError as b,
+  normalizeExtensionCatalogItem as c,
+  applyExtensionMutation as d,
+  fetchEffectiveExtensionControls as e,
   fetchExtensionCatalog as f,
+  fetchExtensionControlHistory as g,
+  acknowledgeDegradedExtensionControlAuthority as h,
+  normalizeExtensionCatalogSummary as n,
   previewExtensionMutation as p,
   recoverExtensionControlAuthority as r
 };

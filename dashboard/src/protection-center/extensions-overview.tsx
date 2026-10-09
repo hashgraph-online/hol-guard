@@ -5,7 +5,8 @@ import {
   extensionDisplayName,
   extensionStateLabel,
 } from "../extension-control-center-model";
-import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
+import type { CatalogReadModel } from "../extension-catalog-v2";
+import type { EffectiveExtensionControls, ExtensionCatalogSummary } from "../extension-controls-api";
 import { connectorWorkspaceItems, refreshCodexHostInventory, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
@@ -42,9 +43,9 @@ function sourceIsManaged(effective: EffectiveExtensionControls, extensionId: str
 }
 
 function CatalogExtensionRow(props: {
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   effective: EffectiveExtensionControls;
-  onOpen: (extension: ExtensionCatalogItem) => void;
+  onOpen: (extension: ExtensionCatalogSummary) => void;
 }) {
   const handleOpen = useCallback(() => {
     props.onOpen(props.extension);
@@ -108,7 +109,8 @@ function CatalogFilterEmpty(props: { onClear: () => void }) {
 }
 
 export function ExtensionsOverview(props: {
-  catalogExtensions: ExtensionCatalogItem[];
+  catalogExtensions: readonly ExtensionCatalogSummary[];
+  readModel: CatalogReadModel;
   effective: EffectiveExtensionControls;
   localCliItems: LocalCliItem[];
   seededItems?: LocalCliItem[];
@@ -123,7 +125,7 @@ export function ExtensionsOverview(props: {
   onPrimaryStatusAction?: () => void;
   onRefresh: () => Promise<void> | void;
   onReloadConnections: () => Promise<unknown> | void;
-  onOpenExtension: (extension: ExtensionCatalogItem) => void;
+  onOpenExtension: (extension: ExtensionCatalogSummary) => void;
   onOpenLocalCli: (cliId: string) => void;
   onAddCustom: (command?: string) => void;
 }) {
@@ -277,6 +279,7 @@ export function ExtensionsOverview(props: {
       >
         <PatternSearchConsole
           catalog={visibleCatalog}
+          readModel={props.readModel}
           effective={props.effective}
           active={props.active}
           query={query}

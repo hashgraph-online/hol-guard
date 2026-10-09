@@ -32,7 +32,7 @@ The legacy `GET /v1/extension-controls/catalog` returns every extension, permiss
   The match text is built once, with the snapshot. `extension-controls patterns` uses this route rather than reading every extension. It applies its narrower phrase filter on top of the result, so its output matches v1.
 - **Unique permissions.** A permission ID that appears twice anywhere in the catalog fails snapshot construction with `catalog_read_model_duplicate_permission`. This keeps search results and per-permission references unambiguous.
 - **Codec.** v2 bodies are JSON. A benchmark compared JSON and Protobuf on the same pages.
-  - Size: compressed with gzip, the two are within 3% on index pages. On permission pages Protobuf is 21% smaller.
+  - Size: compressed with gzip, the two are within 4% on index pages. On permission pages Protobuf is 21% smaller.
   - Speed: the Python client decodes and validates Protobuf several times more slowly, about 4x on permission pages.
   - Cost: Protobuf would also add a runtime dependency and a second schema to keep in step.
 
