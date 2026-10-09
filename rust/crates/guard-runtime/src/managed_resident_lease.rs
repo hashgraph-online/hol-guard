@@ -438,11 +438,13 @@ fn any_live_with_clock(
     expected_digest: Option<&str>,
     clock: impl FnOnce() -> SystemTime,
 ) -> bool {
+    // A removed state base holds no leases. Retaining the resident here would
+    // keep it running forever once its Guard home is deleted.
     let Ok(private_root) = private_root_for_state_base(state_base) else {
-        return true;
+        return state_base_may_hold_leases(state_base);
     };
     let Ok(directory) = lease_directory(state_base) else {
-        return true;
+        return state_base_may_hold_leases(state_base);
     };
     let _lock = match acquire_directory_lock(&directory, &private_root) {
         Ok(Some(lock)) => lock,
@@ -456,6 +458,13 @@ fn any_live_with_clock(
     // not expire merely because a bounded ACL/file scan delays its heartbeat.
     // Take one reference time after acquiring the lock for the whole sweep.
     any_live_locked(&directory, &private_root, expected_digest, clock())
+}
+
+fn state_base_may_hold_leases(state_base: &Path) -> bool {
+    !matches!(
+        fs::symlink_metadata(state_base),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound
+    )
 }
 
 /// Run `action` only while no live lease of `digest` exists, holding the
