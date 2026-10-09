@@ -848,9 +848,15 @@ jobs:
           # the exact wheels already attested on the release, never a rebuild.
           set -euo pipefail
           tag="v${VERSION}"
-          if ! release_json=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets 2>/dev/null); then
-            echo "No GitHub release for ${tag}; keeping freshly built distributions."
-            exit 0
+          view_error="$RUNNER_TEMP/release-view-error.txt"
+          if ! release_json=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets 2>"$view_error"); then
+            if grep -qi "release not found" "$view_error"; then
+              echo "No GitHub release for ${tag}; keeping freshly built distributions."
+              exit 0
+            fi
+            cat "$view_error" >&2
+            echo "Could not read release ${tag}; refusing to fall back to rebuilt wheels" >&2
+            exit 1
           fi
           jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null
           if ! jq -e '[.assets[].name | select(startswith("hol_guard-") and endswith(".whl"))] | length > 0' \

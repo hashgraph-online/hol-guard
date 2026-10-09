@@ -134,8 +134,8 @@ def registry_ready(version: str, wheel: Path, filename: str | None = None) -> bo
     if len(matches) != 1 or matches[0]["digests"]["sha256"] != digest:
         raise ValueError(
             "PyPI wheel digest mismatch; withholding updater assets "
-            "(PyPI holds a different build than the GitHub release asset; "
-            "republish the release's exact attested wheels)"
+            "(PyPI already holds a different build of this file than the GitHub release asset; "
+            "PyPI files cannot be replaced, so ship the fix in a new patch release)"
         )
     return True
 
