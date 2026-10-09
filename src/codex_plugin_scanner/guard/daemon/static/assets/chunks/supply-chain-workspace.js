@@ -768,7 +768,7 @@ function SupplyChainWorkspaceHero({ hero, compact = false }) {
   );
 }
 function recoverySummary(issueCount) {
-  return `Fix ${issueCount} open issue${issueCount === 1 ? "" : "s"} in one guided pass. Guard repairs package tools and turns on routing. Safety intelligence refreshes when Guard Cloud is connected.`;
+  return `${issueCount} issue${issueCount === 1 ? "" : "s"} to resolve. Check Cloud access, approve device changes once, then restore package protection.`;
 }
 function SupplyChainRecovery({
   issues,
@@ -783,6 +783,7 @@ function SupplyChainRecovery({
   const pending = supplyChainFixAllIsPending(state.phase);
   const showResult = state.message !== null;
   const remainingSteps = state.remainingSteps ?? [];
+  const failures = [...new Set(state.failedSteps)].filter((message) => message !== state.message);
   const needsCloudConnect = supplyChainFixAllNeedsCloudConnect(state);
   const isHardFailure = state.phase === "error" || state.phase === "incomplete" && state.failedSteps.length > 0;
   const buttonLabel = supplyChainFixAllButtonLabel(
@@ -838,7 +839,8 @@ function SupplyChainRecovery({
               ]
             }
           ),
-          state.failedSteps.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs text-red-600", children: state.failedSteps.map((failure, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: failure }, `failed:${index}:${failure}`)) }) : null,
+          failures.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs text-red-600", children: failures.map((failure, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: failure }, `failed:${index}:${failure}`)) }) : null,
+          state.phase === "access_required" ? /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "mt-2 inline-block text-sm font-medium text-brand-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2", href: "https://hol.org/guard/pricing", target: "_blank", rel: "noopener noreferrer", children: "Review Cloud plan" }) : null,
           remainingSteps.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs font-medium text-brand-primary", children: remainingSteps.map((remaining, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: remaining }, `remaining:${index}:${remaining}`)) }) : null
         ] }) : null }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(

@@ -22,6 +22,7 @@ import {
   isSupplyChainSyncConnectError,
   isSupplyChainSyncRetryableError,
   readHarnessActionUserMessage,
+  readHarnessActionErrorCode,
   resolveApprovalGateSyncFailure,
 } from "./harness-action-errors";
 import {
@@ -61,6 +62,7 @@ import {
   supplyChainFixAllConnectState, supplyChainFixAllNeedsCloudConnect,
   supplyChainFixAllRequiresConnection, supplyChainFixAllStateFromRepair,
   supplyChainFixAllWorkingState, type SupplyChainFixAllState,
+  supplyChainFixAllAccessState, supplyChainFixAllCanRepair,
 } from "./supply-chain-fix-all";
 
 type PanelLoadState =
@@ -550,21 +552,33 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
 
   const handleFixAll = useCallback(
     async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
-      const requiresConnection =
-        panelLoad.phase === "loaded" && supplyChainFixAllRequiresConnection(panelLoad.data);
-      if (requiresConnection || repairNeedsCloudConnectRef.current) {
-        await beginFixAllConnectRecovery();
-        return;
-      }
-      onFixAllStateChange?.(supplyChainFixAllWorkingState());
       setPendingOp({ op: "fix_all", manager: null });
+      let checkingAccess = true;
       try {
+        onFixAllStateChange?.({ phase: "checking", message: "Checking Cloud access before device approval…", completedSteps: [], failedSteps: [] });
+        const latest = await fetchPackageFirewallStatus();
+        checkingAccess = false;
+        setPanelLoad({ phase: "loaded", data: latest });
+        if (supplyChainFixAllRequiresConnection(latest) || (repairNeedsCloudConnectRef.current && !latest.entitlement.allowed)) {
+          await beginFixAllConnectRecovery();
+          return;
+        }
+        repairNeedsCloudConnectRef.current = false;
+        if (!supplyChainFixAllCanRepair(latest)) {
+          onFixAllStateChange?.(supplyChainFixAllAccessState());
+          return;
+        }
+        onFixAllStateChange?.(supplyChainFixAllWorkingState());
         const result = await repairSupplyChainProtection(credentials);
         const nextState = supplyChainFixAllStateFromRepair(result);
         repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
         onFixAllStateChange?.(nextState);
         refreshInBackground();
       } catch (error) {
+        if (checkingAccess) {
+          onFixAllStateChange?.(supplyChainFixAllAccessState("Could not check Cloud access. No repair was attempted. Check the local Guard connection, then try again."));
+          return;
+        }
         if (credentials === undefined && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
           setPendingApprovalOp({ op: "fix_all", manager: null });
@@ -578,6 +592,11 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         }
         if (isSupplyChainSyncConnectError(error)) {
           await beginFixAllConnectRecovery();
+          return;
+        }
+        if (readHarnessActionErrorCode(error) === "paid_guard_cloud_required") {
+          onFixAllStateChange?.(supplyChainFixAllAccessState());
+          refreshInBackground();
           return;
         }
         const message = readHarnessActionUserMessage(
@@ -597,7 +616,6 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     [
       beginFixAllConnectRecovery,
       onFixAllStateChange,
-      panelLoad,
       refreshInBackground,
       resolveApprovalGate,
     ],
@@ -1044,11 +1062,11 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         <ApprovalProofModal
           title={
             pendingApprovalOp.op === "fix_all"
-              ? "Fix all supply-chain issues"
+              ? "Restore package protection"
               : `${actionLabel(pendingApprovalOp.op)} ${pendingApprovalOp.manager}`
           }
           detail="Enter local approval proof before Guard changes package-manager protection on this device."
-          confirmLabel={pendingApprovalOp.op === "fix_all" ? "Fix all" : actionLabel(pendingApprovalOp.op)}
+          confirmLabel={pendingApprovalOp.op === "fix_all" ? "Restore protection" : actionLabel(pendingApprovalOp.op)}
           approvalGate={resolvedApprovalGate}
           onCancel={handleApprovalCancel}
           onConfirm={handleApprovalConfirm}

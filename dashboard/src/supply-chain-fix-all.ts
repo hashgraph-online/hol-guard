@@ -3,6 +3,8 @@ import type { SupplyChainRepairResult } from "./supply-chain-repair-types";
 
 export type SupplyChainFixAllPhase =
   | "idle"
+  | "checking"
+  | "access_required"
   | "working"
   | "approval"
   | "connecting"
@@ -10,7 +12,7 @@ export type SupplyChainFixAllPhase =
   | "incomplete"
   | "error";
 
-export type SupplyChainFixAllRemainingAction = "connect";
+export type SupplyChainFixAllRemainingAction = "connect" | "check_access";
 
 export type SupplyChainFixAllState = {
   phase: SupplyChainFixAllPhase;
@@ -75,6 +77,8 @@ export function supplyChainFixAllButtonLabel(
   remainingAction: SupplyChainFixAllRemainingAction | null = null,
   failedCount = 0,
 ): string {
+  if (phase === "checking") return "Checking access…";
+  if (phase === "access_required") return "Check Cloud access";
   if (phase === "working") return "Fixing…";
   if (phase === "approval") return "Approval required";
   if (phase === "connecting") return "Connecting…";
@@ -86,11 +90,27 @@ export function supplyChainFixAllButtonLabel(
     return "Connect Guard Cloud";
   }
   if (phase === "incomplete" || phase === "error") return "Retry remaining";
-  return "Fix all";
+  return "Restore protection";
 }
 
 export function supplyChainFixAllIsPending(phase: SupplyChainFixAllPhase): boolean {
-  return phase === "working" || phase === "approval" || phase === "connecting";
+  return phase === "checking" || phase === "working" || phase === "approval" || phase === "connecting";
+}
+
+export function supplyChainFixAllAccessState(
+  message = "Package protection access could not be verified on this device. Check Cloud access to refresh your plan. Your local approval password cannot change Cloud access.",
+): SupplyChainFixAllState {
+  return {
+    phase: "access_required",
+    message,
+    completedSteps: [],
+    failedSteps: [],
+    remainingAction: "check_access",
+  };
+}
+
+export function supplyChainFixAllCanRepair(data: PackageFirewallStatusResponse): boolean {
+  return data.entitlement.allowed || data.package_shims.some((entry) => entry.installed);
 }
 
 export function supplyChainFixAllRequiresConnection(data: PackageFirewallStatusResponse): boolean {

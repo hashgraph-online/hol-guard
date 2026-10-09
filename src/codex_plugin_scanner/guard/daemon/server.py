@@ -1965,7 +1965,11 @@ def _activate_package_firewall_runtime(context: HarnessContext) -> tuple[int, di
     )
 
 
-def _repair_detected_package_shims(context: HarnessContext) -> dict[str, object]:
+def _repair_detected_package_shims(
+    context: HarnessContext,
+    *,
+    install_missing: bool = True,
+) -> dict[str, object]:
     current = package_shim_status(context)
     installed_values = current.get("installed_managers")
     detected_values = current.get("detected_managers")
@@ -1975,7 +1979,7 @@ def _repair_detected_package_shims(context: HarnessContext) -> dict[str, object]
         dict.fromkeys(
             [
                 *[str(value) for value in current_installed],
-                *[str(value) for value in current_detected],
+                *[str(value) for value in current_detected if install_missing],
             ]
         )
     )
@@ -1988,14 +1992,14 @@ def _repair_detected_package_shims(context: HarnessContext) -> dict[str, object]
     verified_installed = verified_installed_values if isinstance(verified_installed_values, list) else []
     verified_detected = verified_detected_values if isinstance(verified_detected_values, list) else []
     installed = {str(value) for value in verified_installed}
-    detected = {str(value) for value in verified_detected}
+    detected = {str(value) for value in verified_detected} if install_missing else set(managers)
     manager_details = verified.get("manager_details")
     invalid_integrity = (
         [detail for detail in manager_details if isinstance(detail, dict) and detail.get("integrity") != "ok"]
         if isinstance(manager_details, list)
         else ["missing manager details"]
     )
-    if not detected.issubset(installed) or verified.get("missing_managers") or invalid_integrity:
+    if not detected.issubset(installed) or (install_missing and verified.get("missing_managers")) or invalid_integrity:
         raise RuntimeError("package shim verification failed")
     return result
 
@@ -4190,16 +4194,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._enforce_package_firewall_rate_limit("repair", payload):
             return
 
-        try:
-            require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="supply_chain_firewall",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-
         entitlement = self._supply_chain_entitlement()
         context = self._supply_chain_context(payload)
         current_status = package_shim_status(context)
@@ -4219,8 +4213,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=status,
             )
             return
+        try:
+            require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="supply_chain_firewall",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+
         result = coordinate_supply_chain_repair(
-            repair_package_shims=lambda: _repair_detected_package_shims(context),
+            repair_package_shims=lambda: _repair_detected_package_shims(
+                context,
+                install_missing=bool(entitlement.get("allowed")),
+            ),
             activate_runtime=lambda: _activate_package_firewall_runtime(context),
             sync_intelligence=lambda: repair_sync_intelligence(
                 self.server.store,  # type: ignore[attr-defined]
