@@ -286,7 +286,7 @@ def _run_guard_package_shims_command(
             payload = probe_package_shim_intercepts(
                 context,
                 managers=requested_managers or None,
-                workspace_dir=context.workspace_dir,
+                workspace_dir=context.workspace_dir or Path.cwd().resolve(),
             )
         else:
             payload = package_shim_status(context)

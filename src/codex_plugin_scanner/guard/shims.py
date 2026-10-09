@@ -1164,10 +1164,11 @@ def _is_transient_path(path: Path) -> bool:
 def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
     shim_text = str(shim_dir)
     expected_lines = {_posix_path_export(shim_dir), _fish_path_prepend(shim_dir)}
+    active_lines = (line for line in content.splitlines() if not line.lstrip().startswith("#"))
     return any(
         line.strip() in expected_lines
         or ((shim_text in line and "PATH" in line) or (shim_text in line and "fish_add_path" in line))
-        for line in content.splitlines()
+        for line in active_lines
     )
 
 

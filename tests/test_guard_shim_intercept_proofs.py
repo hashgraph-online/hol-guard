@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -255,7 +256,7 @@ def _run_daemon_package_shim_install_and_test(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     *,
-    strip_profile_block: bool,
+    rewrite_profile: Callable[[str], str] | None,
 ) -> tuple[int, dict[str, object], dict[str, object]]:
     home_dir = tmp_path / "home"
     home_dir.mkdir()
@@ -283,10 +284,10 @@ def _run_daemon_package_shim_install_and_test(
             ),
         )
         assert install_status == 200
-        if strip_profile_block:
+        if rewrite_profile is not None:
             for profile in home_dir.iterdir():
                 if profile.is_file():
-                    profile.write_text("", encoding="utf-8")
+                    profile.write_text(rewrite_profile(profile.read_text(encoding="utf-8")), encoding="utf-8")
         _cards_status, cards_payload = _read_json_response(
             _request(daemon.port, "/v1/supply-chain/package-shims", method="GET", token=token),
         )
@@ -312,7 +313,7 @@ def test_daemon_package_shim_test_uses_projected_shell_profile_path(
     test_status, test_payload, cards_payload = _run_daemon_package_shim_install_and_test(
         tmp_path,
         monkeypatch,
-        strip_profile_block=False,
+        rewrite_profile=None,
     )
 
     assert cards_payload["package_shims"]["protected_managers"] == ["npm"]
@@ -325,14 +326,20 @@ def test_daemon_package_shim_test_uses_projected_shell_profile_path(
     assert result["intercept_proved"] is True
 
 
+def _comment_out(content: str) -> str:
+    return "".join(f"# {line}" for line in content.splitlines(keepends=True))
+
+
+@pytest.mark.parametrize("rewrite_profile", [lambda _content: "", _comment_out], ids=["removed", "commented"])
 def test_daemon_package_shim_test_reports_path_inactive_without_profile_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    rewrite_profile: Callable[[str], str],
 ) -> None:
     test_status, test_payload, _cards_payload = _run_daemon_package_shim_install_and_test(
         tmp_path,
         monkeypatch,
-        strip_profile_block=True,
+        rewrite_profile=rewrite_profile,
     )
 
     assert test_status == 200
