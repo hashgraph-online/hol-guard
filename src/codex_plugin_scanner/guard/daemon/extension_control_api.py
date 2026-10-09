@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, replace
@@ -55,6 +56,7 @@ from .managed_controls_api import effective_controls_payload
 if TYPE_CHECKING:
     from ..store import GuardStore
 
+_LOGGER = logging.getLogger(__name__)
 _EXTENSION_CONTROL_API_SCHEMA = "guard.daemon.extension-controls.v1"
 _MAX_PENDING_PROOFS = 128
 _MAX_APPLIED_MUTATIONS = 128
@@ -291,7 +293,14 @@ class ExtensionControlApiService:
 
     def apply(self, payload: dict[str, object]) -> dict[str, object]:
         with self._apply_lock:
-            return self._apply_locked(payload)
+            try:
+                return self._apply_locked(payload)
+            except ExtensionControlApiError:
+                raise
+            except Exception as exc:
+                # Report a stable error instead of dropping the connection.
+                _LOGGER.error("Extension-control apply failed: %s", type(exc).__name__, exc_info=exc)
+                raise ExtensionControlApiError(503, "authority_apply_failed") from exc
 
     def _apply_locked(self, payload: dict[str, object]) -> dict[str, object]:
         proof_id = required_request_string(payload, "proof_id")

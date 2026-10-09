@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 import shlex
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -81,6 +82,10 @@ class UnlistedCliIdentity:
     path_class: str | None = None
     # Package runner (``npx``) that launched the CLI, if any.
     runner: str | None = None
+    # Verified launch material the native runtime derived this identity from.
+    # The grant decision re-derives the identity from it, so it is never part
+    # of equality, hashing, or the public payload.
+    identity_source: Mapping[str, object] | None = field(default=None, compare=False, repr=False)
 
     @property
     def is_registry_package(self) -> bool:
@@ -244,7 +249,8 @@ def _safe_primary_segment(segment: CommandSegment) -> bool:
 def _script_identity(entrypoint: dict[str, object], *, interpreter_name: str | None) -> UnlistedCliIdentity | None:
     if not _looks_like_script_kind(str(entrypoint.get("kind") or ""), str(entrypoint.get("status") or "")):
         return None
-    identity = native_local_cli_identity({"source": "script", "entrypoint": entrypoint})
+    source = {"source": "script", "entrypoint": entrypoint}
+    identity = native_local_cli_identity(source)
     if identity is None:
         return None
     return UnlistedCliIdentity(
@@ -255,11 +261,13 @@ def _script_identity(entrypoint: dict[str, object], *, interpreter_name: str | N
         example_label=_example_label(interpreter_name, identity["name"]),
         interpreter_name=interpreter_name,
         source_path=_nonempty_string(entrypoint.get("path")),
+        identity_source=source,
     )
 
 
 def _executable_identity(executable: dict[str, object], exe_name: str) -> UnlistedCliIdentity | None:
-    identity = native_local_cli_identity({"source": "executable", "executable": executable, "name": exe_name})
+    source = {"source": "executable", "executable": executable, "name": exe_name}
+    identity = native_local_cli_identity(source)
     if identity is None:
         return None
     return UnlistedCliIdentity(
@@ -270,6 +278,7 @@ def _executable_identity(executable: dict[str, object], exe_name: str) -> Unlist
         example_label=exe_name,
         interpreter_name=None,
         source_path=_nonempty_string(executable.get("path")),
+        identity_source=source,
     )
 
 
@@ -290,9 +299,8 @@ def _runner_identity(
         return None
     local_bin = invocation.local_bin
     if local_bin is None:
-        identity = native_local_cli_identity(
-            {"source": "registry_package", "name": name, "package_name": invocation.package_name}
-        )
+        registry_source = {"source": "registry_package", "name": name, "package_name": invocation.package_name}
+        identity = native_local_cli_identity(registry_source)
         if identity is None:
             return None
         return UnlistedCliIdentity(
@@ -303,16 +311,16 @@ def _runner_identity(
             example_label=f"{invocation.runner} {name}",
             path_class=REGISTRY_PACKAGE_PATH_CLASS,
             runner=invocation.runner,
+            identity_source=registry_source,
         )
     evidence = {key: value for key in _LOCAL_BIN_IDENTITY_KEYS if isinstance(value := local_bin.get(key), str)}
-    identity = native_local_cli_identity(
-        {
-            "source": "runner_local_bin",
-            "name": name,
-            "package_name": invocation.package_name,
-            "local_bin": evidence,
-        }
-    )
+    local_bin_source = {
+        "source": "runner_local_bin",
+        "name": name,
+        "package_name": invocation.package_name,
+        "local_bin": evidence,
+    }
+    identity = native_local_cli_identity(local_bin_source)
     if identity is None:
         return None
     return UnlistedCliIdentity(
@@ -324,6 +332,7 @@ def _runner_identity(
         source_path=_nonempty_string(local_bin.get("resolved_path")),
         path_class="project-tool" if invocation.direct_dependency else "package-store",
         runner=invocation.runner,
+        identity_source=local_bin_source,
     )
 
 

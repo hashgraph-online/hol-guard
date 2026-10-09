@@ -155,6 +155,7 @@ class _ExtensionControlAuthoritySupportMixin:
         observed = self._secret_store().get_secret(self._anchor_ref())
         if observed != encoded:
             raise ExtensionControlAuthorityError("extension control anchor read-back mismatch")
+        self._export_last_good_authority(anchor)
 
     def _secret_store(self) -> SecretStore:
         current = self._extension_control_authority_secret_store

@@ -100,8 +100,11 @@ def argument_entries(
     """
     if not isinstance(arguments, mapping_type) or not isinstance(arguments, Mapping):
         return None
-    entries = [[str(key), value if isinstance(value, str) else None] for key, value in arguments.items()]
-    return [entry for entry in entries if relevant(entry[0])]
+    return [
+        [name, value if isinstance(value, str) else None]
+        for name, value in ((str(key), value) for key, value in arguments.items())
+        if relevant(name)
+    ]
 
 
 def _request(subop: str, guard_home: Path | None, **fields: Any) -> dict[str, Any]:
