@@ -116,10 +116,6 @@ fn py_rpartition<'a>(value: &'a str, sep: &str) -> (&'a str, bool, &'a str) {
 /// `_PACKAGE_LAUNCHERS` (:40).
 const PACKAGE_LAUNCHERS: &[&str] = &["bunx", "npm", "npx", "pnpm", "uvx", "yarn", "pipx"];
 
-/// `_PACKAGE_SOURCE_FLAGS` (:201-206).
-const PACKAGE_SOURCE_FLAGS: &[&str] =
-    &["--registry", "--index-url", "--extra-index-url", "--index"];
-
 /// `build_mcp_server_identity` (:41-87) — stable server identity with
 /// secret-safe configured env binding.
 pub fn build_mcp_server_identity(
@@ -489,40 +485,9 @@ fn expand_user(value: &str) -> PathBuf {
     PathBuf::from(value)
 }
 
-/// `package_source_token` (:209-233) — canonical package-source token, or
-/// `"default"` when none is set.
+/// Canonical package-source token, including launcher configuration indirection.
 pub fn package_source_token(command: &str, args: &[String]) -> String {
-    let _ = command;
-    let mut sources: Vec<String> = Vec::new();
-    let mut index = 0usize;
-    while index < args.len() {
-        let value = python_strip(&args[index]).to_owned();
-        let mut matched = false;
-        for flag in PACKAGE_SOURCE_FLAGS {
-            let equals = format!("{flag}=");
-            if value == *flag && index + 1 < args.len() {
-                sources.push(format!("{}={}", flag, python_strip(&args[index + 1])));
-                index += 2;
-                matched = true;
-                break;
-            }
-            if value.starts_with(&equals) {
-                let (_, _, after) = py_partition(&value, "=");
-                sources.push(format!("{}={}", flag, python_strip(after)));
-                index += 1;
-                matched = true;
-                break;
-            }
-        }
-        if !matched {
-            index += 1;
-        }
-    }
-    if sources.is_empty() {
-        "default".to_owned()
-    } else {
-        sources.join("|")
-    }
+    crate::mcp_package_sources::package_source_token(command, args)
 }
 
 /// `_package_identity` (:234-243) — `(name, version)` for launcher-backed
@@ -769,7 +734,8 @@ fn option_takes_value(command_name: &str, option: &str) -> bool {
     if option_name.starts_with("--") && option_name.contains('=') {
         return false;
     }
-    value_options_for_command(command_name).contains(option_name)
+    crate::mcp_package_sources::source_option_name(command_name, option_name).is_some()
+        || value_options_for_command(command_name).contains(option_name)
 }
 
 /// `_launcher_subcommands` (:393-402) — package-launcher subcommand prefixes.
@@ -909,7 +875,7 @@ fn looks_like_runtime_path(value: &str) -> bool {
 }
 
 /// Canonical JSON SHA-256 for native MCP identity and descriptor material.
-fn stable_digest(value: &Value) -> String {
+pub(super) fn stable_digest(value: &Value) -> String {
     context_sha256_digest_local(value, None)
 }
 

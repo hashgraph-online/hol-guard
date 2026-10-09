@@ -53,3 +53,5 @@ share that permission.
 
 The status stays `proposed`. The pack is not a qualified business mode or a
 protected account journey.
+
+Per-command behavior by mode is listed in [Business app compatibility](compatibility.md).

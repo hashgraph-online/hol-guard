@@ -5,6 +5,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::{containment, handoff, lease, restart_budget, CLIENT_RETRY_DELAY};
+use crate::resident_diagnostics::{observe, Phase};
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
     runtime_digest, state_scope, token_from_state, validate_package_process_identity,
@@ -64,16 +65,18 @@ fn try_home_states(
             continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
-        if (same_runtime
-            && validate_package_process_identity(state.process_id, &state.process_start_marker)
-                .is_err())
-            || (!same_runtime
-                && validate_runtime_process_identity(
+        if observe(Phase::ClientIdentity, || {
+            if same_runtime {
+                validate_package_process_identity(state.process_id, &state.process_start_marker)
+            } else {
+                validate_runtime_process_identity(
                     state.process_id,
                     &state.process_start_marker,
                     &state.runtime_sha256,
                 )
-                .is_err())
+            }
+        })
+        .is_err()
         {
             continue;
         }
@@ -95,6 +98,16 @@ fn try_home_states(
             timeout,
             &identity,
         ) {
+            // A foreign resident that rejects this runtime's policy snapshot
+            // never will admit it; replace it with a resident of our runtime.
+            Ok(response)
+                if handoff::retire_foreign_resident_rejecting_policy(
+                    &scope,
+                    &state,
+                    &runtime_digest,
+                    &response,
+                    deadline,
+                ) => {}
             Ok(response) => return Ok(Some(response)),
             Err(error)
                 if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
@@ -153,12 +166,15 @@ fn client_request_with_deadline_inner(
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
-    let digest = runtime_digest()?;
-    let _update_lock = crate::resident_update_lock::acquire_shared(state_base, &digest)?;
-    let scope = state_scope(state_base, &digest)?;
-    if let Some(response) =
-        try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)?
-    {
+    let (digest, _update_lock, scope) = observe(Phase::ClientPrepare, || -> Result<_, String> {
+        let digest = runtime_digest()?;
+        let update_lock = crate::resident_update_lock::acquire_shared(state_base, &digest)?;
+        let scope = state_scope(state_base, &digest)?;
+        Ok((digest, update_lock, scope))
+    })?;
+    if let Some(response) = observe(Phase::ClientDiscovery, || {
+        try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
+    })? {
         return Ok(response);
     }
     if Instant::now() >= overall_deadline {
@@ -167,50 +183,69 @@ fn client_request_with_deadline_inner(
     // Older per-digest launchers left their startup marker in the runtime
     // scope.  Retire only an authenticated stale marker before taking the
     // home-wide lock; a live marker remains an active startup signal.
-    let _ = clear_stale_startup_lock(&scope, &digest)?;
-    let mut lock = acquire_startup_lock(state_base)?;
-    if lock.is_none() && clear_stale_startup_lock(state_base, &digest)? {
-        lock = acquire_startup_lock(state_base)?;
-    }
-    if lock.is_none() {
-        let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
-        while Instant::now() < deadline {
-            if let Some(response) =
-                try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)?
-            {
-                return Ok(response);
-            }
-            thread::sleep(
-                CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())),
-            );
-        }
-        if clear_stale_startup_lock(state_base, &digest)? {
+    let mut lock = observe(Phase::ClientStartupLock, || -> Result<_, String> {
+        let _ = clear_stale_startup_lock(&scope, &digest)?;
+        let mut lock = acquire_startup_lock(state_base)?;
+        if lock.is_none() && clear_stale_startup_lock(state_base, &digest)? {
             lock = acquire_startup_lock(state_base)?;
+        }
+        Ok(lock)
+    })?;
+    if lock.is_none() {
+        let response = observe(
+            Phase::ClientStartupWait,
+            || -> Result<Option<Vec<u8>>, String> {
+                let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
+                while Instant::now() < deadline {
+                    if let Some(response) = try_live_or_restart(
+                        state_base,
+                        payload,
+                        overall_deadline,
+                        &digest,
+                        last_failure,
+                    )? {
+                        return Ok(Some(response));
+                    }
+                    thread::sleep(
+                        CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())),
+                    );
+                }
+                if clear_stale_startup_lock(state_base, &digest)? {
+                    lock = acquire_startup_lock(state_base)?;
+                }
+                Ok(None)
+            },
+        )?;
+        if let Some(response) = response {
+            return Ok(response);
         }
     }
     let _startup_lock = lock.ok_or_else(|| "native_resident_start_in_progress".to_owned())?;
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
-    if let Some(response) =
-        try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)?
-    {
+    if let Some(response) = observe(Phase::ClientDiscovery, || {
+        try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
+    })? {
         return Ok(response);
     }
-    restart_budget::consume_for_spawn(state_base, &scope)?;
-    let generation = next_generation(&scope, &digest)?;
-    let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
-    getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;
-    let mut spawned = containment::spawn_managed_for_owner(
-        state_base,
-        generation,
-        &digest,
-        &token,
-        std::process::id(),
-        overall_deadline,
-    )?;
+    let (generation, token, mut spawned) = observe(Phase::ClientSpawn, || -> Result<_, String> {
+        restart_budget::consume_for_spawn(state_base, &scope)?;
+        let generation = next_generation(&scope, &digest)?;
+        let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
+        getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;
+        let spawned = containment::spawn_managed_for_owner(
+            state_base,
+            generation,
+            &digest,
+            &token,
+            std::process::id(),
+            overall_deadline,
+        )?;
+        Ok((generation, token, spawned))
+    })?;
     let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
-    let request_result = loop {
+    let request_result = observe(Phase::ClientSpawnWait, || loop {
         if Instant::now() >= deadline {
             break Err("native_resident_start_timeout".to_owned());
         }
@@ -220,7 +255,7 @@ fn client_request_with_deadline_inner(
             Err(error) => break Err(error),
         }
         thread::sleep(CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())));
-    };
+    });
     match request_result {
         Ok(response) => Ok(response),
         Err(error) => {

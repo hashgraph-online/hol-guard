@@ -179,7 +179,7 @@ pub(super) fn inspection_arguments<'a>(
     let remaining = arguments.get(index..)?;
     matches!(
         remaining.first().map(String::as_str),
-        Some("status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote")
+        Some("status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote" | "worktree")
     )
     .then_some(remaining)
 }

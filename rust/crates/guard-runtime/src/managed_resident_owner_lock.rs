@@ -26,6 +26,16 @@ pub(crate) struct ManagedOwnerLock {
 }
 
 #[cfg(unix)]
+impl ManagedOwnerLock {
+    pub(crate) fn open_private_child_file(
+        &self,
+        name: &str,
+    ) -> Result<File, crate::state_directory_lock::DirectoryLockError> {
+        self._directory.open_child_file(name)
+    }
+}
+
+#[cfg(unix)]
 struct OwnerMarkerInner {
     file: File,
     path: PathBuf,

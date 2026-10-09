@@ -47,6 +47,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
         guard_command::pretool::PathContext {
             home_dir: home,
             cwd,
+            cdpath_unset: false,
         },
         Some(&context),
     )

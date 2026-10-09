@@ -13,6 +13,18 @@ and `delete`, and the Gmail settings that redirect or expose mail:
 `delegates create`.
 The CLI is a community project, not an officially supported Google product.
 
+Discovery routes also match the explicit `gmail:v1`, `drive:v3`, `drive:v2` and
+`calendar:v3` service tokens. Gmail `+` helpers such as `+send` and `+forward`
+are matched only under the bare `gmail` service; this extension does not cover
+them with a versioned service token. Drive v2 method names (`permissions insert`/`patch`, `files trash`) are
+covered whether v2 is selected by `drive:v2` or by `--api-version v2`, and
+`teamdrives delete` is reviewed with shared drive deletion.
+Inline credential or configuration overrides, such as
+`GOOGLE_WORKSPACE_CLI_CONFIG_DIR=... gws ...`, `GOOGLE_WORKSPACE_CLI_TOKEN`,
+`GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE`, `GOOGLE_APPLICATION_CREDENTIALS` or the
+`env` wrapper form, stay under the inherited environment-prefix block. The
+fixtures record that block as evidence.
+
 The contribution is inert until the existing local-admin activation enables it.
 Permissions use a review baseline; activation never grants a send or waives a
 first-party floor. The portable fixtures include inactive contribution cases
@@ -43,7 +55,12 @@ does not add an allow grant or lower that boundary to make fixtures pass.
 This contribution does not authenticate the application account, inspect every
 payload, freeze files, isolate credentials or mediate provider dispatch. It does
 not cover every CLI service, custom discovery document, wrapper, alias, generic
-API fallback, remote connector or agent mode. The finite route list is reviewable
+API fallback, remote connector or agent mode. In particular, the route list does
+not cover a service token with a version that discovery does not publish (for
+example, one served from a planted discovery cache under the default
+configuration directory). It also does not cover a credential or configuration
+variable exported in an earlier command or inherited from the parent
+environment, because the matcher sees only inline assignments. The finite route list is reviewable
 source classification, not a protected Google Workspace journey. Account-bound
 managed dispatch, cumulative budgets, setup UI and live mode/version/OS evidence
 remain separate requirements. No business mode is qualified by these fixtures.

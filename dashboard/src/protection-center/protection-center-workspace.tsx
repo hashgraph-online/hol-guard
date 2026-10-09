@@ -7,6 +7,7 @@ import {
   type ExtensionDetailUrlState,
 } from "../extension-control-center-model";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref, type ProtectionRoute } from "../local-cli-links";
+import { addCustomExtensionPrefillHref } from "./custom-extension-profile";
 import { AddCustomExtensionWorkspace, LocalCliDetail, useLocalCliCatalog } from "./local-clis-panel";
 import {
   acknowledgeDegradedExtensionControlAuthority,
@@ -35,12 +36,10 @@ import {
 } from "./protection-workspace-states";
 import { deriveProtectionStatus } from "./model/protection-presentation";
 import { ReviewModal, type ProtectionPendingChange } from "./protection-change-review";
-
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; catalog: ExtensionCatalogResponse; effective: EffectiveExtensionControls };
-
 type RouteState = { route: ProtectionRoute; detail: ExtensionDetailUrlState };
 
 const DEFAULT_AUTHORITY_RECOVERY_COMMAND = "hol-guard command controls recover-authority";
@@ -233,9 +232,9 @@ export function ProtectionCenterWorkspace(props: {
     setRouteState({ route: { kind: "local-cli", cliId }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
-  const openAddCustom = useCallback(() => {
+  const openAddCustom = useCallback((command?: string) => {
     void localClis.discover();
-    pushExtensionHistory(addCustomExtensionHref());
+    pushExtensionHistory(addCustomExtensionPrefillHref(addCustomExtensionHref(), typeof command === "string" ? command : undefined));
     setRouteState({ route: { kind: "add-custom" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [localClis.discover]);
@@ -417,6 +416,7 @@ export function ProtectionCenterWorkspace(props: {
           catalogExtensions={catalogExtensions}
           effective={state.effective}
           localCliItems={localClis.data?.items ?? []}
+          seededItems={localClis.data?.seeded_items ?? []}
           hostInventory={localClis.data?.host_inventory}
           localCliError={localClis.error}
           localCliNotice={localClis.discoveryNotice}

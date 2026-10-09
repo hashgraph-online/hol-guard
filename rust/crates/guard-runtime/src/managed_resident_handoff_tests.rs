@@ -1,4 +1,5 @@
 use super::{
+    rejects_runtime_policy, retire_foreign_resident_rejecting_policy,
     retire_orphaned_foreign_resident, shutdown_acknowledged, wait_for_resident_stop_containment,
 };
 use crate::resident_state::{
@@ -118,5 +119,50 @@ fn stop_containment_leaves_a_replacement_resident_alone() {
     let deadline = Instant::now() + Duration::from_millis(200);
     assert!(wait_for_resident_stop_containment(&root, &stopped, deadline, &[]).is_ok());
     assert_eq!(discover_states(&root, &digest).unwrap().len(), 1);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn only_a_runtime_identity_rejection_counts_as_rejecting_policy() {
+    assert!(rejects_runtime_policy(
+        br#"{"error":"snapshot_runtime_identity_mismatch","retryable":false}"#
+    ));
+    assert!(!rejects_runtime_policy(
+        br#"{"error":"snapshot_rule_digest_mismatch","retryable":false}"#
+    ));
+    assert!(!rejects_runtime_policy(br#"{"status":"accepted"}"#));
+    assert!(!rejects_runtime_policy(b"not json"));
+}
+
+#[test]
+fn a_policy_rejection_retires_only_an_acknowledging_foreign_resident() {
+    let root = test_root("policy-rejection");
+    let digest = runtime_digest().unwrap();
+    let rejection = br#"{"error":"snapshot_runtime_identity_mismatch","retryable":false}"#;
+    let deadline = Instant::now() + Duration::from_millis(200);
+    // A resident of this runtime is never replaced by its own client.
+    assert!(!retire_foreign_resident_rejecting_policy(
+        &root,
+        &state(&digest),
+        &digest,
+        rejection,
+        deadline
+    ));
+    // Any other answer from a foreign resident is returned to the caller.
+    assert!(!retire_foreign_resident_rejecting_policy(
+        &root,
+        &state(&"f".repeat(64)),
+        &digest,
+        br#"{"status":"accepted"}"#,
+        deadline
+    ));
+    // A foreign resident that does not acknowledge the shutdown stays.
+    assert!(!retire_foreign_resident_rejecting_policy(
+        &root,
+        &state(&"f".repeat(64)),
+        &digest,
+        rejection,
+        deadline
+    ));
     fs::remove_dir_all(root).unwrap();
 }

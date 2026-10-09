@@ -1,7 +1,5 @@
-//! Launch-identity material shared by the Unix implementation and the
-//! non-Unix stub: the same labeled `guard-context-unbound:launch-argv:` digest
-//! and the same shell-tokenizer argv rules apply on both platforms, so a
-//! launch digests identically regardless of target.
+//! Native launch-identity material and shell-tokenizer argv rules shared
+//! by the Unix implementation and the non-Unix stub.
 
 use std::path::Path;
 
@@ -9,39 +7,14 @@ use guard_contracts::write_canonical_json;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-// `native_context.py` unbound degrade prefix (:441-453).
-pub(crate) const UNBOUND_PREFIX: &str = "guard-context-unbound:";
-
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-// `_canonical_material_bytes` (native_context.py :383-388) → canonical JSON
-// UTF-8 bytes. `ensure_ascii=True` semantics are enforced inside
-// `write_canonical_json` (the contract is byte-identical).
-pub(crate) fn canonical_material_bytes(material: &Value) -> Vec<u8> {
-    let mut out = Vec::with_capacity(256);
-    // JSON encode failure is unreachable for identity material (only strings,
-    // numbers, arrays, maps); fail closed to an empty-payload digest rather
-    // than panic, matching the unbound degrade semantics.
-    if write_canonical_json(material, &mut out).is_err() {
-        return Vec::new();
-    }
-    out
-}
-
-// `context_opaque_digest(material, unbound_label=<label>, strict=True)` —
-// when the native resident is absent (always true for in-process Rust) the
-// strict degrade is `guard-context-unbound:<label>:<sha256(canonical_json)>`
-// (native_context.py :441-453 + :377-388).
-pub(crate) fn context_opaque_digest_strict(material: &str, unbound_label: &str) -> String {
-    let material_bytes = canonical_material_bytes(&Value::String(material.to_string()));
-    format!(
-        "{}{}:{}",
-        UNBOUND_PREFIX,
-        unbound_label,
-        sha256_hex(&material_bytes)
-    )
+// Native authority matches OpaqueMaterialDigest: raw UTF-8, not a fallback sentinel.
+#[cfg(unix)]
+pub(crate) fn context_opaque_digest_strict(material: &str) -> String {
+    sha256_hex(material.as_bytes())
 }
 
 // `_launch_argv_digest` (:891-897) — `opaque_material_digest` over
@@ -52,8 +25,7 @@ pub(crate) fn launch_argv_digest(argv: &[String]) -> String {
     if write_canonical_json(&material, &mut bytes).is_err() {
         bytes.clear();
     }
-    let text = String::from_utf8_lossy(&bytes);
-    context_opaque_digest_strict(&text, "launch-argv")
+    sha256_hex(&bytes)
 }
 
 // `_runtime_launch_identity` argv construction (:906-920), extracted so the
@@ -412,25 +384,6 @@ mod tests {
         assert_eq!(
             strip_generated_extended_prefix("C:\\work", "C:\\work".to_string()),
             "C:\\work"
-        );
-    }
-
-    #[test]
-    fn launch_argv_digest_uses_unix_label_contract() {
-        // The digest is the strict `guard-context-unbound:launch-argv:` degrade
-        // (context_opaque_digest over the canonical JSON argv text), byte-for-
-        // byte what the Unix implementation emits — NOT the plain canonical
-        // `digest_json` hash. Oracles verified against Python
-        // native_context.py semantics:
-        //   sha256(json.dumps(json.dumps(["git","status"],separators=(",",":"),
-        //   ensure_ascii=True), ensure_ascii=True))
-        assert_eq!(
-            launch_argv_digest(&["git".to_string(), "status".to_string()]),
-            "guard-context-unbound:launch-argv:8731c2300a49f227285b1c5d205ce9232d4438adafb38cfbb1676b6ca8043c5d"
-        );
-        assert_eq!(
-            launch_argv_digest(&[]),
-            "guard-context-unbound:launch-argv:b3283bf184bb082f364b8537776bc6b15fce2ff9f9acb3fb11ae87da394bfd4b"
         );
     }
 }

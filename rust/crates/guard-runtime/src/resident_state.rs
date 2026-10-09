@@ -17,6 +17,10 @@ mod resident_startup_lock;
 mod resident_state_discovery;
 #[path = "resident_state_files.rs"]
 mod resident_state_files;
+#[path = "resident_state_supersession.rs"]
+mod resident_state_supersession;
+
+pub(crate) use resident_state_supersession::runtime_superseded;
 
 #[allow(unused_imports)]
 pub(crate) use resident_startup_lock::{

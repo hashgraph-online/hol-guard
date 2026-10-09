@@ -14,6 +14,7 @@ pub(super) fn execution_free(
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    stdout_piped: bool,
 ) -> Option<bool> {
     let remaining = crate::command_compatibility::git_inspection_arguments(arguments, context)?;
     let operation = remaining.first()?.as_str();
@@ -25,10 +26,10 @@ pub(super) fn execution_free(
             executable,
             arguments,
             remaining,
-            operation,
             context,
             deadline,
             execution_environment,
+            stdout_piped,
         )
         .unwrap_or(false),
     )
@@ -38,11 +39,12 @@ fn probe(
     executable: &str,
     arguments: &[String],
     remaining: &[String],
-    operation: &str,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    stdout_piped: bool,
 ) -> Option<bool> {
+    let operation = remaining.first()?.as_str();
     // Configuration plus root, path and attribute inspection share this budget.
     // The caller's overall deadline remains the upper bound.
     let inspection_deadline = Instant::now() + Duration::from_secs(2);
@@ -162,9 +164,10 @@ fn probe(
     });
     let environment_pager = environment_pager_disabled(execution_environment);
     let git_pager_disabled = git_pager_disabled(execution_environment);
-    let no_pager = leading
-        .iter()
-        .any(|argument| matches!(argument.as_str(), "-P" | "--no-pager"));
+    let no_pager = stdout_piped
+        || leading
+            .iter()
+            .any(|argument| matches!(argument.as_str(), "-P" | "--no-pager"));
     let configured_paging = !no_pager
         && configured_pager.map_or(operation != "status", |value| !disabled_boolean(value));
     let configured_pager_is_cat = configured_pager.is_some_and(|value| value == "cat");
