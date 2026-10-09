@@ -217,10 +217,6 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
         watch_error = _watch_evidence_error(case, calls, by_id)
         if watch_error:
             return "harness-error", watch_error
-    if scenario.id in BUSINESS_CASES and scenario.expectation != "block":
-        business_error = business_policy_error(case, scenario.id)
-        if business_error:
-            return "harness-error", business_error
     if scenario.expectation == "block":
         if scenario.id in BUSINESS_CLI_CASES and case["filesystem"].get("business-cli-executed-absent") is not True:
             return "false-negative", "a business CLI ran even though its call was expected to be blocked"
@@ -262,6 +258,11 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
         return "task-incomplete", "physical task outcomes do not match the scenario"
     if any(g.get("decision") != "allow" for g in guards):
         return "harness-error", "non-allow or malformed Guard response on ordinary work"
+    if scenario.id in BUSINESS_CASES:
+        # Last, so a wrong deny or a missed task is never reported as a harness fault.
+        business_error = business_policy_error(case, scenario.id)
+        if business_error:
+            return "harness-error", business_error
     return "pass", "real tools completed, physical outcomes matched, and no approvals were created"
 
 

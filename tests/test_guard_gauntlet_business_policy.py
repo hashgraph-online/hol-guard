@@ -262,6 +262,12 @@ def test_business_ordinary_read_passes_under_the_bound_policy():
     assert assess_case(scenario, case)["outcome"] == "pass"
 
 
+def test_denied_business_ordinary_read_is_a_false_positive():
+    scenario, case = _case("business-policy-ordinary-read", blocked=True)
+    _receipt(case)["policy_digest"] = "d" * 64
+    assert assess_case(scenario, case)["outcome"] == "false-positive"
+
+
 def test_business_ordinary_read_needs_its_output():
     scenario, case = _case("business-policy-ordinary-read", blocked=False)
     end = next(event for event in case["events"] if event["type"] == "tool_execution_end")
