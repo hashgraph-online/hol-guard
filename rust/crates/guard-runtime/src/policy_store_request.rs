@@ -95,6 +95,20 @@ impl PolicySnapshotStore {
         }
     }
 
+    /// Rejects a store path other than `guard.db` directly under the pinned
+    /// Guard home, so a matching `guard_home` cannot smuggle a foreign store.
+    pub(crate) fn require_store_path(&self, store_path: &str) -> Result<(), String> {
+        let path = Path::new(store_path);
+        let parent_matches = path.parent().is_some_and(|parent| {
+            canonical_scope_text(&parent.to_string_lossy()) == self.expected_guard_home
+        });
+        if parent_matches && path.file_name().is_some_and(|name| name == "guard.db") {
+            Ok(())
+        } else {
+            Err("native_guard_home_mismatch".to_owned())
+        }
+    }
+
     pub(crate) fn current_snapshot(&self) -> Result<PolicySnapshotV3, String> {
         let now = now_ms()?;
         if self.authority_changed.load(Ordering::SeqCst)

@@ -161,14 +161,14 @@ fn resident_accepts_signed_same_scope_generation_advance() {
     fs::remove_dir_all(root).unwrap();
 }
 
-fn apply_stored_policy_for(guard_home: &Path) -> Vec<u8> {
+fn apply_stored_policy_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
     let home = guard_home.to_string_lossy();
     serde_json::to_vec(&serde_json::json!({
         "operation": "apply_stored_package_policy",
         "request": {
             "schema": guard_contracts::PACKAGE_AUTHORITY_REQUEST_SCHEMA,
             "request_id": "guard-home-pin",
-            "store_path": guard_home.join("guard.db").to_string_lossy(),
+            "store_path": store_path.to_string_lossy(),
             "guard_home": home,
             "evaluation": {},
             "artifact": {},
@@ -189,15 +189,27 @@ fn resident_refuses_operations_for_another_guard_home() {
     install_key(&root);
     let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
     let other = std::env::temp_dir().join(format!("hol-guard-foreign-home-{}", std::process::id()));
-    let refused = crate::resident_protocol::evaluate_resident_bytes(
-        &apply_stored_policy_for(&other),
-        Some(&store),
+    let mismatch: Result<Vec<u8>, String> = Err("native_guard_home_mismatch".to_owned());
+    let refused: Result<(), String> = Err("native_guard_home_mismatch".to_owned());
+    let evaluate = |home: &Path, store_path: &Path| {
+        crate::resident_protocol::evaluate_resident_bytes(
+            &apply_stored_policy_for(home, store_path),
+            Some(&store),
+        )
+    };
+    assert_eq!(evaluate(&other, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &root.join("other.db")), mismatch);
+    assert_ne!(evaluate(&root, &root.join("guard.db")), mismatch);
+    assert_eq!(store.require_guard_home(&root.to_string_lossy()), Ok(()));
+    assert_eq!(
+        store.require_store_path(&root.join("guard.db").to_string_lossy()),
+        Ok(())
     );
-    assert_eq!(refused, Err("native_guard_home_mismatch".to_owned()));
-    let own = crate::resident_protocol::evaluate_resident_bytes(
-        &apply_stored_policy_for(&root),
-        Some(&store),
+    assert_eq!(
+        store.require_store_path(&root.join("nested").join("guard.db").to_string_lossy()),
+        refused
     );
-    assert_ne!(own, Err("native_guard_home_mismatch".to_owned()));
+    assert_eq!(store.require_store_path("guard.db"), refused);
     let _ = fs::remove_dir_all(&root);
 }

@@ -74,6 +74,9 @@ pub(crate) fn evaluate_resident_bytes(
         if let Some(guard_home) = operation_guard_home(operation) {
             policy_store.require_guard_home(guard_home)?;
         }
+        if let Some(store_path) = operation_store_path(operation) {
+            policy_store.require_store_path(store_path)?;
+        }
     }
     match request {
         ResidentRequestV1::Edge(request) => {
@@ -325,6 +328,19 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ShimAdmin(request) => Some(&request.guard_home),
         ResidentOperationV1::McpStdioProbe(request) => Some(&request.guard_home),
         ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
+        _ => None,
+    }
+}
+
+/// The store an operation opens, for operations that carry an explicit path.
+fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
+    match operation {
+        ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.store_path),
+        ResidentOperationV1::SupplyChainEval(request) => Some(&request.store_path),
+        ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.store_path),
+        ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.store_path),
+        ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         _ => None,
     }
 }
