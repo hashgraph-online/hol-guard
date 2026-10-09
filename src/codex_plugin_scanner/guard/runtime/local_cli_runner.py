@@ -162,6 +162,10 @@ def installed_package_version(resolved_bin: Path, package_name: object) -> str |
 
     if not isinstance(package_name, str) or not package_name:
         return None
+    if resolved_bin.parent.name == ".bin" and resolved_bin.parent.parent.name == "node_modules":
+        # npm on Windows and pnpm write regular-file shims into ``.bin``
+        # instead of symlinks, so the owning package sits beside ``.bin``.
+        return _shim_package_version(resolved_bin.parent.parent, package_name)
     for parent in resolved_bin.parents:
         if parent.name == "node_modules":
             return None
@@ -172,6 +176,16 @@ def installed_package_version(resolved_bin: Path, package_name: object) -> str |
             version = data.get("version")
             return version if isinstance(version, str) and version else None
     return None
+
+
+def _shim_package_version(node_modules: Path, package_name: str) -> str | None:
+    if not _PACKAGE_NAME.fullmatch(package_name):
+        return None
+    data = _read_manifest(node_modules.joinpath(*package_name.split("/"), "package.json"))
+    if not isinstance(data, dict) or data.get("name") != package_name:
+        return None
+    version = data.get("version")
+    return version if isinstance(version, str) and version else None
 
 
 def is_direct_dependency(cwd: Path, package_name: str) -> bool:

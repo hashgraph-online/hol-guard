@@ -1,24 +1,47 @@
 use super::*;
 
-/// `shutil.which(command, path=...)` — search `command` in a `:`-separated path.
+/// `shutil.which(command, path=...)` — search `command` in the platform's
+/// `PATH` list (`:` on Unix, `;` on Windows). On Windows a bare name also
+/// matches the default `PATHEXT` launchers, so `npx` finds `npx.cmd`.
 pub(super) fn which_on_path(command: &str, path: &str) -> Option<String> {
-    if command.contains('/') {
+    if command.contains('/') || (cfg!(windows) && command.contains('\\')) {
         let candidate = Path::new(command);
         if is_executable(candidate) {
             return Some(command.to_owned());
         }
         return None;
     }
-    for entry in path.split(':') {
-        if entry.is_empty() {
+    let suffixes = path_lookup_suffixes(command);
+    for entry in std::env::split_paths(path) {
+        if entry.as_os_str().is_empty() {
             continue;
         }
-        let candidate = Path::new(entry).join(command);
-        if is_executable(&candidate) {
-            return Some(candidate.to_string_lossy().into_owned());
+        for suffix in suffixes {
+            let candidate = entry.join(format!("{command}{suffix}"));
+            if is_executable(&candidate) {
+                return Some(candidate.to_string_lossy().into_owned());
+            }
         }
     }
     None
+}
+
+// Windows' default PATHEXT order. Extensionless files are not launchable there.
+const WINDOWS_PATH_EXTENSIONS: &[&str] = &[".com", ".exe", ".bat", ".cmd"];
+
+fn path_lookup_suffixes(command: &str) -> &'static [&'static str] {
+    if !cfg!(windows) {
+        return &[""];
+    }
+    let lowered = command.to_ascii_lowercase();
+    if WINDOWS_PATH_EXTENSIONS
+        .iter()
+        .any(|extension| lowered.ends_with(extension))
+    {
+        &[""]
+    } else {
+        WINDOWS_PATH_EXTENSIONS
+    }
 }
 
 pub(super) fn is_executable(path: &Path) -> bool {
