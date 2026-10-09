@@ -225,3 +225,28 @@ def test_raw_admission_rejection_requests_refresh(
             )
     finally:
         record_native_resident_client_failure_code(None)
+
+
+def test_stale_admission_failure_does_not_leak_into_next_review(
+    worker: HookWorker,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record_native_resident_client_failure_code("native_command_control_authority_not_current")
+    monkeypatch.setattr(worker, "_review_raw_hook_native", lambda **_kwargs: None)
+    try:
+        response, _ = worker._review_native_edge_with_snapshot(
+            payload={"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "a.ts"}},
+            harness="grok",
+            event_name="PreToolUse",
+            default_harness="grok",
+            home_dir=tmp_path,
+            guard_home=tmp_path / "guard",
+            workspace=tmp_path,
+            deadline=time.monotonic() + 2,
+            policy_snapshot={"mode": "enforce", "generation": 1},
+            recording_only=False,
+        )
+    finally:
+        record_native_resident_client_failure_code(None)
+    assert response["reason_code"] == "native_pre_tool_unavailable"

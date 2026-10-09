@@ -11,7 +11,10 @@ from typing import TYPE_CHECKING, Protocol
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
-from ..native_resident_client import native_resident_client_failure_code
+from ..native_resident_client import (
+    native_resident_client_failure_code,
+    record_native_resident_client_failure_code,
+)
 from ..native_runtime import NativeRuntimeStatus, native_mode
 from ..runtime.structured_output_mediation import (
     StructuredContentMediation,
@@ -495,6 +498,9 @@ class HookWorkerNativeMixin:
         from ..runtime_transition_hook_probe import transition_hook_probe
 
         probe = transition_hook_probe(payload)
+        # Worker threads are reused, so clear any failure code left by an
+        # earlier request before this review can report its own.
+        record_native_resident_client_failure_code(None)
         edge = self._review_raw_hook_native(
             payload=payload,
             harness=harness,
