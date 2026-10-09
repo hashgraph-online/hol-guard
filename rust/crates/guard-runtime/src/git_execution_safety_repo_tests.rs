@@ -368,3 +368,33 @@ fn resident_op_binds_the_request_and_rejects_bad_schemas() {
         .iter()
         .any(|feature| feature == guard_contracts::GIT_EXECUTION_SAFETY_FEATURE));
 }
+
+#[test]
+fn absent_account_config_directory_is_a_stable_global_config() {
+    use crate::git_execution_safety_binary::global_config_environment_is_stable;
+    let home = temp_root("xdg-absent");
+    let account = home.to_string_lossy().into_owned();
+    let environment = |xdg: String| -> crate::git_execution_safety_config::Environment {
+        [
+            ("HOME".to_owned(), account.clone()),
+            ("XDG_CONFIG_HOME".to_owned(), xdg),
+        ]
+        .into_iter()
+        .collect()
+    };
+    let config = home.join(".config");
+    assert!(!config.exists());
+    assert!(global_config_environment_is_stable(
+        &environment(config.to_string_lossy().into_owned()),
+        Some(&account),
+    ));
+    assert!(!global_config_environment_is_stable(
+        &environment(home.join("elsewhere").to_string_lossy().into_owned()),
+        Some(&account),
+    ));
+    assert!(!global_config_environment_is_stable(
+        &environment(format!("{}/../x", config.display())),
+        Some(&account),
+    ));
+    let _ = std::fs::remove_dir_all(&home);
+}

@@ -80,7 +80,9 @@ fn any_set(environment: &Environment, names: &[&str], strip: bool) -> bool {
 }
 
 pub(crate) fn routing_environment_is_clean(environment: &Environment) -> bool {
-    !any_set(environment, ROUTING_ENVIRONMENT, true)
+    // Compared without stripping: a whitespace-only value still names a path
+    // for Git, while probes run with these variables removed.
+    !any_set(environment, ROUTING_ENVIRONMENT, false)
 }
 
 pub(crate) fn fetch_environment_is_set(environment: &Environment) -> bool {

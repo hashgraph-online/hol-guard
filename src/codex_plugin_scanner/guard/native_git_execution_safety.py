@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .native_context import _canonical_request_sha256, _resolve_digest_home
+from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
 from .native_runtime_resilience import (
@@ -109,6 +109,8 @@ def git_execution_safety_native(
         return None
     guard_home = _resolve_digest_home(None)
     if native_runtime_health_snapshot(status.identity.sha256, guard_home).circuit_open:
+        return None
+    if not ensure_resident_prerequisite(guard_home):
         return None
     try:
         home = str(Path.home())

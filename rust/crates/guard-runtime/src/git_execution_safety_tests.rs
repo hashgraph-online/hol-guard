@@ -257,8 +257,13 @@ fn environment_gates_match_the_retired_python_vectors() {
     assert!(routing_environment_is_clean(&environment(&[(
         "HOME", "/h"
     )])));
-    assert!(routing_environment_is_clean(&environment(&[(
+    // Whitespace-only routing values still name a path for Git, so they are
+    // not clean; only an empty value is treated as unset.
+    assert!(!routing_environment_is_clean(&environment(&[(
         "GIT_DIR", "  "
+    )])));
+    assert!(routing_environment_is_clean(&environment(&[(
+        "GIT_DIR", ""
     )])));
     assert!(!routing_environment_is_clean(&environment(&[(
         "GIT_DIR", "."

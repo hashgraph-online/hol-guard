@@ -29,7 +29,7 @@ mod git_execution_safety_checks;
 mod git_execution_safety_config;
 mod git_execution_safety_op;
 mod git_execution_safety_probe;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod git_execution_safety_repo_tests;
 #[cfg(test)]
 mod git_execution_safety_tests;

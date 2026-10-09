@@ -155,7 +155,33 @@ pub(crate) fn global_config_environment_is_stable(
         .map_or("", |value| value.trim());
     configured == account
         && (xdg.is_empty()
-            || fs::canonicalize(xdg).is_ok_and(|resolved| resolved == account.join(".config")))
+            || resolve_non_strict(Path::new(xdg))
+                .is_some_and(|resolved| resolved == account.join(".config")))
+}
+
+/// Resolve symlinks in the longest existing prefix and append the remaining
+/// components, so a configured directory that does not exist yet still compares
+/// equal to its final location. Relative `.`/`..` in the missing tail fail closed.
+#[cfg(unix)]
+fn resolve_non_strict(path: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+    let mut existing = path;
+    let mut tail: Vec<&std::ffi::OsStr> = Vec::new();
+    loop {
+        if let Ok(resolved) = fs::canonicalize(existing) {
+            let mut resolved = resolved;
+            for name in tail.iter().rev() {
+                resolved.push(name);
+            }
+            return Some(resolved);
+        }
+        let name = match existing.components().next_back()? {
+            Component::Normal(name) => name,
+            _ => return None,
+        };
+        tail.push(name);
+        existing = existing.parent()?;
+    }
 }
 
 #[cfg(not(unix))]

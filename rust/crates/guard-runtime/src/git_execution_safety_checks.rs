@@ -435,7 +435,7 @@ impl Context<'_> {
 }
 
 /// Exposed to tests: filter detection against a prepared repository.
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn ref_uses_checkout_filter_for_tests(
     request: &GitExecutionSafetyRequestV1,
     git: &Path,
