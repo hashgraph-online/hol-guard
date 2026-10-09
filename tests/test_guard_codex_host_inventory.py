@@ -201,6 +201,90 @@ def test_wrong_host_or_user_rejected_before_handshake(tmp_path, monkeypatch, wro
     assert requests == []
 
 
+def test_codex_owned_daemon_without_guard_pid_record(tmp_path, monkeypatch):
+    def handler(request):
+        response = _handler(request)
+        if request["method"] == "app/read":
+            app = response["result"]["apps"][0]
+            app["toolSummaries"] = app.pop("tools")
+        return response
+
+    cache = inventory.CodexHostInventoryCache()
+    with _host(tmp_path, monkeypatch, handler) as (home, requests):
+        (home / "app-server-control" / "hol-guard-app-server.pid").unlink()
+        cache.refresh(codex_home=home, cancel=threading.Event())
+        payload = cache.read()
+        assert payload is not None
+        assert payload["apps"][0]["tools"][0]["name"] == "send_message"
+        assert payload["permissions_granted"] is False
+        assert "host_pid" not in payload
+        assert [row["method"] for row in requests] == ["initialize", "initialized", "app/installed", "app/read"]
+        monkeypatch.setattr(inventory, "_is_codex_process", lambda _pid: False)
+        assert cache.read() is None
+
+
+@pytest.mark.parametrize("wrong_peer", ["uid", "process"])
+def test_codex_owned_daemon_still_authenticates_peer(tmp_path, monkeypatch, wrong_peer):
+    with _host(tmp_path, monkeypatch, _handler) as (home, requests):
+        (home / "app-server-control" / "hol-guard-app-server.pid").unlink()
+        if wrong_peer == "process":
+            monkeypatch.setattr(inventory, "_is_codex_process", lambda _pid: False)
+        else:
+            monkeypatch.setattr(inventory, "_peer_identity", lambda _client: (os.geteuid() + 1, os.getpid()))
+        with pytest.raises(ValueError, match="codex_host_untrusted"):
+            inventory.read_codex_host_inventory(codex_home=home)
+    assert requests == []
+
+
+def test_dangling_pid_marker_is_not_treated_as_native_host(tmp_path):
+    control = tmp_path / "app-server-control"
+    control.mkdir(mode=0o700)
+    (control / "hol-guard-app-server.pid").symlink_to(tmp_path / "missing")
+    with pytest.raises(OSError):
+        inventory._optional_managed_pid(control / "socket")
+
+
+def test_protocol_tool_summaries_bound_long_display_text(tmp_path, monkeypatch):
+    def handler(request):
+        response = _handler(request)
+        if request["method"] == "app/read":
+            app = response["result"]["apps"][0]
+            app["toolSummaries"] = app.pop("tools")
+            app["toolSummaries"][0].update(title="t" * 700, description="d" * 9030)
+        return response
+
+    with _host(tmp_path, monkeypatch, handler) as (home, _requests):
+        snapshot = inventory.read_codex_host_inventory(codex_home=home)
+    assert snapshot.metadata_complete
+    tool = snapshot.apps[0]["tools"][0]
+    assert len(tool["title"]) == 512
+    assert len(tool["description"]) == 4000
+    assert "inputSchema" not in tool
+
+
+def test_unavailable_tool_summaries_keep_app_but_not_complete(tmp_path, monkeypatch):
+    def handler(request):
+        response = _handler(request)
+        if request["method"] == "app/read":
+            response["result"]["apps"][0]["toolSummaries"] = None
+        return response
+
+    with _host(tmp_path, monkeypatch, handler) as (home, _requests):
+        snapshot = inventory.read_codex_host_inventory(codex_home=home)
+    assert not snapshot.metadata_complete
+    assert snapshot.apps[0]["tools"] == []
+    assert snapshot.apps[0]["metadata_available"] is False
+
+
+def test_managed_marker_removal_invalidates_snapshot(tmp_path, monkeypatch):
+    cache = inventory.CodexHostInventoryCache()
+    with _host(tmp_path, monkeypatch, _handler) as (home, _requests):
+        cache.refresh(codex_home=home, cancel=threading.Event())
+        assert cache.read() is not None
+        (home / "app-server-control" / "hol-guard-app-server.pid").unlink()
+        assert cache.read() is None
+
+
 @pytest.mark.parametrize("fault", ["replay", "foreign_app", "missing_app", "duplicate_app", "duplicate_tool", "error"])
 def test_replay_and_malformed_pages_fail_atomically(tmp_path, monkeypatch, fault):
     previous: list[object] = []
@@ -370,7 +454,9 @@ def test_refresh_keeps_valid_public_snapshot_visible_until_result(tmp_path, monk
         cache.refresh(codex_home=home, cancel=threading.Event())
         payload = cache.read()
         assert payload is not None
-        snapshot = inventory.CodexHostInventory(payload["connection_id"], tuple(payload["apps"]), True)
+        snapshot = inventory.CodexHostInventory(
+            payload["connection_id"], tuple(payload["apps"]), True, os.getpid(), os.getpid()
+        )
         entered, release, cancel = threading.Event(), threading.Event(), threading.Event()
 
         def slow_read(**_kwargs):
