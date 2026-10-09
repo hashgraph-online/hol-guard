@@ -189,14 +189,13 @@ def parse_package_script_invocation(
 def identity_for_package_json(manifest_path: Path, *, runner: str) -> UnlistedCliIdentity | None:
     payload, digest = _read_package_payload(manifest_path)
     package_name = _package_name(payload, manifest_path.parent)
-    identity = native_local_cli_identity(
-        {
-            "source": "package_json",
-            "manifest_path": str(manifest_path.resolve()),
-            "content_sha256": digest,
-            "package_name": package_name,
-        }
-    )
+    source = {
+        "source": "package_json",
+        "manifest_path": str(manifest_path.resolve()),
+        "content_sha256": digest,
+        "package_name": package_name,
+    }
+    identity = native_local_cli_identity(source)
     if identity is None:
         return None
     return UnlistedCliIdentity(
@@ -207,6 +206,7 @@ def identity_for_package_json(manifest_path: Path, *, runner: str) -> UnlistedCl
         example_label=f"{runner} run",
         interpreter_name=runner,
         source_path=str(manifest_path),
+        identity_source=source,
     )
 
 

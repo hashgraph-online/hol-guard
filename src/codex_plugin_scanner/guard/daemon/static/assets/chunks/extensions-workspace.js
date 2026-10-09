@@ -1,7 +1,5 @@
-import { aT as fetchLocalCliApi, r as reactExports, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aU as HiMiniNoSymbol, al as HiMiniLockClosed, P as HiMiniExclamationTriangle, aV as useResolvedApprovalGate, ar as HiMiniArrowPath, w as HiMiniShieldCheck, aW as HiMiniInformationCircle, at as isApprovalProofSubmitDisabled, C as HiMiniXMark, as as ApprovalProofFieldInputs, au as buildApprovalProofCredentials, aX as GenIcon, Q as HiMiniBolt, aY as HiMiniGlobeAlt, aZ as HiMiniCube, K as HiMiniCloud, a_ as HiMiniServerStack, b as HiMiniCommandLine, a$ as HiMiniFolder, b0 as FaWindows, b1 as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, b2 as approvalProofRecentlySatisfied, b3 as isBulkApproveGateReady, b4 as HiMiniArrowLeft, b5 as HiMiniPlus, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard, b6 as guardAwareHref, aN as HiMiniMagnifyingGlass, an as HiMiniAdjustmentsHorizontal, b7 as HiMiniCheck, b8 as startGuardCloudConnect, b9 as HiMiniArrowTopRightOnSquare, aM as WorkspacePageHeader, ba as fetchExtensionControlApi } from "../guard-dashboard.js";
-import { E as ExtensionControlApiError, p as previewExtensionMutation, a as applyExtensionMutation, f as fetchExtensionCatalog, b as fetchEffectiveExtensionControls, c as fetchExtensionControlHistory, d as acknowledgeDegradedExtensionControlAuthority, r as recoverExtensionControlAuthority } from "./extension-controls-api.js";
+import { aT as fetchLocalCliApi, r as reactExports, aU as localPermissionDraftState, aV as setLocalPermissionDraftState, aW as newExtensionPolicyDraftIdentity, aX as extensionPolicyDraftIsDirty, aY as setLocalPermissionDraftStates, aZ as buildExtensionPolicyDraftMutation, a_ as ExtensionControlApiError, a$ as previewExtensionMutation, b0 as isCurrentExtensionPolicyDraft, b1 as applyExtensionMutation, b2 as fetchExtensionCatalog, b3 as fetchEffectiveExtensionControls, b4 as fetchExtensionControlHistory, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, b5 as HiMiniNoSymbol, al as HiMiniLockClosed, P as HiMiniExclamationTriangle, b6 as useResolvedApprovalGate, ar as HiMiniArrowPath, w as HiMiniShieldCheck, b7 as HiMiniInformationCircle, at as isApprovalProofSubmitDisabled, C as HiMiniXMark, as as ApprovalProofFieldInputs, au as buildApprovalProofCredentials, b8 as GenIcon, Q as HiMiniBolt, b9 as HiMiniGlobeAlt, ba as HiMiniCube, K as HiMiniCloud, bb as HiMiniServerStack, b as HiMiniCommandLine, bc as HiMiniFolder, bd as FaWindows, be as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, bf as approvalProofRecentlySatisfied, bg as isBulkApproveGateReady, bh as HiMiniArrowLeft, bi as HiMiniPlus, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard, bj as ApprovalProofModal, bk as guardAwareHref, aN as HiMiniMagnifyingGlass, an as HiMiniAdjustmentsHorizontal, bl as HiMiniCheck, bm as startGuardCloudConnect, bn as HiMiniArrowTopRightOnSquare, aM as WorkspacePageHeader, bo as fetchExtensionControlApi, bp as acknowledgeDegradedExtensionControlAuthority, bq as recoverExtensionControlAuthority } from "../guard-dashboard.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
-import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const DEFAULT_EXTENSION_DETAIL_URL_STATE = {
@@ -1024,96 +1022,6 @@ function useModalDialog(onClose, canClose = true) {
     };
   }, []);
   return dialogRef;
-}
-function cloneLayers$1(layers) {
-  return layers.map((layer) => ({
-    ...layer,
-    controls: layer.controls.map((control) => ({ ...control }))
-  }));
-}
-function sortedControls(layer) {
-  return {
-    ...layer,
-    controls: [...layer.controls].sort(
-      (left, right) => `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`)
-    )
-  };
-}
-function localPermissionDraftState(layers, permissionId) {
-  const local = layers.find((layer) => layer.kind === "local-admin");
-  const control = local?.controls.find(
-    (item) => item.target_kind === "permission" && item.target_id === permissionId
-  );
-  if (!control) return "inherit";
-  return control.state === "enabled" ? "allow" : "block";
-}
-function setLocalPermissionDraftState(layers, catalogDigest, permissionId, state) {
-  const next = cloneLayers$1(layers);
-  let local = next.find((layer) => layer.kind === "local-admin");
-  if (!local && state === "inherit") return next;
-  if (!local) {
-    local = {
-      schema_version: "1.0.0",
-      kind: "local-admin",
-      catalog_digest: catalogDigest,
-      global_lockdown: false,
-      controls: []
-    };
-    next.push(local);
-  }
-  const hadPermissionControl = local.controls.some(
-    (control) => control.target_kind === "permission" && control.target_id === permissionId
-  );
-  local.controls = local.controls.filter(
-    (control) => control.target_kind !== "permission" || control.target_id !== permissionId
-  );
-  if (state !== "inherit") {
-    local.controls.push({
-      target_kind: "permission",
-      target_id: permissionId,
-      state: state === "allow" ? "enabled" : "disabled"
-    });
-  }
-  if (state === "inherit" && hadPermissionControl && !local.global_lockdown && local.controls.length === 0) {
-    const localIndex = next.indexOf(local);
-    next.splice(localIndex, 1);
-  }
-  const normalized = next.map((layer) => sortedControls(layer));
-  normalized.sort((left, right) => left.kind.localeCompare(right.kind));
-  return normalized;
-}
-function setLocalPermissionDraftStates(layers, catalogDigest, permissionIds, state) {
-  return permissionIds.reduce(
-    (next, permissionId) => setLocalPermissionDraftState(next, catalogDigest, permissionId, state),
-    layers
-  );
-}
-function canonicalLayerValue(layers) {
-  return JSON.stringify(
-    [...layers].map((layer) => sortedControls(layer)).sort((left, right) => left.kind.localeCompare(right.kind))
-  );
-}
-function extensionPolicyDraftIsDirty(effective, draftLayers) {
-  return canonicalLayerValue(effective.layers) !== canonicalLayerValue(draftLayers);
-}
-function buildExtensionPolicyDraftMutation(effective, catalogDigest, draftLayers, identity) {
-  return {
-    previous_revision: effective.revision,
-    catalog_digest: catalogDigest,
-    layers: cloneLayers$1(draftLayers),
-    actor_id: "dashboard-admin",
-    idempotency_key: identity.idempotencyKey,
-    nonce: identity.nonce
-  };
-}
-function newExtensionPolicyDraftIdentity() {
-  return {
-    idempotencyKey: crypto.randomUUID().replaceAll("-", ""),
-    nonce: crypto.randomUUID().replaceAll("-", "")
-  };
-}
-function isCurrentExtensionPolicyDraft(generation, current) {
-  return generation === current;
 }
 function permissionSuffix(permissionId) {
   const marker = ".permission.";

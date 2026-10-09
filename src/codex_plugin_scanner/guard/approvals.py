@@ -73,6 +73,7 @@ from .risk import artifact_risk_signals, artifact_risk_summary
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
+from .runtime.extension_allow_hint import validated_extension_allow_hint
 from .runtime.github_workflow_runtime import (
     issue_github_workflow_capability_for_resolution,
 )
@@ -579,6 +580,7 @@ def queue_blocked_approvals(
             guard_version=guard_version,
             first_seen_guard_version=guard_version,
             last_seen_guard_version=guard_version,
+            extension_allow_hint=_item_extension_allow_hint(item, artifact),
         )
         request = replace(
             request,
@@ -1921,6 +1923,13 @@ def _item_with_command_category(item: dict[str, object], artifact) -> dict[str, 
         if isinstance(extension_id, str) and extension_id.startswith("command."):
             return {**item, "action_envelope_json": {**envelope, "command_category": extension_id}}
     return item
+
+
+def _item_extension_allow_hint(item: dict[str, object], artifact) -> dict[str, object] | None:
+    value = artifact.metadata.get("extension_allow_hint") if artifact is not None else None
+    if value is None:
+        value = item.get("extension_allow_hint")
+    return validated_extension_allow_hint(value)
 
 
 def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:

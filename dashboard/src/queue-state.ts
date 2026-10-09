@@ -387,13 +387,12 @@ const BULK_BLOCKED_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
 /**
  * Low-risk categories: file reads, docs edits, generated inventory. Everything
  * else that is not blocked is "elevated" (shell, source edits, git, network,
- * packages, deploys, destructive deletes, etc.).
+ * packages, deploys, destructive deletes, uncategorized commands, etc.).
  */
 const BULK_LOW_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
   "file_read",
   "docs_edit",
   "generated_inventory_edit",
-  "other",
 ]);
 
 /**

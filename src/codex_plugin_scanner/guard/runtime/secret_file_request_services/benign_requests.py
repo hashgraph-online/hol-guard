@@ -374,6 +374,7 @@ def build_tool_action_request_artifact(
     extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
     native_extension_evidence: object | None = None,
     native_evaluation: CompositeCommandEvaluation | None = None,
+    extension_allow_hint: dict[str, object] | None = None,
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 
@@ -506,6 +507,11 @@ def build_tool_action_request_artifact(
                 else {}
             ),
             **({"reason_code": request.reason_code} if request.reason_code is not None else {}),
+            **(
+                {"extension_allow_hint": extension_allow_hint}
+                if evidence_available and extension_allow_hint is not None
+                else {}
+            ),
             **(
                 {"script_read_identity_sha256": request.script_read_identity_sha256}
                 if request.script_read_identity_sha256 is not None

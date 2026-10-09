@@ -324,6 +324,16 @@ def test_credential_seed_writes_back_only_when_the_operator_copy_is_unchanged(tm
     assert login.read_text() == "operator-relogin"
 
 
+def test_cursor_seed_carries_the_windows_login_under_appdata(tmp_path):
+    source, fixture = tmp_path / "real", tmp_path / "fixture"
+    login = source / "AppData" / "Roaming" / "Cursor" / "auth.json"
+    login.parent.mkdir(parents=True)
+    login.write_text("cursor-login")
+    seed = CredentialSeed(adapter("cursor"), source, fixture)
+    assert seed.seeded >= 1
+    assert (fixture / "AppData" / "Roaming" / "Cursor" / "auth.json").read_text() == "cursor-login"
+
+
 def test_logout_during_a_case_is_not_undone_by_write_back(tmp_path):
     source, fixture = tmp_path / "real", tmp_path / "fixture"
     login = source / ".codex" / "auth.json"

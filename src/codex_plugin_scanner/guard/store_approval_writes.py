@@ -243,7 +243,7 @@ def _update_request(
                fallback_cli_command = ?, scanner_evidence_json = ?,
                watch_only_observation = case when watch_only_observation = 1 and ? = 1 then 1 else 0 end,
                browser_intent_json = ?, review_command = ?, approval_url = ?, raw_command_text = ?, guard_version = ?,
-               continuation_snapshot_json = ?,
+               continuation_snapshot_json = ?, extension_allow_hint_json = ?,
                first_seen_guard_version = coalesce(first_seen_guard_version, ?), last_seen_guard_version = ?
            where request_id = ? and oauth_source = ?""",
         _update_values(
@@ -309,6 +309,7 @@ def _update_values(
         request.raw_command_text,
         request.guard_version,
         continuation_snapshot,
+        _optional_json(request.extension_allow_hint, sort_keys=True),
         request.first_seen_guard_version or request.guard_version,
         request.last_seen_guard_version or request.guard_version,
         request_id,
@@ -336,9 +337,10 @@ def _insert_request(
              launch_summary, risk_headline, action_envelope_json, decision_v2_json, fallback_cli_command,
              scanner_evidence_json, browser_intent_json, review_command, approval_url, status, resolution_action,
              resolution_scope, reason, created_at, resolved_at, raw_command_text, guard_version,
-             first_seen_guard_version, last_seen_guard_version, watch_only_observation, continuation_snapshot_json)
+             first_seen_guard_version, last_seen_guard_version, watch_only_observation, continuation_snapshot_json,
+             extension_allow_hint_json)
            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         _insert_values(
             request,
             canonical,
@@ -410,6 +412,7 @@ def _insert_values(
         request.last_seen_guard_version or request.guard_version,
         int(_scanner_evidence_is_watch_only(request.scanner_evidence)),
         _continuation_snapshot_json(request),
+        _optional_json(request.extension_allow_hint, sort_keys=True),
     )
 
 
