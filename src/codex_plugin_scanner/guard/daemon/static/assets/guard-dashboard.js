@@ -15256,7 +15256,7 @@ function summarizeBulkApproveSelection(groups) {
       requestId: group.primary.request_id,
       title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
       path: resolveFileReadPath(group.primary),
-      command: group.primary.raw_command_text?.trim() || null,
+      command: group.primary.raw_command_text?.trim() || group.primary.action_envelope_json?.command?.trim() || null,
       harnessLabel: harnessDisplayName(group.primary.harness),
       duplicateCount: group.duplicateCount,
       summary: buildQueueSummary(group.primary),
@@ -28849,8 +28849,10 @@ function buildBulkRiskDisclosure(stats) {
       confirmPhrase: phrase
     };
   }
+  const retryBlocked = stats.retryBlockedActionCount ?? 0;
+  const onceVerb = retryBlocked > 0 ? "is approved once" : "runs once";
   const bullets = [
-    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`
+    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each ${onceVerb}; the decision is not remembered.`
   ];
   if (stats.highActionCount > 0) {
     bullets.push(
@@ -28862,7 +28864,6 @@ function buildBulkRiskDisclosure(stats) {
       `${stats.elevatedActionCount} of the selected ${pluralActions(stats.actionCount)} ${stats.elevatedActionCount === 1 ? "is an elevated-risk action" : "are elevated-risk actions"} (shell, file edits, network, or similar). Confirm you expected each one.`
     );
   }
-  const retryBlocked = stats.retryBlockedActionCount ?? 0;
   if (retryBlocked > 0) {
     bullets.push(
       `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${retryBlocked === 1 ? "is a command the agent" : "are commands the agent"} will still be blocked on after approval. Approving records your decision only; use "Always allow exact action" or an Extensions pattern to let the agent run ${retryBlocked === 1 ? "it" : "them"}.`
@@ -28896,7 +28897,7 @@ function buildBulkRiskDisclosure(stats) {
       tier,
       tone: "amber",
       headline: `Approving ${mix}`,
-      body: stats.elevatedActionCount > 0 ? "This batch includes elevated-risk actions (shell, edits, network). Each runs once and the decision is not remembered. Skim the list before confirming." : "Each selected action runs once and the decision is not remembered. Skim the list before confirming.",
+      body: stats.elevatedActionCount > 0 ? `This batch includes elevated-risk actions (shell, edits, network). Each ${onceVerb} and the decision is not remembered. Skim the list before confirming.` : `Each selected action ${onceVerb} and the decision is not remembered. Skim the list before confirming.`,
       bullets,
       requiresTypedConfirm: false,
       confirmPhrase: phrase
@@ -28906,7 +28907,7 @@ function buildBulkRiskDisclosure(stats) {
     tier,
     tone: "green",
     headline: `Approving ${mix}`,
-    body: "Each selected action runs once. The decision is not remembered, so these will ask again next time.",
+    body: `Each selected action ${onceVerb}. The decision is not remembered, so these will ask again next time.`,
     bullets,
     requiresTypedConfirm: false,
     confirmPhrase: phrase

@@ -184,6 +184,21 @@ assert(
   !buildBulkRiskDisclosure(bulkStats).bullets.some((bullet) => bullet.includes("still be blocked")),
   "bulk disclosure stays unchanged without restricted commands",
 );
+const restrictedDisclosure = buildBulkRiskDisclosure({ ...bulkStats, retryBlockedActionCount: 1 });
+assert(
+  !restrictedDisclosure.body.includes("runs once") && !restrictedDisclosure.bullets.some((b) => b.includes("runs once")),
+  "bulk disclosure never says restricted commands run once",
+);
+assert(
+  buildBulkRiskDisclosure(bulkStats).bullets[0].includes("Each runs once"),
+  "unrestricted bulk disclosure keeps the run-once wording",
+);
+
+// Review feedback: the bulk preview falls back to the action-envelope command.
+const envelopeOnly = { ...unbound, raw_command_text: null, action_envelope_json: { ...(unbound.action_envelope_json ?? {}), command: "make test" } } as never;
+const [envelopeGroup] = groupDuplicates([envelopeOnly]);
+const [envelopeLine] = summarizeBulkApproveSelection([envelopeGroup]);
+assert(envelopeLine.command === "make test", "bulk preview uses the action-envelope command when raw text is empty");
 
 // #3840: uncategorized commands are not counted as file reads, and the dialog can show the command.
 const [pythonGroup] = groupDuplicates([unbound]);

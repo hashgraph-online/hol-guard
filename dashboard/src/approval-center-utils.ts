@@ -785,7 +785,7 @@ export function summarizeBulkApproveSelection(
       requestId: group.primary.request_id,
       title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
       path: resolveFileReadPath(group.primary),
-      command: group.primary.raw_command_text?.trim() || null,
+      command: group.primary.raw_command_text?.trim() || group.primary.action_envelope_json?.command?.trim() || null,
       harnessLabel: harnessDisplayName(group.primary.harness),
       duplicateCount: group.duplicateCount,
       summary: buildQueueSummary(group.primary),

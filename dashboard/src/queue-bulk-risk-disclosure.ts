@@ -157,8 +157,11 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     };
   }
 
+  // Restricted commands stay blocked for the agent, so never claim they run.
+  const retryBlocked = stats.retryBlockedActionCount ?? 0;
+  const onceVerb = retryBlocked > 0 ? "is approved once" : "runs once";
   const bullets: string[] = [
-    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`,
+    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each ${onceVerb}; the decision is not remembered.`,
   ];
 
   if (stats.highActionCount > 0) {
@@ -175,7 +178,6 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     );
   }
 
-  const retryBlocked = stats.retryBlockedActionCount ?? 0;
   if (retryBlocked > 0) {
     bullets.push(
       `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${
@@ -220,8 +222,8 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
       headline: `Approving ${mix}`,
       body:
         stats.elevatedActionCount > 0
-          ? "This batch includes elevated-risk actions (shell, edits, network). Each runs once and the decision is not remembered. Skim the list before confirming."
-          : "Each selected action runs once and the decision is not remembered. Skim the list before confirming.",
+          ? `This batch includes elevated-risk actions (shell, edits, network). Each ${onceVerb} and the decision is not remembered. Skim the list before confirming.`
+          : `Each selected action ${onceVerb} and the decision is not remembered. Skim the list before confirming.`,
       bullets,
       requiresTypedConfirm: false,
       confirmPhrase: phrase,
@@ -232,7 +234,7 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     tier,
     tone: "green",
     headline: `Approving ${mix}`,
-    body: "Each selected action runs once. The decision is not remembered, so these will ask again next time.",
+    body: `Each selected action ${onceVerb}. The decision is not remembered, so these will ask again next time.`,
     bullets,
     requiresTypedConfirm: false,
     confirmPhrase: phrase,
