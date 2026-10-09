@@ -299,7 +299,12 @@ pub(super) fn guard_untrusted_business_context(
     let intrinsic = ActionFloor::parse(&result.minimum_action)
         .ok_or_else(|| "native_policy_action_invalid".to_owned())?;
     let floor = policy.floor(intrinsic, None);
-    if floor.action > intrinsic {
+    // A failed extension evaluation blocks without naming a finding. Commands the
+    // parser cannot model, such as `sh -c '<string>'`, land there; the missing
+    // business facts are the actionable reason for those blocks.
+    if floor.action > intrinsic
+        || result.reason_code == "native_command_extension_evaluation_failed"
+    {
         result.reason_code = "native_business_context_unavailable".into();
         result.reason = "HOL Guard requires authenticated account, audience and content facts for this business operation.".into();
     }
