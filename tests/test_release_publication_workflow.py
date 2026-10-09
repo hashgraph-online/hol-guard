@@ -378,11 +378,11 @@ def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> 
     jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
     steps = jobs["assemble-native-guard-distributions"]["steps"]
     names = [step.get("name") for step in steps]
-    reuse_name = "Reuse attested GitHub release wheels for a repair run"
+    reuse_name = "Reuse wheels already attested on the GitHub release"
     assert names.index(reuse_name) < names.index("Validate exact native artifact set")
     assert names.index(reuse_name) < names.index("Record aggregate immutable hashes")
     step = steps[names.index(reuse_name)]
-    assert "release_repair == 'true'" in step["if"]
+    assert step["if"] == "needs.build.outputs.channel == 'stable'"
     assert step["working-directory"] == "${{ runner.temp }}"
     script = step["run"]
     assert 'gh release download "$tag"' in script

@@ -12,7 +12,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
-STEP_NAME = "Reuse attested GitHub release wheels for a repair run"
+STEP_NAME = "Reuse wheels already attested on the GitHub release"
 WHEEL = "hol_guard-9.9.9-py3-none-any.whl"
 
 FAKE_GH = """#!/usr/bin/env bash
@@ -22,6 +22,7 @@ case "$1 $2" in
   "release view")
     if [[ "$mode" == notfound ]]; then echo "release not found" >&2; exit 1; fi
     if [[ "$mode" == outage ]]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+    if [[ "$mode" == nowheels ]]; then printf '{"isDraft":true,"isPrerelease":false,"assets":[]}'; exit 0; fi
     printf '{"isDraft":false,"isPrerelease":false,"assets":[{"name":"%s"}]}' "$FAKE_RELEASE_WHEEL"
     ;;
   "release download")
@@ -100,8 +101,9 @@ def test_verified_release_wheels_replace_the_rebuilt_bytes(tmp_path: Path) -> No
     assert (dist / WHEEL).read_text(encoding="utf-8") == "release-bytes"
 
 
-def test_a_missing_release_keeps_the_rebuilt_wheels(tmp_path: Path) -> None:
-    result, dist = _run(tmp_path, "notfound")
+@pytest.mark.parametrize("mode", ["notfound", "nowheels"])
+def test_a_release_without_wheels_keeps_the_rebuilt_wheels(tmp_path: Path, mode: str) -> None:
+    result, dist = _run(tmp_path, mode)
 
     assert result.returncode == 0, result.stderr
     assert (dist / WHEEL).read_text(encoding="utf-8") == "rebuilt-bytes"

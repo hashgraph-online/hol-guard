@@ -834,8 +834,10 @@ jobs:
           pattern: native-guard-wheel-*
           path: dist/
           merge-multiple: true
-      - name: Reuse attested GitHub release wheels for a repair run
-        if: needs.build.outputs.release_repair == 'true' && needs.build.outputs.channel == 'stable'
+      - name: Reuse wheels already attested on the GitHub release
+        # Any stable run can follow a deferred publication, including a dispatch
+        # from the release tag itself, so check every stable run for attached wheels.
+        if: needs.build.outputs.channel == 'stable'
         # Run outside the checked-out source so no workspace file can influence this step.
         working-directory: ${{ runner.temp }}
         env:
@@ -858,12 +860,12 @@ jobs:
             echo "Could not read release ${tag}; refusing to fall back to rebuilt wheels" >&2
             exit 1
           fi
-          jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null
           if ! jq -e '[.assets[].name | select(startswith("hol_guard-") and endswith(".whl"))] | length > 0' \
             <<< "$release_json" >/dev/null; then
             echo "Release ${tag} has no attached wheels; keeping freshly built distributions."
             exit 0
           fi
+          jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null
           release_dir=$(mktemp -d)
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$release_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl"
           provenance_bundle="$release_dir/hol-guard-v${VERSION}.intoto.jsonl"
