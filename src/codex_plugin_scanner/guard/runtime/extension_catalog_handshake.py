@@ -7,6 +7,8 @@ import urllib.parse
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from .extension_control_limits import CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES
+
 
 @dataclass(frozen=True)
 class ExtensionCatalogUpload:
@@ -59,9 +61,21 @@ def prepare_extension_catalog_handshake(
     catalog = catalog_factory(generated_at)
     if catalog.get("catalogDigest") != digest:
         raise RuntimeError("Extension catalog changed during runtime synchronization")
+    body = json.dumps(
+        {"idempotencyKey": f"catalog:{digest}", "catalog": catalog},
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    if len(body) > CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES:
+        return {
+            "managedControlsCapabilities": [],
+            "extension_catalog_sync_status": "downgraded",
+            "extension_catalog_sync_reason": "catalog_upload_exceeds_cloud_limit",
+        }, None
     upload = ExtensionCatalogUpload(
         url=_normalized_extension_catalog_sync_url(runtime_sync_url, upload_path=str(upload_path)),
-        body=json.dumps({"idempotencyKey": f"catalog:{digest}", "catalog": catalog}).encode("utf-8"),
+        body=body,
     )
     return {
         "extension_catalog_sync_status": "uploaded",

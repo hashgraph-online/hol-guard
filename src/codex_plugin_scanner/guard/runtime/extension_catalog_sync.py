@@ -10,8 +10,8 @@ from datetime import datetime
 from typing import Protocol, TypedDict
 
 from .extension_control_limits import (
+    CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
     MAX_CATALOG_EXTENSIONS,
-    MAX_CATALOG_PAYLOAD_BYTES,
     MAX_INPUT_TEXT_LENGTH,
     MAX_PERMISSIONS_PER_EXTENSION,
 )
@@ -225,7 +225,7 @@ def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
     """Execute the shared catalog's bounded shape, privacy, identity, and digest contract."""
 
     encoded = _canonical_json(payload).encode("utf-8")
-    if len(encoded) > MAX_CATALOG_PAYLOAD_BYTES:
+    if len(encoded) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
         raise ValueError("Extension catalog payload limit exceeded")
     if not isinstance(payload, dict):
         raise ValueError("Extension catalog must be an object")
@@ -255,7 +255,7 @@ def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
     expected_limits = {
         "maxExtensions": MAX_CATALOG_EXTENSIONS,
         "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
-        "maxPayloadBytes": MAX_CATALOG_PAYLOAD_BYTES,
+        "maxPayloadBytes": CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
         "maxStringLength": 8_192,
     }
     if payload.get("limits") != expected_limits:
@@ -440,13 +440,13 @@ def build_extension_catalog_wire(
         "limits": {
             "maxExtensions": MAX_CATALOG_EXTENSIONS,
             "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
-            "maxPayloadBytes": MAX_CATALOG_PAYLOAD_BYTES,
+            "maxPayloadBytes": CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
             "maxStringLength": 8_192,
         },
         "extensions": extensions,
     }
     _reject_private_wire_keys(payload)
-    if len(_canonical_json(payload).encode("utf-8")) > MAX_CATALOG_PAYLOAD_BYTES:
+    if len(_canonical_json(payload).encode("utf-8")) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
         raise ValueError("Extension catalog payload limit exceeded")
     return validate_extension_catalog_wire(payload)
 

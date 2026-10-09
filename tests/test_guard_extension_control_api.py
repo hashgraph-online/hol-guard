@@ -35,6 +35,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_limits import (
+    MAX_DAEMON_CATALOG_RESPONSE_BYTES,
     advertised_extension_control_limits,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_proof import ExtensionControlProof
@@ -94,7 +95,7 @@ def test_catalog_and_effective_responses_are_bounded_public_dtos(tmp_path: Path)
     limits = advertised_extension_control_limits()
     assert catalog["limits"] == {
         **limits,
-        "max_body_bytes": limits["max_catalog_payload_bytes"],
+        "max_body_bytes": MAX_DAEMON_CATALOG_RESPONSE_BYTES,
         "max_controls": limits["max_controls_total"],
     }
     projection = cast(dict[str, object], effective.pop("projection"))

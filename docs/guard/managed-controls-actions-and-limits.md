@@ -40,7 +40,7 @@ Release 3.0 uses one shared limit source across Local and Cloud:
 | Limit | Value | Enforcement boundary |
 |---|---:|---|
 | Catalog Extensions | 512 | Local catalog construction and Cloud catalog ingestion |
-| Catalog payload bytes | 1,000,000 | Runtime API and Cloud ingestion |
+| Cloud v1 catalog payload bytes | 1,000,000 | Cloud catalog sync (canonical privacy-safe catalog) |
 | Control layers | 2 | Local resolver and mutation API |
 | Controls per layer | 512 | Local resolver and mutation API |
 | Total controls | 1,024 | Local resolver, API, Cloud compilation, and signing |
@@ -55,6 +55,24 @@ Release 3.0 uses one shared limit source across Local and Cloud:
 Every boundary must be tested at limit minus one, limit, and limit plus one where the representation permits it. API metadata must advertise the same values that the resolver, mutation service, compiler, and signer enforce.
 
 Oversized data is rejected before signing, persistence, or enforcement. Clients must not silently truncate a Control Set or catalog in a way that could imply complete enforcement.
+
+### Catalog delivery budgets
+
+The Extension catalog has several representations, and each one has its own byte budget. They are not interchangeable, and raising one does not raise another. The local budgets live in `contracts/catalog-delivery/limits.json`. Python and Rust tests fail if their constants drift from that file.
+
+| Representation | Budget | Enforced by |
+|---|---:|---|
+| Cloud v1 catalog (canonical, privacy-safe) | 1,000,000 bytes | Runtime catalog sync before upload; Cloud ingestion |
+| Cloud v1 upload body (`idempotencyKey` + `catalog`) | 1,016,384 bytes | Runtime handshake before upload; Cloud route body limit |
+| Legacy daemon `GET /v1/extension-controls/catalog` response | 8,000,000 bytes, measured on the exact wire bytes after HTML-safe escaping | Daemon service before writing; dashboard and CLI client read limit |
+| Other daemon `GET` responses | 1,048,576 bytes | Daemon client |
+| Packaged `command-catalog.v1.json` artifact | 8,000,000 bytes | Build script before publishing; packaged loader before decoding |
+| Native compiled catalog projection | 8,000,000 bytes | Rust source compiler |
+| Native command program | 4 MiB | Rust compiler and admission; build script; packaged loader |
+
+The Cloud v1 profile stays at 1,000,000 bytes because Cloud requires the exact advertised value. If a catalog grows past it, the runtime stops advertising managed-controls capabilities and reports `catalog_upload_exceeds_cloud_limit`. It does not send a body that Cloud would reject.
+
+The structural ceiling is still 512 Extensions with 512 permissions each. Byte budgets do not raise it. The current built-in catalog uses about 1.04 MB on the legacy daemon wire. Daemon clients released before these budgets read at most 1 MiB, so they cannot load a larger legacy catalog response. Paginated catalog routes replace the full-catalog response for growth beyond that.
 
 ## Failure behavior
 

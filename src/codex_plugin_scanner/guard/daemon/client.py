@@ -18,7 +18,7 @@ from threading import Timer
 from typing import Protocol, TypeGuard, cast
 from urllib.parse import urlsplit
 
-from ..runtime.extension_control_limits import MAX_CATALOG_PAYLOAD_BYTES
+from ..runtime.extension_control_limits import MAX_DAEMON_CATALOG_RESPONSE_BYTES, MAX_DAEMON_GET_RESPONSE_BYTES
 from .manager import (
     clear_guard_daemon_state,
     ensure_guard_daemon,
@@ -128,7 +128,7 @@ class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
 
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
 _STATUS_REQUEST_TIMEOUT_S: float = 0.25
-_MAX_GET_RESPONSE_BYTES: int = 1_048_576
+_MAX_GET_RESPONSE_BYTES: int = MAX_DAEMON_GET_RESPONSE_BYTES
 
 
 class _ReadableResponse(Protocol):
@@ -293,11 +293,11 @@ class GuardSurfaceDaemonClient:
         return dict(operation) if _is_string_object_dict(operation) else response
 
     def extension_control_catalog(self) -> dict[str, object]:
-        # The catalog enumerates every built-in extension and has its own contract cap.
+        # The legacy full catalog enumerates every built-in extension and has its own local budget.
         return self._get(
             "/v1/extension-controls/catalog",
             timeout=_DEFAULT_REQUEST_TIMEOUT_S,
-            max_bytes=MAX_CATALOG_PAYLOAD_BYTES,
+            max_bytes=MAX_DAEMON_CATALOG_RESPONSE_BYTES,
         )
 
     def effective_extension_controls(self) -> dict[str, object]:
@@ -406,6 +406,8 @@ class GuardSurfaceDaemonClient:
         deadline: float,
         max_bytes: int = _MAX_GET_RESPONSE_BYTES,
     ) -> bytes:
+        if type(max_bytes) is not int or not 0 < max_bytes <= MAX_DAEMON_CATALOG_RESPONSE_BYTES:
+            raise ValueError("Guard daemon response limit must be a positive bounded integer")
         remaining = deadline - time.monotonic()
         if remaining <= 0.0:
             raise GuardDaemonTimeoutError("Guard daemon request timed out")
