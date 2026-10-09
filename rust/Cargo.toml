@@ -21,11 +21,6 @@ resolver = "2"
 opt-level = "s"
 # Executable behavior is unchanged; omit symbol tables from distributed binaries.
 strip = "symbols"
-# Whole-program optimization trims about 1.3 MB from each compressed native wheel
-# without slowing hook evaluation. opt-level "z" was smaller still but
-# measurably slower, so it stays at "s".
-lto = "fat"
-codegen-units = 1
 
 [workspace.package]
 version = "0.1.0"
