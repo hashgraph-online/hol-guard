@@ -18,6 +18,7 @@ from threading import Timer
 from typing import Protocol, TypeGuard, cast
 from urllib.parse import urlsplit
 
+from ..runtime.extension_control_limits import MAX_CATALOG_PAYLOAD_BYTES
 from .manager import (
     clear_guard_daemon_state,
     ensure_guard_daemon,
@@ -292,7 +293,12 @@ class GuardSurfaceDaemonClient:
         return dict(operation) if _is_string_object_dict(operation) else response
 
     def extension_control_catalog(self) -> dict[str, object]:
-        return self._get("/v1/extension-controls/catalog", timeout=_DEFAULT_REQUEST_TIMEOUT_S)
+        # The catalog enumerates every built-in extension and has its own contract cap.
+        return self._get(
+            "/v1/extension-controls/catalog",
+            timeout=_DEFAULT_REQUEST_TIMEOUT_S,
+            max_bytes=MAX_CATALOG_PAYLOAD_BYTES,
+        )
 
     def effective_extension_controls(self) -> dict[str, object]:
         return self._get("/v1/extension-controls/effective", timeout=_DEFAULT_REQUEST_TIMEOUT_S)
@@ -341,7 +347,13 @@ class GuardSurfaceDaemonClient:
         response = self._post("/v1/policy/claim", payload)
         return response.get("claimed") is True
 
-    def _get(self, path: str, *, timeout: float) -> dict[str, object]:
+    def _get(
+        self,
+        path: str,
+        *,
+        timeout: float,
+        max_bytes: int = _MAX_GET_RESPONSE_BYTES,
+    ) -> dict[str, object]:
         deadline = time.monotonic() + timeout
         request = urllib.request.Request(
             f"{self.daemon_url}{path}",
@@ -350,7 +362,7 @@ class GuardSurfaceDaemonClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                payload = self._read_response_with_deadline(response, deadline=deadline)
+                payload = self._read_response_with_deadline(response, deadline=deadline, max_bytes=max_bytes)
                 return self._decode_json_response(payload.decode("utf-8"))
         except urllib.error.HTTPError as error:
             raise self._http_request_error(error, deadline=deadline) from error
@@ -364,7 +376,11 @@ class GuardSurfaceDaemonClient:
                 raise GuardDaemonTransportError("Guard daemon response was truncated") from error
             try:
                 with urllib.request.urlopen(request, timeout=remaining) as retry_response:
-                    payload = self._read_response_with_deadline(retry_response, deadline=deadline)
+                    payload = self._read_response_with_deadline(
+                        retry_response,
+                        deadline=deadline,
+                        max_bytes=max_bytes,
+                    )
                     return self._decode_json_response(payload.decode("utf-8"))
             except TimeoutError as retry_error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
@@ -388,6 +404,7 @@ class GuardSurfaceDaemonClient:
         response: _ReadableResponse,
         *,
         deadline: float,
+        max_bytes: int = _MAX_GET_RESPONSE_BYTES,
     ) -> bytes:
         remaining = deadline - time.monotonic()
         if remaining <= 0.0:
@@ -397,12 +414,12 @@ class GuardSurfaceDaemonClient:
         read1 = getattr(response, "read1", None)
         if not callable(read1):
             try:
-                payload = response.read(_MAX_GET_RESPONSE_BYTES + 1)
+                payload = response.read(max_bytes + 1)
             except TimeoutError as error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
             if time.monotonic() >= deadline:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out")
-            if len(payload) > _MAX_GET_RESPONSE_BYTES:
+            if len(payload) > max_bytes:
                 raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
             return payload
 
@@ -416,7 +433,7 @@ class GuardSurfaceDaemonClient:
             if not _bound_response_read(response, remaining):
                 raise GuardDaemonTransportError("Guard daemon response does not support bounded reads")
             try:
-                chunk = bounded_read(min(65_536, _MAX_GET_RESPONSE_BYTES + 1 - total_bytes))
+                chunk = bounded_read(min(65_536, max_bytes + 1 - total_bytes))
             except TimeoutError as error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
             if time.monotonic() >= deadline:
@@ -424,7 +441,7 @@ class GuardSurfaceDaemonClient:
             if not chunk:
                 break
             total_bytes += len(chunk)
-            if total_bytes > _MAX_GET_RESPONSE_BYTES:
+            if total_bytes > max_bytes:
                 raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
             chunks.append(chunk)
             if _response_is_closed(response):
