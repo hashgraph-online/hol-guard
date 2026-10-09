@@ -129,7 +129,7 @@ fn runner_local_bin_identity(
         return Ok(None);
     };
     let fingerprint = path_fingerprint(path);
-    let identity_hash = identity_digest(&[
+    let mut fields = vec![
         ("kind", Value::from("executable")),
         ("content_sha256", Value::from(digest)),
         ("path_fingerprint", Value::from(fingerprint.as_str())),
@@ -141,7 +141,20 @@ fn runner_local_bin_identity(
                 .cloned()
                 .unwrap_or(Value::Null),
         ),
-    ])?;
+    ];
+    // A regular-file `.bin` shim (npm on Windows, pnpm) only launches the
+    // package's bin script, so that script's hash binds the grant too. Symlinked
+    // bins omit it and keep their existing identity.
+    if let Some(bin_target) = local_bin.get("bin_target_content_hash") {
+        let bin_digest = bin_target
+            .as_str()
+            .map(|hash| Value::from(hash.strip_prefix("sha256:").unwrap_or(hash)));
+        let Some(bin_digest) = sha256_hex(bin_digest.as_ref()) else {
+            return Ok(None);
+        };
+        fields.push(("bin_target_sha256", Value::from(bin_digest)));
+    }
+    let identity_hash = identity_digest(&fields)?;
     Ok(Some(LocalCliIdentityV1 {
         cli_id: format!(
             "local-cli.{}-{}",
