@@ -529,6 +529,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     runtime_started_at: str
     idle_timeout_seconds: float | None
     last_activity_monotonic: float
+    idle_shutdown_claimed: bool
     start_monotonic: float
     active_stream_clients: int
     active_stream_clients_lock: threading.Lock
@@ -654,6 +655,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.workspace_dir = workspace_dir.resolve(strict=False) if workspace_dir is not None else None
         self.idle_timeout_seconds = idle_timeout_seconds
         self.last_activity_monotonic = time.monotonic()
+        self.idle_shutdown_claimed = False
         self.start_monotonic = time.monotonic()
         self.active_stream_clients = 0
         self.active_stream_clients_lock = threading.Lock()
@@ -877,11 +879,28 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 with self.request_capacity_lock:
                     self.normal_connections.discard(id(request_socket))
             return
+        # Admission and the idle watchdog's shutdown claim share this lock, so a
+        # request is either counted before the claim or refused here, never
+        # admitted into a server that is closing.
+        with self.request_capacity_lock:
+            closing = self.idle_shutdown_claimed
+            if closing:
+                self.rejected_requests += 1
+            else:
+                self.active_requests += 1
+                self.last_activity_monotonic = time.monotonic()
+        if closing:
+            try:
+                self.shutdown_request(request_socket)
+            finally:
+                self.connection_capacity.release()
+                self._guard_release_request()
+                with self.request_capacity_lock:
+                    self.normal_connections.discard(id(request_socket))
+            return
         with suppress(OSError):
             request_socket.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
         self._register_unclassified_connection(request_socket, accepted_at=accepted_at)
-        with self.request_capacity_lock:
-            self.active_requests += 1
         if pending:
             # Do not serialize partial-header waits on the accept thread.
             # These sockets still own both outer permits; the existing bounded
@@ -983,6 +1002,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.normal_connections.discard(id(request))
             if was_active:
                 self.active_requests -= 1
+                # The idle clock starts when the last request finishes, not when it started.
+                self.last_activity_monotonic = time.monotonic()
             capacity_kind = self.request_capacity_kinds.pop(id(request), None)
         if capacity_kind is not None:
             self._request_capacity_for_kind(capacity_kind).release()
@@ -9476,7 +9497,15 @@ class GuardDaemonServer:
             ):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue
-            if time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds:
+            with self._server.request_capacity_lock:
+                # A request that outlives the idle window is activity, not idleness.
+                idle = (
+                    self._server.active_requests == 0
+                    and time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds
+                )
+                if idle:
+                    self._server.idle_shutdown_claimed = True
+            if idle:
                 self._shutdown_started.set()
                 self._server.shutdown()
                 return

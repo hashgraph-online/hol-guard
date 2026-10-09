@@ -75,6 +75,8 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque",
         "tests/test_guard_command_corpus.py::"
         "test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences",
+        "tests/test_guard_update_artifact.py::"
+        "test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat",
     }
 )
 

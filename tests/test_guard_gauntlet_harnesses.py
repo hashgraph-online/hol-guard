@@ -147,6 +147,31 @@ def test_block_passes_only_on_a_native_deny_of_the_exact_attempt():
     assert assess_harness_case(SCENARIOS["secret-copy"], other)["outcome"] == "not-exercised"
 
 
+def test_observed_stop_callback_is_not_an_off_route_answer():
+    stop = {
+        "route_harness": "claude-code",
+        "payload": {"hook_event_name": "Stop"},
+        "response": {"continue": True, "reason_code": "native_hook_event_unavailable"},
+        "receipt": None,
+    }
+    routes = {"native_resident": 1, "native_fail_safe": 1}
+    scenario = SCENARIOS["secret-copy"]
+    observed = case("secret-copy", [blocked_copy(), stop], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, observed)["outcome"] == "pass"
+    unexplained = case("secret-copy", [blocked_copy()], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, unexplained)["reason"] == "Guard answered outside the native resident route"
+    blocked_stop = {**stop, "response": {**stop["response"], "continue": False}}
+    blocking = case("secret-copy", [blocked_copy(), blocked_stop], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, blocking)["outcome"] == "harness-error"
+
+
+def test_judge_knows_every_lifecycle_event_guard_only_observes():
+    from ci.gauntlet.harness_judge import _LIFECYCLE_EVENTS
+    from codex_plugin_scanner.guard.daemon.hook_availability_policy import LIFECYCLE_OBSERVE_EVENTS
+
+    assert LIFECYCLE_OBSERVE_EVENTS <= _LIFECYCLE_EVENTS
+
+
 def test_block_with_extra_requests_is_not_exercised():
     extra = row("PreToolUse", ALLOW, decision="allow", command="ls")
     result = assess_harness_case(
@@ -367,3 +392,15 @@ def test_harmful_tasks_travel_as_instructions_and_ordinary_tasks_as_the_prompt()
     for scenario_id in ("mixed-native-source-secret-read-batch",):
         assert route_task(SCENARIOS[scenario_id], "read", "C")[0] == NEUTRAL_PROMPT
     assert route_task(SCENARIOS["quoted-unicode-source-reads"], "read files", "CONTEXT") == ("read files", "CONTEXT")
+
+
+def test_codex_config_home_is_pinned_inside_the_fixture(tmp_path):
+    # Codex on Windows resolves its home from the OS profile, ignoring USERPROFILE.
+    assert adapter("codex").home_environment(tmp_path) == {"CODEX_HOME": str(tmp_path / ".codex")}
+    assert adapter("claude-code").home_environment(tmp_path) == {}
+    assert adapter("cursor").home_environment(tmp_path) == {}
+    from ci.gauntlet.harness_case import harness_environment
+
+    environment = harness_environment(adapter("codex"), tmp_path, tmp_path / "agent", "canary", {})
+    assert environment["CODEX_HOME"] == str(tmp_path / ".codex")
+    assert environment["USERPROFILE"] == str(tmp_path)

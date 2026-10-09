@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shlex
 import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
@@ -20,6 +19,7 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
 )
 from ..codex_config import dump_toml, read_toml_payload
+from ..codex_hook_command_line import encode_hook_config_argument, render_hook_command
 from ..codex_hook_file_integrity import validate_regular_file
 from ..codex_hook_integrity import (
     atomic_write_bytes,
@@ -339,7 +339,8 @@ def _hook_command_parts_for_home_mode(
         },
     }
     bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
-    return (python_executable, "-I", str(bridge_path), json.dumps(config, separators=(",", ":")))
+    config_argument = encode_hook_config_argument(json.dumps(config, separators=(",", ":")))
+    return (python_executable, "-I", str(bridge_path), config_argument)
 
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -351,7 +352,7 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
 
 
 def _hook_command(context: HarnessContext) -> str:
-    return shlex.join(_hook_command_parts(context))
+    return render_hook_command(_hook_command_parts(context))
 
 
 def _managed_hook_entry(

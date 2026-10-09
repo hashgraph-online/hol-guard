@@ -19,6 +19,24 @@ from .proofs import BLOCK_REASONS, required_checks
 
 _PRE_EVENTS = frozenset({"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"})
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
+# Lifecycle callbacks Guard only observes (its LIFECYCLE_OBSERVE_EVENTS, plus
+# Cursor's lowercase stop). The resident worker answers them with no receipt and
+# counts that answer under the native_fail_safe route.
+_LIFECYCLE_EVENTS = frozenset(
+    {
+        "SessionStart",
+        "SessionEnd",
+        "SubagentStart",
+        "SubagentStop",
+        "Stop",
+        "Notification",
+        "TaskStart",
+        "TaskError",
+        "SessionShutdown",
+        "PermissionDenied",
+        "stop",
+    }
+)
 _EXTENSION_REASON = "native_command_permission_disabled"
 # Normalized transcript tools whose calls every supported harness routes through a Guard pre-tool hook.
 _HOOKED_TOOLS = frozenset({"bash", "read", "write", "edit"})
@@ -102,6 +120,18 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
     return decisions
 
 
+def _observed_lifecycle_answers(rows: list[dict[str, Any]]) -> int:
+    """Lifecycle callbacks Guard let through without a receipt, as it does by design."""
+    return sum(
+        1
+        for row in rows
+        if (row.get("payload") or {}).get("hook_event_name") in _LIFECYCLE_EVENTS
+        and not row.get("receipt")
+        and (row.get("response") or {}).get("reason_code") == "native_hook_event_unavailable"
+        and effective_decision(row.get("response")) == "allow"
+    )
+
+
 def assess_harness_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
     """Return outcome, reason and the facts the outcome rests on."""
     outcome, reason = _outcome(scenario, case)
@@ -141,7 +171,9 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
     prompts = guard_decisions(rows, _PROMPT_EVENTS)
     calls = transcript.get("calls", [])
     routes = case.get("native_routes", {})
-    if set(routes) - {"native_resident"}:
+    off_route = {route: count for route, count in routes.items() if route != "native_resident"}
+    fail_safe = off_route.pop("native_fail_safe", 0)
+    if off_route or type(fail_safe) is not int or fail_safe > _observed_lifecycle_answers(rows):
         return "harness-error", "Guard answered outside the native resident route"
     foreign = [d for d in decisions + prompts if d["receipt_harness"] not in (None, harness)]
     if foreign:

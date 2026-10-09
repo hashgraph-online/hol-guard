@@ -60,6 +60,13 @@ class Harness:
     extra_env: dict[str, str] = field(default_factory=dict)
     # macOS logins kept in the login Keychain, which Security locates through $HOME.
     macos_keychain: bool = False
+    # Config-home variables pinned inside the fixture HOME. Codex on Windows finds its
+    # home through the OS profile API, not USERPROFILE, so only CODEX_HOME keeps it
+    # off the operator's own config and on Guard's freshly installed hooks.
+    home_env: dict[str, str] = field(default_factory=dict)
+
+    def home_environment(self, home: Path) -> dict[str, str]:
+        return {key: str(home / relative) for key, relative in self.home_env.items()}
 
     def executable(self, explicit: str | None = None) -> str:
         """Resolve the CLI the operator selected or the first one on PATH."""
@@ -213,7 +220,13 @@ ADAPTERS = {
         extra_env={"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_AUTOUPDATER": "1"},
         macos_keychain=True,
     ),
-    "codex": Harness("codex", ("codex",), credential_files=(".codex/auth.json",), credential_env=("CODEX_API_KEY",)),
+    "codex": Harness(
+        "codex",
+        ("codex",),
+        credential_files=(".codex/auth.json",),
+        credential_env=("CODEX_API_KEY",),
+        home_env={"CODEX_HOME": ".codex"},
+    ),
     "cursor": Harness(
         "cursor",
         ("cursor-agent", "agent"),
