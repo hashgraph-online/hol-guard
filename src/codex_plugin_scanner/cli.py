@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
+from .cli_native_errors import guard_value_error_exit
 from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
 from .reporting import format_json as format_json
 from .version import __version__
@@ -460,7 +461,7 @@ def main(argv: list[str] | None = None) -> int:
             run_guard = getattr(cli_module, "run_guard_command", None) or _guard_cli("run_guard_command")
             return run_guard(args)
         except ValueError as exc:
-            parser.error(str(exc))
+            return guard_value_error_exit(parser, exc)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1
@@ -491,7 +492,7 @@ def _dispatch_scanner_command(
         try:
             return _guard_cli("run_guard_command")(args)
         except ValueError as exc:
-            parser.error(str(exc))
+            return guard_value_error_exit(parser, exc)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1

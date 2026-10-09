@@ -81,6 +81,9 @@ export type McpToolDefaultState = "inherit" | "allow" | "review" | "block";
 
 export type McpLaunch =
   | {
+      kind: "unsupported";
+    }
+  | {
       kind: "direct-command";
       command: string;
     }
@@ -128,7 +131,8 @@ export type ExtensionCatalogItem = {
   rules: ExtensionRule[];
   permission_count: number;
   permissions: ExtensionPermission[];
-  surface?: "mcp";
+  // "unsupported" marks a surface from a newer Guard that this dashboard cannot render.
+  surface?: "mcp" | "unsupported";
   mcp_launch?: McpLaunch;
   mcp_tools?: McpToolDefault[];
 };
