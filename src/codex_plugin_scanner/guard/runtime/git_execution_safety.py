@@ -10,10 +10,27 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def _ask(check: str, **facts: object) -> tuple[bool, str | None]:
+def _ask(
+    check: str,
+    *,
+    cwd: Path | None = None,
+    git_binary: Path | None = None,
+    git_path: Path | None = None,
+    arguments: list[str] | None = None,
+    branch: str | None = None,
+    reference: str | None = None,
+) -> tuple[bool, str | None]:
     from ..native_git_execution_safety import git_execution_safety_native
 
-    answer = git_execution_safety_native(check, **facts)  # type: ignore[arg-type]
+    answer = git_execution_safety_native(
+        check,
+        cwd=cwd,
+        git_binary=git_binary,
+        git_path=git_path,
+        arguments=arguments,
+        branch=branch,
+        reference=reference,
+    )
     if answer is None:
         return False, None
     return answer.allowed, answer.resolved_path
