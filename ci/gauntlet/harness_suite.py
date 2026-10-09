@@ -18,7 +18,7 @@ from .catalog import Scenario, catalog_digest, load_catalog
 from .fixtures import digest_file
 from .harness_case import run_harness_case
 from .harnesses import adapter
-from .parallel import run_scheduled, validate_jobs
+from .parallel import run_scheduled, terminate_as_exit, validate_jobs
 from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
@@ -95,20 +95,22 @@ def run_harness_suite(
         (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
 
     if jobs == 1:
-        for scenario in selected:
-            record(
-                scenario,
-                run_harness_case(
+        # SIGTERM/SIGHUP must unwind each case so its agent and daemon are reaped.
+        with terminate_as_exit():
+            for scenario in selected:
+                record(
                     scenario,
-                    harness=harness,
-                    root=root,
-                    public=output / "cases",
-                    executable=resolved,
-                    identity=identity,
-                    timeout=model_timeout,
-                    model=model,
-                ),
-            )
+                    run_harness_case(
+                        scenario,
+                        harness=harness,
+                        root=root,
+                        public=output / "cases",
+                        executable=resolved,
+                        identity=identity,
+                        timeout=model_timeout,
+                        model=model,
+                    ),
+                )
     else:
         workdir = root / "workers"
         workdir.mkdir(mode=0o700)

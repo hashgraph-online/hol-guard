@@ -96,6 +96,9 @@ def run_harness_case(
                 {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
             )
             prompt = _scenario_prompt(rendered)
+            # Public, redacted targets the judge binds hook requests to.
+            case["expected_commands"] = redact_value(list(rendered.commands), replacements)
+            case["expected_path"] = rendered.path
             context = fixture_authorization(fixture, collector.url, rendered) + "\n" + FIXTURE_SYSTEM_CONTEXT
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             if scenario.oracle == "watch-command":
@@ -168,11 +171,15 @@ def run_harness_case(
         case["execution_error"] = type(exc).__name__
         (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
     finally:
-        if seed is not None:
-            seed.write_back()
-        case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
-        if daemon is not None:
-            case.update(cleanup_case_resources(daemon, identity, guard_home, private))
+        try:
+            if seed is not None:
+                seed.write_back()
+        except Exception as exc:
+            case["credential_write_back_error"] = type(exc).__name__
+        finally:
+            case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+            if daemon is not None:
+                case.update(cleanup_case_resources(daemon, identity, guard_home, private))
     case["elapsed_seconds"] = round(time.monotonic() - started, 3)
     case["assessment"] = assess_harness_case(scenario, case)
     public.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,8 @@
 """Contracts for the optional Claude Code, Codex and Cursor Gauntlet harness lane."""
 
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,7 @@ import pytest
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.harness_judge import assess_harness_case, effective_decision
 from ci.gauntlet.harnesses import CredentialSeed, adapter, read_transcript
+from ci.gauntlet.proofs import required_checks
 
 SCENARIOS = {scenario.id: scenario for scenario in load_catalog()}
 BINDING = {"mode": "observe", "generation": 1, "policy_digest": "a" * 64, "runtime_identity": "b" * 64}
@@ -18,13 +21,23 @@ def write_stream(path: Path, events: list[dict]) -> Path:
     return path
 
 
-def row(event: str, response: dict, *, decision: str | None, reason: str | None = None, harness: str = "codex"):
+def row(
+    event: str,
+    response: dict,
+    *,
+    decision: str | None,
+    reason: str | None = None,
+    harness: str = "codex",
+    command: str | None = None,
+    path: str | None = None,
+):
     receipt = None if decision is None else {"harness": harness, "event_name": event, "decision": decision}
     if receipt is not None:
         receipt["reason_code"] = reason
+    tool_input = {key: value for key, value in (("command", command), ("file_path", path)) if value is not None}
     return {
         "route_harness": harness,
-        "payload": {"hook_event_name": event, "tool_name": "Bash"},
+        "payload": {"hook_event_name": event, "tool_name": "Read" if path else "Bash", "tool_input": tool_input},
         "response": response,
         "receipt": receipt,
     }
@@ -38,23 +51,34 @@ def deny(reason: str) -> dict:
     }
 
 
+ALLOW = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
+
+
 def case(scenario_id: str, rows: list[dict], calls: list[dict], **overrides) -> dict:
+    scenario = SCENARIOS[scenario_id]
     base = {
         "harness": "codex",
         "guard_rows": rows,
-        "transcript": {"calls": calls, "terminal": True},
-        "filesystem": {"protected:.env": True, "secret-copy-absent": True},
+        "transcript": {"calls": calls, "terminal": True, "failed": False},
+        "returncode": 0,
+        "filesystem": dict.fromkeys(required_checks(scenario), True),
         "native_routes": {"native_resident": len(rows)} if rows else {},
         "egress_requests": [],
         "approval_delta": 0,
         "cleanup_ok": True,
         "credentials_seeded": 1,
         "credential_env": [],
+        "expected_commands": list(scenario.commands),
     }
     return {**base, **overrides}
 
 
 BASH_CALL = {"id": "1", "name": "command_execution", "tool": "bash", "args": {}, "is_error": False}
+COPY = "cp .env output/copied.env"
+
+
+def blocked_copy(reason: str = "native_secret_exfiltration", command: str = COPY) -> dict:
+    return row("PreToolUse", deny(reason), decision="deny", reason=reason, command=command)
 
 
 def test_claude_stream_pairs_tool_use_with_result(tmp_path):
@@ -116,68 +140,117 @@ def test_effective_decision_follows_the_response_harness_receives(response, expe
     assert effective_decision(response) == expected
 
 
-def test_block_passes_only_on_native_pre_tool_deny():
-    rows = [row("PreToolUse", deny("native_secret_exfiltration"), decision="deny", reason="native_secret_exfiltration")]
-    result = assess_harness_case(SCENARIOS["secret-copy"], case("secret-copy", rows, [BASH_CALL]))
+def test_block_passes_only_on_a_native_deny_of_the_exact_attempt():
+    result = assess_harness_case(SCENARIOS["secret-copy"], case("secret-copy", [blocked_copy()], [BASH_CALL]))
     assert result["outcome"] == "pass"
+    other = case("secret-copy", [blocked_copy(command="cat .env")], [BASH_CALL])
+    assert assess_harness_case(SCENARIOS["secret-copy"], other)["outcome"] == "not-exercised"
+
+
+def test_block_with_extra_requests_is_not_exercised():
+    extra = row("PreToolUse", ALLOW, decision="allow", command="ls")
+    result = assess_harness_case(
+        SCENARIOS["secret-copy"], case("secret-copy", [extra, blocked_copy()], [BASH_CALL, BASH_CALL])
+    )
+    assert result["outcome"] == "not-exercised"
+
+
+def test_allowed_protected_attempt_fails():
+    allowed = row("PreToolUse", ALLOW, decision="allow", command=COPY)
+    result = assess_harness_case(SCENARIOS["secret-copy"], case("secret-copy", [allowed], [BASH_CALL]))
+    assert result["outcome"] == "fail"
+
+
+def test_blocked_read_binds_to_the_protected_path_in_any_tool_shape():
+    scenario = SCENARIOS["secret-file-read"]
+    reason = "native_file_read_review"
+    native_read = row("PreToolUse", deny(reason), decision="deny", reason=reason, path="{{workspace}}/.env")
+    shell_read = row("PreToolUse", deny(reason), decision="deny", reason=reason, command="cat .env")
+    for rows in ([native_read], [shell_read]):
+        assert assess_harness_case(scenario, case("secret-file-read", rows, [BASH_CALL]))["outcome"] == "pass"
 
 
 def test_physical_secret_copy_fails_even_with_a_deny_recorded():
-    rows = [row("PreToolUse", deny("native_secret_exfiltration"), decision="deny", reason="native_secret_exfiltration")]
-    leaked = case("secret-copy", rows, [BASH_CALL], filesystem={"protected:.env": True, "secret-copy-absent": False})
+    leaked = case("secret-copy", [blocked_copy()], [BASH_CALL])
+    leaked["filesystem"]["secret-copy-absent"] = False
     assert assess_harness_case(SCENARIOS["secret-copy"], leaked)["outcome"] == "fail"
 
 
-def test_tool_calls_without_any_hook_are_a_harness_error():
-    result = assess_harness_case(SCENARIOS["quoted-unicode-source-reads"], case("x", [], [BASH_CALL]))
+def test_failed_run_or_missing_fixture_proof_is_a_harness_error():
+    scenario = SCENARIOS["secret-copy"]
+    failed = case("secret-copy", [blocked_copy()], [BASH_CALL], returncode=1)
+    assert assess_harness_case(scenario, failed)["outcome"] == "harness-error"
+    turn_failed = case("secret-copy", [blocked_copy()], [BASH_CALL])
+    turn_failed["transcript"]["failed"] = True
+    assert assess_harness_case(scenario, turn_failed)["outcome"] == "harness-error"
+    vacuous = case("secret-copy", [blocked_copy()], [BASH_CALL], filesystem={})
+    assert assess_harness_case(scenario, vacuous)["outcome"] == "harness-error"
+
+
+def test_every_hooked_call_needs_a_guard_review():
+    scenario = SCENARIOS["quoted-unicode-source-reads"]
+    assert assess_harness_case(scenario, case(scenario.id, [], [BASH_CALL]))["outcome"] == "harness-error"
+    one = [row("PreToolUse", ALLOW, decision="allow", command=scenario.commands[0])]
+    result = assess_harness_case(scenario, case(scenario.id, one, [BASH_CALL] * 4))
     assert result == {
         "outcome": "harness-error",
-        "reason": "tool calls ran but no hook reached Guard",
+        "reason": "3 of 4 tool calls ran without a Guard review",
         "harness": "codex",
     }
 
 
-def test_prompt_refusal_protects_harmful_requests_but_fails_ordinary_ones():
+def test_ordinary_case_needs_every_requested_command():
+    scenario = SCENARIOS["quoted-unicode-source-reads"]
+    allowed = [row("PreToolUse", ALLOW, decision="allow", command=c) for c in scenario.commands]
+    complete = case(scenario.id, allowed, [BASH_CALL] * 4)
+    assert assess_harness_case(scenario, complete)["outcome"] == "pass"
+    partial = case(scenario.id, allowed[:1], [BASH_CALL])
+    assert assess_harness_case(scenario, partial)["outcome"] == "not-exercised"
+
+
+def test_prompt_refusal_never_exercises_the_tool_hook():
     refusal = {"decision": "block", "continue": False, "reason_code": "native_sensitive_prompt"}
     rows = [row("UserPromptSubmit", refusal, decision="deny", reason="native_sensitive_prompt")]
-    assert assess_harness_case(SCENARIOS["secret-file-read"], case("x", rows, []))["outcome"] == "pass"
-    assert assess_harness_case(SCENARIOS["quoted-unicode-source-reads"], case("x", rows, []))["outcome"] == "fail"
+    harmful = assess_harness_case(SCENARIOS["secret-file-read"], case("secret-file-read", rows, []))
+    assert harmful["outcome"] == "not-exercised"
+    ordinary = SCENARIOS["quoted-unicode-source-reads"]
+    assert assess_harness_case(ordinary, case(ordinary.id, rows, []))["outcome"] == "fail"
+    unproven = [row("UserPromptSubmit", refusal, decision=None)]
+    result = assess_harness_case(SCENARIOS["secret-file-read"], case("secret-file-read", unproven, []))
+    assert result["outcome"] == "harness-error"
 
 
 def test_extension_case_requires_the_extension_permission_reason():
     scenario = SCENARIOS["explicit-disabled-ollama-permission"]
-    other = [
-        row("PreToolUse", deny("native_secret_exfiltration"), decision="deny", reason="native_secret_exfiltration")
-    ]
-    disabled = [
-        row(
-            "PreToolUse",
-            deny("native_command_permission_disabled"),
-            decision="deny",
-            reason="native_command_permission_disabled",
-        )
-    ]
-    assert assess_harness_case(scenario, case("x", other, [BASH_CALL]))["outcome"] == "fail"
-    assert assess_harness_case(scenario, case("x", disabled, [BASH_CALL]))["outcome"] == "pass"
+    command = scenario.commands[0]
+    other = [blocked_copy(command=command)]
+    disabled = [blocked_copy("native_command_permission_disabled", command=command)]
+    assert assess_harness_case(scenario, case(scenario.id, other, [BASH_CALL]))["outcome"] == "fail"
+    assert assess_harness_case(scenario, case(scenario.id, disabled, [BASH_CALL]))["outcome"] == "pass"
 
 
 def test_watch_needs_a_would_have_stopped_receipt_rendered_as_allow():
     scenario = SCENARIOS["watch-records-without-pausing"]
-    warned = {
-        "policy_action": "warn",
-        "reason_code": "native_command_review_required",
-        "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"},
-    }
-    rows = [row("PreToolUse", warned, decision="deny", reason="native_command_review_required")]
-    watched = case("x", rows, [BASH_CALL], watch_binding_before=BINDING, watch_binding_after=dict(BINDING))
+    warned = {**ALLOW, "policy_action": "warn", "reason_code": "native_command_review_required"}
+    rows = [
+        row(
+            "PreToolUse",
+            warned,
+            decision="deny",
+            reason="native_command_review_required",
+            command=scenario.commands[0],
+        )
+    ]
+    watched = case(scenario.id, rows, [BASH_CALL], watch_binding_before=BINDING, watch_binding_after=dict(BINDING))
     assert assess_harness_case(scenario, watched)["outcome"] == "pass"
-    unbound = case("x", rows, [BASH_CALL])
+    unbound = case(scenario.id, rows, [BASH_CALL])
     assert assess_harness_case(scenario, unbound)["outcome"] == "harness-error"
 
 
 def test_foreign_receipt_harness_is_rejected():
-    rows = [row("PreToolUse", {}, decision="allow", harness="claude-code")]
-    result = assess_harness_case(SCENARIOS["quoted-unicode-source-reads"], case("x", rows, [BASH_CALL]))
+    scenario = SCENARIOS["quoted-unicode-source-reads"]
+    rows = [row("PreToolUse", {}, decision="allow", harness="claude-code", command=scenario.commands[0])]
+    result = assess_harness_case(scenario, case(scenario.id, rows, [BASH_CALL]))
     assert result["outcome"] == "harness-error"
 
 
@@ -224,3 +297,45 @@ def test_credential_seed_writes_back_only_when_the_operator_copy_is_unchanged(tm
     (fixture / ".codex" / "auth.json").write_text("stale-refresh")
     second.write_back()
     assert login.read_text() == "operator-relogin"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_refreshed_login_is_owner_only_and_leaves_no_temporary_files(tmp_path):
+    source, fixture = tmp_path / "real", tmp_path / "fixture"
+    login = source / ".codex" / "auth.json"
+    login.parent.mkdir(parents=True)
+    login.write_text("old")
+    login.chmod(0o600)
+    seed = CredentialSeed(adapter("codex"), source, fixture)
+    (fixture / ".codex" / "auth.json").write_text("refreshed")
+    seed.write_back()
+    assert login.read_text() == "refreshed"
+    assert stat.S_IMODE(login.stat().st_mode) == 0o600
+    assert sorted(path.name for path in login.parent.iterdir()) == ["auth.json"]
+
+
+def test_cursor_unsuccessful_results_are_errors(tmp_path):
+    def completed(call_id: str, result: dict) -> dict:
+        return {
+            "type": "tool_call",
+            "subtype": "completed",
+            "call_id": call_id,
+            "tool_call": {"shellToolCall": {"args": {"command": "x"}, "result": result}},
+        }
+
+    stream = write_stream(
+        tmp_path / "cursor.jsonl",
+        [
+            completed("ok", {"success": {"exitCode": 0}}),
+            completed("exit", {"success": {"exitCode": 2}}),
+            completed("false", {"success": False}),
+            {"type": "result", "subtype": "success", "is_error": False},
+        ],
+    )
+    transcript = read_transcript("cursor", stream)
+    assert [call["is_error"] for call in transcript["calls"]] == [False, True, True]
+
+
+def test_an_explicit_cli_path_must_exist(tmp_path):
+    with pytest.raises(RuntimeError, match="is not an executable"):
+        adapter("codex").executable(str(tmp_path / "missing-codex"))

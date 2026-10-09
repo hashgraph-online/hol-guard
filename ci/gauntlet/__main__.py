@@ -234,7 +234,15 @@ def main() -> int:
 
 def _run_harness(args: argparse.Namespace) -> int:
     """Drive a non-omp agent CLI; inference goes through that CLI's own login."""
-    if args.native_luna_route or args.provider_url or args.model or args.reasoning_effort or args.omp:
+    if (
+        args.native_luna_route
+        or args.provider_url
+        or args.provider_identity
+        or args.allow_loopback_provider
+        or args.model
+        or args.reasoning_effort
+        or args.omp
+    ):
         raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
     if args.profile != "core":
         raise ValueError("--harness supports only the core profile")

@@ -14,6 +14,10 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -59,8 +63,12 @@ class Harness:
 
     def executable(self, explicit: str | None = None) -> str:
         """Resolve the CLI the operator selected or the first one on PATH."""
-        for candidate in (explicit, *self.executable_names):
-            if candidate and (resolved := shutil.which(candidate)):
+        if explicit:
+            if resolved := shutil.which(explicit):
+                return resolved
+            raise RuntimeError(f"--harness-cli {explicit!r} is not an executable")
+        for candidate in self.executable_names:
+            if resolved := shutil.which(candidate):
                 return resolved
         raise RuntimeError(f"install the {self.name} CLI before running Gauntlet with --harness {self.name}")
 
@@ -258,15 +266,58 @@ class CredentialSeed:
         return len(self._pairs) + int(self.keychain)
 
     def write_back(self) -> None:
+        """Replace the operator's login with a refreshed copy, never a stale or wider-readable one.
+
+        Parallel workers share the operator's file, so the compare and replace run
+        under a lock. Each attempt writes its own owner-only (0600) temporary file.
+        """
         for source, target, original in self._pairs:
             try:
-                current, refreshed = source.read_bytes(), target.read_bytes()
+                refreshed = target.read_bytes()
             except OSError:
                 continue
-            if current == original and refreshed != original and refreshed.strip():
-                temporary = source.with_name(source.name + ".gauntlet-tmp")
-                temporary.write_bytes(refreshed)
-                os.replace(temporary, source)
+            if refreshed == original or not refreshed.strip():
+                continue
+            with _login_lock(source):
+                if source.read_bytes() != original:
+                    continue
+                descriptor, name = tempfile.mkstemp(prefix=f".{source.name}.", suffix=".gauntlet", dir=source.parent)
+                temporary = Path(name)
+                try:
+                    with os.fdopen(descriptor, "wb") as handle:
+                        handle.write(refreshed)
+                    os.replace(temporary, source)
+                finally:
+                    temporary.unlink(missing_ok=True)
+
+
+_LOCK_WAIT_SECONDS = 60
+_STALE_LOCK_SECONDS = 600
+
+
+@contextmanager
+def _login_lock(source: Path) -> Iterator[None]:
+    """Hold an exclusive lock directory beside the login file; mkdir is atomic on every host."""
+    lock = source.with_name(source.name + ".gauntlet-lock")
+    deadline = time.monotonic() + _LOCK_WAIT_SECONDS
+    while True:
+        try:
+            lock.mkdir(mode=0o700)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > _STALE_LOCK_SECONDS:
+                    lock.rmdir()
+                    continue
+            except OSError:
+                pass
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"another Gauntlet worker holds the {source.name} login lock") from None
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        lock.rmdir()
 
 
 def credential_environment(harness: Harness) -> dict[str, str]:
@@ -365,7 +416,8 @@ def _cursor_event(event: dict, kind: Any, calls: dict, order: list, terminal: bo
             _remember(calls, order, event.get("call_id"), name, body.get("args"))
             if event.get("subtype") == "completed":
                 result = body.get("result")
-                is_error = not (isinstance(result, dict) and "success" in result)
+                success = result.get("success") if isinstance(result, dict) else None
+                is_error = not isinstance(success, dict) or success.get("exitCode", 0) != 0
                 _finish(calls, event.get("call_id"), is_error, result)
     elif kind == "result":
         return True, event.get("is_error") is True or event.get("subtype") != "success"
