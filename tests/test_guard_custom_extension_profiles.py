@@ -4,11 +4,13 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.daemon.local_cli_profiles_api import (
     annotate_cli_profiles,
     is_default_catalog,
     merge_profile_commands,
     profile_catalog_seed,
+    profiled_cli_package_launch,
     seeded_profile_cli_id,
     seeded_profile_items,
 )
@@ -265,3 +267,46 @@ def test_backfill_observation_does_not_bump_existing_rows(tmp_path: Path) -> Non
     after = next(item for item in store.list_local_cli_items() if item["cli_id"] == _WRANGLER.cli_id)
     assert after["observed_count"] == before["observed_count"]
     assert after["last_seen_at"] == before["last_seen_at"]
+
+
+def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+
+    def _probe(*_args, **_kwargs):
+        raise AssertionError("profiled CLIs must not be probed as MCP servers")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        _probe,
+    )
+    service = LocalCliApiService(store=GuardStore(home))
+    result = service.recognize({"command": "npx wrangler"})
+    item = result["item"]
+    assert isinstance(item, dict)
+    assert item["surface"] == "cli"
+    assert item["name"] == "wrangler"
+    ids = {entry["command_id"] for entry in item["commands"]}
+    assert {"deploy", "d1.execute"} <= ids
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("npx wrangler", True),
+        ("npx -y wrangler@4 deploy", True),
+        ("bunx wrangler", True),
+        ("npx --package wrangler some-mcp", False),
+        ("npx @other/wrangler", False),
+        ("npx wrangler@npm:other-mcp", False),
+        ("npx wrangler@latest", True),
+        ("npx cowsay", False),
+        ("wrangler", False),
+    ],
+)
+def test_profiled_cli_package_launch_needs_direct_unscoped_target(command: str, expected: bool) -> None:
+    assert profiled_cli_package_launch(command.split()) is expected
