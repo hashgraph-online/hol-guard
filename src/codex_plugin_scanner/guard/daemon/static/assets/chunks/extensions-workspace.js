@@ -248,8 +248,9 @@ function customExtensionBadge(item) {
 function hasSuggestedRules(item) {
   return item.commands.some((command) => command.suggested_state !== void 0);
 }
-function prefillSuggestedStates(commands) {
-  return commands.map((command) => command.state === "inherit" && command.suggested_state !== void 0 && command.suggested_state !== "inherit" ? { ...command, state: command.suggested_state } : command);
+function prefillSuggestedStates(item) {
+  if (item.state !== "unset") return item.commands;
+  return item.commands.map((command) => command.state === "inherit" && command.suggested_state !== void 0 && command.suggested_state !== "inherit" ? { ...command, state: command.suggested_state } : command);
 }
 function addCustomExtensionPrefillHref(base, command) {
   if (!command || !Object.values(PROFILE_SETUP_COMMANDS).includes(command)) return base;
@@ -5135,7 +5136,7 @@ function AddCustomExtensionButton(props) {
 function LocalCliDetail(props) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = reactExports.useState(null);
-  const [commands, setCommands] = reactExports.useState(() => prefillSuggestedStates(props.item.commands));
+  const [commands, setCommands] = reactExports.useState(() => prefillSuggestedStates(props.item));
   const [providerDrafts, setProviderDrafts] = reactExports.useState({});
   const previousItem = reactExports.useRef(props.item);
   const [busy, setBusy] = reactExports.useState(false);
@@ -5157,7 +5158,7 @@ function LocalCliDetail(props) {
     }
     setCommands((current) => {
       if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
-        return prefillSuggestedStates(props.item.commands);
+        return prefillSuggestedStates(props.item);
       }
       const changed = previous.mcp_catalog?.revision !== props.item.mcp_catalog?.revision ? props.item.mcp_catalog?.changes?.changed : [];
       return rebaseCommandDraft(current, previous.commands, props.item.commands, changed);
@@ -7599,7 +7600,7 @@ function ExtensionsOverview(props) {
         {
           items: addedCustomItems,
           onOpen: props.onOpenLocalCli,
-          seededItems: props.seededItems,
+          seededItems: addedCustomItems.filter((item) => item.seeded === true),
           onSetUp: props.onAddCustom,
           onAdd: handleAddCustom,
           discovering,

@@ -76,7 +76,12 @@ from .local_cli_api_contract import LOCAL_CLI_API_SCHEMA as _LOCAL_CLI_API_SCHEM
 from .local_cli_api_contract import LocalCliApiError
 from .local_cli_continuity_api import decorate_local_cli_continuity
 from .local_cli_mcp_store import bound_mcp_observation, stored_mcp_recognition
-from .local_cli_profiles_api import annotate_cli_profiles, merge_profile_commands, seeded_profile_items
+from .local_cli_profiles_api import (
+    annotate_cli_profiles,
+    ensure_profile_catalog,
+    merge_profile_commands,
+    seeded_profile_items,
+)
 from .local_cli_registry_setup import registry_setup as reviewed_registry_setup
 from .mcp_discovery_jobs import DiscoveryJobError, DiscoveryStageError, McpDiscoveryJobs
 from .mcp_registry_undo import RegistrySetupUndo
@@ -887,7 +892,7 @@ class LocalCliApiService:
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "revision": self._store.read_local_cli_revision(),
-            "item": public_local_cli_item(listed or fallback),
+            "item": annotate_cli_profiles([public_local_cli_item(listed or fallback)])[0],
             "help_status": help_status,
             "summary": summary,
         }
@@ -939,6 +944,8 @@ class LocalCliApiService:
         except ApprovalGateError as exc:
             raise LocalCliApiError(exc.status, exc.code, str(exc)) from exc
         command_states = self._command_states_from_payload(payload)
+        if command_states:
+            ensure_profile_catalog(self._store, identity.cli_id, identity.name)
         from ..native_policy_snapshot import local_cli_publication_status, notify_native_policy_mutation
 
         # Retire acknowledged authority before writing. The final notification

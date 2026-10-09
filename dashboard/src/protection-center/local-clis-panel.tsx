@@ -52,7 +52,7 @@ export function LocalCliDetail(props: {
 }) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
-  const [commands, setCommands] = useState(() => prefillSuggestedStates(props.item.commands));
+  const [commands, setCommands] = useState(() => prefillSuggestedStates(props.item));
   const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderActionDraft>>({});
   const previousItem = useRef(props.item);
   const [busy, setBusy] = useState(false);
@@ -74,7 +74,7 @@ export function LocalCliDetail(props: {
     }
     setCommands((current) => {
       if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
-        return prefillSuggestedStates(props.item.commands);
+        return prefillSuggestedStates(props.item);
       }
       const changed = previous.mcp_catalog?.revision !== props.item.mcp_catalog?.revision
         ? props.item.mcp_catalog?.changes?.changed : [];

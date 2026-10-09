@@ -59,8 +59,11 @@ assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "local-c
 const command = (state: string, suggested?: string) => ({
   command_id: state, name: state, usage: state, description: "", parent_id: null, state, suggested_state: suggested,
 }) as never;
-const filled = prefillSuggestedStates([command("inherit", "allow"), command("block", "allow"), command("inherit"), command("inherit", "inherit")]);
+const commands = [command("inherit", "allow"), command("block", "allow"), command("inherit"), command("inherit", "inherit")];
+const filled = prefillSuggestedStates({ state: "unset", commands });
 assert.deepEqual(filled.map((entry) => entry.state), ["allow", "block", "inherit", "inherit"]);
+// Added extensions keep their saved choices, including a deliberate "inherit".
+assert.equal(prefillSuggestedStates({ state: "allowed", commands }), commands);
 
 // Prefill URL is allowlisted.
 assert.equal(addCustomExtensionPrefillHref("/extensions/add", "npx wrangler"), "/extensions/add?command=npx%20wrangler");

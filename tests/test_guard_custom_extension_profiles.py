@@ -4,6 +4,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon.local_cli_profiles_api import (
     annotate_cli_profiles,
+    ensure_profile_catalog,
     merge_profile_commands,
     seeded_profile_cli_id,
     seeded_profile_items,
@@ -39,11 +40,14 @@ def test_profile_command_tree_is_valid(profile) -> None:
     assert not profile.executables & catalog_owned_executables()
 
 
-def test_wrangler_suggestions_review_writes_and_allow_reads_only() -> None:
+def test_wrangler_suggestions_leave_writes_to_guard_and_allow_reads_only() -> None:
     suggested = WRANGLER_PROFILE.suggested_states()
 
+    # CLI commands cannot store an explicit review rule; inherit keeps them on
+    # Guard's default review for commands it cannot prove read-only.
+    assert set(suggested.values()) <= {"inherit", "allow"}
     for command_id in ("deploy", "versions.deploy", "secret.put", "d1.execute", "r2.object.delete", "login"):
-        assert suggested[command_id] == "review"
+        assert suggested[command_id] == "inherit"
     for command_id in ("whoami", "deployments.list", "d1.list", "kv.key.list"):
         assert suggested[command_id] == "allow"
     assert suggested["d1"] == "inherit"
@@ -104,7 +108,7 @@ def test_apply_cli_profiles_seeds_placeholder_when_wrangler_unseen() -> None:
     assert isinstance(commands, list)
     by_id = {command["command_id"]: command for command in commands}
     assert by_id[ROOT_COMMAND_ID]["state"] == "inherit" and "suggested_state" not in by_id[ROOT_COMMAND_ID]
-    assert by_id["deploy"]["suggested_state"] == "review"
+    assert by_id["whoami"]["suggested_state"] == "allow"
     assert by_id["deploy"]["state"] == "inherit"
 
 
@@ -123,9 +127,52 @@ def test_apply_cli_profiles_annotates_detected_wrangler_without_placeholder() ->
     assert seeded_profile_items(items, authority_revision=1) == []
     annotated = items[0]
     assert annotated["brand"] == "cloudflare" and annotated["display_name"] == "Cloudflare Wrangler"
-    assert annotated["commands"] == [
-        {"command_id": "deploy", "state": "allow", "suggested_state": "review"},
+    commands = annotated["commands"]
+    assert isinstance(commands, list)
+    assert commands[:2] == [
+        {"command_id": "deploy", "state": "allow", "suggested_state": "inherit"},
         {"command_id": "root", "state": "inherit"},
     ]
+    by_id = {command["command_id"]: command for command in commands}
+    assert by_id["whoami"]["state"] == "inherit" and by_id["whoami"]["suggested_state"] == "allow"
+    assert len(by_id) == len(commands)
     assert "profile_id" not in items[1]
     assert detected["commands"][0] == {"command_id": "deploy", "state": "allow"}
+
+
+def test_detected_wrangler_without_stored_commands_gets_profile_suggestions() -> None:
+    detected = {"cli_id": "local-cli.wrangler-1234abcd", "name": "wrangler", "surface": "cli", "commands": []}
+
+    [annotated] = annotate_cli_profiles([detected])
+
+    commands = annotated["commands"]
+    assert isinstance(commands, list)
+    by_id = {command["command_id"]: command for command in commands}
+    assert by_id["whoami"]["suggested_state"] == "allow"
+    assert by_id["deploy"]["state"] == "inherit"
+
+
+class _CatalogStore:
+    def __init__(self, commands: tuple[LocalCliCommand, ...]) -> None:
+        self.commands = commands
+        self.writes = 0
+
+    def read_local_cli_command_catalog(self, cli_id: str) -> list[LocalCliCommand]:
+        return list(self.commands)
+
+    def replace_local_cli_commands(self, cli_id: str, commands: tuple[LocalCliCommand, ...]) -> None:
+        self.commands = commands
+        self.writes += 1
+
+
+def test_ensure_profile_catalog_stores_profile_commands_once() -> None:
+    extra = LocalCliCommand(command_id="hyperdrive", name="hyperdrive", usage="wrangler hyperdrive", description="")
+    store = _CatalogStore((*default_local_cli_commands("wrangler"), extra))
+
+    ensure_profile_catalog(store, "local-cli.wrangler-1234abcd", "wrangler")  # type: ignore[arg-type]
+    ensure_profile_catalog(store, "local-cli.wrangler-1234abcd", "wrangler")  # type: ignore[arg-type]
+    ensure_profile_catalog(store, "local-cli.gh-1234abcd", "gh")  # type: ignore[arg-type]
+
+    ids = {command.command_id for command in store.commands}
+    assert store.writes == 1
+    assert {"whoami", "deploy", "hyperdrive", ROOT_COMMAND_ID, OTHER_COMMAND_ID} <= ids

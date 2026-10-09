@@ -23,11 +23,13 @@ export function hasSuggestedRules(item: LocalCliItem): boolean {
 }
 
 /**
- * Pre-select suggested rules for commands that have never been saved. Saved
- * states are untouched, and nothing is applied until the user confirms.
+ * Pre-select suggested rules while an extension has not been added yet. Once
+ * added, its saved rules are shown as-is, including deliberate "inherit"
+ * choices. Nothing is applied until the user confirms.
  */
-export function prefillSuggestedStates(commands: LocalCliCommand[]): LocalCliCommand[] {
-  return commands.map((command) => command.state === "inherit"
+export function prefillSuggestedStates(item: Pick<LocalCliItem, "state" | "commands">): LocalCliCommand[] {
+  if (item.state !== "unset") return item.commands;
+  return item.commands.map((command) => command.state === "inherit"
     && command.suggested_state !== undefined && command.suggested_state !== "inherit"
     ? { ...command, state: command.suggested_state }
     : command);

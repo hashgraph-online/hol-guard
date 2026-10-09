@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from ..runtime.custom_extension_profiles import (
     KNOWN_CLI_PROFILES,
@@ -11,6 +12,9 @@ from ..runtime.custom_extension_profiles import (
     profile_for_executable,
 )
 from ..runtime.local_cli_commands import LocalCliCommand, merge_discovered_commands
+
+if TYPE_CHECKING:
+    from ..store import GuardStore
 
 SEEDED_PROFILE_PREFIX = "local-cli.profile-"
 
@@ -26,6 +30,23 @@ def merge_profile_commands(tool_name: str, discovered: Sequence[LocalCliCommand]
     if profile is None:
         return tuple(discovered)
     return merge_discovered_commands(tool_name, (*profile.local_cli_commands(), *discovered))
+
+
+def ensure_profile_catalog(store: GuardStore, cli_id: str, tool_name: str) -> None:
+    """Store a profiled CLI's curated commands so suggested rules can be saved.
+
+    CLIs detected from hook traffic have no stored commands yet, and saving a
+    rule for an unknown command id is rejected.
+    """
+
+    profile = profile_for_executable(tool_name)
+    if profile is None:
+        return
+    existing = store.read_local_cli_command_catalog(cli_id)
+    known = {command.command_id for command in existing}
+    if all(entry.command.command_id in known for entry in profile.commands):
+        return
+    store.replace_local_cli_commands(cli_id, merge_profile_commands(tool_name, existing))
 
 
 def annotate_cli_profiles(items: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -64,8 +85,10 @@ def _annotated(item: dict[str, object], profile: KnownCliProfile) -> dict[str, o
     commands = item.get("commands")
     annotated = dict(item)
     annotated.update(profile_id=profile.profile_id, brand=profile.brand, display_name=profile.display_name)
-    if isinstance(commands, list):
-        annotated["commands"] = [_with_suggestion(command, suggested) for command in commands]
+    listed = [command for command in commands if isinstance(command, dict)] if isinstance(commands, list) else []
+    known = {command.get("command_id") for command in listed}
+    missing = [entry.command.to_dict() for entry in profile.commands if entry.command.command_id not in known]
+    annotated["commands"] = [_with_suggestion(command, suggested) for command in (*listed, *missing)]
     return annotated
 
 
@@ -112,6 +135,7 @@ def _seeded_item(profile: KnownCliProfile, *, authority_revision: int) -> dict[s
 __all__ = [
     "SEEDED_PROFILE_PREFIX",
     "annotate_cli_profiles",
+    "ensure_profile_catalog",
     "merge_profile_commands",
     "seeded_profile_cli_id",
     "seeded_profile_items",

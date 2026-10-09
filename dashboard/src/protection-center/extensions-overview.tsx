@@ -321,7 +321,7 @@ export function ExtensionsOverview(props: {
           <CustomExtensionsSection
             items={addedCustomItems}
             onOpen={props.onOpenLocalCli}
-            seededItems={props.seededItems}
+            seededItems={addedCustomItems.filter((item) => item.seeded === true)}
             onSetUp={props.onAddCustom}
             onAdd={handleAddCustom}
             discovering={discovering}
