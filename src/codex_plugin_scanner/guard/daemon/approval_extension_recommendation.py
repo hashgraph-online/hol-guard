@@ -61,6 +61,11 @@ def _caution_reason(permission, rules) -> str | None:
     return None
 
 
+def _hint_ids(hint: dict[str, object], key: str) -> list[str]:
+    items = hint.get(key)
+    return [item for item in items if isinstance(item, str)] if isinstance(items, list) else []
+
+
 def build_approval_extension_recommendation(
     approval: dict[str, object],
     *,
@@ -78,10 +83,10 @@ def build_approval_extension_recommendation(
         return None
     local_states = _layer_states(snapshot, ControlLayerKind.LOCAL_ADMIN)
     managed_states = _layer_states(snapshot, ControlLayerKind.SIGNED_CLOUD)
-    hinted_rule_ids = set(hint["rule_ids"])  # type: ignore[arg-type]
+    hinted_rule_ids = set(_hint_ids(hint, "rule_ids"))
     permissions: list[dict[str, object]] = []
-    for permission_id in hint["permission_ids"]:  # type: ignore[union-attr]
-        permission = registry.permission(str(permission_id))
+    for permission_id in _hint_ids(hint, "permission_ids"):
+        permission = registry.permission(permission_id)
         extension = registry.get(permission.extension_id) if permission is not None else None
         if permission is None or extension is None or not permission.configurable or permission.deprecated:
             return None
