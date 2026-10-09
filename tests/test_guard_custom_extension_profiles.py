@@ -176,3 +176,13 @@ def test_ensure_profile_catalog_stores_profile_commands_once() -> None:
     ids = {command.command_id for command in store.commands}
     assert store.writes == 1
     assert {"whoami", "deploy", "hyperdrive", ROOT_COMMAND_ID, OTHER_COMMAND_ID} <= ids
+
+
+def test_ensure_profile_catalog_leaves_mcp_servers_named_wrangler_alone() -> None:
+    tool = LocalCliCommand(command_id="list_workers", name="list_workers", usage="list_workers", description="")
+    store = _CatalogStore((tool,))
+
+    ensure_profile_catalog(store, "local-cli.mcp-1234abcd", "wrangler")  # type: ignore[arg-type]
+
+    assert store.writes == 0
+    assert store.commands == (tool,)

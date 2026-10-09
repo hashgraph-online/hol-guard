@@ -32,13 +32,20 @@ def merge_profile_commands(tool_name: str, discovered: Sequence[LocalCliCommand]
     return merge_discovered_commands(tool_name, (*profile.local_cli_commands(), *discovered))
 
 
+_MCP_CLI_ID_PREFIX = "local-cli.mcp-"
+
+
 def ensure_profile_catalog(store: GuardStore, cli_id: str, tool_name: str) -> None:
     """Store a profiled CLI's curated commands so suggested rules can be saved.
 
     CLIs detected from hook traffic have no stored commands yet, and saving a
-    rule for an unknown command id is rejected.
+    rule for an unknown command id is rejected. MCP servers are skipped: their
+    name comes from user config, and merging CLI commands would crowd out
+    their tools and drop saved tool rules.
     """
 
+    if cli_id.startswith(_MCP_CLI_ID_PREFIX):
+        return
     profile = profile_for_executable(tool_name)
     if profile is None:
         return
