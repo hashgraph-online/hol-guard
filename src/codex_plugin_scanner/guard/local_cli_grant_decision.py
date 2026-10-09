@@ -13,14 +13,17 @@ native allow path blocks. Python never reads grant rows to substitute.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
 from .models import GuardAction
-from .native_local_cli_grant import native_local_cli_grant
+from .native_local_cli_grant import NativeLocalCliGrantFailure, native_local_cli_grant
 from .native_local_cli_identity import LocalCliIdentityUnavailableError
 from .runtime.local_cli_commands import LocalCliCommand, resolve_command_id_for_text
 from .runtime.local_cli_identity import UnlistedCliIdentity
+
+_LOGGER = logging.getLogger(__name__)
 
 GRANT_REFINABLE_ACTIONS = frozenset({"allow", "review", "require-reapproval", "warn"})
 GrantOutcome = Literal["allowed", "blocked"]
@@ -42,7 +45,13 @@ def decide_local_cli_grant(
 
     if current_action not in GRANT_REFINABLE_ACTIONS:
         return None
-    command_id = _resolved_command_id(store, identity, command=command, cwd=cwd, home_dir=home_dir)
+    try:
+        command_id = _resolved_command_id(store, identity, command=command, cwd=cwd, home_dir=home_dir)
+    except Exception as exc:
+        # The resident checks a CLI-level block only after this read, so a
+        # failed read must not look like "no grant" to callers.
+        _LOGGER.warning("local CLI command catalog unavailable", exc_info=True)
+        raise LocalCliIdentityUnavailableError("native_local_cli_grant_catalog_unavailable") from exc
     store_path = getattr(store, "path", None)
     guard_home = getattr(store, "guard_home", None)
     native = (
@@ -58,6 +67,11 @@ def decide_local_cli_grant(
     )
     if native is None:
         raise LocalCliIdentityUnavailableError("native_local_cli_grant_unavailable")
+    if isinstance(native, NativeLocalCliGrantFailure):
+        # Callers hold or block without an answer; record why so a grant that
+        # stopped applying can be traced to its cause.
+        _LOGGER.warning("local CLI grant decision unavailable: %s", native.code)
+        raise LocalCliIdentityUnavailableError(native.code)
     if native.cli_id != identity.cli_id or native.identity_hash != identity.identity_hash:
         # The resident derived a different identity than the one Python holds.
         raise LocalCliIdentityUnavailableError("native_local_cli_grant_identity_mismatch")

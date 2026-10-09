@@ -16,6 +16,8 @@ pub(crate) const SUPPORTED_SCHEMA_VERSION: i64 = 11;
 pub(crate) enum StoreReadError {
     PathInvalid,
     StoreUnavailable,
+    /// The schema marker is damaged: its checksum does not match its version.
+    SchemaInvalid,
 }
 
 /// `store_path` must be `guard.db` directly under `guard_home`, so a request
@@ -66,19 +68,41 @@ pub(crate) fn table_exists(connection: &Connection, table: &str) -> Result<bool,
         .map_err(|_| StoreReadError::StoreUnavailable)
 }
 
+/// Digest the schema marker must carry for `version`.
+pub(crate) fn schema_checksum(version: i64) -> String {
+    guard_policy_snapshot::digest_bytes(
+        format!("hol-guard.local-cli-allowlist.schema.v{version}").as_bytes(),
+    )
+}
+
 /// Version recorded by the local CLI schema marker, when the store has one.
+///
+/// A marker newer than this build is returned as-is so the caller can report
+/// it as unsupported. Any other marker whose checksum does not match its
+/// version is treated as damage, the same way the store's own schema
+/// validator treats it, and is never trusted to authorize a grant.
 pub(crate) fn schema_version(connection: &Connection) -> Result<Option<i64>, StoreReadError> {
     if !table_exists(connection, "local_cli_schema_migration")? {
         return Ok(None);
     }
-    connection
+    let marker: Option<(i64, String)> = connection
         .query_row(
-            "select version from local_cli_schema_migration where singleton = 1",
+            "select version, checksum from local_cli_schema_migration where singleton = 1",
             [],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
-        .map_err(|_| StoreReadError::StoreUnavailable)
+        .map_err(|_| StoreReadError::StoreUnavailable)?;
+    let Some((version, checksum)) = marker else {
+        return Ok(None);
+    };
+    if version > SUPPORTED_SCHEMA_VERSION {
+        return Ok(Some(version));
+    }
+    if version < 1 || checksum != schema_checksum(version) {
+        return Err(StoreReadError::SchemaInvalid);
+    }
+    Ok(Some(version))
 }
 
 /// Whether `table` carries `column`.

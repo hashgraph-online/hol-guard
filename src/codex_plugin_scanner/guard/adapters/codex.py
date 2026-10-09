@@ -78,6 +78,7 @@ from ..codex_hook_sources import (
 )
 from ..codex_hook_sources import strict_json_object as _strict_json_object
 from ..codex_hook_sources import strict_toml_object as _strict_toml_object
+from ..codex_hook_trust import apply_codex_hook_trust_doctor, codex_hook_trust_stale
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..launcher import merge_guard_launcher_env
@@ -1215,6 +1216,7 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
             else _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON
         ),
         "protection_active": hooks_feature_enabled and managed_hook_installed and integrity_valid,
+        "hook_trust_stale": codex_hook_trust_stale(config_payload, config_path),
         **{key: value for key, value in integrity.items() if key != "event_matches"},
     }
 
@@ -1855,6 +1857,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
         payload["warnings"] = warnings
         payload["setup_status"] = finalize_codex_doctor_setup_status(payload.get("setup_status"), hook_state, warnings)
+        apply_codex_hook_trust_doctor(payload, hook_state)
         payload["native_hook_state"] = hook_state
         return payload
 

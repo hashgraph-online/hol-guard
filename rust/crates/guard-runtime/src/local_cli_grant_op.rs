@@ -128,6 +128,7 @@ fn store_error(error: StoreReadError) -> &'static str {
     match error {
         StoreReadError::PathInvalid => "native_local_cli_grant_path_invalid",
         StoreReadError::StoreUnavailable => STORE_UNAVAILABLE,
+        StoreReadError::SchemaInvalid => "native_local_cli_grant_schema_invalid",
     }
 }
 

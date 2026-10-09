@@ -132,7 +132,7 @@ def _resident_request(
         # ("opened") / recv ("event") / close ("closed") and forced a silent
         # Python fallback the resident should own.
         accepted = _MCP_SESSION_ACCEPTED_STATUS.get(operation)
-        if operation == "policy_decision_lookup":
+        if operation in {"policy_decision_lookup", "local_cli_grant_decide"}:
             accepted = frozenset({"ok", "error"})
         if accepted is not None:
             if decoded.get("status") not in accepted:
