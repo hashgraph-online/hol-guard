@@ -167,9 +167,10 @@ def test_duplicate_rule_ids_fail_across_explicit_document_set() -> None:
         validate_effective_rule_ids((document, document))
 
 
-def test_canonical_hash_vector_is_cross_language_stable() -> None:
-    vector = json.loads((FIXTURES / "hashes" / "basic.json").read_text(encoding="utf-8"))
-    document = parse_policy_document_yaml((FIXTURES / "valid" / "basic.yaml").read_bytes())
+@pytest.mark.parametrize("name", ("basic", "business-selector"))
+def test_canonical_hash_vector_is_cross_language_stable(name: str) -> None:
+    vector = json.loads((FIXTURES / "hashes" / f"{name}.json").read_text(encoding="utf-8"))
+    document = parse_policy_document_yaml((FIXTURES / "hashes" / vector["source"]).read_bytes())
 
     assert canonical_policy_document_bytes(document).decode("utf-8") == vector["canonicalJson"]
     assert policy_document_digest(document) == vector["sha256"]
