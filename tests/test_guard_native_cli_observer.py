@@ -29,3 +29,16 @@ def test_dropped_observation_is_not_cached(monkeypatch: pytest.MonkeyPatch, tmp_
     observer._pending.get_nowait()
     assert _observe(tmp_path) is True
     assert _observe(tmp_path) is False
+
+
+def test_camel_case_harness_payload_is_observed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(observer, "_pending", queue.Queue(maxsize=4))
+    monkeypatch.setattr(observer, "_recent", observer.OrderedDict())
+    monkeypatch.setattr(observer, "_ensure_worker", lambda: None)
+    payload = {
+        "toolName": "run_terminal_command",
+        "toolInput": {"command": "npx wrangler whoami"},
+        "cwd": str(tmp_path),
+    }
+
+    assert observer.observe_native_pre_tool_cli(object(), payload=payload, workspace=tmp_path, home_dir=None) is True

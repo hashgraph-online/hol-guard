@@ -214,8 +214,9 @@ def test_native_review_applies_custom_extension_grants(
 
 
 @pytest.mark.parametrize(("state", "blocked"), [("blocked", True), ("allowed", False)])
+@pytest.mark.parametrize("input_key", ["tool_input", "toolInput"])
 def test_native_allow_still_honors_custom_extension_block(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str, blocked: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str, blocked: bool, input_key: str
 ) -> None:
     workspace = tmp_path / "workspace"
     _write_wrangler_workspace(workspace)
@@ -233,7 +234,7 @@ def test_native_allow_still_honors_custom_extension_block(
     response = hook_native_local_cli.native_local_cli_block_response(
         store,
         harness="codex",
-        payload={"tool_input": {"command": "npx wrangler whoami"}, "cwd": str(workspace)},
+        payload={input_key: {"command": "npx wrangler whoami"}, "cwd": str(workspace)},
         native_result={"decision": "allow", "policy_action": "allow", "minimum_action": "allow"},
         workspace=workspace,
         home_dir=home_dir,
