@@ -196,3 +196,21 @@ def test_hook_input_drops_the_utf8_bom_windows_powershell_prepends(tmp_path, mon
         monkeypatch.setattr(sys, "stdin", stream)
         raw = namespace["_read_hook_input"](time.monotonic() + 1)
     assert json.loads(raw) == {"command": "echo hi"}
+
+
+@pytest.mark.parametrize("alive", [True, False])
+def test_windows_daemon_liveness_never_sends_a_console_signal(tmp_path, monkeypatch, alive):
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import windows_paths
+
+    namespace = _hook_namespace(tmp_path)
+
+    def console_signal(_pid, _signal):
+        raise AssertionError("os.kill(pid, 0) sends CTRL_C_EVENT on Windows")
+
+    namespace["os"] = SimpleNamespace(name="nt", kill=console_signal)
+    monkeypatch.setattr(windows_paths, "windows_process_liveness", lambda pid: alive if pid == 4242 else None)
+    assert namespace["_daemon_pid_is_alive"](4242) is alive
+    # Unproven liveness still falls through to the healthz and HMAC checks.
+    assert namespace["_daemon_pid_is_alive"](7) is True

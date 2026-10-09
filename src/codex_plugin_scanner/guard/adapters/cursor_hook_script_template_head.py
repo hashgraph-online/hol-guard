@@ -158,6 +158,22 @@ def _daemon_hook_env_overlay(guard_env: Mapping[str, str]) -> dict[str, str]:
     return overlay
 
 
+def _daemon_pid_is_alive(pid: int) -> bool:
+    if os.name == "nt":
+        # Signal 0 is CTRL_C_EVENT on Windows; os.kill would send a console
+        # interrupt, and fails outright when the daemon has another console.
+        try:
+            from codex_plugin_scanner.guard.windows_paths import windows_process_liveness
+        except Exception:
+            return True
+        return windows_process_liveness(pid) is not False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
 def _daemon_hook_result(
     payload_json: str,
     *,
@@ -188,9 +204,7 @@ def _daemon_hook_result(
     pid = state.get("pid")
     if not isinstance(pid, int) or pid <= 0:
         return (None, None)
-    try:
-        os.kill(pid, 0)
-    except OSError:
+    if not _daemon_pid_is_alive(pid):
         return (None, "transport-failure")
     # Probe /healthz before sending the hook payload and auth token.
     # Ensures the listener is actually the Guard daemon, not a spoofed process.
