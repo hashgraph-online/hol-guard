@@ -17,6 +17,10 @@ mod resident_startup_lock;
 mod resident_state_discovery;
 #[path = "resident_state_files.rs"]
 mod resident_state_files;
+#[path = "resident_state_supersession.rs"]
+mod resident_state_supersession;
+
+pub(crate) use resident_state_supersession::runtime_superseded;
 
 #[allow(unused_imports)]
 pub(crate) use resident_startup_lock::{
@@ -115,18 +119,6 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
             executable_digest(&executable)
         })
         .clone()
-}
-
-/// Report whether this process's executable no longer holds the runtime it
-/// loaded, which is how an update that replaced or removed the binary shows up
-/// to processes still running the old image. Unreadable paths count as
-/// superseded so the caller fails closed.
-pub(crate) fn runtime_superseded(loaded_digest: &str) -> bool {
-    std::env::current_exe()
-        .and_then(fs::canonicalize)
-        .ok()
-        .and_then(|executable| executable_digest(&executable).ok())
-        .is_none_or(|digest| digest != loaded_digest)
 }
 
 pub(crate) use crate::resident_process_identity::{
