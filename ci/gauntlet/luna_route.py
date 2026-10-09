@@ -24,11 +24,12 @@ from typing import Any
 
 ADAPTER = Path(__file__).with_name("luna_adapter.ts")
 PINNED_PACKAGE = Path(__file__).resolve().parents[1] / "pi-exact-continuation" / "package.json"
-ADAPTER_ID = "pinned-omp-native-luna-stream-v2"
+ADAPTER_ID = "pinned-omp-native-luna-stream-v3"
 REQUEST_MODEL = "native-luna"
 BACKEND = ("openai-codex", "gpt-5.6-luna")
 # Medium is the default: it qualifies the same catalog faster and at lower cost than high.
-EFFORTS = ("medium", "high")
+# Low is accepted only as an explicit opt-in for A/B cost comparisons.
+EFFORTS = ("medium", "high", "low")
 DEFAULT_EFFORT = "medium"
 STARTUP_SECONDS = 60.0
 STOP_SECONDS = 5.0
@@ -197,10 +198,8 @@ class NativeLunaRoute:
         try:
             if job is not None:
                 # The adapter stops itself when its stdin closes; the job reaps anything left.
-                try:
+                with suppress(subprocess.TimeoutExpired):
                     process.wait(timeout=STOP_SECONDS)
-                except subprocess.TimeoutExpired:
-                    pass
                 job.terminate()
                 try:
                     process.wait(timeout=STOP_SECONDS)

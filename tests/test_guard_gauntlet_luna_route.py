@@ -74,7 +74,9 @@ def test_sdk_root_comes_from_the_omp_executable_and_must_hold_the_packages(tmp_p
         sdk_root_for(None, tmp_path)
 
 
-@pytest.mark.parametrize(("requested", "effort"), [({}, "medium"), ({"effort": "high"}, "high")])
+@pytest.mark.parametrize(
+    ("requested", "effort"), [({}, "medium"), ({"effort": "high"}, "high"), ({"effort": "low"}, "low")]
+)
 def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monkeypatch, requested, effort):
     _root, omp = _sdk(tmp_path)
     monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 0\n")) + os.pathsep + os.environ["PATH"])
@@ -91,7 +93,7 @@ def test_route_rejects_unsupported_effort(tmp_path, monkeypatch):
     _root, omp = _sdk(tmp_path)
     monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 0\n")) + os.pathsep + os.environ["PATH"])
     with pytest.raises(ValueError):
-        NativeLunaRoute(omp=str(omp), effort="low")
+        NativeLunaRoute(omp=str(omp), effort="xhigh")
 
 
 def test_route_passes_its_effort_to_the_adapter(tmp_path, monkeypatch):
@@ -226,7 +228,7 @@ def test_cli_rejects_an_unsupported_luna_effort(tmp_path):
             str(tmp_path / "e"),
             "--native-luna-route",
             "--reasoning-effort",
-            "low",
+            "xhigh",
         ],
         capture_output=True,
         text=True,

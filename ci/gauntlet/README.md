@@ -113,7 +113,7 @@ The default per-scenario host deadline is 300 seconds with at most 32 provider r
 
 ### Run cases in parallel (`--jobs N`)
 
-A full core run executes every catalog case against live inference, which takes roughly 20-25 minutes sequentially. `--jobs N` (1-8, default 1) runs up to N cases concurrently. `--jobs 4` is the recommended starting point; raise it only if your provider's rate limits and the machine's CPU headroom allow.
+A full core run executes every catalog case against live inference — roughly three minutes at `--jobs 4` on a recent Mac, or 20-25 minutes sequentially. `--jobs N` (1-8, default 1) runs up to N cases concurrently. `--jobs 4` is the recommended starting point; raise it only if your provider's rate limits and the machine's CPU headroom allow.
 
 ```sh
 python -m ci.gauntlet run --jobs 4 \
@@ -129,12 +129,16 @@ python -m ci.gauntlet run --jobs 4 \
 - A provider 429 or 5xx ends that case's inference round as failed, which the judge classifies as `inference-error`; it is never a pass and never a product failure. There are no retries, and no model output is replayed. If you see these, lower `--jobs` and rerun the whole profile in a fresh output directory.
 - SIGINT, SIGTERM and SIGHUP cancel every in-flight worker: each worker unwinds its own agent process group, daemon and resident, and the runner then force-terminates the process group of any worker that has not exited within 90 seconds. A worker also unwinds itself if the runner dies. Processes are only ever terminated through handles the runner started, never by name. If a runner or worker is killed with SIGKILL, check for leftover processes under the work root before the next run.
 - `--jobs` is rejected with `--profile contained-bun-vitest`.
+- Ordinary (allow) cases are scheduled before the short single-attempt protection cases so the run's tail stays short; evidence is still written in catalog order.
+- `--fail-fast` stops scheduling new cases and cancels in-flight workers after the first non-pass outcome, keeping partial evidence. A stopped run reports `stopped_early: true` and can never pass: `pass` requires every selected case.
+- `--host-slots N` (or `GUARD_GAUNTLET_HOST_SLOTS`) caps running cases host-wide through flock'd slot files under `~/.cache/hol-guard-gauntlet/slots` (`--slot-dir` or `GUARD_GAUNTLET_SLOT_DIR` relocates them). It bounds several Gauntlet processes on one machine, not just this run's `--jobs`. The kernel frees a lease when its process dies. POSIX only; rejected on Windows, with the contained profile and with `--harness`.
+- `summary.json` reports informational `inference_usage` totals (prompt/cached/output/reasoning tokens and round counts) summed from the per-round usage each relay stored in the case evidence. Providers that do not report usage simply contribute zero. Verification does not read it.
 
 A local live inference server can be selected with `--provider-url http://127.0.0.1:PORT/v1 --allow-loopback-provider --model MODEL --provider-identity ID`. The identity must truthfully describe the actual backend. Do not label an opaque helper as DeepSeek, Codex or another model whose identity was not verified.
 
 ### Luna high through an Oh My Pi ChatGPT login
 
-Oh My Pi's `openai-codex` lane uses the Responses API through an existing ChatGPT login, so the Chat Completions relay cannot reach it directly. `--native-luna-route` starts a small loopback adapter (`luna_adapter.ts`, run with Bun from the pinned SDK tree) that translates one streaming Chat Completions request into one `openai-codex/gpt-5.6-luna` request at `medium` thinking and streams the result back. Pass `--reasoning-effort high` to run Luna high instead.
+Oh My Pi's `openai-codex` lane uses the Responses API through an existing ChatGPT login, so the Chat Completions relay cannot reach it directly. `--native-luna-route` starts a small loopback adapter (`luna_adapter.ts`, run with Bun from the pinned SDK tree) that translates one streaming Chat Completions request into one `openai-codex/gpt-5.6-luna` request at `medium` thinking and streams the result back. Pass `--reasoning-effort high` for high or `low` for the opt-in A/B lane.
 
 ```sh
 python -m ci.gauntlet run \
@@ -145,11 +149,26 @@ python -m ci.gauntlet run \
 
 - The adapter is transport only. It never executes a tool: tools stay in the Gauntlet agent and run through the installed Guard extension. It stops the outer SDK turn before any tool dispatch.
 - Tool-call argument bytes are forwarded exactly as the model produced them (no parse and re-encode). If the original bytes cannot be bound, the request fails.
-- The route fixes the provider, model and effort itself. Combining it with `--provider-url`, `--model`, `--provider-identity` or `--allow-loopback-provider`, or with an effort other than `medium` or `high`, is rejected. The adapter rejects any request that does not name `native-luna` with the run's `reasoning_effort`.
-- Evidence records the provider identity `openai-codex/gpt-5.6-luna/<effort> via pinned-omp-native-luna-stream-v2`, and every round's `response_models` is the real backend `openai-codex/gpt-5.6-luna`.
+- The route fixes the provider, model and effort itself. Combining it with `--provider-url`, `--model`, `--provider-identity` or `--allow-loopback-provider`, or with an effort other than `medium`, `high` or `low`, is rejected. The adapter rejects any request that does not name `native-luna` with the run's `reasoning_effort`. `low` is an opt-in for A/B cost comparison; the default remains `medium`.
+- Adapter v3 additionally passes the relay's per-case `x-opencode-session` UUID as the SDK `promptCacheKey`, so a case's rounds share prompt-cache affinity, and it emits an OpenAI-style `usage` object on the finish chunk, which the relay records per round. `sessionId` stays unset: websocket/session transport state is untouched.
+- Evidence records the provider identity `openai-codex/gpt-5.6-luna/<effort> via pinned-omp-native-luna-stream-v3`, and every round's `response_models` is the real backend `openai-codex/gpt-5.6-luna`.
 - Credentials are resolved inside the adapter process by Oh My Pi's normal auth storage. They are never read by the runner, put in arguments or evidence, or exported, and the adapter's environment carries no provider keys. Sign in to Oh My Pi with ChatGPT beforehand; no `GUARD_GAUNTLET_API_KEY` is needed.
 - The adapter binds `127.0.0.1` on an ephemeral port and accepts only requests carrying a random per-run bearer token that the relay holds, so no other local process can use the login. It runs in its own process group and is stopped and reaped when the run ends, fails, or the runner receives SIGTERM or SIGHUP. It also exits if the runner dies without cleanup.
 - The SDK tree is found from `--omp` (or `omp` on `PATH`), whose usual location is `<sdk-root>/node_modules/.bin/omp`. Pass `--sdk-root` to name it explicitly; its Oh My Pi version must equal the repository pin. The pinned catalog must contain the model. Set `GUARD_GAUNTLET_SDK_ROOT` to run the adapter's optional SDK check in `luna_adapter.test.ts`.
+
+### Qualify a candidate (`qualify`)
+
+`qualify` replaces the manual build-and-run steps with one deterministic driver. Run it **from a clean trusted `main` checkout** — it uses that checkout's own verifier, catalog and scripts:
+
+```sh
+python -m ci.gauntlet qualify --sha FULL_TESTED_SOURCE_SHA \
+  [--candidate-sha FULL_PR_HEAD_SHA] [--attempts 2] [--jobs 6]
+```
+
+- Caches under `--cache-root` (default `~/.cache/hol-guard-gauntlet`): one SDK prefix per candidate `package-lock.json` digest, and one native wheel per tested SHA and platform, built in a persistent `build-worktree` so `rust/target` stays warm. Builds serialize on a flock'd lock. Pass `--sdk-root` to skip the SDK cache or `--wheel` to skip the build (required off macOS).
+- Each attempt is a complete fresh `run --native-luna-route --fail-fast` in a pristine detached worktree under `--run-root` with its own evidence and work directories; no results are stitched. A retry happens only while attempts remain **and** every failed case is `not-exercised`, `inference-error` or `harness-error` — product outcomes (`false-positive`, `false-negative`, `task-incomplete`) always stop the loop.
+- A passing attempt is verified in-process by the driver checkout's own verifier with `--source-root` on the candidate worktree. That verification is independent only when the reported `trusted_verifier` is true (driver checkout clean and an ancestor of `origin/main`); otherwise treat the result as provisional.
+- It prints one JSON line (also written to `run_root/qualification.json`) with the sha binding, wheel/SDK identity, per-attempt records, cleanup results and the verify report, and exits 0 only when the evidence verified **and** the report is merge-qualified.
 
 ### Other harnesses (`--harness`, never merge-qualifying)
 

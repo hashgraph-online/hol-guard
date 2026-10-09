@@ -98,6 +98,114 @@ def test_jobs_are_bounded(jobs: Any) -> None:
         parallel.validate_jobs(jobs)
 
 
+def test_spawn_order_follows_the_order_parameter() -> None:
+    spawned: list[str] = []
+    results = parallel.run_scheduled(
+        list("abcd"),
+        jobs=4,
+        spawn=lambda name: (spawned.append(name), FakeWorker(name, [], 1))[1],
+        order=[2, 0, 3, 1],
+        sleep=_no_sleep,
+    )
+    assert spawned == ["c", "a", "d", "b"]
+    assert results == ["a", "b", "c", "d"]
+
+
+@pytest.mark.parametrize("order", [[0, 0], [0, 2], [1], ["a", "b"]])
+def test_order_must_be_a_permutation_of_item_indices(order: Any) -> None:
+    with pytest.raises(ValueError):
+        parallel.run_scheduled(["a", "b"], jobs=1, spawn=lambda n: FakeWorker(n, [], 1), order=order)
+
+
+def test_should_stop_cancels_inflight_and_returns_none_for_unrun() -> None:
+    log: list[str] = []
+    workers = {"a": FakeWorker("a", log, 1), "b": FakeWorker("b", log, 99), "c": FakeWorker("c", log, 99)}
+    results = parallel.run_scheduled(
+        list(workers),
+        jobs=2,
+        spawn=lambda n: workers[n],
+        sleep=_no_sleep,
+        grace=0.0,
+        should_stop=lambda _index, result: result == "a",
+    )
+    assert results == ["a", None, None]
+    assert {"terminate:b", "kill:b"} <= set(log)
+    assert "terminate:c" not in log
+
+
+@pytest.mark.skipif(os.name != "posix", reason="flock host slots")
+def test_host_slots_share_one_inventory_and_release_on_collect(tmp_path: Path) -> None:
+    slots_dir = tmp_path / "slots"
+    holder = parallel.HostSlots(slots_dir, 2)
+    held = holder.try_acquire()
+    assert held is not None
+    slots = parallel.HostSlots(slots_dir, 2)
+    live: list[FakeWorker] = []
+    peak = 0
+
+    def spawn(name: str) -> FakeWorker:
+        nonlocal peak
+        worker = FakeWorker(name, [], 2)
+        live.append(worker)
+        peak = max(peak, sum(w.state == "running" for w in live))
+        return worker
+
+    results = parallel.run_scheduled(list("abc"), jobs=3, spawn=spawn, sleep=_no_sleep, slots=slots)
+    assert results == ["a", "b", "c"]
+    # One slot is held by ``holder`` the entire run, so at most one case runs.
+    assert peak == 1
+    # Collected leases are released: one slot is free while ``held`` pins the other.
+    extra = slots.try_acquire()
+    assert extra is not None and slots.try_acquire() is None
+    extra.release()
+    held.release()
+    assert slots.try_acquire() is not None
+
+
+@pytest.mark.skipif(os.name != "posix", reason="flock host slots")
+def test_host_slot_leases_survive_cancel_and_spawn_failure(tmp_path: Path) -> None:
+    slots_dir = tmp_path / "slots"
+    holder = parallel.HostSlots(slots_dir, 3)
+    slots = parallel.HostSlots(slots_dir, 3)
+    log: list[str] = []
+    with pytest.raises(KeyboardInterrupt):
+        parallel.run_scheduled(
+            ["a", "b"],
+            jobs=2,
+            spawn=lambda n: FakeWorker(n, log, 99),
+            sleep=lambda _s: (_ for _ in ()).throw(KeyboardInterrupt()),
+            grace=0.0,
+            slots=slots,
+        )
+    # Killed workers' leases are released: all three slots are free again.
+    held = [holder.try_acquire() for _ in range(3)]
+    assert all(lease is not None for lease in held) and holder.try_acquire() is None
+    for lease in held:
+        lease.release()
+
+    def spawn(name: str) -> FakeWorker:
+        raise OSError("cannot start")
+
+    with pytest.raises(OSError):
+        parallel.run_scheduled(["x"], jobs=1, spawn=spawn, sleep=_no_sleep, slots=slots)
+    lease = slots.try_acquire()
+    assert lease is not None
+    lease.release()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="flock host slots")
+def test_host_slots_validation_and_idempotent_release(tmp_path: Path) -> None:
+    for count in (0, -1, parallel.MAX_SLOTS + 1, True):
+        with pytest.raises(ValueError):
+            parallel.HostSlots(tmp_path / f"s{count}", count)
+    slots = parallel.HostSlots(tmp_path / "slots", 1)
+    lease = slots.try_acquire()
+    assert lease is not None and slots.try_acquire() is None
+    lease.release()
+    lease.release()
+    assert slots.acquire(sleep=_no_sleep) is not None
+
+
 def test_worker_failure_cancels_and_reaps_every_inflight_worker() -> None:
     log: list[str] = []
     workers = {"a": FakeWorker("a", log, 1, fail=True), "b": FakeWorker("b", log, 99), "c": FakeWorker("c", log, 99)}
