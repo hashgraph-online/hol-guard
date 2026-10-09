@@ -132,7 +132,11 @@ def registry_ready(version: str, wheel: Path, filename: str | None = None) -> bo
         # Uploads are sequential: another platform can arrive before this wheel.
         return False
     if len(matches) != 1 or matches[0]["digests"]["sha256"] != digest:
-        raise ValueError("PyPI wheel digest mismatch; withholding updater assets")
+        raise ValueError(
+            "PyPI wheel digest mismatch; withholding updater assets "
+            "(PyPI holds a different build than the GitHub release asset; "
+            "republish the release's exact attested wheels)"
+        )
     return True
 
 

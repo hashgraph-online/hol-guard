@@ -834,6 +834,46 @@ jobs:
           pattern: native-guard-wheel-*
           path: dist/
           merge-multiple: true
+      - name: Reuse attested GitHub release wheels for a repair run
+        if: needs.build.outputs.release_repair == 'true' && needs.build.outputs.channel == 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          # Native wheels are not byte-reproducible. A repair run must publish
+          # the exact wheels already attested on the release, never a rebuild.
+          set -euo pipefail
+          tag="v${VERSION}"
+          if ! release_json=$(gh release view "$tag" --json isDraft,isPrerelease,assets 2>/dev/null); then
+            echo "No GitHub release for ${tag}; keeping freshly built distributions."
+            exit 0
+          fi
+          jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null
+          if ! jq -e '[.assets[].name | select(startswith("hol_guard-") and endswith(".whl"))] | length > 0' \
+            <<< "$release_json" >/dev/null; then
+            echo "Release ${tag} has no attached wheels; keeping freshly built distributions."
+            exit 0
+          fi
+          release_dir=$(mktemp -d)
+          gh release download "$tag" --dir "$release_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl"
+          bundle="$release_dir/hol-guard-v${VERSION}.intoto.jsonl"
+          [[ -s "$bundle" ]] || { echo "Release ${tag} has no provenance bundle; refusing to publish unverified wheels" >&2; exit 1; }
+          shopt -s nullglob
+          release_files=("$release_dir"/hol_guard-*)
+          for release_file in "${release_files[@]}"; do
+            gh attestation verify "$release_file" --repo "$GITHUB_REPOSITORY" \
+              --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null || {
+              echo "Release asset $(basename "$release_file") failed attestation verification" >&2
+              exit 1
+            }
+          done
+          diff <(cd "$release_dir" && ls hol_guard-*.whl) <(cd dist && ls hol_guard-*.whl) >/dev/null || {
+            echo "Release wheel set does not match the rebuilt wheel set" >&2
+            exit 1
+          }
+          cp -f "${release_files[@]}" dist/
+          echo "Reusing ${#release_files[@]} attested release assets for ${tag}." >> "$GITHUB_STEP_SUMMARY"
       - name: Validate exact native artifact set
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
