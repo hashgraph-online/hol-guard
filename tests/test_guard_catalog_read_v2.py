@@ -331,6 +331,26 @@ def test_authenticated_v2_errors_are_typed_and_uncached(
     assert "ETag" not in headers
 
 
+@pytest.mark.parametrize("value", ["off", "0", "false", " Disabled "])
+def test_rollback_switch_answers_unavailable_without_native_dispatch(
+    daemon: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    reader = _Recorder(NativeCatalogReadResult(status=200, etag=ETAG, body=b"{}"))
+    _use_reader(monkeypatch, reader)
+    monkeypatch.setenv(catalog_read_v2.CATALOG_V2_ROLLOUT_ENV, value)
+    status, headers, body = _get(daemon, "/v2/extension-controls/catalog/index", {"X-Guard-Token": daemon.token})
+    assert status == 501
+    assert json.loads(body) == {"error": "catalog_read_model_unavailable"}
+    assert "ETag" not in headers
+    assert reader.calls == []
+
+
+@pytest.mark.parametrize("value", [None, "", "on", "1"])
+def test_v2_read_path_is_on_unless_switched_off(value: str | None) -> None:
+    environ = {} if value is None else {catalog_read_v2.CATALOG_V2_ROLLOUT_ENV: value}
+    assert catalog_read_v2.catalog_read_v2_enabled(environ)
+
+
 def test_authenticated_unknown_v2_path_is_not_found(daemon: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> None:
     reader = _Recorder(None)
     _use_reader(monkeypatch, reader)

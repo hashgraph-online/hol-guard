@@ -4,11 +4,17 @@ The caller has already authenticated the request. This adapter forwards the raw
 route suffix, query string and ``If-None-Match`` value to the native read model
 and writes its bytes verbatim. A missing native read model answers 501 so a
 client may fall back to the legacy v1 catalog.
+
+Rollback: ``HOL_GUARD_CATALOG_READ_V2=off`` makes every v2 route answer that
+same 501 without dispatching to the native read model, so current clients use
+the bounded legacy path. Stage A budgets, Cloud v1 metadata and native
+enforcement are unaffected.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol
 
@@ -20,6 +26,13 @@ CATALOG_V2_UNAVAILABLE = "catalog_read_model_unavailable"
 # client must still reauthenticate on each request.
 CATALOG_V2_CACHE_CONTROL = "private, no-cache"
 CATALOG_V2_EXPOSED_HEADERS = "ETag"
+CATALOG_V2_ROLLOUT_ENV = "HOL_GUARD_CATALOG_READ_V2"
+_DISABLED_VALUES = frozenset({"0", "off", "false", "disabled"})
+
+
+def catalog_read_v2_enabled(environ: Mapping[str, str] = os.environ) -> bool:
+    """The v2 read path is on unless the rollback switch turns it off."""
+    return environ.get(CATALOG_V2_ROLLOUT_ENV, "").strip().lower() not in _DISABLED_VALUES
 
 
 class CatalogReadHandler(Protocol):
@@ -40,6 +53,9 @@ def serve_catalog_read_v2(
     catalog_digest: str,
     reader: Callable[..., NativeCatalogReadResult | None] = native_catalog_read,
 ) -> None:
+    if not catalog_read_v2_enabled():
+        handler.write_catalog_v2_error(CATALOG_V2_UNAVAILABLE, status=501)
+        return
     route = path.removeprefix(CATALOG_V2_PREFIX)
     result = reader(
         guard_home=guard_home,
@@ -68,4 +84,10 @@ def serve_catalog_read_v2(
     handler.write_catalog_v2_body(result.body, status=200, headers=headers)
 
 
-__all__ = ["CATALOG_V2_PREFIX", "CATALOG_V2_UNAVAILABLE", "serve_catalog_read_v2"]
+__all__ = [
+    "CATALOG_V2_PREFIX",
+    "CATALOG_V2_ROLLOUT_ENV",
+    "CATALOG_V2_UNAVAILABLE",
+    "catalog_read_v2_enabled",
+    "serve_catalog_read_v2",
+]
