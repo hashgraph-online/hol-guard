@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import secrets
+import sqlite3
 from typing import cast
 
 from .managed_controls_policy_bundle import (
@@ -188,7 +189,15 @@ class StoreExtensionControlAuthorityMixin(
                 connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
                 is None
             )
-        if not snapshot_missing or not self._restore_last_good_authority(anchor, key=key):
+        if not snapshot_missing:
+            return None
+        try:
+            restored = self._restore_last_good_authority(anchor, key=key)
+        except (sqlite3.Error, ExtensionControlAuthorityError):
+            # Leftover rows can conflict with the restore; fall back to the
+            # explicit reset, which archives them.
+            return None
+        if not restored:
             return None
         view = self._read_extension_control_authority_locked(catalog_digest, migration_registry=migration_registry)
         return view if view.health is AuthorityHealth.PROTECTED else None
@@ -209,11 +218,16 @@ class StoreExtensionControlAuthorityMixin(
                 "the previous snapshot is kept in the local recovery archive."
             )
         if self._last_good_path().is_file():
-            self._quarantine_unusable_last_good_export()
-            warnings.append(
-                "A saved copy of the previous extension controls could not be verified against the current "
-                "authority and was set aside as extension-control-last-good.unapplied-*.json in the Guard home."
-            )
+            if self._quarantine_unusable_last_good_export():
+                warnings.append(
+                    "A saved copy of the previous extension controls could not be verified against the current "
+                    "authority and was set aside as extension-control-last-good.unapplied-*.json in the Guard home."
+                )
+            else:
+                warnings.append(
+                    "A saved copy of the previous extension controls could not be verified against the current "
+                    "authority and could not be set aside; it remains as extension-control-last-good.json."
+                )
         self.extension_control_recovery_warnings = tuple(warnings)
         for warning in warnings:
             _LOGGER.warning(warning)

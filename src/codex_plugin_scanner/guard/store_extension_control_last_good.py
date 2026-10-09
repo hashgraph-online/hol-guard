@@ -85,7 +85,12 @@ class ExtensionControlLastGoodMixin:
                 return
             self._write_owner_only(self._last_good_path(), encoded)
         except Exception as error:
-            _LOGGER.warning("Guard could not refresh the extension-control last-good export: %s", type(error).__name__)
+            detail = str(error) if isinstance(error, OSError | sqlite3.Error) else ""
+            _LOGGER.warning(
+                "Guard could not refresh the extension-control last-good export: %s %s",
+                type(error).__name__,
+                detail,
+            )
 
     @staticmethod
     def _write_owner_only(path: Path, text: str) -> None:
@@ -135,15 +140,18 @@ class ExtensionControlLastGoodMixin:
             "snapshot_mac": str(raw["snapshot_mac"]),
         }
 
-    def _quarantine_unusable_last_good_export(self) -> None:
-        """Move an export that cannot be applied aside instead of overwriting it."""
+    def _quarantine_unusable_last_good_export(self) -> bool:
+        """Move an export that cannot be applied aside; report whether it moved."""
 
         path = self._last_good_path()
         if not path.is_file() or path.is_symlink():
-            return
+            return False
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        with suppress(OSError):
+        try:
             os.replace(path, path.with_name(f"extension-control-last-good.unapplied-{stamp}.json"))
+        except OSError:
+            return False
+        return True
 
     def _restore_last_good_authority(self, anchor: AuthorityAnchor, *, key: bytes) -> bool:
         """Re-create the snapshot row from the export when it matches the vault anchor."""
@@ -185,7 +193,13 @@ class ExtensionControlLastGoodMixin:
                     exported["committed_at"],
                 ),
             )
-            if revision > 0:
+            baseline_exists = (
+                connection.execute(
+                    "select 1 from extension_control_authority_transition where revision = ?", (revision,)
+                ).fetchone()
+                is not None
+            )
+            if revision > 0 and not baseline_exists:
                 self._insert_restored_baseline_transition(
                     connection,
                     revision=revision,

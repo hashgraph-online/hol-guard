@@ -106,3 +106,30 @@ def test_reset_keeps_unusable_export_aside_and_warns(tmp_path: Path) -> None:
     assert view.revision == 0
     assert fresh.extension_control_recovery_warnings
     assert list(tmp_path.glob("extension-control-last-good.unapplied-*.json"))
+
+
+def test_restore_at_a_later_revision_chains_further_changes(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    _commit(store)
+    _commit(store, revision=1, key="change-2")
+
+    fresh = _recreate_database(tmp_path, secrets)
+    view = fresh.read_extension_control_authority(catalog_digest=_CATALOG)
+
+    assert view.health is AuthorityHealth.PROTECTED
+    assert view.revision == 2
+    _commit(fresh, revision=2, key="change-3")
+    assert fresh.read_extension_control_authority(catalog_digest=_CATALOG).revision == 3
+
+
+def test_recovery_survives_transition_rows_left_after_a_lost_snapshot_row(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    _commit(store)
+    with store._connect() as connection:
+        connection.execute("delete from extension_control_authority_snapshot")
+
+    view = store.recover_extension_control_authority(catalog_digest=_CATALOG)
+
+    assert view.health is AuthorityHealth.PROTECTED
