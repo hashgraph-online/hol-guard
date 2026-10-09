@@ -127,6 +127,7 @@ from .extension_catalog_handshake import (
 )
 from .extension_catalog_sync import build_builtin_extension_catalog_wire
 from .extension_control_authority import ExtensionControlAuthorityView
+from .local_request_snapshots import _cloud_scrub_text
 from .local_runtime_fallbacks import best_effort_access_token, local_receipt_redaction_level
 from .managed_controls_sync import (
     apply_custom_extension_continuity_from_sync,
@@ -5960,11 +5961,28 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
 
 
 def _cloud_sync_command_display_part(value: str) -> str:
-    return " ".join(_cloud_sync_sanitize_text(value, fallback="").split())
+    # Same CLI credential-argument scrub as Cloud review events.
+    return " ".join(_cloud_sync_sanitize_text(_cloud_scrub_text(value), fallback="").split())
 
 
 def _cloud_sync_transport_encode_text(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _cloud_sync_scrub_envelope_commands(envelope: dict[str, object], *, redaction_level: str) -> dict[str, object]:
+    # Stored receipt envelopes keep locally redacted command text, which can still
+    # carry CLI credential flags. Re-scrub at the sync boundary, and drop the text
+    # when the current redaction level withholds commands.
+    safe = dict(envelope)
+    for key in ("command", "redacted_command"):
+        value = safe.get(key)
+        if not isinstance(value, str):
+            continue
+        if redaction_level == "full":
+            safe.pop(key)
+        else:
+            safe[key] = _cloud_sync_command_display_part(value)
+    return safe
 
 
 def _cloud_sync_receipt_action_command(envelope: dict[str, object], *, redaction_level: str) -> str | None:
@@ -6051,7 +6069,7 @@ def _cloud_sync_receipt_payload(
     if isinstance(redacted_envelope, dict) and redacted_envelope:
         full_envelope = receipt.get("action_envelope_json")
         if isinstance(full_envelope, dict):
-            enriched = dict(redacted_envelope)
+            enriched = _cloud_sync_scrub_envelope_commands(redacted_envelope, redaction_level=redaction_level)
             command = _cloud_sync_receipt_action_command(full_envelope, redaction_level=redaction_level)
             if command is not None:
                 enriched.pop("command", None)
@@ -6069,7 +6087,10 @@ def _cloud_sync_receipt_payload(
                     enriched["package_name"] = package_name
             payload["envelopeRedacted"] = enriched
         else:
-            payload["envelopeRedacted"] = redacted_envelope
+            payload["envelopeRedacted"] = _cloud_sync_scrub_envelope_commands(
+                redacted_envelope,
+                redaction_level=redaction_level,
+            )
     return payload
 
 
