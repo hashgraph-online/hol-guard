@@ -205,9 +205,13 @@ fn windows_get_content_reads_use_native_paths() {
     let home_str = canonical.to_str().unwrap().trim_start_matches(r"\\?\");
     let project_str = format!(r"{home_str}\project");
     let action = |command: &str| {
-        evaluate_pre_tool_with_context(&request(command), Some(home_str), Some(project_str.as_str()))
-            .unwrap()
-            .minimum_action
+        evaluate_pre_tool_with_context(
+            &request(command),
+            Some(home_str),
+            Some(project_str.as_str()),
+        )
+        .unwrap()
+        .minimum_action
     };
     for command in [
         format!(r"Get-Content -Raw '{home_str}\.hol-support\SAFETY.md'"),
