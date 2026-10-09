@@ -164,7 +164,9 @@ def _optional_managed_pid(socket_path: Path) -> int | None:
 
 def _host_identity_matches(socket_path: Path, pid: int, expected: int | None) -> bool:
     tracked = _optional_managed_pid(socket_path)
-    return tracked == expected and (tracked == pid if tracked is not None else pid > 1 and _is_codex_process(pid))
+    # Process identity is authenticated on the connected peer during refresh.
+    # Cache reads only pin the private socket and marker, without spawning ps.
+    return tracked == expected and (tracked == pid if tracked is not None else pid > 1)
 
 
 def _peer_identity(client: socket.socket) -> tuple[int, int]:
@@ -455,7 +457,7 @@ def _merge_metadata(apps: list[dict[str, object]], result: dict[str, object]) ->
         app["name"] = _text(row.get("name"), maximum=256, required=True)
         tools: list[dict[str, object]] = []
         names: set[str] = set()
-        summaries = row.get("toolSummaries", row.get("tools", []))
+        summaries = row.get("toolSummaries", row.get("tools"))
         for entry in _array([] if summaries is None else summaries, maximum=_MAX_TOOLS):
             tool = _object(entry)
             name = _identifier(tool.get("name"))
