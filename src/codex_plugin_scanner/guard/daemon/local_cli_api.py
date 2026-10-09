@@ -80,6 +80,7 @@ from .local_cli_profiles_api import (
     annotate_cli_profiles,
     merge_profile_commands,
     profile_catalog_seed,
+    profiled_cli_package_launch,
     seeded_profile_items,
 )
 from .local_cli_registry_setup import registry_setup as reviewed_registry_setup
@@ -656,6 +657,8 @@ class LocalCliApiService:
             server_identity_hash=stored_server_hash if isinstance(stored_server_hash, str) else None,
             source_label=stored_source_label if isinstance(stored_source_label, str) else None,
         )
+        if selected_server is None and stored_observation is None and profiled_cli_package_launch(tokens):
+            return None
         # A known connection remains MCP even when its script no longer exists.
         if selected_server is None and not looks_like_mcp_launch(
             tokens, command_text=command, cwd=home_dir, home_dir=home_dir
