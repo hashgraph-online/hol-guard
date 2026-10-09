@@ -28,6 +28,7 @@ from .hook_availability_policy import (
     availability_harness_response,
     recording_only_pre_tool_response,
 )
+from .hook_native_cli_observer import observe_native_pre_tool_cli
 from .hook_native_review_approval import (
     pause_native_pre_tool_for_approval,
     record_claude_permission_notice_for_native_review,
@@ -633,6 +634,8 @@ class HookWorkerNativeMixin:
                     response = _claude_native_prompt_brand(response, native_result)
             return (response, True)
         if native_event == "PreToolUse":
+            with suppress(Exception):
+                observe_native_pre_tool_cli(self.store, payload=payload, workspace=workspace, home_dir=home_dir)
             if recording_only:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":

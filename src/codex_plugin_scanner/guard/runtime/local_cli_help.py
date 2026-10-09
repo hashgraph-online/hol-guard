@@ -78,6 +78,12 @@ def help_invocation_for_command(
     identity = identify_unlisted_cli(command_text, cwd=cwd, home_dir=home_dir)
     if identity is None:
         return None
+    if identity.runner is not None:
+        # Probe the proven project bin directly; registry fetches are never run.
+        bin_path = identity.source_path
+        if identity.is_registry_package or bin_path is None or not _safe_probe_path(bin_path):
+            return None
+        return identity, (bin_path, "--help")
     try:
         model = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
     except ValueError:

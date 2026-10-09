@@ -18,9 +18,11 @@ from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafe
 from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
 from .command_tokens import executable_name
 from .custom_extension_suggestion import common_utility_reject_message, is_common_shell_utility
+from .local_cli_runner import runner_name, unwrap_local_runner
 
 LocalCliKind = Literal["executable", "script"]
 
+REGISTRY_PACKAGE_CLI_PREFIX = "local-cli.pkg-"
 _CLI_ID_PATTERN = re.compile(r"^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$")
 _SLUG_MAX = 32
 _INTERPRETER_NAMES = frozenset(
@@ -73,6 +75,16 @@ class UnlistedCliIdentity:
     example_label: str
     interpreter_name: str | None = None
     source_path: str | None = None
+    # Stored observation class; derived from ``source_path`` when unset.
+    path_class: str | None = None
+    # Package runner (``npx``) that launched the CLI, if any.
+    runner: str | None = None
+
+    @property
+    def is_registry_package(self) -> bool:
+        """Runner fetches without a proven local bin never carry a persistent allow."""
+
+        return self.cli_id.startswith(REGISTRY_PACKAGE_CLI_PREFIX)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -121,6 +133,8 @@ def identify_unlisted_cli_from_command(
     if not unlisted_cli_invocation_is_safe(command):
         return None
     segment = command.segments[0]
+    if runner_name(segment.executable) is not None:
+        return _runner_identity(command, segment, cwd=cwd, home_dir=home_dir)
     launch = build_runtime_launch_identity(
         segment.executable,
         args=segment.arguments,
@@ -277,6 +291,60 @@ def _executable_identity(executable: dict[str, object], exe_name: str) -> Unlist
         example_label=exe_name,
         interpreter_name=None,
         source_path=path,
+    )
+
+
+def _runner_identity(
+    command: CanonicalCommand,
+    segment: CommandSegment,
+    *,
+    cwd: Path,
+    home_dir: Path | None,
+) -> UnlistedCliIdentity | None:
+    invocation = unwrap_local_runner(
+        command.raw_text, segment.executable, segment.arguments, cwd=cwd, home_dir=home_dir
+    )
+    if invocation is None:
+        return None
+    name = invocation.target
+    if _is_interpreter_name(name) or is_common_shell_utility(name) or is_reserved_tool_name(name):
+        return None
+    slug = _slug(name)
+    local_bin = invocation.local_bin
+    if local_bin is None:
+        package_fingerprint = _path_fingerprint(f"npm:{invocation.package_name}")
+        return UnlistedCliIdentity(
+            cli_id=f"{REGISTRY_PACKAGE_CLI_PREFIX}{slug}-{package_fingerprint[:8]}",
+            name=name,
+            kind="executable",
+            identity_hash=_identity_digest({"kind": "registry-package", "package_name": invocation.package_name}),
+            example_label=f"{invocation.runner} {name}",
+            path_class="registry-package",
+            runner=invocation.runner,
+        )
+    path = _nonempty_string(local_bin.get("resolved_path"))
+    raw_hash = local_bin.get("content_hash")
+    digest = _sha256_hex(raw_hash.removeprefix("sha256:") if isinstance(raw_hash, str) else None)
+    if path is None or digest is None:
+        return None
+    path_fingerprint = _path_fingerprint(path)
+    return UnlistedCliIdentity(
+        cli_id=f"local-cli.{slug}-{path_fingerprint[:8]}",
+        name=name,
+        kind="executable",
+        identity_hash=_identity_digest(
+            {
+                "kind": "executable",
+                "content_sha256": digest,
+                "path_fingerprint": path_fingerprint,
+                "package_name": invocation.package_name,
+                "installed_version": local_bin.get("installed_version"),
+            }
+        ),
+        example_label=name,
+        source_path=path,
+        path_class="project-tool" if invocation.direct_dependency else "package-store",
+        runner=invocation.runner,
     )
 
 
