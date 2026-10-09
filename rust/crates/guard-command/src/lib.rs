@@ -7,6 +7,11 @@ pub mod business_gmail_wire;
 pub mod business_gws_command;
 pub mod business_input;
 pub mod canonical_command;
+pub mod catalog_read_model;
+#[cfg(test)]
+mod catalog_read_model_tests;
+mod catalog_read_projection;
+mod catalog_read_query;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;

@@ -94,6 +94,10 @@ class ExtensionControlApiService:
         self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
         self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
 
+    @property
+    def catalog_digest(self) -> str:
+        return self._registry.catalog_digest
+
     def catalog(self) -> dict[str, object]:
         limits = advertised_extension_control_limits()
         payload: dict[str, object] = {

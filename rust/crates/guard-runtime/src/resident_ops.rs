@@ -278,6 +278,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PromptAnalyze(request) => {
                 crate::prompt_analyze_op::evaluate_prompt_analyze(&request)
             }
+            // Static catalog metadata only: no policy store, guard home or
+            // effective-control state is read (ADR 0014).
+            ResidentOperationV1::CatalogRead(request) => encode_response(
+                &guard_command::catalog_read_model::evaluate_catalog_read(&request),
+            ),
             #[cfg(not(unix))]
             ResidentOperationV1::ContainedNodeExecute(_)
             | ResidentOperationV1::ContainedTypescriptExecute(_)
@@ -344,3 +349,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "catalog_read_op_tests.rs"]
+mod catalog_read_op_tests;

@@ -80,6 +80,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),
         guard_contracts::POLICY_DECISION_LOOKUP_FEATURE.into(),
+        guard_command::catalog_read_model::CATALOG_READ_CAPABILITY.into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
@@ -157,6 +158,7 @@ pub(crate) enum ResidentOperationV1 {
     PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
+    CatalogRead(guard_command::catalog_read_model::CatalogReadRequestV1),
     Health(Value),
     Shutdown(Value),
 }
