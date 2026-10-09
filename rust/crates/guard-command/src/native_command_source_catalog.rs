@@ -314,7 +314,9 @@ pub(super) fn lower_catalog(
     let catalog = Value::Array(catalog);
     let catalog_bytes =
         serde_json::to_vec(&catalog).map_err(|_| "command_source_encoding_failed")?;
-    if catalog_bytes.len() > 1_000_000 {
+    // Mirrors `max_catalog_payload_bytes` in contracts/managed-controls/v1/limits.json, which
+    // also bounds the Python catalog loader and the daemon catalog response.
+    if catalog_bytes.len() > 8_000_000 {
         return Err("command_source_catalog_projection_exceeded");
     }
     let nodes = graph.finish()?;
