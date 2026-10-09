@@ -351,7 +351,7 @@ function suggestionMatchesQuery(item: LocalCliItem, needle: string): boolean {
   return item.commands.some((command) => commandMatchesQuery(command, compact));
 }
 
-async function readJson(response: Response): Promise<unknown> {
+export async function readJson(response: Response): Promise<unknown> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const record = isRecord(payload) ? payload : {};
@@ -414,14 +414,6 @@ export async function applyLocalCliMutation(payload: LocalCliMutationPayload): P
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  }));
-}
-
-export async function forgetLocalCli(item: Pick<LocalCliItem, "cli_id" | "identity_hash">): Promise<void> {
-  await readJson(await fetchLocalCliApi("/v1/local-clis/forget", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cli_id: item.cli_id, identity_hash: item.identity_hash }),
   }));
 }
 

@@ -900,13 +900,6 @@ async function applyLocalCliMutation(payload) {
     body: JSON.stringify(payload)
   }));
 }
-async function forgetLocalCli(item) {
-  await readJson(await fetchLocalCliApi("/v1/local-clis/forget", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cli_id: item.cli_id, identity_hash: item.identity_hash })
-  }));
-}
 async function refreshMcpInventory(cliId, signal, configuredConnections = false, forceRefresh = false) {
   if (signal.aborted) return;
   const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
@@ -4056,6 +4049,13 @@ function connectionReviewMessage(state) {
   if (state === "blocked") return "The connection will deny every tool, including tools listed as Allow.";
   if (state === "unset") return "Saved connection permissions will be removed. Future calls return to Guard policy.";
   return "Unknown and future tools still require review. These choices do not verify the provider account.";
+}
+async function forgetLocalCli(item) {
+  await readJson(await fetchLocalCliApi("/v1/local-clis/forget", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cli_id: item.cli_id, identity_hash: item.identity_hash })
+  }));
 }
 function lastSeenCopy(lastSeenAt) {
   if (!lastSeenAt) return null;

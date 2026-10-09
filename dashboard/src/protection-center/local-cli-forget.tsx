@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
 
 import { useConfirmDialog } from "../confirm-dialog";
-import { forgetLocalCli, LocalCliApiError, type LocalCliItem } from "../local-cli-api";
+import { LocalCliApiError, type LocalCliItem } from "../local-cli-api";
+import { forgetLocalCli } from "../local-cli-forget-api";
 
 export function lastSeenCopy(lastSeenAt: string | null): string | null {
   if (!lastSeenAt) return null;

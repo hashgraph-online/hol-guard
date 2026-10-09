@@ -147,7 +147,8 @@ def test_mcp_observation_insert_prunes_expired_near_duplicates(tmp_path: Path) -
     assert old.cli_id not in _ids(store)
 
 
-def test_prune_keeps_connections_sharing_an_enrolled_server(tmp_path: Path) -> None:
+@pytest.mark.parametrize("legacy_server_wide", [False, True], ids=["connection", "legacy-server-wide"])
+def test_prune_keeps_connections_sharing_an_enrolled_server(tmp_path: Path, legacy_server_wide: bool) -> None:
     store = GuardStore(tmp_path / "guard-home")
     enrolled = _observe_mcp(store, "local-cli.mcp-enrolled", ("server.ts",), days_ago=60)
     _enroll(store, enrolled)
@@ -155,6 +156,11 @@ def test_prune_keeps_connections_sharing_an_enrolled_server(tmp_path: Path) -> N
         server_hash = connection.execute(
             "select server_identity_hash from local_cli_observation where cli_id = ?", (enrolled.cli_id,)
         ).fetchone()[0]
+        if legacy_server_wide:
+            # Older server-wide grants stored the server hash only as identity_hash.
+            connection.execute(
+                "update local_cli_observation set server_identity_hash = null where cli_id = ?", (enrolled.cli_id,)
+            )
         connection.execute(
             """insert into local_cli_observation (
                    cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count,
@@ -169,6 +175,8 @@ def test_prune_keeps_connections_sharing_an_enrolled_server(tmp_path: Path) -> N
     assert store.prune_inactive_local_cli_observations(now=NOW) == []
     with pytest.raises(LocalCliForgetError, match="local_cli_shared_server_enrolled"):
         store.forget_local_cli_observation("local-cli.mcp-sibling", identity_hash="3" * 64)
+    listed = {str(item["cli_id"]): item for item in store.list_local_cli_items()}
+    assert listed["local-cli.mcp-sibling"].get("shares_enrolled_server") is True
 
 
 def test_daemon_forget_maps_store_refusals_to_http_errors(tmp_path: Path) -> None:

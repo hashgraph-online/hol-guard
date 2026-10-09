@@ -31,18 +31,20 @@ _OBSERVATION_TABLES = (
 # An observation can be forgotten only when nothing enrolled depends on it.
 # MCP connections that share a server with an enrolled record stay: their
 # presence keeps a legacy server-wide grant from covering a different
-# configured connection (see read_local_mcp_grant).
-_FORGETTABLE_PREDICATE = """
+# configured connection (see read_local_mcp_grant). A legacy server-wide row
+# may store the server hash only as its identity_hash, so both columns count.
+_ENROLLED_MCP_SERVERS = """
+    select coalesce(enrolled.server_identity_hash, enrolled.identity_hash)
+    from local_cli_observation enrolled
+    join local_cli_grant grant_row on grant_row.cli_id = enrolled.cli_id
+    where enrolled.surface = 'mcp'
+"""
+_FORGETTABLE_PREDICATE = f"""
     observation.cli_id not in (select cli_id from local_cli_grant)
     and not (
         observation.surface = 'mcp'
         and observation.server_identity_hash is not null
-        and observation.server_identity_hash in (
-            select enrolled.server_identity_hash
-            from local_cli_observation enrolled
-            join local_cli_grant grant_row on grant_row.cli_id = enrolled.cli_id
-            where enrolled.server_identity_hash is not null
-        )
+        and observation.server_identity_hash in ({_ENROLLED_MCP_SERVERS})
     )
 """
 
@@ -194,10 +196,11 @@ def mark_shared_enrolled_servers(items: Iterable[dict[str, object]], enrolled_id
 
     listed = list(items)
     enrolled_servers = {
-        item.get("server_identity_hash")
+        item.get("server_identity_hash") or item.get("identity_hash")
         for item in listed
-        if item.get("cli_id") in enrolled_ids and isinstance(item.get("server_identity_hash"), str)
+        if item.get("cli_id") in enrolled_ids and item.get("surface") == "mcp"
     }
+    enrolled_servers.discard(None)
     for item in listed:
         if (
             item.get("surface") == "mcp"
