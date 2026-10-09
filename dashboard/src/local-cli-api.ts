@@ -416,6 +416,14 @@ export async function applyLocalCliMutation(payload: LocalCliMutationPayload): P
   }));
 }
 
+export async function forgetLocalCli(item: Pick<LocalCliItem, "cli_id" | "identity_hash">): Promise<void> {
+  await readJson(await fetchLocalCliApi("/v1/local-clis/forget", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cli_id: item.cli_id, identity_hash: item.identity_hash }),
+  }));
+}
+
 export async function refreshMcpInventory(
   cliId: string, signal: AbortSignal, configuredConnections = false, forceRefresh = false,
 ): Promise<void> {

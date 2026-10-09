@@ -19,6 +19,7 @@ from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.local_mcp_stdio import McpCatalogResult
 from .runtime.mcp_classification import classify_mcp_action
 from .store_custom_extension_continuity import _write_local_cli_grant
+from .store_local_cli_retention import prune_expired_local_cli_observations
 from .store_local_cli_rows import (
     _grant_from_row,
     _merge_item,
@@ -88,6 +89,7 @@ class StoreLocalCliMixin:
                         server_args_hash,
                     ),
                 )
+                _ = prune_expired_local_cli_observations(connection, now=seen_at)
                 return
             _ = connection.execute(
                 """

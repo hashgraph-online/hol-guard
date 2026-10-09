@@ -368,6 +368,7 @@ _LOCAL_CLI_PATHS = frozenset(
         "/v1/local-clis/apply",
         "/v1/local-clis/recognize",
         "/v1/local-clis/discover",
+        "/v1/local-clis/forget",
         "/v1/local-clis/provider-actions",
         "/v1/local-clis/provider-workflows",
         "/v1/local-clis/registry-search",

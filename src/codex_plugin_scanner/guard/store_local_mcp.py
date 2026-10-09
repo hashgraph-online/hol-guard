@@ -20,6 +20,7 @@ from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity, resolved_package_launcher_executable
 from .runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .store_local_cli import _grant_from_row, _read_command_catalog, _read_command_states, _row_values
+from .store_local_cli_retention import prune_expired_local_cli_observations
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import read_mcp_skill_page, read_mcp_tool_authority
 from .store_mcp_provider_catalog import read_provider_actions, write_composio_metadata
@@ -253,6 +254,7 @@ class StoreLocalMcpMixin:
                 if inserted is not None:
                     if legacy_deny:
                         _carry_legacy_mcp_denial(connection, inserted, identity.identity_hash, seen_at)
+                    _ = prune_expired_local_cli_observations(connection, now=seen_at)
                     return inserted
                 existing = _observation_from_values(
                     connection.execute(
