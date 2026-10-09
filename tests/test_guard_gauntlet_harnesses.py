@@ -147,6 +147,24 @@ def test_block_passes_only_on_a_native_deny_of_the_exact_attempt():
     assert assess_harness_case(SCENARIOS["secret-copy"], other)["outcome"] == "not-exercised"
 
 
+def test_observed_stop_callback_is_not_an_off_route_answer():
+    stop = {
+        "route_harness": "claude-code",
+        "payload": {"hook_event_name": "Stop"},
+        "response": {"continue": True, "reason_code": "native_hook_event_unavailable"},
+        "receipt": None,
+    }
+    routes = {"native_resident": 1, "native_fail_safe": 1}
+    scenario = SCENARIOS["secret-copy"]
+    observed = case("secret-copy", [blocked_copy(), stop], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, observed)["outcome"] == "pass"
+    unexplained = case("secret-copy", [blocked_copy()], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, unexplained)["reason"] == "Guard answered outside the native resident route"
+    blocked_stop = {**stop, "response": {**stop["response"], "continue": False}}
+    blocking = case("secret-copy", [blocked_copy(), blocked_stop], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, blocking)["outcome"] == "harness-error"
+
+
 def test_block_with_extra_requests_is_not_exercised():
     extra = row("PreToolUse", ALLOW, decision="allow", command="ls")
     result = assess_harness_case(
