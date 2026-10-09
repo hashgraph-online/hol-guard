@@ -3187,6 +3187,12 @@ def current_guard_daemon_runtime_fingerprint() -> str:
     return _current_guard_daemon_runtime_fingerprint()
 
 
+def current_guard_daemon_source_root() -> str:
+    """Return the install root whose runtime identity this process reports."""
+
+    return _current_guard_daemon_source_root()
+
+
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:
     payload = _load_state(guard_home)
     if not isinstance(payload, dict) or not _guard_daemon_state_matches_current_runtime(payload):

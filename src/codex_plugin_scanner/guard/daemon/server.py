@@ -295,6 +295,7 @@ from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state_if_current,
     current_guard_daemon_runtime_fingerprint,
+    current_guard_daemon_source_root,
     load_guard_daemon_auth_token,
     release_guard_daemon_owner_lock,
     repair_approval_center_locator,
@@ -8021,6 +8022,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,
             "runtime_fingerprint": current_guard_daemon_runtime_fingerprint(),
+            # Adoption needs the install root to reject a previous generation
+            # still running from the same, now upgraded, install.
+            "source_root": current_guard_daemon_source_root(),
             "guard_home": str(store.guard_home.resolve()),
             "command_activity_evidence": {
                 "state": "degraded" if activity_health.persistence_error_count else "healthy",
