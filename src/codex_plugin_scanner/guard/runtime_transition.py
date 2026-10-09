@@ -596,10 +596,12 @@ class TransitionFile:
             expected_digest=self.expected_digest,
             artifact_identity=self.artifact_identity,
         )
-        if publishes:
+        # Only an existing user file carries its own mode forward. A new file's mode is
+        # chosen by Guard, so a group-writable request there stays a caller error.
+        if publishes and self.before is not None:
             # A world-writable source is genuinely unsafe to carry forward; group-write
             # (umask 0002) is merely normalized away from the published mode.
-            if os.name != "nt" and self.before is not None and self.before_mode & 0o002:
+            if os.name != "nt" and self.before_mode & 0o002:
                 raise TransitionError("file_mode_invalid", f"{self.path} is world-writable")
             after_mode = _normalized_after_mode(after_mode)
         # The previous mode is the user's file. Only the published mode must be private.
