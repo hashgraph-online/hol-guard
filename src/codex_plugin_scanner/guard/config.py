@@ -1392,10 +1392,27 @@ def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> N
             staging_root = Path(temp_dir) / destination.name
             _migrate_guard_home_state(source=source, destination=staging_root)
             if destination.exists():
+                _refuse_live_database_companions(destination)
                 _remove_guard_home_destination(destination)
             shutil.move(str(staging_root), str(destination))
     except OSError:
         raise GuardHomeMigrationError("guard home migration failed") from None
+
+
+def _refuse_live_database_companions(destination: Path) -> None:
+    """Never swap guard.db out from under a non-empty WAL or rollback journal.
+
+    A later checkpoint of the old log would write stale pages into the new
+    database, and another Guard process may still hold the old files open.
+    """
+
+    for suffix in ("-wal", "-journal"):
+        companion = destination / f"guard.db{suffix}"
+        try:
+            if companion.is_file() and companion.stat().st_size > 0:
+                raise GuardHomeMigrationError("guard home has a live database log")
+        except OSError:
+            raise GuardHomeMigrationError("guard home migration failed") from None
 
 
 def _remove_guard_home_destination(path: Path) -> None:

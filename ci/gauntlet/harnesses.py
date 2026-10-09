@@ -230,7 +230,8 @@ ADAPTERS = {
     "cursor": Harness(
         "cursor",
         ("cursor-agent", "agent"),
-        credential_files=(".cursor/cli-config.json",),
+        # On Windows the CLI keeps its login in %APPDATA%, which the fixture redirects.
+        credential_files=(".cursor/cli-config.json", "AppData/Roaming/Cursor/auth.json"),
         credential_env=("CURSOR_API_KEY",),
         macos_keychain=True,
     ),

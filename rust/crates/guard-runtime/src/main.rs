@@ -27,6 +27,7 @@ mod encrypted_secret_store;
 mod github_workflow_runtime_authorization;
 mod hardening;
 mod hook_process_spawn;
+mod local_cli_grant_op;
 mod local_once_store;
 mod managed_resident;
 mod mcp_probe_op;
