@@ -45,7 +45,13 @@ def decide_local_cli_grant(
 
     if current_action not in GRANT_REFINABLE_ACTIONS:
         return None
-    command_id = _resolved_command_id(store, identity, command=command, cwd=cwd, home_dir=home_dir)
+    try:
+        command_id = _resolved_command_id(store, identity, command=command, cwd=cwd, home_dir=home_dir)
+    except Exception as exc:
+        # The resident checks a CLI-level block only after this read, so a
+        # failed read must not look like "no grant" to callers.
+        _LOGGER.warning("local CLI command catalog unavailable", exc_info=True)
+        raise LocalCliIdentityUnavailableError("native_local_cli_grant_catalog_unavailable") from exc
     store_path = getattr(store, "path", None)
     guard_home = getattr(store, "guard_home", None)
     native = (

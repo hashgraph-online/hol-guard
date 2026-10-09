@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -146,3 +147,25 @@ def test_failure_code_is_raised_and_logged(
     ):
         matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
     assert "native_local_cli_grant_schema_invalid" in caplog.text
+
+
+def test_catalog_read_failure_holds_instead_of_dropping_a_block(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    store, command, _identity = _blocked_store(tmp_path)
+
+    def broken_catalog(_cli_id: str) -> list[object]:
+        raise sqlite3.OperationalError("no such column: usage")
+
+    def native_must_not_run(**_kwargs: object) -> None:
+        raise AssertionError("the resident must not be asked without a resolved command")
+
+    monkeypatch.setattr(store, "read_local_cli_command_catalog", broken_catalog)
+    monkeypatch.setattr(decision, "native_local_cli_grant", native_must_not_run)
+
+    with pytest.raises(LocalCliIdentityUnavailableError, match="native_local_cli_grant_catalog_unavailable"):
+        matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
+    assert (
+        apply_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
+        == "review"
+    )
