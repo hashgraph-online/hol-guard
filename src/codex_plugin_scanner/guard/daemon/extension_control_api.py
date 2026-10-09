@@ -298,12 +298,8 @@ class ExtensionControlApiService:
             except ExtensionControlApiError:
                 raise
             except Exception as exc:
-                # An unexpected failure must not escape the request handler:
-                # the connection would drop with no response and the client
-                # could not tell whether the change applied. Report a stable
-                # error; a transition that never reached its anchor is rolled
-                # back on the next authority read.
-                _LOGGER.error("Extension-control apply failed: %s", type(exc).__name__)
+                # Report a stable error instead of dropping the connection.
+                _LOGGER.error("Extension-control apply failed: %s", type(exc).__name__, exc_info=exc)
                 raise ExtensionControlApiError(503, "authority_apply_failed") from exc
 
     def _apply_locked(self, payload: dict[str, object]) -> dict[str, object]:

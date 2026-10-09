@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timezone
 from typing import cast
 
 from .runtime.extension_control_authority import (
@@ -27,6 +28,21 @@ from .store_extension_control_authority_support import (
     _row_optional_str,
     _row_str,
 )
+
+# A request that failed after preparing its transition may be retried with the
+# same single-use proof, which needs the prepared row and proof reservation to
+# survive. Only transitions older than this are treated as abandoned.
+ABANDONED_TRANSITION_GRACE_SECONDS = 300.0
+
+
+def _prepared_row_is_stale(row: sqlite3.Row) -> bool:
+    try:
+        created = datetime.fromisoformat(_row_str(row, "created_at"))
+    except ValueError:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - created).total_seconds() >= ABANDONED_TRANSITION_GRACE_SECONDS
 
 
 class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySupportMixin):
@@ -179,7 +195,9 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         snapshot. That row never took effect, so removing it restores the
         previous authority without applying anything. The row is authenticated
         first, and anchored or committed transitions are left for explicit
-        recovery. Returns whether the abandoned row was removed.
+        recovery. Rows younger than the grace window are kept so the original
+        request can retry with its single-use proof. Returns whether the
+        abandoned row was removed.
         """
 
         if (
@@ -190,6 +208,8 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             return False
         pending = self._pending_transition(revision + 1)
         if pending is None or _row_str(pending, "phase") != AuthorityPhase.PREPARED.value:
+            return False
+        if not _prepared_row_is_stale(pending):
             return False
         from .native_policy_snapshot_constants import NativePolicySnapshotError
 
