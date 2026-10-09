@@ -9,6 +9,7 @@ from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _resolve_command
+from .omp_code_mode import omp_code_mode_warnings
 from .pi_extension_previous_source import previous_managed_extension_source
 from .pi_support import (
     EXTENSION_SUFFIXES,
@@ -651,6 +652,14 @@ class OmpHarnessAdapter(_PiFamilyHarnessAdapter):
         "and uses a managed Oh My Pi extension to review prompts and tool calls inline."
     )
     fallback_hint = "Oh My Pi keeps the blocked request in Guard and shows the reason inline before you retry."
+
+    def diagnostics(self, context: HarnessContext) -> dict[str, object]:
+        payload = super().diagnostics(context)
+        extra = omp_code_mode_warnings(context.home_dir / OMP_AGENT_DIR / "config.yml")
+        if extra:
+            existing = payload.get("warnings")
+            payload["warnings"] = [*(existing if isinstance(existing, list) else []), *extra]
+        return payload
 
 
 def _legacy_omp_managed_extension_sources(

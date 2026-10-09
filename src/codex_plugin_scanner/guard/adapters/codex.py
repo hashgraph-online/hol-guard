@@ -78,6 +78,7 @@ from ..codex_hook_sources import (
 )
 from ..codex_hook_sources import strict_json_object as _strict_json_object
 from ..codex_hook_sources import strict_toml_object as _strict_toml_object
+from ..codex_hook_trust import stale_guard_hook_coordinates
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..launcher import merge_guard_launcher_env
@@ -1214,6 +1215,9 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
             else _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON
         ),
         "protection_active": hooks_feature_enabled and managed_hook_installed and integrity_valid,
+        "hook_trust_stale": bool(
+            isinstance(config_payload, dict) and stale_guard_hook_coordinates(config_payload, config_path)
+        ),
         **{key: value for key, value in integrity.items() if key != "event_matches"},
     }
 
