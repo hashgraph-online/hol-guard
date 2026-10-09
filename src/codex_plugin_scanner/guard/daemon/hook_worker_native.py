@@ -687,6 +687,12 @@ class HookWorkerNativeMixin:
                 home_dir=home_dir,
             )
             if custom_block is not None:
+                if recording_only:
+                    custom_block = recording_only_pre_tool_response(
+                        native_harness,
+                        reason_code="local_cli_extension_blocked",
+                        reason="Watch recorded this action without stopping it.",
+                    )
                 return (
                     _record_native_pre_activity(self, native_harness, payload, custom_block, accepted_receipt),
                     True,

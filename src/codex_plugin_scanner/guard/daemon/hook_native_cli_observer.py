@@ -41,27 +41,32 @@ def observe_native_pre_tool_cli(
     cwd = _launch_cwd(payload, workspace)
     if cwd is None:
         return False
-    if _seen_recently((command, str(cwd))):
+    key = (command, str(cwd))
+    if _seen_recently(key):
         return False
     try:
         _pending.put_nowait((store, command, cwd, home_dir))
     except queue.Full:
         return False
+    _remember(key)
     _ensure_worker()
     return True
 
 
 def _seen_recently(key: tuple[str, str]) -> bool:
-    now = time.monotonic()
     with _lock:
         seen_at = _recent.get(key)
-        if seen_at is not None and now - seen_at < _RECENT_TTL_SECONDS:
-            return True
-        _recent[key] = now
+        return seen_at is not None and time.monotonic() - seen_at < _RECENT_TTL_SECONDS
+
+
+def _remember(key: tuple[str, str]) -> None:
+    """Mark a queued observation; dropped ones stay eligible for the next call."""
+
+    with _lock:
+        _recent[key] = time.monotonic()
         _recent.move_to_end(key)
         while len(_recent) > _MAX_RECENT:
             _recent.popitem(last=False)
-    return False
 
 
 def _ensure_worker() -> None:
