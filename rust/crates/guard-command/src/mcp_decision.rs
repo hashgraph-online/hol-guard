@@ -409,13 +409,25 @@ pub fn package_launcher_name(command: &str) -> Option<String> {
 /// `resolved_package_launcher_executable` (:161-185) — resolve a package
 /// launcher to a real executable, or `None` if unknown.
 pub fn resolved_package_launcher_executable(command: &str) -> Option<PathBuf> {
+    let path_value = std::env::var("PATH").unwrap_or_default();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    resolved_package_launcher_executable_in(command, &path_value, home.as_deref())
+}
+
+/// Same resolution against a caller-supplied `PATH` and home directory, for a
+/// resident that must resolve launchers as the calling process would.
+pub fn resolved_package_launcher_executable_in(
+    command: &str,
+    path_value: &str,
+    home: Option<&Path>,
+) -> Option<PathBuf> {
     let launcher = package_launcher_name(command)?;
-    let candidate = expand_user(command);
+    let candidate = expand_user_in(command, home);
     let resolved = if candidate.is_absolute() {
         std::fs::canonicalize(&candidate).ok()?
     } else {
-        let found =
-            which_package_launcher(command).or_else(|| which_package_launcher(&launcher))?;
+        let found = which_package_launcher(command, path_value, home)
+            .or_else(|| which_package_launcher(&launcher, path_value, home))?;
         std::fs::canonicalize(Path::new(&found)).ok()?
     };
     if !resolved.is_file() {
@@ -426,11 +438,10 @@ pub fn resolved_package_launcher_executable(command: &str) -> Option<PathBuf> {
 
 /// `_which_package_launcher` (:186-195) — resolve a launcher on PATH,
 /// skipping Guard package shims.
-fn which_package_launcher(launcher: &str) -> Option<String> {
-    let path_value = std::env::var("PATH").unwrap_or_default();
+fn which_package_launcher(launcher: &str, path_value: &str, home: Option<&Path>) -> Option<String> {
     let parts: Vec<&str> = path_value
         .split(':')
-        .filter(|part| !part.is_empty() && !is_guard_package_shim_dir(part))
+        .filter(|part| !part.is_empty() && !is_guard_package_shim_dir(part, home))
         .collect();
     if parts.is_empty() {
         return None;
@@ -464,8 +475,8 @@ fn which_in(launcher: &str, parts: &[&str]) -> Option<String> {
 }
 
 /// `_is_guard_package_shim_dir` (:196-208).
-fn is_guard_package_shim_dir(part: &str) -> bool {
-    let expanded = expand_user(part);
+fn is_guard_package_shim_dir(part: &str, home: Option<&Path>) -> bool {
+    let expanded = expand_user_in(part, home);
     let mut posix = expanded.to_string_lossy().into_owned();
     while posix.ends_with('/') {
         posix.pop();
@@ -474,11 +485,11 @@ fn is_guard_package_shim_dir(part: &str) -> bool {
 }
 
 /// `Path.expanduser` — only `~`/`~user` at the head expand.
-fn expand_user(value: &str) -> PathBuf {
+fn expand_user_in(value: &str, home: Option<&Path>) -> PathBuf {
     if let Some(rest) = value.strip_prefix('~') {
         if rest.is_empty() || rest.starts_with('/') {
-            if let Some(home) = std::env::var_os("HOME") {
-                return PathBuf::from(home).join(rest.trim_start_matches('/'));
+            if let Some(home) = home {
+                return home.join(rest.trim_start_matches('/'));
             }
         }
     }

@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .native_policy_snapshot_test_fixtures import _ack, _status
 
 
@@ -181,7 +182,9 @@ def test_large_observed_catalog_publishes_choices_and_reports_capacity_without_l
         )
 
     publisher = NativePolicySnapshotPublisher(
-        store=store, status_provider=_status, client_request=lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
+        store=store,
+        status_provider=_status,
+        client_request=lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home")),
     )
     try:
         publisher._publish_once()

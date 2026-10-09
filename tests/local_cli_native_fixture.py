@@ -1,4 +1,4 @@
-"""Run local CLI grant decisions through a keyed compiled resident.
+"""Run local CLI and MCP grant decisions through a keyed compiled resident.
 
 The grant decision is native-authoritative: the resident reads ``guard.db``
 and answers, and refuses to serve a home that holds no policy verifier key.
@@ -18,7 +18,7 @@ from .native_runtime_fixtures import _resolve_native_hook_runtime
 
 @pytest.fixture(autouse=True)
 def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    from codex_plugin_scanner.guard import local_cli_grant_decision
+    from codex_plugin_scanner.guard import local_cli_grant_decision, local_mcp_grant_decision
     from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
         provision_native_verifier_key_for_store,
     )
@@ -36,7 +36,16 @@ def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch) -> Iterator
             homes.add(guard_home)
         return real(guard_home=guard_home, **kwargs)
 
+    real_mcp = local_mcp_grant_decision.native_local_mcp_grant
+
+    def keyed_mcp(*, guard_home: Path, **kwargs):
+        if guard_home not in homes:
+            provision_native_verifier_key_for_store(GuardStore(guard_home))
+            homes.add(guard_home)
+        return real_mcp(guard_home=guard_home, **kwargs)
+
     monkeypatch.setattr(local_cli_grant_decision, "native_local_cli_grant", keyed)
+    monkeypatch.setattr(local_mcp_grant_decision, "native_local_mcp_grant", keyed_mcp)
     yield
     for home in homes:
         close_native_residents(home)

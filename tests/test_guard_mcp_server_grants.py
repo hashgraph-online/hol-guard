@@ -34,6 +34,8 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def _identity():
     return build_mcp_server_identity(
