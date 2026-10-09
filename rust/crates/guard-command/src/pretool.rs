@@ -8,6 +8,7 @@ use std::path::Path;
 pub struct PathContext<'a> {
     pub home_dir: Option<&'a str>,
     pub cwd: Option<&'a str>,
+    pub cdpath_unset: bool,
 }
 
 mod contained_wrapper;
@@ -364,7 +365,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 ) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
-    let context = crate::pretool::PathContext { home_dir, cwd };
+    let context = PathContext::for_session(home_dir, cwd, execution_environment);
     if shell_script::contains_credential_post(&model, context) {
         return Ok(pretool_decision(
             model,

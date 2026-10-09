@@ -74,6 +74,7 @@ from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
 from .update_opencode import _refresh_opencode_pretool_plugin
 from .update_release_candidates import newest_pypi_version
+from .update_retirement import retire_with_retry
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
@@ -202,10 +203,14 @@ def _retire_native_resident_before_update(guard_home: Path) -> bool:
     """Stop shared native state while the installed runtime is still intact."""
 
     try:
-        return retire_native_resident_for_update(
-            executable=_bundled_runtime_candidate(),
-            guard_home=guard_home,
-            environment=_isolated_environment(),
+        return retire_with_retry(
+            lambda timeout_seconds: retire_native_resident_for_update(
+                executable=_bundled_runtime_candidate(),
+                guard_home=guard_home,
+                environment=_isolated_environment(),
+                timeout_seconds=timeout_seconds,
+            ),
+            sleep=time.sleep,
         )
     except Exception:
         # A failed preflight must leave the current package untouched.

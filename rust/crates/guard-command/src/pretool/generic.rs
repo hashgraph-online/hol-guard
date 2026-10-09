@@ -110,7 +110,11 @@ pub fn evaluate_pre_tool_envelope_with_context(
         payload,
         controls,
         deadline,
-        crate::pretool::PathContext { home_dir, cwd },
+        crate::pretool::PathContext {
+            home_dir,
+            cwd,
+            cdpath_unset: false,
+        },
         None,
     )
 }
@@ -147,7 +151,9 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
-    let super::PathContext { home_dir, cwd } = context;
+    let context =
+        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    let super::PathContext { home_dir, cwd, .. } = context;
     let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
@@ -294,7 +300,11 @@ fn evaluate_envelope(
             signals.tool_name.as_deref(),
             &signals.package_values,
             deadline,
-            super::PathContext { home_dir, cwd },
+            super::PathContext {
+                home_dir,
+                cwd,
+                ..context
+            },
         ),
         (Some(controls), _) => controls.apply_with_tool(
             None,
@@ -311,9 +321,9 @@ fn evaluate_envelope(
         && result.reason_code != "native_git_helper_context_review"
         && command_model.is_some_and(|model| {
             let destination =
-                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd });
-            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd) };
-            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd });
+                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd, ..context });
+            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd), ..context };
+            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd, ..context });
             model.segments.iter().enumerate().any(|(index, segment)| {
                 segment.executable.as_deref().is_some_and(|executable| {
                     if super::executable_basename(executable) != "git" {
@@ -325,6 +335,7 @@ fn evaluate_envelope(
                         context,
                         deadline,
                         execution_environment,
+                        super::git_helper_context::stdout_piped(model, index),
                     );
                     !segment.environment_names.is_empty()
                         || !super::directory_targets::drive_targets_quoted(segment)
@@ -352,9 +363,16 @@ fn evaluate_envelope(
     }
     let contained_test_reason = command_model.and_then(|model| {
         super::restricted_tests::readonly_test_reason(model).or_else(|| {
-            super::contained_wrapper::contained_core(model, super::PathContext { home_dir, cwd })
-                .and_then(|core| super::restricted_tests::readonly_test_reason(&core))
-                .filter(|reason| *reason != "native_git_readonly_containment_required")
+            super::contained_wrapper::contained_core(
+                model,
+                super::PathContext {
+                    home_dir,
+                    cwd,
+                    ..context
+                },
+            )
+            .and_then(|core| super::restricted_tests::readonly_test_reason(&core))
+            .filter(|reason| *reason != "native_git_readonly_containment_required")
         })
     });
     // The read-only credential-filtering backend currently exists on macOS.

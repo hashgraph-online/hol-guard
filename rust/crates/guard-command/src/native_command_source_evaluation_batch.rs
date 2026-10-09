@@ -109,6 +109,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
             crate::pretool::PathContext {
                 home_dir: request.home_dir.as_deref(),
                 cwd: request.cwd.as_deref(),
+                cdpath_unset: false,
             },
             request.execution_environment.as_ref(),
         );
