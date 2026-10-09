@@ -177,6 +177,9 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       // The same normal authentication resolver used by native OMP sessions.
       // Credentials stay inside the pinned SDK; none are exported or logged.
       getApiKey: requestModel => registry.resolver(requestModel, 'guard-gauntlet-native-luna'),
+      // Advertise the host's independent native-tool capability without forcing
+      // any tool choice, call count, argument, or model-selected batch.
+      onPayload: (payload: any) => { payload.parallel_tool_calls = true; },
       onSseEvent: event => wire.capture(event),
     });
     active.add(agent);

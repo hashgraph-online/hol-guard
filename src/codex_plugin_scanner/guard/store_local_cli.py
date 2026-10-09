@@ -49,6 +49,7 @@ class StoreLocalCliMixin:
         server_identity_hash: str | None = None,
         server_command: str | None = None,
         server_args_hash: str | None = None,
+        only_if_missing: bool = False,
     ) -> None:
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
@@ -59,6 +60,8 @@ class StoreLocalCliMixin:
                 "select observed_count from local_cli_observation where cli_id = ?",
                 (identity.cli_id,),
             ).fetchone()
+            if current is not None and only_if_missing:
+                return
             if current is None:
                 _ = connection.execute(
                     """
@@ -67,6 +70,7 @@ class StoreLocalCliMixin:
                         observed_count, last_seen_at, source_path, help_status, surface,
                         server_identity_hash, server_command, server_args_hash
                     ) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+                    on conflict(cli_id) do nothing
                     """,
                     (
                         identity.cli_id,
@@ -207,6 +211,15 @@ class StoreLocalCliMixin:
                 (cli_id,),
             ).fetchone()
         return None if row is None else _grant_from_row(row)
+
+    def has_local_cli_block_rules(self) -> bool:
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            row = connection.execute(
+                "select exists(select 1 from local_cli_grant where state = 'blocked')"
+                " or exists(select 1 from local_cli_command_grant where state = 'block')"
+            ).fetchone()
+        return bool(row and row[0])
 
     def read_local_cli_revision(self) -> int:
         with self._connect() as connection:

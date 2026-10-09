@@ -24,7 +24,7 @@ def refresh(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "ROOT", tmp_path)
     monkeypatch.setattr(detector, "ROOT", tmp_path)
     monkeypatch.setattr(module, "TRUST_BINDINGS", bindings)
-    monkeypatch.setattr(module, "TRUST_MAP", bindings.parent / "trust-class-map.v1.json")
+    monkeypatch.setattr(module, "TRUST_MAP", bindings.parent / "build-trust-class-map.v1.json")
     return module
 
 
@@ -66,3 +66,59 @@ def test_stale_descriptor_does_not_make_regeneration_pending(refresh, monkeypatc
     )
     monkeypatch.setattr(refresh, "catalog_ids", lambda: {"command.active"})
     assert refresh.pending_contribution_ids() == []
+
+
+@pytest.mark.parametrize("kind", ["command", "mcp"])
+def test_check_rejects_missing_ownership_without_staging_it(refresh, kind, capsys):
+    write(
+        refresh.TRUST_BINDINGS / "command.core.v1.json",
+        {"schemaVersion": "guard.extension-trust-binding.v1", "extension": "command.core", "trustClass": "first-party"},
+    )
+    if kind == "mcp":
+        write(refresh.ROOT / "contributions/mcp-servers/mcp.run.json", {"id": "mcp.run"})
+        identity = "command.mcp-run"
+    else:
+        write(
+            refresh.ROOT / "contributions/command-sources/command.new.json",
+            {"extension": {"extension_id": "command.new", "trustClass": "first-party"}},
+        )
+        identity = "command.new"
+    before = {p: p.read_bytes() for p in refresh.ROOT.rglob("*") if p.is_file()}
+
+    with pytest.raises(SystemExit, match=identity):
+        refresh.main(["--check-trust"])
+
+    assert {p: p.read_bytes() for p in refresh.ROOT.rglob("*") if p.is_file()} == before
+    assert refresh.main(["--trust-only"]) == 0
+    assert refresh.main(["--check-trust"]) == 0
+    assert refresh._trust_binding_index() == {"command.core": "first-party", identity: "external"}
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["authored_trust_complete"] is True
+    assert not (refresh.TRUST_BINDINGS.parent / "trust-class-map.v1.json").exists()
+
+
+def test_check_does_not_require_bindings_for_orphan_generated_descriptors(refresh):
+    write(
+        refresh.TRUST_BINDINGS / "command.core.v1.json",
+        {"schemaVersion": "guard.extension-trust-binding.v1", "extension": "command.core", "trustClass": "first-party"},
+    )
+    write(refresh.ROOT / "contributions/extensions/command.orphan.json", {"id": "command.orphan"})
+    assert refresh.main(["--check-trust"]) == 0
+    assert not refresh.TRUST_MAP.exists()
+
+
+def test_check_rejects_invalid_authored_class_without_repair(refresh):
+    path = refresh.TRUST_BINDINGS / "command.core.v1.json"
+    write(
+        path,
+        {"schemaVersion": "guard.extension-trust-binding.v1", "extension": "command.core", "trustClass": "unknown"},
+    )
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="unknown trust class"):
+        refresh.main(["--check-trust"])
+    assert path.read_bytes() == before
+    assert not refresh.TRUST_MAP.exists()
+
+
+def test_required_quality_checks_ownership_before_package_preparation():
+    action = (Path(__file__).parents[1] / ".github/actions/ci-job-quality/action.yml").read_text()
+    assert action.index("scripts/refresh_extension_artifacts.py --check-trust") < action.index("uv sync")

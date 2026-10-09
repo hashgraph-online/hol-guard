@@ -724,7 +724,7 @@ def _validate_composition_trace(action: GuardAction, trace: Mapping[str, object]
             raise ValueError(f"composition_trace.current_action cannot be weaker than {key}")
 
     saved_allow_override = bool(
-        current_action == "review"
+        current_action in {"review", "require-reapproval"}
         and parsed["saved_action"] == "allow"
         and saved_state_present
         and action in {"allow", "warn"}
@@ -965,7 +965,7 @@ def _validate_artifact_approval_projection(
         raise ValueError("composition_trace.trusted_request_override must match outer evidence")
 
     saved_allow_reuse = bool(
-        current_action == "review"
+        current_action in {"review", "require-reapproval"}
         and saved_action == "allow"
         and reuse_action == "allow"
         and reuse_status == "accepted"
@@ -988,7 +988,9 @@ def _validate_artifact_approval_projection(
     runtime_action = trace.get("runtime_detector_action")
     if runtime_action is not None:
         parsed_runtime_action = _parse_guard_action(runtime_action)
-        detector_review_was_approved = parsed_runtime_action == "review" and (trusted_applied or saved_allow_reuse)
+        detector_review_was_approved = (parsed_runtime_action == "review" and trusted_applied) or (
+            parsed_runtime_action in {"review", "require-reapproval"} and saved_allow_reuse
+        )
         if not detector_review_was_approved:
             expected_action = most_restrictive_guard_action(expected_action, parsed_runtime_action)
     if decision.action != expected_action:

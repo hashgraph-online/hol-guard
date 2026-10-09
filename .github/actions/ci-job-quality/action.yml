@@ -6,6 +6,9 @@ runs:
   - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
     with:
       python-version: '3.12'
+  - name: Require authored contribution trust before preparation
+    run: python scripts/refresh_extension_artifacts.py --check-trust
+    shell: bash
   - name: Set up uv
     id: setup-uv-primary
     continue-on-error: true

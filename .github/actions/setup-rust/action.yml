@@ -47,7 +47,10 @@ runs:
         prefix-key: v0-rust
         workspaces: rust
         shared-key: ${{ inputs.targets && format('{0}-{1}', inputs.cache-key, inputs.targets) || inputs.cache-key }}
-        cache-workspace-crates: true
+        # actions/checkout gives every source a fresh mtime, so Cargo rebuilds
+        # workspace crates regardless; caching them only spends the 10 GB
+        # Actions budget and evicts useful dependency entries.
+        cache-workspace-crates: false
         # Cache paths also determine Actions' archive version. Preserve the
         # old path set so the trusted pre-migration cache can actually restore.
         cache-bin: true

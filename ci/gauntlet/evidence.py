@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .business_policy import BUSINESS_DIRECTORY_DELETE, business_policy_error
 from .catalog import WATCH_OUTPUT, Scenario
 from .extension_adapters import extension_adapter
 from .input_evidence import redact_value
@@ -216,6 +217,10 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
         watch_error = _watch_evidence_error(case, calls, by_id)
         if watch_error:
             return "harness-error", watch_error
+    if scenario.id == BUSINESS_DIRECTORY_DELETE:
+        business_error = business_policy_error(case)
+        if business_error:
+            return "harness-error", business_error
     if scenario.expectation == "block":
         denied = [
             g
