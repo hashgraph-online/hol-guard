@@ -48,5 +48,7 @@ def test_upgraded_install_cannot_adopt_previous_generation_daemon(
         monkeypatch.setattr(manager, "_runtime_fingerprint_cache", None)
         assert details["runtime_fingerprint"] == "previous-generation"
         assert manager._daemon_healthz_details_match_current_runtime(details) is False
+        legacy_details = {key: value for key, value in details.items() if key != "source_root"}
+        assert manager._daemon_healthz_details_match_current_runtime(legacy_details) is False
     finally:
         daemon.stop()

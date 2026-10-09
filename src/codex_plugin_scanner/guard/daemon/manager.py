@@ -1322,6 +1322,11 @@ def _daemon_healthz_details_match_current_runtime(payload: dict[str, object]) ->
     """Match live daemon identity including protocol compatibility."""
 
     # Same-release peers still require a current compatibility version.
+    # A peer with a different fingerprint must name its install root: a daemon
+    # from before the upgrade omits it and would otherwise pass as a same-release peer.
+    fingerprint = payload.get("runtime_fingerprint")
+    if fingerprint != _current_guard_daemon_runtime_fingerprint() and not isinstance(payload.get("source_root"), str):
+        return False
     return _guard_daemon_state_matches_current_runtime(payload)
 
 
