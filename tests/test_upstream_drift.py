@@ -133,12 +133,14 @@ def test_main_exits_nonzero_on_drift_and_writes_report(tmp_path, monkeypatch):
 
 
 GMAIL_URL = "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"
+GWS_DEFAULT_VERSIONS = {"gmail": "v1", "drive": "v3", "calendar": "v3"}
 
 
 def gmail_document(**send_changes) -> dict:
     send = {
         "httpMethod": "POST",
         "path": "gmail/v1/users/{userId}/messages/send",
+        "description": "Sends the specified message.",
         "parameters": {"userId": {"location": "path", "type": "string", "required": True}},
         "request": {"$ref": "Message"},
         "scopes": ["https://www.googleapis.com/auth/gmail.send"],
@@ -148,40 +150,89 @@ def gmail_document(**send_changes) -> dict:
         "name": "gmail",
         "version": "v1",
         "revision": "1",
-        "schemas": {"Message": {"properties": {"raw": {}, "threadId": {}}}},
-        "resources": {"users": {"resources": {"messages": {"methods": {"send": send, "list": {}}}}}},
+        "schemas": {
+            "Message": {"properties": {"raw": {"type": "string"}, "payload": {"$ref": "MessagePart"}}},
+            "MessagePart": {"properties": {"filename": {"type": "string", "description": "Name."}}},
+        },
+        "resources": {"users": {"resources": {"messages": {"methods": {"send": send, "batchDelete": {}}}}}},
     }
 
 
-def write_gmail_pins(repository: Path, document: dict) -> None:
+def write_gmail_pins(repository: Path, document: dict, routes=("users.messages.send",)) -> Path:
     folder = repository / "contributions/upstream-schemas"
-    folder.mkdir(parents=True)
-    projection = discovery_projection(document, ["users.messages.send"])
+    folder.mkdir(parents=True, exist_ok=True)
     pins_file = {
         "schema": "hol.guard.upstream-discovery-pins.v1",
         "extension_id": "command.demo",
-        "apis": [{"name": "gmail", "version": "v1", "revision": "1", "projection": projection}],
+        "description": "demo",
+        "apis": [
+            {"name": "gmail", "version": "v1", "revision": "1", "projection": discovery_projection(document, routes)}
+        ],
     }
-    (folder / "command.demo.json").write_text(json.dumps(pins_file), encoding="utf-8")
+    path = folder / "command.demo.json"
+    path.write_text(json.dumps(pins_file), encoding="utf-8")
+    return path
 
 
-def test_repository_discovery_pins_cover_gws_rule_routes():
-    found = {pin.project: dict(pin.expected) for pin in discovery_pins(ROOT)}
-    assert set(found) == {"gmail/v1", "drive/v3", "calendar/v3"}
-    assert "methods users.messages.send" in found["gmail/v1"]
-    assert "methods users.settings.updateAutoForwarding" in found["gmail/v1"]
-    assert "methods permissions.create" in found["drive/v3"]
-    assert "resources acl" in found["calendar/v3"]
-    sources = pins(ROOT)
-    assert any(pin.extension_id == "command.google-workspace.gws" for pin in sources)
+def rule_discovery_routes() -> set[tuple[str, str]]:
+    source = json.loads((ROOT / "contributions/command-sources/command.google-workspace.gws.json").read_text())
+    paths = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            config = node.get("config") or {}
+            if node.get("op") == "executable.v1":
+                paths.append(config["subcommands"])
+            if node.get("op") == "executable-path-set.v1":
+                paths.extend(config["paths"])
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(source)
+    routes = set()
+    for service, *route in paths:
+        name, _, version = service.partition(":")
+        if name in GWS_DEFAULT_VERSIONS and not route[0].startswith("+"):
+            routes.add((f"{name}/{version or GWS_DEFAULT_VERSIONS[name]}", ".".join(route)))
+    return routes
+
+
+def test_repository_discovery_pins_cover_every_gws_rule_route():
+    pinned = {
+        (pin.project, key.split(" ", 1)[1])
+        for pin in discovery_pins(ROOT)
+        for key, _ in pin.expected
+        if key.startswith("methods ")
+    }
+    assert pinned == rule_discovery_routes()
+    assert {pin.extension_id for pin in discovery_pins(ROOT)} == {"command.google-workspace.gws"}
+    assert any(pin.extension_id == "command.google-workspace.gws" for pin in pins(ROOT))
+
+
+def test_repository_discovery_pin_file_round_trips(tmp_path):
+    path = ROOT / "contributions/upstream-schemas/command.google-workspace.gws.json"
+    pins_file = json.loads(path.read_text(encoding="utf-8"))
+    assert upstream_drift._pins_text(pins_file) == path.read_text(encoding="utf-8")
+    assert len(path.read_text(encoding="utf-8").splitlines()) <= 500
+
+
+def nested_change() -> dict:
+    document = gmail_document()
+    document["schemas"]["MessagePart"]["properties"]["filename"]["type"] = "integer"
+    return document
 
 
 @pytest.mark.parametrize(
     ("document", "changed"),
     [
         (gmail_document(), []),
+        (gmail_document(description="Sends mail."), []),
         (gmail_document(scopes=["https://mail.google.com/"]), ["methods users.messages.send"]),
         (gmail_document(path="gmail/v2/send"), ["methods users.messages.send"]),
+        (nested_change(), ["schemas MessagePart"]),
     ],
 )
 def test_discovery_pin_reports_changed_method_shape(tmp_path, document, changed):
@@ -192,6 +243,12 @@ def test_discovery_pin_reports_changed_method_shape(tmp_path, document, changed)
     if changed:
         assert finding.detail == "changed: " + ", ".join(changed)
         assert finding.affected_packs == ["business.demo"]
+
+
+def test_discovery_route_lookup_ignores_case(tmp_path):
+    write_gmail_pins(tmp_path, gmail_document(), routes=("users.messages.batchdelete",))
+    [pin] = discovery_pins(tmp_path)
+    assert dict(pin.expected)["methods users.messages.batchdelete"] != upstream_drift._digest(None)
 
 
 def test_discovery_pin_reports_new_sibling_and_removed_method(tmp_path):
@@ -215,17 +272,38 @@ def test_discovery_fetch_failure_is_unknown(tmp_path):
     assert finding.status == "unknown"
 
 
+def test_discovery_summary_names_the_refresh_step(tmp_path):
+    write_gmail_pins(tmp_path, gmail_document())
+    [pin] = discovery_pins(tmp_path)
+    [finding] = check([pin], fake_fetch({GMAIL_URL: nested_change()}), {}, {})
+    text = summary([finding])
+    assert "--refresh-discovery-pins" in text
+    assert "update the command source pin" not in text
+    assert "| `1` | `1` |" in text
+
+
 def test_refresh_discovery_pins_rewrites_reviewed_routes_only(tmp_path):
     write_gmail_pins(tmp_path, gmail_document())
     current = gmail_document(scopes=["https://mail.google.com/"])
     current["revision"] = "2"
-    refresh_discovery_pins(tmp_path, fake_fetch({GMAIL_URL: current}))
+    [path] = refresh_discovery_pins(tmp_path, fake_fetch({GMAIL_URL: current}))
     [pin] = discovery_pins(tmp_path)
     [finding] = check([pin], fake_fetch({GMAIL_URL: current}), {}, {})
     assert finding.status == "current"
-    api = json.loads((tmp_path / "contributions/upstream-schemas/command.demo.json").read_text())["apis"][0]
+    api = json.loads(path.read_text())["apis"][0]
     assert api["revision"] == "2"
     assert list(api["projection"]["methods"]) == ["users.messages.send"]
+    assert sorted(api["projection"]["schemas"]) == ["Message", "MessagePart"]
+
+
+def test_refresh_refuses_to_pin_a_removed_method(tmp_path):
+    path = write_gmail_pins(tmp_path, gmail_document())
+    before = path.read_text()
+    removed = gmail_document()
+    del removed["resources"]["users"]["resources"]["messages"]["methods"]["send"]
+    with pytest.raises(ValueError, match=r"no longer has users\.messages\.send"):
+        refresh_discovery_pins(tmp_path, fake_fetch({GMAIL_URL: removed}))
+    assert path.read_text() == before
 
 
 def test_scheduled_workflow_only_reads():

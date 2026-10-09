@@ -10,9 +10,10 @@ the extension and Gauntlet scenarios bound to it.
 
 Some extensions also depend on a provider API description that the CLI reads at
 runtime. For those, ``contributions/upstream-schemas`` records the reviewed
-Google Discovery shape of each method the rules match, plus the method list of
-its resource. A changed method shape, a removed method or a new sibling method
-is reported the same way as a moved release pin.
+Google Discovery shape of each method the rules match, the request schemas it
+reaches and the method list of its resource. A changed method or request shape,
+a removed method or a new sibling method is reported the same way as a moved
+release pin.
 
 The check only reads. It never edits a source, trust binding or proof, and it
 never publishes. A drift report exits 1 so a scheduled run leaves a failed job
@@ -93,34 +94,70 @@ def pins(repository: Path) -> list[Pin]:
     return found
 
 
+def _child(mapping: dict[str, Any] | None, name: str) -> Any:
+    """Look up a Discovery resource or method the way gws does: case-insensitively."""
+    for key, value in (mapping or {}).items():
+        if key.lower() == name.lower():
+            return value
+    return None
+
+
+def _without_descriptions(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _without_descriptions(item) for key, item in sorted(value.items()) if key != "description"}
+    if isinstance(value, list):
+        return [_without_descriptions(item) for item in value]
+    return value
+
+
+def _references(value: Any) -> Iterable[str]:
+    if isinstance(value, dict):
+        if isinstance(value.get("$ref"), str):
+            yield value["$ref"]
+        for item in value.values():
+            yield from _references(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _references(item)
+
+
 def discovery_projection(document: dict[str, Any], routes: Iterable[str]) -> dict[str, dict[str, Any]]:
-    """Project the request surface of each route and the method list of its resource."""
-    projection: dict[str, dict[str, Any]] = {"methods": {}, "resources": {}}
+    """Project each route's request surface, its resource's method list and every request schema it reaches.
+
+    Routes use the lowercase command path the gws rules match, for example
+    ``users.messages.batchdelete``. A route the document lacks projects to ``None``.
+    """
+    projection: dict[str, dict[str, Any]] = {"methods": {}, "resources": {}, "schemas": {}}
+    schemas = document.get("schemas") or {}
+    pending: list[str] = []
     for route in routes:
         *path, name = route.split(".")
         node: dict[str, Any] | None = document
         for part in path:
-            node = ((node or {}).get("resources") or {}).get(part)
+            node = _child((node or {}).get("resources"), part)
         methods = (node or {}).get("methods") or {}
         projection["resources"][".".join(path)] = sorted(methods) if node is not None else None
-        method = methods.get(name)
+        method = _child(methods, name)
         if method is None:
             projection["methods"][route] = None
             continue
         request = (method.get("request") or {}).get("$ref")
-        schema = ((document.get("schemas") or {}).get(request) or {}) if request else {}
+        pending += [request] if request else []
         projection["methods"][route] = {
             "httpMethod": method.get("httpMethod"),
             "path": method.get("path"),
-            "parameters": {
-                key: {field: spec.get(field) for field in ("location", "type", "required", "enum", "repeated")}
-                for key, spec in sorted((method.get("parameters") or {}).items())
-            },
+            "parameters": _without_descriptions(method.get("parameters") or {}),
             "request": request,
-            "requestProperties": sorted(schema.get("properties") or {}),
             "scopes": sorted(method.get("scopes") or ()),
             "supportsMediaUpload": bool(method.get("supportsMediaUpload")),
         }
+    while pending:
+        name = pending.pop()
+        if name in projection["schemas"]:
+            continue
+        shape = _without_descriptions(schemas.get(name)) if name in schemas else None
+        projection["schemas"][name] = shape
+        pending += list(_references(shape))
     return projection
 
 
@@ -147,7 +184,7 @@ def discovery_pins(repository: Path) -> list[Pin]:
         for api in pins_file["apis"]:
             expected = _expected(api["projection"])
             project = f"{api['name']}/{api['version']}"
-            found.append(Pin(pins_file["extension_id"], "discovery", project, _digest(expected), source, expected))
+            found.append(Pin(pins_file["extension_id"], "discovery", project, api["revision"], source, expected))
     return found
 
 
@@ -270,12 +307,49 @@ def summary(findings: list[Finding]) -> str:
             f"| `{item.pin.extension_id}` | {item.pin.kind}:{item.pin.project} | `{item.pin.pinned[:12]}` "
             f"| `{item.current or '?'}` | {item.status}: {item.detail} | {proofs} |"
         )
-    lines += ["", "Review the upstream change, then update the command source pin and rerun the listed proofs."]
+    lines.append("")
+    if any(item.pin.kind != "discovery" for item in stale):
+        lines.append("Review the upstream change, then update the command source pin and rerun the listed proofs.")
+    if any(item.pin.kind == "discovery" for item in stale):
+        lines.append(
+            "For a Discovery change, review the listed methods, resources and schemas, then run "
+            "`python -m scripts.upstream_drift --refresh-discovery-pins`, commit the pin diff "
+            "and rerun the listed proofs."
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _pins_text(pins_file: dict[str, Any]) -> str:
+    """Write one projected key per line so the file stays short and each review diff names its key."""
+    lines = ["{"]
+    for key in ("schema", "extension_id", "description"):
+        lines.append(f"  {json.dumps(key)}: {json.dumps(pins_file[key])},")
+    lines.append('  "apis": [')
+    for index, api in enumerate(pins_file["apis"]):
+        lines.append("    {")
+        for key in ("name", "version", "revision"):
+            lines.append(f"      {json.dumps(key)}: {json.dumps(api[key])},")
+        lines.append('      "projection": {')
+        kinds = sorted(api["projection"])
+        for kind_index, kind in enumerate(kinds):
+            entries = sorted(api["projection"][kind].items())
+            lines.append(f"        {json.dumps(kind)}: {{")
+            for entry_index, (key, value) in enumerate(entries):
+                comma = "," if entry_index < len(entries) - 1 else ""
+                lines.append(f"          {json.dumps(key)}: {json.dumps(value, sort_keys=True)}{comma}")
+            lines.append("        }" + ("," if kind_index < len(kinds) - 1 else ""))
+        lines.append("      }")
+        lines.append("    }" + ("," if index < len(pins_file["apis"]) - 1 else ""))
+    lines += ["  ]", "}"]
     return "\n".join(lines) + "\n"
 
 
 def refresh_discovery_pins(repository: Path, fetch: Fetch) -> list[Path]:
-    """Re-pin each listed route to the current Discovery shape after a maintainer review."""
+    """Re-pin each listed route to the current Discovery shape after a maintainer review.
+
+    A route whose reviewed method has disappeared is not re-pinned as absent: the
+    rule that matches it needs a reviewed change first.
+    """
     written = []
     for path in sorted((repository / "contributions/upstream-schemas").glob("*.json")):
         pins_file = json.loads(path.read_text(encoding="utf-8"))
@@ -283,9 +357,18 @@ def refresh_discovery_pins(repository: Path, fetch: Fetch) -> list[Path]:
             continue
         for api in pins_file["apis"]:
             document = fetch(_DISCOVERY_URL.format(name=api["name"], version=api["version"]))
+            reviewed = api["projection"]["methods"]
+            projection = discovery_projection(document, sorted(reviewed))
+            removed = sorted(
+                route for route, shape in projection["methods"].items() if shape is None and reviewed[route]
+            )
+            if removed:
+                raise ValueError(
+                    f"{api['name']}/{api['version']} no longer has {', '.join(removed)}; update the rule first"
+                )
             api["revision"] = document.get("revision")
-            api["projection"] = discovery_projection(document, sorted(api["projection"]["methods"]))
-        path.write_text(json.dumps(pins_file, indent=2) + "\n", encoding="utf-8")
+            api["projection"] = projection
+        path.write_text(_pins_text(pins_file), encoding="utf-8")
         written.append(path)
     return written
 
