@@ -289,41 +289,17 @@ impl PackageIntent {
     /// `to_dict` (:122-126): `command_tokens` are re-split from the redacted
     /// command so private argv is excluded from public output.
     pub fn to_dict(&self) -> Value {
-        self.serialize(false)
-    }
-
-    /// Exact request values for ephemeral, private enforcement IPC only.
-    pub fn to_execution_dict(&self) -> Value {
-        self.serialize(true)
-    }
-
-    fn serialize(&self, execution: bool) -> Value {
         let mut payload = Map::new();
         payload.insert("package_manager".to_owned(), json!(self.package_manager));
         payload.insert("intent_kind".to_owned(), json!(self.intent_kind));
         payload.insert(
             "command_tokens".to_owned(),
-            if execution {
-                json!(self.command_tokens)
-            } else {
-                json!(shlex_split(&self.redacted_command).unwrap_or_default())
-            },
+            json!(shlex_split(&self.redacted_command).unwrap_or_default()),
         );
         payload.insert("redacted_command".to_owned(), json!(self.redacted_command));
         payload.insert(
             "targets".to_owned(),
-            Value::Array(
-                self.targets
-                    .iter()
-                    .map(|target| {
-                        if execution {
-                            target.to_execution_dict()
-                        } else {
-                            target.to_dict()
-                        }
-                    })
-                    .collect(),
-            ),
+            Value::Array(self.targets.iter().map(|target| target.to_dict()).collect()),
         );
         payload.insert("manifest_paths".to_owned(), json!(self.manifest_paths));
         payload.insert("lockfile_paths".to_owned(), json!(self.lockfile_paths));

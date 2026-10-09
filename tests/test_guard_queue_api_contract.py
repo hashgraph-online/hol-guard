@@ -724,7 +724,6 @@ def test_artifact_scope_resolution_removes_same_artifact_review_from_queue(tmp_p
         store,
         [
             _request("req-active", command="cat ~/.npmrc", artifact_id=shared_artifact),
-            _request("req-covered", command="cat ~/.pypirc", artifact_id=shared_artifact),
             _request("req-unrelated", command="cat ~/.ssh/id_rsa", artifact_id="codex:project:other-tool"),
         ],
     )
@@ -741,11 +740,11 @@ def test_artifact_scope_resolution_removes_same_artifact_review_from_queue(tmp_p
     finally:
         daemon.stop()
 
-    assert payload["resolved_scope_ids"] == ["req-covered"]
+    # Retried identical actions fold into one queue row at insert time, so an
+    # artifact-scope approval clears only the decided action. A pending
+    # request for a different action must never ride along.
     assert payload["remaining_pending_count"] == 1
     assert payload["next_selectable_request_id"] == "req-unrelated"
-    assert store.get_approval_request("req-covered")["status"] == "resolved"
-    assert store.get_approval_request("req-covered")["resolution_action"] == "allow"
     assert store.get_approval_request("req-unrelated")["status"] == "pending"
 
 

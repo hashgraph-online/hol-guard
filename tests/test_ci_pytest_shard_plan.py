@@ -23,6 +23,19 @@ def _durations(nodes: list[str], *, seconds: float = 1.0) -> dict[str, float]:
     return {node_id_digest(node_id): seconds for node_id in nodes}
 
 
+def test_isolated_function_excludes_all_parameters_without_matching_other_tests(monkeypatch) -> None:
+    from scripts.ci import build_pytest_shard_plan as planner
+
+    parent = "tests/test_probe.py::test_latency"
+    isolated = [f"{parent}[first]", f"{parent}[second]"]
+    retained = [f"{parent}_control[value]", "tests/test_other.py::test_latency[first]"]
+    monkeypatch.setattr(planner, "SCHEDULING_ONLY_NODE_IDS", frozenset({parent}))
+
+    shards, _loads = build_affinity_node_shards(isolated + retained, 1, {})
+
+    assert shards == [sorted(retained)]
+
+
 def test_new_parameters_inherit_unsplit_duration_without_overriding_observations() -> None:
     parent = "tests/test_corpus.py::test_all_cases"
     nodes = [f"{parent}[{index}]" for index in range(4)]
@@ -105,31 +118,6 @@ def test_hung_continuation_timing_runs_in_required_dedicated_lane_not_parallel_s
     assert "if" not in timing_step
     selected = shlex.split(timing_step["run"])
     assert module in selected or timing_node in selected
-    assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
-
-
-@pytest.mark.parametrize("profile", ["pi-240-24", "pi-480-two-client-24", "mixed-harness-fairness"])
-def test_packaged_workload_runs_in_required_isolated_lane(profile: str) -> None:
-    import yaml
-
-    parent = "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads"
-    node = f"{parent}[{profile}]"
-    ordinary = "tests/test_guard_daemon_acceptance.py::test_adversarial_workload_nodeids_resolve"
-    parallel_profile = f"{parent}[pi-960-four-client-8]"
-    shards, _loads = build_affinity_node_shards([node, ordinary, parallel_profile], 1, {})
-    assert shards == [sorted([ordinary, parallel_profile])]
-    root = Path(__file__).resolve().parents[1]
-    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
-    step = next(
-        step
-        for step in jobs["scheduling-sensitive"]["steps"]
-        if step.get("name") == "Run scheduling-sensitive tests untraced"
-    )
-    assert "if" not in step
-    selected = shlex.split(step["run"])
-    assert node in selected
-    assert parent not in selected
-    assert parallel_profile not in selected
     assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
 
 

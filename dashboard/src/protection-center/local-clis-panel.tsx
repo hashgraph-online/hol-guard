@@ -24,7 +24,8 @@ import { customExtensionContinuityView } from "../managed-controls/custom-extens
 import { commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
 import { McpProviderActions, type ProviderActionDraft } from "./mcp-provider-actions";
 import { ProviderWorkflows } from "./provider-workflows";
-import { bulkPolicyCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken } from "./local-cli-panel-copy";
+import { bulkPolicyCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
+import { customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates } from "./custom-extension-profile";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
 
 export { customExtensionStateLabel } from "./local-cli-panel-copy";
@@ -51,7 +52,7 @@ export function LocalCliDetail(props: {
 }) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
-  const [commands, setCommands] = useState(props.item.commands);
+  const [commands, setCommands] = useState(() => prefillSuggestedStates(props.item));
   const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderActionDraft>>({});
   const previousItem = useRef(props.item);
   const [busy, setBusy] = useState(false);
@@ -73,7 +74,7 @@ export function LocalCliDetail(props: {
     }
     setCommands((current) => {
       if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
-        return props.item.commands;
+        return prefillSuggestedStates(props.item);
       }
       const changed = previous.mcp_catalog?.revision !== props.item.mcp_catalog?.revision
         ? props.item.mcp_catalog?.changes?.changed : [];
@@ -179,7 +180,7 @@ export function LocalCliDetail(props: {
         {props.item.surface !== "mcp" ? (
           <p className="font-mono text-xs font-semibold tracking-[0.14em] text-slate-400">{props.item.example_label}</p>
         ) : null}
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.item.name}</h1>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{customExtensionDisplayName(props.item)}</h1>
         {props.item.surface === "mcp" && props.item.source_label ? (
           <p className="mt-2 text-sm text-slate-600">{props.item.source_label}</p>
         ) : null}
@@ -335,7 +336,7 @@ export function LocalCliDetail(props: {
         <p className="mt-2 text-sm leading-6 text-brand-dark/75">{props.continuity.summary || continuity.description}</p>
         <p className="mt-2 text-xs leading-5 text-brand-dark/60">{continuity.privacyDisclosure}</p>
       </section>
-      {added ? (
+      {added || hasSuggestedRules(props.item) ? (
         <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
           <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">
             {detailCatalogHeading(props.item.surface)}
@@ -343,6 +344,9 @@ export function LocalCliDetail(props: {
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
             {detailCatalogHelper(props.item.surface)}
           </p>
+          {commandsDirty && hasSuggestedRules(props.item) && !added ? (
+            <p role="note" className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75">{SUGGESTED_RULES_NOTICE}</p>
+          ) : null}
           {bulkTargets.length > 0 ? (
             <BulkPolicyPicker
               value={bulkState}

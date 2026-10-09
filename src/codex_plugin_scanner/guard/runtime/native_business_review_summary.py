@@ -39,7 +39,7 @@ _SERVICES = {
     "google_gmail": frozenset(
         {"mail_read", "mail_draft", "mail_send", "mail_label", "mail_permanent_delete", "mail_settings"}
     ),
-    "google_drive": frozenset({"drive_read", "drive_edit", "drive_share"}),
+    "google_drive": frozenset({"drive_read", "drive_edit", "drive_share", "drive_export"}),
     "google_calendar": frozenset({"calendar_read", "calendar_invite"}),
 }
 

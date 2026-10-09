@@ -184,37 +184,10 @@ def _is_guard_package_shim_dir(part: str) -> bool:
     return posix.endswith("/package-shims/bin") or "/.hol-guard/package-shims/" in posix
 
 
-_PACKAGE_SOURCE_FLAGS = (
-    "--registry",
-    "--index-url",
-    "--extra-index-url",
-    "--index",
-)
-
-
 def package_source_token(command: str, args: tuple[str, ...]) -> str:
-    """Return a canonical package-source token, or 'default' when none is set."""
+    """Use the native identity authority for canonical source classification."""
 
-    sources: list[str] = []
-    index = 0
-    while index < len(args):
-        value = args[index].strip()
-        matched = False
-        for flag in _PACKAGE_SOURCE_FLAGS:
-            equals = f"{flag}="
-            if value == flag and index + 1 < len(args):
-                sources.append(f"{flag}={args[index + 1].strip()}")
-                index += 2
-                matched = True
-                break
-            if value.startswith(equals):
-                sources.append(f"{flag}={value.partition('=')[2].strip()}")
-                index += 1
-                matched = True
-                break
-        if not matched:
-            index += 1
-    return "|".join(sources) if sources else "default"
+    return build_mcp_server_identity(config_path="", command=command, args=args, transport="stdio").package_source
 
 
 def _split_package_token(value: str) -> tuple[str | None, str | None]:

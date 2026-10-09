@@ -83,23 +83,24 @@ def _hook_harness_is_unmanaged(daemon_server: Any, harness: str) -> bool:
     """True when leftover hooks belong to an app Guard is not currently protecting."""
 
     store = getattr(daemon_server, "store", None)
+    if store is None:
+        return False
     getter = getattr(store, "get_managed_install", None)
     if not callable(getter):
         return False
     canonical = _canonical_managed_harness(harness)
     try:
-        managed = getter(canonical)
-    except Exception:
-        return False
-    if isinstance(managed, dict) and managed.get("active") is False:
-        return True
-    if managed is not None:
-        return False
-    lister = getattr(store, "list_managed_installs", None)
-    if not callable(lister):
-        return False
-    try:
-        installs = lister()
+        # Reuse setup only for this hook; each read keeps its own transaction.
+        with store.connection_scope():
+            managed = getter(canonical)
+            if isinstance(managed, dict) and managed.get("active") is False:
+                return True
+            if managed is not None:
+                return False
+            lister = getattr(store, "list_managed_installs", None)
+            if not callable(lister):
+                return False
+            installs = lister()
     except Exception:
         return False
     if not isinstance(installs, list):

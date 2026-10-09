@@ -287,3 +287,40 @@ def test_update_retirement_fails_closed_on_unexpected_client_error(
     monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
     monkeypatch.setattr(update_commands, "_isolated_environment", lambda: {})
     assert update_commands._retire_native_resident_before_update(tmp_path / "guard-home") is False
+
+
+def test_update_retirement_retries_a_transient_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    results = iter([False, True])
+    calls: list[float] = []
+
+    def retire(**kwargs: object) -> bool:
+        calls.append(float(kwargs["timeout_seconds"]))
+        return next(results)
+
+    monkeypatch.setattr(update_commands, "retire_native_resident_for_update", retire)
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
+    monkeypatch.setattr(update_commands, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
+    assert update_commands._retire_native_resident_before_update(tmp_path / "guard-home") is True
+    assert calls == [6.0, 6.0]
+
+
+def test_update_retirement_fails_closed_after_bounded_attempts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[object] = []
+
+    def retire(**kwargs: object) -> bool:
+        calls.append(kwargs)
+        return False
+
+    monkeypatch.setattr(update_commands, "retire_native_resident_for_update", retire)
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
+    monkeypatch.setattr(update_commands, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
+    assert update_commands._retire_native_resident_before_update(tmp_path / "guard-home") is False
+    assert len(calls) == 3

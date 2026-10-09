@@ -1,0 +1,179 @@
+name: Verify release compiler cache determinism
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact commit to compile; defaults to the dispatched ref.
+        required: false
+        type: string
+      version:
+        description: Release version stamped into the binaries; defaults to the checked-in version.
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  compare:
+    name: Cached vs cold release binaries (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            suffix: ''
+          # Intel binaries are cross-compiled on Apple silicon; the native
+          # macos-15-intel wheel job self-tests and verifies them before packaging.
+          - runner: macos-15
+            target: x86_64-apple-darwin
+            suffix: ''
+            cross: true
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            suffix: ''
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+            rustflags: -C link-arg=/Brepro
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+      VERSION: ${{ inputs.version }}
+      RUST_TARGET: ${{ matrix.target }}
+      RUSTFLAGS: ${{ matrix.rustflags }}
+      SUFFIX: ${{ matrix.suffix }}
+      HOL_GUARD_BUILD_SHA: ${{ inputs.source_sha || github.sha }}
+      HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+      HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - name: Bind exact source and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          BASE_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
+          RELEASE_VERSION="${VERSION:-$BASE_VERSION}"
+          if [[ "$RELEASE_VERSION" != "$BASE_VERSION" ]]; then
+            [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$RELEASE_VERSION"
+          fi
+          while IFS= read -r changed_path; do
+            case "$changed_path" in
+              pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock) ;;
+              *) echo "Version stamping changed an unexpected file" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only)
+          echo "VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_PACKAGE_VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
+      - name: Verify release enrollment root
+        run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
+      - name: Install pinned Rust target
+        shell: bash
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+          rustup target add "$RUST_TARGET"
+      - name: Install Linux static toolchain
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Restore trusted release dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          prefix-key: release-native-v1
+          workspaces: rust
+          shared-key: release-${{ matrix.target }}
+          cache-workspace-crates: false
+          cache-bin: false
+          save-if: 'false'
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
+      - name: Compile with the release compiler cache
+        shell: bash
+        env:
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'on'
+          SCCACHE_GHA_VERSION: release-native-v1
+          # This gate only reads entries written by trusted main pushes.
+          SCCACHE_GHA_RW_MODE: READ_ONLY
+          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          "$SCCACHE_PATH" --show-stats
+          # Two cold builds would compare equal trivially; the cached build must
+          # actually have compiled workspace crates from cache entries.
+          "$SCCACHE_PATH" --show-stats --stats-format json > "$RUNNER_TEMP/sccache-stats.json"
+          python - "$RUNNER_TEMP/sccache-stats.json" <<'PY'
+          import json
+          import sys
+
+          stats = json.load(open(sys.argv[1], encoding="utf-8"))["stats"]
+          hits = sum(stats["cache_hits"]["counts"].values())
+          errors = stats.get("cache_errors", {}).get("counts", {})
+          if hits == 0:
+              sys.exit("::error::Cached build had no compiler-cache hits; warm the cache with a main push first")
+          if any(errors.values()):
+              sys.exit(f"::error::Compiler cache reported read errors: {errors}")
+          print(f"compiler-cache hits: {hits}")
+          PY
+          mkdir -p "$RUNNER_TEMP/cached"
+          for binary in hol-guard-runtime guard-command-source; do
+            cp "rust/target/$RUST_TARGET/release/$binary$SUFFIX" "$RUNNER_TEMP/cached/"
+          done
+      - name: Compile cold into an empty compiler cache
+        shell: bash
+        env:
+          # The wrapper is part of Cargo's crate metadata hash, so the cold build
+          # keeps the release wrapper and only swaps in an empty local cache.
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'off'
+          SCCACHE_DIR: ${{ runner.temp }}/sccache-cold
+        run: |
+          set -euo pipefail
+          "$SCCACHE_PATH" --stop-server || true
+          cargo clean --manifest-path rust/Cargo.toml
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
+          "$SCCACHE_PATH" --show-stats
+          "$SCCACHE_PATH" --show-stats --stats-format json > "$RUNNER_TEMP/sccache-cold-stats.json"
+          python - "$RUNNER_TEMP/sccache-cold-stats.json" <<'PY'
+          import json
+          import sys
+
+          stats = json.load(open(sys.argv[1], encoding="utf-8"))["stats"]
+          hits = sum(stats["cache_hits"]["counts"].values())
+          misses = sum(stats["cache_misses"]["counts"].values())
+          if hits != 0 or misses == 0:
+              sys.exit(f"::error::Cold build must compile every workspace crate fresh (hits={hits}, misses={misses})")
+          print(f"cold compiles: {misses}")
+          PY
+      - name: Require byte-identical release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          for binary in hol-guard-runtime guard-command-source; do
+            cached=$(python -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$RUNNER_TEMP/cached/$binary$SUFFIX")
+            cold=$(python -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "rust/target/$RUST_TARGET/release/$binary$SUFFIX")
+            echo "$binary cached=$cached cold=$cold"
+            echo "| $RUST_TARGET | $binary | \`$cached\` | \`$cold\` |" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$cached" != "$cold" ]]; then
+              echo "::error::$binary differs between cached and cold compilation for $RUST_TARGET"
+              status=1
+            fi
+          done
+          exit "$status"

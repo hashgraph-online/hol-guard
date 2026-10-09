@@ -123,6 +123,7 @@ fn evaluate_with_path(
         guard_command::pretool::PathContext {
             home_dir: home.to_str(),
             cwd: repository.to_str(),
+            cdpath_unset: false,
         },
         Some(&context),
     )

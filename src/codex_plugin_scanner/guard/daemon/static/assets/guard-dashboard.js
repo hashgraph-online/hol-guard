@@ -14128,7 +14128,7 @@ function processControlCommand(command) {
 }
 function containerOrDeployCommand(command) {
   const normalized = command.toLowerCase();
-  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az)\b/.test(normalized);
+  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az|wrangler)\b/.test(normalized);
 }
 function packageInstallCommand(command) {
   const normalized = command.toLowerCase();
@@ -30037,6 +30037,7 @@ const businessOperationLabels = {
   drive_read: "Read Drive files",
   drive_edit: "Edit Drive files",
   drive_share: "Share Drive files",
+  drive_export: "Export Drive files",
   calendar_read: "Read calendar events",
   calendar_invite: "Invite calendar attendees"
 };

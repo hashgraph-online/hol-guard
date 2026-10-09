@@ -11,6 +11,7 @@ from typing import Literal
 
 from .command_model import parse_shell_command
 from .local_cli_identity import UnlistedCliIdentity
+from .local_cli_runner import runner_inner_arguments
 
 LocalCliCommandState = Literal["inherit", "allow", "review", "block"]
 
@@ -137,7 +138,12 @@ def command_tokens_for_invocation(
     if not model.segments:
         return ()
     arguments = list(model.segments[0].arguments)
-    if identity.kind == "script" and arguments:
+    if identity.runner is not None:
+        split = runner_inner_arguments(identity.runner, arguments)
+        if split is None:
+            return ()
+        arguments = split
+    elif identity.kind == "script" and arguments:
         first_name = Path(arguments[0]).name
         if first_name == identity.name:
             arguments = arguments[1:]

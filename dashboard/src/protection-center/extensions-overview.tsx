@@ -111,6 +111,7 @@ export function ExtensionsOverview(props: {
   catalogExtensions: ExtensionCatalogItem[];
   effective: EffectiveExtensionControls;
   localCliItems: LocalCliItem[];
+  seededItems?: LocalCliItem[];
   hostInventory?: import("../codex-host-inventory").CodexHostInventory;
   localCliError: string | null;
   localCliNotice: string | null;
@@ -124,7 +125,7 @@ export function ExtensionsOverview(props: {
   onReloadConnections: () => Promise<unknown> | void;
   onOpenExtension: (extension: ExtensionCatalogItem) => void;
   onOpenLocalCli: (cliId: string) => void;
-  onAddCustom: () => void;
+  onAddCustom: (command?: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const discoveryStarted = useRef(false);
@@ -231,7 +232,9 @@ export function ExtensionsOverview(props: {
   const handleClearFilters = useCallback(() => {
     setFilters(EMPTY_CATALOG_FILTERS);
   }, []);
-  const allCustomItems = connectorWorkspaceItems(props.localCliItems);
+  const onAddCustom = props.onAddCustom;
+  const handleAddCustom = useCallback(() => { onAddCustom(); }, [onAddCustom]);
+  const allCustomItems = connectorWorkspaceItems(props.localCliItems, "", props.seededItems);
   const addedCustomItems = allCustomItems.filter((item) =>
     customItemMatchesFilters(item, filters),
   );
@@ -280,7 +283,7 @@ export function ExtensionsOverview(props: {
           onQueryChange={setQuery}
           onRefresh={props.onRefresh}
           onOpenExtension={props.onOpenExtension}
-          actionSlot={searching ? <AddCustomExtensionButton onClick={props.onAddCustom} /> : null}
+          actionSlot={searching ? <AddCustomExtensionButton onClick={handleAddCustom} /> : null}
           toolbarSlot={
             <>
               <CatalogFilterTrigger
@@ -318,7 +321,9 @@ export function ExtensionsOverview(props: {
           <CustomExtensionsSection
             items={addedCustomItems}
             onOpen={props.onOpenLocalCli}
-            onAdd={props.onAddCustom}
+            seededItems={addedCustomItems.filter((item) => item.seeded === true)}
+            onSetUp={props.onAddCustom}
+            onAdd={handleAddCustom}
             discovering={discovering}
             filteredOut={customItemsFilteredOut}
             onClearFilters={handleClearFilters}

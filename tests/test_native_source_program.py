@@ -103,7 +103,7 @@ def test_extension_directory_renders_all_canonical_sources(
     for source in build["sources"]:
         extension = source["extension"]
         identity = extension["extension_id"]
-        description = " ".join(extension["description"].split()).replace("|", "\\|")
+        description = renderer._escape_cell(extension["description"])
         assert rendered.count(f"`{identity}`") == 1
         assert f"| `{identity}` | {description} | {len(extension['rules'])} |" in rendered
         if identity in build["trust"]["classes"]["external"]:
@@ -284,6 +284,7 @@ def test_native_matcher_node_budget(compiler: Path, example: dict) -> None:
         "config": {},
         "matchers": groups,
     }
+
     result = invoke(compiler, example)
     assert result.returncode != 0
     assert json.loads(result.stdout)["code"] == "command_source_matcher_budget_exceeded"

@@ -119,7 +119,10 @@ def test_reused_core_assets_skip_native_runtime_verifier() -> None:
     verify = next(
         step for step in steps if step.get("name") == "Verify exact Apple identity, notarization, and Core contract"
     )
-    assert build.get("if") == "steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'"
+    assert build.get("if") == (
+        "steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'"
+        " && steps.existing.outputs.mode == 'build'"
+    )
     assert "verify_pyinstaller_native_runtime.py" in str(build.get("run"))
     assert "verify_pyinstaller_native_runtime.py" not in str(verify.get("run"))
 

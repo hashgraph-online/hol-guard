@@ -139,28 +139,6 @@ pub(super) fn open_inspect_private_file(path: &Path) -> io::Result<std::fs::File
     Ok(file)
 }
 
-/// Return whether an existing regular file has exactly one directory entry.
-/// The link count is read from the opened handle so aliases cannot be hidden
-/// by a path-only metadata lookup.
-pub fn is_single_link_file(path: &Path) -> io::Result<bool> {
-    let file = open_raw_with_access(
-        path,
-        false,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        FILE_READ_ATTRIBUTES,
-    )?;
-    validate_handle(&file, false)?;
-    let mut information = unsafe { zeroed::<BY_HANDLE_FILE_INFORMATION>() };
-    // SAFETY: The output buffer is correctly sized and the handle remains
-    // open for the synchronous query.
-    if unsafe { GetFileInformationByHandle(file.as_raw_handle() as HANDLE, &mut information) }
-        == FALSE
-    {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(information.nNumberOfLinks == 1)
-}
-
 pub(super) fn open_directory_bound(
     path: &Path,
     allow_acl_repair: bool,
@@ -214,7 +192,7 @@ pub(super) fn open_raw(
     open_raw_with_access(path, directory, share_mode, desired_access)
 }
 
-fn open_raw_with_access(
+pub(super) fn open_raw_with_access(
     path: &Path,
     directory: bool,
     share_mode: DWORD,
@@ -486,46 +464,4 @@ pub(super) fn rename_into_directory(
         ));
     }
     Ok(())
-}
-
-/// Delete the path's currently opened object only when it is the same object
-/// as `expected`. Comparison and deletion both use owned handles, preventing a
-/// same-user pathname replacement from redirecting cleanup to a new file.
-pub fn remove_file_if_same(path: &Path, expected: &std::fs::File) -> io::Result<bool> {
-    let current = match open_raw(
-        path,
-        false,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        true,
-    ) {
-        Ok(current) => current,
-        Err(error) => {
-            if error.kind() == io::ErrorKind::NotFound {
-                return Ok(false);
-            }
-            return Err(error);
-        }
-    };
-    validate_handle(&current, false)?;
-    if file_information(expected.as_raw_handle() as HANDLE)?
-        != file_information(current.as_raw_handle() as HANDLE)?
-    {
-        return Ok(false);
-    }
-    mark_handle_for_delete(&current)?;
-    Ok(true)
-}
-
-pub(super) fn file_information(handle: HANDLE) -> io::Result<(DWORD, DWORD, DWORD)> {
-    // SAFETY: BY_HANDLE_FILE_INFORMATION is a plain output struct; handle
-    // stays owned during this query.
-    let mut information = unsafe { zeroed::<BY_HANDLE_FILE_INFORMATION>() };
-    if unsafe { GetFileInformationByHandle(handle, &mut information) } == FALSE {
-        return Err(io::Error::last_os_error());
-    }
-    Ok((
-        information.dwVolumeSerialNumber,
-        information.nFileIndexHigh,
-        information.nFileIndexLow,
-    ))
 }

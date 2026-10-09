@@ -73,5 +73,6 @@ if ! verify_published_wheel "refs/tags/${CORE_TAG}"; then
   fi
 fi
 cp "$WHEEL" "$RUNNER_TEMP/attested-macos-arm64.whl"
+echo "ATTESTED_WHEEL_FILENAME=$(basename "$WHEEL")" >> "$GITHUB_ENV"
 test -f "$RUNNER_TEMP/attested-macos-arm64.whl"
 echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"

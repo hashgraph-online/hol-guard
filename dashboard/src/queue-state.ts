@@ -1073,7 +1073,7 @@ function processControlCommand(command: string): boolean {
 
 function containerOrDeployCommand(command: string): boolean {
   const normalized = command.toLowerCase();
-  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az)\b/.test(normalized);
+  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az|wrangler)\b/.test(normalized);
 }
 
 function packageInstallCommand(command: string): boolean {
