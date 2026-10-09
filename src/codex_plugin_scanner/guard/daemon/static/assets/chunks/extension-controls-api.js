@@ -285,7 +285,7 @@ function mcpTool(value, label) {
 }
 function mcpCatalogFields(item, label) {
   if (item.surface === void 0) return {};
-  if (typeof item.surface === "string" && item.surface !== "mcp") return {};
+  if (typeof item.surface === "string" && item.surface !== "mcp") return { surface: "unsupported" };
   const surface = enumValue(item.surface, `${label}.surface`, ["mcp"]);
   const launch = item.mcp_launch === void 0 ? void 0 : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
   const tools = item.mcp_tools === void 0 ? void 0 : array(item.mcp_tools, `${label}.mcp_tools`, 80).map((entry, index) => mcpTool(entry, `${label}.mcp_tools[${index}]`));

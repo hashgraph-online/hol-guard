@@ -179,7 +179,8 @@ const futureSurface = normalizeExtensionCatalog({
   ...mcpCatalog,
   extensions: [{ ...mcpCatalog.extensions[0], surface: "future-surface", mcp_launch: undefined }],
 });
-assert.equal(futureSurface.extensions[0]?.surface, undefined);
+assert.equal(futureSurface.extensions[0]?.surface, "unsupported");
+assert.equal(futureSurface.extensions[0]?.mcp_launch, undefined);
 const futureIcon = normalizeExtensionCatalog({
   ...mcpCatalog,
   extensions: [{ ...mcpCatalog.extensions[0], icon: { kind: "future-icon" } }],

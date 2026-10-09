@@ -249,8 +249,8 @@ function mcpCatalogFields(
   label: string,
 ): Pick<ExtensionCatalogItem, "surface" | "mcp_launch" | "mcp_tools"> {
   if (item.surface === undefined) return {};
-  // Unknown surfaces from a newer daemon are not rendered as MCP; keep the entry itself.
-  if (typeof item.surface === "string" && item.surface !== "mcp") return {};
+  // Unknown surfaces from a newer daemon are kept but not rendered as MCP or commands.
+  if (typeof item.surface === "string" && item.surface !== "mcp") return { surface: "unsupported" };
   const surface = enumValue(item.surface, `${label}.surface`, ["mcp"] as const);
   const launch = item.mcp_launch === undefined ? undefined : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
   const tools = item.mcp_tools === undefined
