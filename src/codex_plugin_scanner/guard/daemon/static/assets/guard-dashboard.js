@@ -28914,6 +28914,16 @@ function buildBulkRiskDisclosure(stats) {
     confirmPhrase: phrase
   };
 }
+function countRetryBlockedActions(groups, items) {
+  const byId = new Map(items.map((item) => [item.request_id, item]));
+  let total = 0;
+  for (const group of groups) {
+    const members = [group.primary, ...group.duplicateIds.map((id) => byId.get(id)).filter((item) => item !== void 0)];
+    const blocked = members.filter((member) => retryCannotReuseApproval(member)).length;
+    total += blocked === members.length ? 1 + group.duplicateCount : blocked;
+  }
+  return total;
+}
 function useQueueBulkApprove(props) {
   const [drawerOpen, setDrawerOpen] = reactExports.useState(false);
   const [drawerStep, setDrawerStep] = reactExports.useState("review");
@@ -28950,11 +28960,10 @@ function useQueueBulkApprove(props) {
     let highActionCount = 0;
     let elevatedActionCount = 0;
     let lowActionCount = 0;
-    let retryBlockedActionCount = 0;
+    const retryBlockedActionCount = countRetryBlockedActions(selectedBulkGroups, props.items);
     for (const group of selectedBulkGroups) {
       const tier = bulkApprovalRiskTier(group);
       const count = 1 + group.duplicateCount;
-      if (retryCannotReuseApproval(group.primary)) retryBlockedActionCount += count;
       if (tier === "high") highActionCount += count;
       else if (tier === "elevated") elevatedActionCount += count;
       else if (tier === "low") lowActionCount += count;
@@ -28970,7 +28979,7 @@ function useQueueBulkApprove(props) {
       lowActionCount,
       retryBlockedActionCount
     };
-  }, [selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
+  }, [props.items, selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
   const riskDisclosure = reactExports.useMemo(
     () => buildBulkRiskDisclosure(selectionStats),
     [selectionStats]

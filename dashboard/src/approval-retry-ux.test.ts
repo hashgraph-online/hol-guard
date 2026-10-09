@@ -12,6 +12,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-card";
 import { ReviewScopeControls } from "./review-scope-controls";
+import { countRetryBlockedActions } from "./use-queue-bulk-approve";
 import { buildBulkRiskDisclosure } from "./queue-bulk-risk-disclosure";
 
 function assert(condition: boolean, message: string): void {
@@ -197,6 +198,22 @@ assert(
 assert(
   buildBulkRiskDisclosure(bulkStats).bullets[0].includes("Each runs once"),
   "unrestricted bulk disclosure keeps the run-once wording",
+);
+
+// Review feedback: count retry-blocked members individually, not by the group's primary.
+const reusableTwin = { ...bound, request_id: "44444444444444444444444444444444" };
+const blockedTwin = { ...unbound, request_id: "55555555555555555555555555555555" };
+assert(
+  countRetryBlockedActions([{ primary: bound, duplicateCount: 1, duplicateIds: [blockedTwin.request_id] }], [bound, blockedTwin]) === 1,
+  "a blocked duplicate behind a reusable primary is counted",
+);
+assert(
+  countRetryBlockedActions([{ primary: unbound, duplicateCount: 1, duplicateIds: [reusableTwin.request_id] }], [unbound, reusableTwin]) === 1,
+  "a reusable duplicate behind a blocked primary is not counted",
+);
+assert(
+  countRetryBlockedActions([{ primary: unbound, duplicateCount: 2, duplicateIds: [blockedTwin.request_id] }], [unbound, blockedTwin]) === 3,
+  "a fully blocked group counts every action, matching the bulk action count",
 );
 
 // Review feedback: the bulk preview falls back to the action-envelope command.
