@@ -426,12 +426,6 @@ def overlay_live_owned_event_matches(integrity: Mapping[str, object], hooks: obj
     }
 
 
-_CODEX_HOOK_TRUST_WARNING = (
-    "Codex has not trusted the current HOL Guard hooks, so Codex skips them. "
-    "Open Codex, run /hooks, and press t to trust them."
-)
-
-
 def codex_hook_doctor_warnings(hook_state: Mapping[str, object]) -> list[str]:
     """Return doctor copy for Codex native-hook state."""
 
@@ -454,8 +448,6 @@ def codex_hook_doctor_warnings(hook_state: Mapping[str, object]) -> list[str]:
             "Codex hooks are installed but do not match this Guard CLI. Run "
             "`hol-guard install codex` or `hol-guard update` to rebind them."
         )
-    if bool(hook_state.get("hook_trust_stale")):
-        warnings.append(_CODEX_HOOK_TRUST_WARNING)
     return warnings
 
 

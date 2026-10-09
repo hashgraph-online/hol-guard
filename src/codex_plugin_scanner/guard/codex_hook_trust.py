@@ -15,7 +15,12 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-from .codex_hook_registration import _is_live_guard_codex_hook_command
+from .codex_hook_registration import _hook_entry_is_active, _is_live_guard_codex_hook_command
+
+CODEX_HOOK_TRUST_WARNING = (
+    "Codex has not trusted the current HOL Guard hooks, so Codex skips them. "
+    "Open Codex, run /hooks, and press t to trust them."
+)
 
 _EVENT_LABELS = {
     "PreToolUse": "pre_tool_use",
@@ -91,6 +96,8 @@ def stale_guard_hook_coordinates(payload: Mapping[str, object], config_path: Pat
         return []
     state = hooks.get("state")
     state_map = state if isinstance(state, Mapping) else {}
+    # Codex keys hook state by the canonical config path.
+    prefixes = dict.fromkeys((str(_resolved(config_path)), str(config_path)))
     stale: list[str] = []
     for event_name, groups in hooks.items():
         label = codex_event_label(str(event_name))
@@ -98,20 +105,46 @@ def stale_guard_hook_coordinates(payload: Mapping[str, object], config_path: Pat
             continue
         for group_index, group in enumerate(groups):
             handlers = group.get("hooks") if isinstance(group, Mapping) else None
-            if not isinstance(handlers, list):
+            if not isinstance(handlers, list) or not _hook_entry_is_active(group):
                 continue
             for handler_index, handler in enumerate(handlers):
                 if not isinstance(handler, Mapping) or not _is_guard_handler(handler):
                     continue
+                if not _hook_entry_is_active(handler):
+                    continue
                 expected = codex_command_hook_hash(str(event_name), group.get("matcher"), handler)
                 if expected is None:
                     continue
-                key = f"{config_path}:{label}:{group_index}:{handler_index}"
-                entry = state_map.get(key)
-                trusted = entry.get("trusted_hash") if isinstance(entry, Mapping) else None
-                if trusted != expected:
-                    stale.append(key)
+                keys = [f"{prefix}:{label}:{group_index}:{handler_index}" for prefix in prefixes]
+                entries = [entry for key in keys if isinstance(entry := state_map.get(key), Mapping)]
+                # A handler switched off in Codex's /hooks never runs, so its trust is irrelevant.
+                if any(entry.get("enabled") is False for entry in entries):
+                    continue
+                if not any(entry.get("trusted_hash") == expected for entry in entries):
+                    stale.append(keys[0])
     return stale
+
+
+def codex_hook_trust_stale(payload: object, config_path: Path) -> bool:
+    return isinstance(payload, Mapping) and bool(stale_guard_hook_coordinates(payload, config_path))
+
+
+def apply_codex_hook_trust_doctor(payload: dict[str, object], hook_state: Mapping[str, object]) -> None:
+    """Warn about untrusted Guard hooks and stop doctor from calling them active."""
+
+    if not hook_state.get("hook_trust_stale"):
+        return
+    warnings = payload.get("warnings")
+    payload["warnings"] = [*(warnings if isinstance(warnings, list) else []), CODEX_HOOK_TRUST_WARNING]
+    if payload.get("setup_status") == "active":
+        payload["setup_status"] = "partial"
+
+
+def _resolved(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError):
+        return path
 
 
 def _is_guard_handler(handler: Mapping[str, object]) -> bool:
