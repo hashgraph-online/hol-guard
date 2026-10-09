@@ -353,6 +353,10 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
                     <span className="font-medium">{line.harnessLabel}</span>
                     {line.path !== null ? (
                       <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60">{line.path}</span>
+                    ) : line.command !== null ? (
+                      <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60" title={line.command}>
+                        {line.command}
+                      </span>
                     ) : (
                       <span className="mt-0.5 block text-brand-dark/60">{line.title}</span>
                     )}

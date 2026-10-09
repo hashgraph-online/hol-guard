@@ -14,7 +14,9 @@ import {
   formatRelativeTime,
   harnessDisplayName,
   isWatchOnlyObservation,
+  receiptDescribesRequest,
   requestResolutionBlockReason,
+  retryCannotReuseApproval,
 } from "./approval-center-utils";
 import { GuardRequestResolutionError } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
@@ -55,6 +57,14 @@ import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
+/** A decision only describes the request it was made on, never the request shown after it. */
+export function resolvedStateForItem<T extends { requestId: string }>(
+  state: T | null,
+  item: Pick<GuardApprovalRequest, "request_id"> | null,
+): T | null {
+  return item !== null && state?.requestId === item.request_id ? state : null;
+}
+
 function resolvedActionCopy(
   item: GuardApprovalRequest | null,
   action: "allow" | "block",
@@ -84,7 +94,13 @@ export function ReviewDecisionCard(props: {
   const [allowScope, setAllowScope] = useState<DecisionScope>("artifact");
   const [blockScope, setBlockScope] = useState<DecisionScope>("artifact");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
-  const [resolved, setResolved] = useState<{ action: "allow" | "block"; persistedExactAction: boolean } | null>(null);
+  // Keyed by request id: the parent may show the next request before onResolve settles.
+  const [resolvedState, setResolved] = useState<{
+    requestId: string;
+    action: "allow" | "block";
+    persistedExactAction: boolean;
+  } | null>(null);
+  const resolved = resolvedStateForItem(resolvedState, item);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
@@ -201,7 +217,7 @@ export function ReviewDecisionCard(props: {
           ...proof,
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
         });
-        setResolved({ action, persistedExactAction: persistExactAction });
+        setResolved({ requestId: item.request_id, action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
@@ -469,6 +485,12 @@ export function ReviewDecisionCard(props: {
 
         {!nativeDisplayOnly && <PrimaryActionCard item={item} />}
         {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
+        {resolved === null && retryCannotReuseApproval(item) ? (
+          <p className="mt-4 text-sm leading-6 text-brand-dark">
+            Guard cannot match a retry of this exact command to an approval. Approving records your decision,
+            but {harnessName} may be blocked again. To run it now, copy the command and run it yourself.
+          </p>
+        ) : null}
         {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable.
@@ -626,7 +648,7 @@ export function ReviewDecisionCard(props: {
         </div>
       )}
 
-      {detail.receipt && (
+      {detail.receipt && receiptDescribesRequest(item, detail.receipt) && (
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <SectionLabel>Last time</SectionLabel>
           <p className="mt-2 text-sm text-muted-foreground">

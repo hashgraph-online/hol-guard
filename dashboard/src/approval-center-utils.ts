@@ -125,6 +125,21 @@ function resolveDataFlowSinkLabel(signal: RiskSignalV2): string {
   return "External sink";
 }
 
+/** True when the daemon reports that a retry of this native command can never reuse its approval. */
+export function retryCannotReuseApproval(item: GuardApprovalRequest): boolean {
+  return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
+}
+
+/**
+ * Receipts are looked up by harness and artifact id. For native tool calls that id names
+ * the tool (for example `omp:native-pretool:bash`), so only a receipt for the same action
+ * hash describes this request.
+ */
+export function receiptDescribesRequest(item: GuardApprovalRequest, receipt: { artifact_hash: string }): boolean {
+  if (!item.artifact_id.includes(":native-pretool:")) return true;
+  return receipt.artifact_hash === item.artifact_hash;
+}
+
 export function buildRetryAfterApprovalCopy(
   item: GuardApprovalRequest,
   action: "allow" | "block",
@@ -141,6 +156,9 @@ export function buildRetryAfterApprovalCopy(
   if (action === "allow") {
     if (persistedExactAction) {
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
+    }
+    if (retryCannotReuseApproval(item)) {
+      return `Approved. Guard cannot match a retry of this command to this approval, so ${harness} may be blocked again. Run the command yourself if you still need it.`;
     }
     return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }
@@ -735,6 +753,7 @@ export type BulkApproveRiskLine = {
   requestId: string;
   title: string;
   path: string | null;
+  command: string | null;
   harnessLabel: string;
   duplicateCount: number;
   summary: string;
@@ -750,6 +769,7 @@ export function summarizeBulkApproveSelection(
       requestId: group.primary.request_id,
       title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
       path: resolveFileReadPath(group.primary),
+      command: group.primary.raw_command_text?.trim() || null,
       harnessLabel: harnessDisplayName(group.primary.harness),
       duplicateCount: group.duplicateCount,
       summary: buildQueueSummary(group.primary),

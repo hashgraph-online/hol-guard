@@ -13626,8 +13626,7 @@ const BULK_BLOCKED_CATEGORY_IDS = /* @__PURE__ */ new Set([
 const BULK_LOW_CATEGORY_IDS = /* @__PURE__ */ new Set([
   "file_read",
   "docs_edit",
-  "generated_inventory_edit",
-  "other"
+  "generated_inventory_edit"
 ]);
 const BULK_HIGH_CATEGORY_IDS = /* @__PURE__ */ new Set([
   "destructive_shell",
@@ -14899,6 +14898,13 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
+function retryCannotReuseApproval(item) {
+  return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
+}
+function receiptDescribesRequest(item, receipt) {
+  if (!item.artifact_id.includes(":native-pretool:")) return true;
+  return receipt.artifact_hash === item.artifact_hash;
+}
 function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false) {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
@@ -14911,6 +14917,9 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
   if (action === "allow") {
     if (persistedExactAction) {
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
+    }
+    if (retryCannotReuseApproval(item)) {
+      return `Approved. Guard cannot match a retry of this command to this approval, so ${harness} may be blocked again. Run the command yourself if you still need it.`;
     }
     return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }
@@ -15241,6 +15250,7 @@ function summarizeBulkApproveSelection(groups) {
       requestId: group.primary.request_id,
       title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
       path: resolveFileReadPath(group.primary),
+      command: group.primary.raw_command_text?.trim() || null,
       harnessLabel: harnessDisplayName(group.primary.harness),
       duplicateCount: group.duplicateCount,
       summary: buildQueueSummary(group.primary),
@@ -28665,7 +28675,7 @@ function QueueBulkDrawer(props) {
               /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-1.5 space-y-1.5", children: [
                 lines.slice(0, 3).map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
-                  line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title })
+                  line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path }) : line.command !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", title: line.command, children: line.command }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title })
                 ] }, line.requestId)),
                 lines.length > 3 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-[11px] text-muted-foreground", children: [
                   "+ ",
@@ -30115,6 +30125,9 @@ function BusinessReviewSummaryPanel({ requestId }) {
   return state.summary ? /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryDetails, { summary: state.summary }) : null;
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
+function resolvedStateForItem(state, item) {
+  return item !== null && state?.requestId === item.request_id ? state : null;
+}
 function resolvedActionCopy(item, action, persistedExactAction) {
   if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
   if (action === "allow") return "Approved: action can proceed";
@@ -30130,7 +30143,8 @@ function ReviewDecisionCard(props) {
   const [allowScope, setAllowScope] = reactExports.useState("artifact");
   const [blockScope, setBlockScope] = reactExports.useState("artifact");
   const [submitting, setSubmitting] = reactExports.useState(null);
-  const [resolved, setResolved] = reactExports.useState(null);
+  const [resolvedState, setResolved] = reactExports.useState(null);
+  const resolved = resolvedStateForItem(resolvedState, item);
   const [showConsequences, setShowConsequences] = reactExports.useState(false);
   const [showEvidence, setShowEvidence] = reactExports.useState(false);
   const [lastAction, setLastAction] = reactExports.useState(null);
@@ -30238,7 +30252,7 @@ function ReviewDecisionCard(props) {
           ...proof,
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
-        setResolved({ action, persistedExactAction: persistExactAction });
+        setResolved({ requestId: item.request_id, action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
@@ -30480,6 +30494,11 @@ function ReviewDecisionCard(props) {
       ] }),
       !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
+      resolved === null && retryCannotReuseApproval(item) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: [
+        "Guard cannot match a retry of this exact command to an approval. Approving records your decision, but ",
+        harnessName,
+        " may be blocked again. To run it now, copy the command and run it yourself."
+      ] }) : null,
       item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -30603,7 +30622,7 @@ function ReviewDecisionCard(props) {
       ),
       showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
     ] }),
-    detail.receipt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+    detail.receipt && receiptDescribesRequest(item, detail.receipt) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last time" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
         "You previously ",
