@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -82,7 +83,7 @@ def test_valid_reply_is_returned_and_cwd_is_made_absolute(recorder: _Recorder) -
     assert answer == bridge.GitSafetyAnswer(True, "/usr/bin/git")
     request = recorder.payloads[-1]["request"]
     assert isinstance(request, dict)
-    assert request["cwd"] == str(Path(".").resolve())
+    assert request["cwd"] == os.path.abspath(".")
     assert recorder.successes == 1
 
 
