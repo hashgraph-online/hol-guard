@@ -78,8 +78,8 @@ from .local_cli_continuity_api import decorate_local_cli_continuity
 from .local_cli_mcp_store import bound_mcp_observation, stored_mcp_recognition
 from .local_cli_profiles_api import (
     annotate_cli_profiles,
-    ensure_profile_catalog,
     merge_profile_commands,
+    profile_catalog_seed,
     seeded_profile_items,
 )
 from .local_cli_registry_setup import registry_setup as reviewed_registry_setup
@@ -944,8 +944,7 @@ class LocalCliApiService:
         except ApprovalGateError as exc:
             raise LocalCliApiError(exc.status, exc.code, str(exc)) from exc
         command_states = self._command_states_from_payload(payload)
-        if command_states:
-            ensure_profile_catalog(self._store, identity.cli_id, identity.name)
+        catalog_seed = profile_catalog_seed(identity.cli_id, identity.name) if command_states else ()
         from ..native_policy_snapshot import local_cli_publication_status, notify_native_policy_mutation
 
         # Retire acknowledged authority before writing. The final notification
@@ -960,6 +959,7 @@ class LocalCliApiService:
                 command_states=command_states,
                 now=utc_now(),
                 provider_updates=provider_updates,
+                catalog_seed=catalog_seed,
             )
         except ValueError as exc:
             if str(exc) == "local_cli_revision_conflict":

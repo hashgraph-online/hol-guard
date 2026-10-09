@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING
+from collections.abc import Iterable, Mapping, Sequence
 
 from ..runtime.custom_extension_profiles import (
     KNOWN_CLI_PROFILES,
     KnownCliProfile,
     profile_for_executable,
 )
-from ..runtime.local_cli_commands import LocalCliCommand, merge_discovered_commands
-
-if TYPE_CHECKING:
-    from ..store import GuardStore
+from ..runtime.local_cli_commands import (
+    OTHER_COMMAND_ID,
+    ROOT_COMMAND_ID,
+    LocalCliCommand,
+    merge_discovered_commands,
+)
 
 SEEDED_PROFILE_PREFIX = "local-cli.profile-"
 
@@ -24,36 +25,44 @@ def seeded_profile_cli_id(profile: KnownCliProfile) -> str:
 
 
 def merge_profile_commands(tool_name: str, discovered: Sequence[LocalCliCommand]) -> tuple[LocalCliCommand, ...]:
-    """Put curated profile commands ahead of help-discovered ones for known CLIs."""
+    """Fill the catalog with curated profile commands after help-discovered ones.
+
+    Discovered commands go first so the catalog limit never evicts them; the
+    profile only fills the remaining slots.
+    """
 
     profile = profile_for_executable(tool_name)
     if profile is None:
         return tuple(discovered)
-    return merge_discovered_commands(tool_name, (*profile.local_cli_commands(), *discovered))
+    return merge_discovered_commands(tool_name, (*discovered, *profile.local_cli_commands()))
 
 
 _MCP_CLI_ID_PREFIX = "local-cli.mcp-"
+_DEFAULT_COMMAND_IDS = frozenset({ROOT_COMMAND_ID, OTHER_COMMAND_ID})
 
 
-def ensure_profile_catalog(store: GuardStore, cli_id: str, tool_name: str) -> None:
-    """Store a profiled CLI's curated commands so suggested rules can be saved.
+def profile_catalog_seed(cli_id: str, tool_name: str) -> tuple[LocalCliCommand, ...]:
+    """Return the curated catalog to store for a profiled CLI, or nothing.
 
     CLIs detected from hook traffic have no stored commands yet, and saving a
-    rule for an unknown command id is rejected. MCP servers are skipped: their
-    name comes from user config, and merging CLI commands would crowd out
-    their tools and drop saved tool rules.
+    rule for an unknown command id is rejected. The apply transaction stores
+    this seed only while the catalog holds just the default commands, so
+    existing commands and the rules covering them are never replaced. MCP
+    servers are skipped: their name comes from user config.
     """
 
     if cli_id.startswith(_MCP_CLI_ID_PREFIX):
-        return
+        return ()
     profile = profile_for_executable(tool_name)
     if profile is None:
-        return
-    existing = store.read_local_cli_command_catalog(cli_id)
-    known = {command.command_id for command in existing}
-    if all(entry.command.command_id in known for entry in profile.commands):
-        return
-    store.replace_local_cli_commands(cli_id, merge_profile_commands(tool_name, existing))
+        return ()
+    return merge_discovered_commands(tool_name, profile.local_cli_commands())
+
+
+def is_default_catalog(command_ids: Iterable[object]) -> bool:
+    """True when a catalog holds no commands beyond the default root and other."""
+
+    return all(command_id in _DEFAULT_COMMAND_IDS for command_id in command_ids)
 
 
 def annotate_cli_profiles(items: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -94,8 +103,13 @@ def _annotated(item: dict[str, object], profile: KnownCliProfile) -> dict[str, o
     annotated.update(profile_id=profile.profile_id, brand=profile.brand, display_name=profile.display_name)
     listed = [command for command in commands if isinstance(command, dict)] if isinstance(commands, list) else []
     known = {command.get("command_id") for command in listed}
-    missing = [entry.command.to_dict() for entry in profile.commands if entry.command.command_id not in known]
-    annotated["commands"] = [_with_suggestion(command, suggested) for command in (*listed, *missing)]
+    if is_default_catalog(known):
+        # Match the seed the apply transaction stores, so every shown
+        # suggestion can be saved. Stored catalogs are shown as they are.
+        seed = profile_catalog_seed(str(item.get("cli_id") or ""), str(item.get("name") or ""))
+        by_id = {command.get("command_id"): command for command in listed}
+        listed = [by_id.get(command.command_id) or command.to_dict() for command in seed]
+    annotated["commands"] = [_with_suggestion(command, suggested) for command in listed]
     return annotated
 
 
@@ -142,8 +156,9 @@ def _seeded_item(profile: KnownCliProfile, *, authority_revision: int) -> dict[s
 __all__ = [
     "SEEDED_PROFILE_PREFIX",
     "annotate_cli_profiles",
-    "ensure_profile_catalog",
+    "is_default_catalog",
     "merge_profile_commands",
+    "profile_catalog_seed",
     "seeded_profile_cli_id",
     "seeded_profile_items",
 ]

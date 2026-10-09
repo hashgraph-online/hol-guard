@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
 
 from ..store_custom_extension_continuity import CustomExtensionContinuityMutation
-from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommandState, is_local_cli_command_id
+from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommand, LocalCliCommandState, is_local_cli_command_id
 from .local_cli_identity import LocalCliKind, UnlistedCliIdentity, is_local_cli_id
 
 if TYPE_CHECKING:
@@ -197,6 +197,7 @@ def record_local_custom_extension_mutation(
     command_states: Mapping[str, LocalCliCommandState],
     now: str,
     provider_updates: Sequence[tuple[str, str, int]] = (),
+    catalog_seed: Sequence[LocalCliCommand] = (),
 ) -> int:
     """Commit a local grant and its continuity tombstone/state/receipt atomically."""
 
@@ -270,6 +271,7 @@ def record_local_custom_extension_mutation(
             },
             observation_preconditions={identity.cli_id: _observation_precondition(local)},
             provider_updates={identity.cli_id: provider_updates} if provider_updates else None,
+            catalog_seeds={identity.cli_id: catalog_seed} if catalog_seed else None,
         )
     except ValueError as error:
         if str(error) in {"local_cli_revision_conflict", "provider_action_revision_conflict"}:

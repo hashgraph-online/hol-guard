@@ -49,6 +49,7 @@ class StoreLocalCliMixin:
         server_identity_hash: str | None = None,
         server_command: str | None = None,
         server_args_hash: str | None = None,
+        only_if_missing: bool = False,
     ) -> None:
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
@@ -59,6 +60,8 @@ class StoreLocalCliMixin:
                 "select observed_count from local_cli_observation where cli_id = ?",
                 (identity.cli_id,),
             ).fetchone()
+            if current is not None and only_if_missing:
+                return
             if current is None:
                 _ = connection.execute(
                     """
@@ -67,6 +70,7 @@ class StoreLocalCliMixin:
                         observed_count, last_seen_at, source_path, help_status, surface,
                         server_identity_hash, server_command, server_args_hash
                     ) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+                    on conflict(cli_id) do nothing
                     """,
                     (
                         identity.cli_id,

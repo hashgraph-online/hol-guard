@@ -3816,7 +3816,8 @@ function ProviderWorkflows({ cliId }) {
 }
 function customExtensionActionLabel(item) {
   if (item.seeded === true) return `Set up ${item.display_name ?? item.name}`;
-  return item.state === "unset" && item.surface === "cli" && item.suggestable ? "Review suggested rules" : null;
+  if (item.state !== "unset" || item.surface !== "cli" || !item.suggestable) return null;
+  return hasSuggestedRules(item) ? "Review suggested rules" : "Review and add";
 }
 const SUGGESTED_RULES_NOTICE = "Suggested rules are pre-selected for commands you have not set yet. Nothing changes until you review and confirm.";
 function randomToken$2() {
@@ -3912,7 +3913,7 @@ function customExtensionUnits(surface) {
 function customExtensionStateLabel(item) {
   if (item.seeded === true) return "Not set up yet. Guard keeps its usual review until you add it.";
   if (item.state === "unset" && item.surface === "cli" && item.suggestable) {
-    return "Guard detected this tool. Review suggested rules before adding it.";
+    return hasSuggestedRules(item) ? "Guard detected this tool. Review suggested rules before adding it." : "Guard detected this tool. Review it before adding it.";
   }
   const { unit, units, source } = customExtensionUnits(item.surface);
   if (item.stale) {

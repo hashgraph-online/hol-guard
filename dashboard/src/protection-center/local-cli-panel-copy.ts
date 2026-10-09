@@ -2,11 +2,13 @@ import { approvalProofRecentlySatisfied } from "../approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import type { LocalCliItem, LocalCliListResponse, LocalCliState } from "../local-cli-api";
 import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
+import { hasSuggestedRules } from "./custom-extension-profile";
 import { mcpToolCanReceiveDirectAllow } from "./mcp-catalog-state";
 
 export function customExtensionActionLabel(item: LocalCliItem): string | null {
   if (item.seeded === true) return `Set up ${item.display_name ?? item.name}`;
-  return item.state === "unset" && item.surface === "cli" && item.suggestable ? "Review suggested rules" : null;
+  if (item.state !== "unset" || item.surface !== "cli" || !item.suggestable) return null;
+  return hasSuggestedRules(item) ? "Review suggested rules" : "Review and add";
 }
 
 export const SUGGESTED_RULES_NOTICE =
@@ -124,7 +126,9 @@ function customExtensionUnits(surface: LocalCliItem["surface"]): { unit: string;
 export function customExtensionStateLabel(item: LocalCliItem): string {
   if (item.seeded === true) return "Not set up yet. Guard keeps its usual review until you add it.";
   if (item.state === "unset" && item.surface === "cli" && item.suggestable) {
-    return "Guard detected this tool. Review suggested rules before adding it.";
+    return hasSuggestedRules(item)
+      ? "Guard detected this tool. Review suggested rules before adding it."
+      : "Guard detected this tool. Review it before adding it.";
   }
   const { unit, units, source } = customExtensionUnits(item.surface);
   if (item.stale) {
