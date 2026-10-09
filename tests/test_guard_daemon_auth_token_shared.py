@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -82,3 +84,41 @@ def test_republishing_state_keeps_the_token_file(tmp_path: Path, port: int) -> N
 
     assert token_path.stat().st_mtime_ns == before
     assert load_guard_daemon_auth_token(guard_home) == token
+
+
+def test_republishing_restores_a_missing_token_without_replacing_another(tmp_path: Path) -> None:
+    guard_home = _guard_home(tmp_path)
+    token = ensure_guard_daemon_auth_token(guard_home)
+    (guard_home / "daemon-auth-token").unlink()
+
+    write_guard_daemon_state(guard_home, 5474, token, pid=os.getpid(), write_auth_token=False)
+    assert load_guard_daemon_auth_token(guard_home) == token
+
+    write_guard_daemon_state(guard_home, 5475, "other-daemon-token", pid=os.getpid(), write_auth_token=False)
+    assert load_guard_daemon_auth_token(guard_home) == token
+
+
+def test_concurrent_daemon_processes_share_one_token(tmp_path: Path) -> None:
+    guard_home = _guard_home(tmp_path)
+    script = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from codex_plugin_scanner.guard.daemon.manager import ensure_guard_daemon_auth_token\n"
+        "print(ensure_guard_daemon_auth_token(Path(sys.argv[1])))\n"
+    )
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", script, str(guard_home)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for _ in range(6)
+    ]
+    tokens = set()
+    for process in processes:
+        stdout, stderr = process.communicate(timeout=60)
+        assert process.returncode == 0, stderr
+        tokens.add(stdout.strip())
+
+    assert tokens == {load_guard_daemon_auth_token(guard_home)}

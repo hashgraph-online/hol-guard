@@ -1563,7 +1563,10 @@ def write_guard_daemon_state(
             state_payload,
             discovery_key=discovery_key,
         )
-        if write_auth_token:
+        # ``write_auth_token=False`` never replaces another daemon's token, but
+        # a missing file is restored so hooks can keep signing approval links.
+        existing_token = load_guard_daemon_auth_token(guard_home)
+        if write_auth_token or existing_token is None or not existing_token.strip():
             _write_private_atomic_text(_auth_token_path(guard_home), auth_token)
         _write_private_atomic_text(
             state_path,
