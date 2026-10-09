@@ -648,6 +648,10 @@ fn evaluate_request(
                 request,
             )?);
         }
+        ContextDigestKindV1::LocalCliIdentity { source } => {
+            result.local_cli_identity =
+                super::context_digest_local_cli::local_cli_identity(source)?;
+        }
         ContextDigestKindV1::PackageLauncherToken { command_name, args } => {
             result.package_launcher = Some(guard_contracts::PackageLauncherResultV1 {
                 package: guard_command::mcp_decision::package_token(command_name, args),
@@ -831,6 +835,7 @@ fn evaluate_context_digest_request_inner(
         runtime_resolved_executable: None,
         runtime_resolved_argv: None,
         tool_catalog: None,
+        local_cli_identity: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();

@@ -29,6 +29,8 @@ mod execution_environment;
 pub use execution_environment::*;
 mod context_digest;
 pub use context_digest::*;
+mod local_cli_identity;
+pub use local_cli_identity::*;
 mod browser_mcp_intent;
 pub use browser_mcp_intent::*;
 mod mcp_tool_policy;

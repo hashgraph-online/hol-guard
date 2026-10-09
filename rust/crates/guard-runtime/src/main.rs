@@ -20,6 +20,7 @@ mod command_effect;
 mod contained_op;
 mod context_digest;
 mod context_digest_json;
+mod context_digest_local_cli;
 mod daemon_policy_authority;
 mod edge;
 mod encrypted_secret_store;
