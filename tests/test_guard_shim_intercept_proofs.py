@@ -22,7 +22,12 @@ from tests.shim_execution_helpers import (
     protect_evaluator_evidence,
     write_fake_manager_script,
 )
-from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
+from tests.test_guard_headless_daemon_api import (
+    PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS,
+    _dashboard_token_for,
+    _read_json_response,
+    _request,
+)
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -298,6 +303,7 @@ def _run_daemon_package_shim_install_and_test(
                 token=token,
                 payload={"managers": ["npm"]},
             ),
+            timeout=PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS,
         )
     finally:
         daemon.stop()
