@@ -313,6 +313,9 @@ class HookWorkerNativeMixin:
 
         if native_event != "PostToolUse" or canonical_harness_name(native_harness) not in {"pi", "omp"}:
             return dict(native_result)
+        # Native denials have no model-visible content to project.
+        if native_result.get("decision") != "allow":
+            return dict(native_result)
         resolution = self._structured_output_resolution(
             guard_home=guard_home,
             workspace=workspace,

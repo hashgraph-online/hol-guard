@@ -1,18 +1,5 @@
 //! Source-faithful shell heredoc and command-substitution structures
-//! (`runtime/shell_structure.py`, 323 lines — verbatim).
-
-use fancy_regex::Regex;
-use std::sync::OnceLock;
-
-fn heredoc_operator_pattern() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(
-            r#"(?<!<)(?P<operator><<-?)[ \t]*(?P<quote>['"]?)(?P<delimiter>(?:[A-Za-z_][A-Za-z0-9_]*|--[A-Za-z0-9][A-Za-z0-9_-]*))(?P=quote)"#,
-        )
-        .unwrap()
-    })
-}
+//! (`runtime/shell_structure.py`).
 
 /// `ShellHeredoc` (:10-23).
 #[derive(Clone, Debug)]
@@ -41,7 +28,7 @@ pub struct ShellCommandSubstitution {
 }
 
 /// `extract_heredocs` (:43-88). Bounded POSIX heredocs without interpreting
-/// contents; text is byte-offset exact.
+/// contents; offsets index Unicode scalar values.
 pub fn extract_heredocs(command: &str) -> Vec<ShellHeredoc> {
     if command.is_empty() {
         return Vec::new();
@@ -71,7 +58,7 @@ pub fn extract_heredocs(command: &str) -> Vec<ShellHeredoc> {
             let (closing_start, closing_end) =
                 find_heredoc_closing_line(&chars, body_start, delimiter, strip_tabs);
             results.push(ShellHeredoc {
-                delimiter: delimiter.clone(),
+                delimiter: m.delimiter,
                 body: chars[body_start..closing_start].iter().collect(),
                 operator_start: scan_cursor + m.start,
                 declaration_end: scan_cursor + m.end,
@@ -101,52 +88,90 @@ struct HeredocDecl {
 /// `_heredoc_declarations` (:91-107).
 fn heredoc_declarations(line: &[char]) -> Vec<HeredocDecl> {
     let mut matches = Vec::new();
-    let line_text: String = line.iter().collect();
     let mut state = ShellScanState::new();
     let mut index = 0usize;
-    let mut byte_index = 0usize;
     while index < line.len() {
         let next_index = state.advance(line, index);
         if next_index != index + 1 {
-            byte_index += line[index..next_index]
-                .iter()
-                .map(|ch| ch.len_utf8())
-                .sum::<usize>();
             index = next_index;
             continue;
         }
-        if state.is_top_level() && starts_with(line, index, "<<") {
-            // Match the original line so lookbehind can reject here-strings.
-            if let Ok(Some(caps)) =
-                heredoc_operator_pattern().captures_from_pos(&line_text, byte_index)
-            {
-                let whole = caps.get(0).unwrap();
-                if whole.start() == byte_index {
-                    let byte_end = whole.end();
-                    let delim = caps.name("delimiter").unwrap().as_str().to_owned();
-                    let quoted = caps
-                        .name("quote")
-                        .map(|q| !q.as_str().is_empty())
-                        .unwrap_or(false);
-                    let strip_tabs = caps.name("operator").unwrap().as_str() == "<<-";
-                    let char_end = line_text[byte_index..byte_end].chars().count();
-                    matches.push(HeredocDecl {
-                        start: index,
-                        end: index + char_end,
-                        delimiter: delim,
-                        quoted,
-                        strip_tabs,
-                    });
-                    index += char_end;
-                    byte_index = byte_end;
-                    continue;
-                }
+        if state.is_top_level()
+            && line[index] == '<'
+            && line.get(index + 1) == Some(&'<')
+            && (index == 0 || line[index - 1] != '<')
+        {
+            let operator_end = index + 2;
+            let declaration = if line.get(operator_end) == Some(&'-') {
+                // The optional operator dash backtracks for delimiters such as --END.
+                heredoc_declaration(line, index, operator_end + 1, true)
+                    .or_else(|| heredoc_declaration(line, index, operator_end, false))
+            } else {
+                heredoc_declaration(line, index, operator_end, false)
+            };
+            if let Some(declaration) = declaration {
+                index = declaration.end;
+                matches.push(declaration);
+                continue;
             }
         }
-        byte_index += line[index].len_utf8();
         index += 1;
     }
     matches
+}
+
+fn heredoc_declaration(
+    line: &[char],
+    operator_start: usize,
+    mut cursor: usize,
+    strip_tabs: bool,
+) -> Option<HeredocDecl> {
+    while matches!(line.get(cursor), Some(' ' | '\t')) {
+        cursor += 1;
+    }
+    let quote = line
+        .get(cursor)
+        .copied()
+        .filter(|ch| matches!(ch, '\'' | '"'));
+    if quote.is_some() {
+        cursor += 1;
+    }
+    let delimiter_start = cursor;
+    let allow_hyphen = match line.get(cursor).copied()? {
+        ch if ch.is_ascii_alphabetic() || ch == '_' => {
+            cursor += 1;
+            false
+        }
+        '-' if line.get(cursor + 1) == Some(&'-')
+            && line
+                .get(cursor + 2)
+                .is_some_and(|ch| ch.is_ascii_alphanumeric()) =>
+        {
+            cursor += 3;
+            true
+        }
+        _ => return None,
+    };
+    while line
+        .get(cursor)
+        .is_some_and(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || (allow_hyphen && *ch == '-'))
+    {
+        cursor += 1;
+    }
+    let delimiter_end = cursor;
+    if let Some(quote) = quote {
+        if line.get(cursor) != Some(&quote) {
+            return None;
+        }
+        cursor += 1;
+    }
+    Some(HeredocDecl {
+        start: operator_start,
+        end: cursor,
+        delimiter: line[delimiter_start..delimiter_end].iter().collect(),
+        quoted: quote.is_some(),
+        strip_tabs,
+    })
 }
 
 /// `_find_heredoc_closing_line` (:110-129).
@@ -441,7 +466,7 @@ fn find_newline(chars: &[char], from: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_heredocs, mask_heredoc_bodies};
+    use super::{extract_heredocs, mask_complete_heredocs, mask_heredoc_bodies};
 
     #[test]
     fn here_strings_do_not_mask_following_package_commands() {
@@ -497,5 +522,91 @@ mod tests {
         assert!(masked.starts_with("cat <<<x;"));
         assert!(!masked.contains("npm install hidden"));
         assert!(masked.ends_with("\nnpm install visible"));
+    }
+
+    #[test]
+    fn delimiter_prefixes_preserve_unmatched_header_suffixes() {
+        for (header, delimiter, quoted, strip_tabs, declaration_end, masked_prefix) in [
+            ("cat <<EOF-tail", "EOF", false, false, 9, "cat      -tail\n"),
+            ("cat <<EOFé", "EOF", false, false, 9, "cat      é\n"),
+            ("cat <<_9.name", "_9", false, false, 8, "cat     .name\n"),
+            (
+                "cat <<--9-A_.",
+                "--9-A_",
+                false,
+                false,
+                12,
+                "cat         .\n",
+            ),
+            ("cat <<---END", "--END", false, true, 12, "cat         \n"),
+            ("cat << 'EOF'x", "EOF", true, false, 12, "cat         x\n"),
+            ("cat <<\t\"EOF\"", "EOF", true, false, 12, "cat         \n"),
+        ] {
+            let command = format!("{header}\nprivate\n{delimiter}\nnpm install visible");
+            let heredocs = extract_heredocs(&command);
+            assert_eq!(heredocs.len(), 1, "{header}");
+            let heredoc = &heredocs[0];
+            assert_eq!(heredoc.delimiter, delimiter, "{header}");
+            assert_eq!(heredoc.body, "private\n", "{header}");
+            assert_eq!(heredoc.quoted, quoted, "{header}");
+            assert_eq!(heredoc.strip_tabs, strip_tabs, "{header}");
+            assert_eq!(heredoc.operator_start, 4, "{header}");
+            assert_eq!(heredoc.declaration_end, declaration_end, "{header}");
+            let masked = mask_complete_heredocs(&command, &heredocs);
+            assert!(masked.starts_with(masked_prefix), "{header}: {masked:?}");
+            assert!(!masked.contains("private"), "{header}");
+            assert!(masked.ends_with("\nnpm install visible"), "{header}");
+        }
+    }
+
+    #[test]
+    fn invalid_or_nested_declarations_leave_following_commands_visible() {
+        for header in [
+            "cat <<",
+            "cat <<9EOF",
+            "cat <<é",
+            "cat <<--_END",
+            "cat <<--é",
+            "cat <<----END",
+            "cat <<\u{00a0}EOF",
+            "cat <<\rEOF",
+            "cat <<'EOF\"",
+            "cat <<'EOF",
+            "cat <<\"EOF-tail\"",
+            "printf '<<EOF'",
+            "printf \"<<EOF\"",
+            "printf \"$(cat <<EOF)\"",
+            "printf \u{0060}cat <<EOF\u{0060}",
+            "(cat <<EOF)",
+            "cat \\<<EOF",
+        ] {
+            let command = format!("{header}\nnpm install visible\nEOF\nnpm install after");
+            let heredocs = extract_heredocs(&command);
+            assert!(heredocs.is_empty(), "{header}");
+            assert_eq!(
+                mask_heredoc_bodies(&command, &heredocs),
+                command,
+                "{header}"
+            );
+        }
+    }
+
+    #[test]
+    fn quoted_command_substitution_keeps_unicode_character_offsets() {
+        let command = "🙂 \"$(cat <<BAD)\" <<E\nx\nE\ny";
+        let heredocs = extract_heredocs(command);
+        assert_eq!(heredocs.len(), 1);
+        let heredoc = &heredocs[0];
+        assert_eq!(heredoc.delimiter, "E");
+        assert_eq!(heredoc.body, "x\n");
+        assert_eq!(heredoc.operator_start, 17);
+        assert_eq!(heredoc.declaration_end, 20);
+        assert_eq!(heredoc.body_start, 21);
+        assert_eq!(heredoc.body_end, 23);
+        assert_eq!(heredoc.end, 25);
+        assert_eq!(
+            mask_heredoc_bodies(command, &heredocs),
+            "🙂 \"$(cat <<BAD)\" <<E\n \n \ny"
+        );
     }
 }

@@ -155,11 +155,12 @@ jobs:
         if: matrix.check == 'test'
         run: |
           echo "CARGO_PROFILE_TEST_OPT_LEVEL=1" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_TEST_DEBUG=0" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-rust
         with:
-          cache-key: ci-workspace-${{ matrix.check }}
+          cache-key: ${{ matrix.check == 'test' && 'ci-workspace-test-llvm-cov-0.6.21-opt1-debug0-v1' || 'ci-workspace-clippy' }}
           components: clippy
       - name: Validate the locked Rust workspace
         env:
@@ -179,9 +180,7 @@ jobs:
               fi
               ;;
             test)
-              nextest_bin="$(python3 scripts/ci/install_nextest.py)"
-              PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --workspace --all-targets \
-                --test-threads 2 --retries 0 --no-fail-fast
+              bash scripts/ci/prepare_sonar_rust_coverage.sh
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
@@ -196,6 +195,15 @@ jobs:
           path: clippy-report/
           if-no-files-found: error
           retention-days: 1
+      - name: Upload successful full native coverage
+        if: matrix.check == 'test' && success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-coverage-${{ github.run_attempt }}
+          path: rust-coverage/
+          if-no-files-found: error
+          retention-days: 1
+
 
   native-command-evaluators:
     runs-on: ubuntu-latest
@@ -269,6 +277,42 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  native-consumer-coverage:
+    name: native-consumer-coverage
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-native-consumer-llvm-cov-opt1-debug0-v1
+      - name: Build source-bound instrumented native consumers and LLVM tools
+        run: uv run --no-sync python -m scripts.ci.native_consumer_coverage build
+      - name: Upload instrumented native consumers
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-consumer-coverage-${{ github.run_attempt }}
+          path: native-consumer-coverage/
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload matching native consumer manifest
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-consumer-coverage-metadata-${{ github.run_attempt }}
+          path: native-consumer-coverage/metadata.json
+          if-no-files-found: error
+          retention-days: 1
+
+
   coverage-plan:
     needs: native-command-evaluators
     runs-on: ubuntu-latest
@@ -321,11 +365,12 @@ jobs:
 
   coverage:
     name: coverage (3.12, ${{ matrix.shard-index }})
-    needs: [plan, coverage-plan, native-command-evaluators]
+    needs: [plan, coverage-plan, native-command-evaluators, native-consumer-coverage]
     if: >-
       !cancelled() &&
       needs.coverage-plan.result == 'success' &&
       needs.native-command-evaluators.result == 'success' &&
+      (github.event_name == 'pull_request' || needs.native-consumer-coverage.result == 'success') &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
@@ -362,6 +407,23 @@ jobs:
           echo "HOL_GUARD_BUILD_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
+      - name: Select successful instrumented native consumer artifact
+        if: github.event_name != 'pull_request'
+        id: native-consumer-selection
+        run: uv run --no-sync python -m scripts.ci.native_consumer_coverage select
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Download source-bound instrumented native consumers
+        if: github.event_name != 'pull_request'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ steps.native-consumer-selection.outputs.artifact-id }}
+          path: native-consumer-coverage
+          merge-multiple: true
+      - name: Verify instrumented consumers and configure native coverage
+        if: github.event_name != 'pull_request'
+        run: uv run --no-sync python -m scripts.ci.native_consumer_coverage configure
+
       - name: Run coverage shard ${{ matrix.shard-index }}
         shell: bash
         run: |
@@ -387,6 +449,18 @@ jobs:
             --deselect tests/test_guard_cloud_review_runtime_recovery.py::test_cloud_review_worker_survives_ten_thousand_recurring_disconnects \
             --deselect tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources \
             "${coverage_args[@]}"
+      - name: Export actual native execution coverage for this shard
+        if: always() && github.event_name != 'pull_request'
+        run: uv run --no-sync python -m scripts.ci.native_consumer_coverage export --shard ${{ matrix.shard-index }}
+      - name: Preserve source-bound native consumer coverage
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-consumer-coverage-${{ github.run_attempt }}-3.12-${{ matrix.shard-index }}
+          path: rust-consumer-coverage/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Upload pytest coverage data artifact
         if: always() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -642,6 +716,34 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/ci-job-cisco-full
 
+  windows-frozen:
+    needs: [plan, native-command-evaluators]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-windows-frozen
+        with:
+          python-version: "3.12"
+      - name: Preserve bounded frozen dependency graph evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-frozen-graph-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/hol-guard-frozen-work/hol-guard/Analysis-00.toc
+            ${{ runner.temp }}/hol-guard-frozen-work/hol-guard/xref-hol-guard.html
+            ${{ runner.temp }}/hol-guard-frozen-work/hol-guard/warn-hol-guard.txt
+          if-no-files-found: warn
+          retention-days: 1
+
+
   cross-platform:
     needs: [plan, native-command-evaluators]
     if: >-
@@ -745,7 +847,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform]
+    needs: [plan, native-workspace, native-command-evaluators, native-consumer-coverage, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-frozen]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -774,11 +876,11 @@ jobs:
           # skipped one, which means its `if`/needs chain broke) must not let a
           # data-only plan coast through on surviving lane-gated residue.
           always_on = ["plan","native-workspace","native-command-evaluators",
-                       "quality","coverage-plan","ci-python-312"]
+                       "native-consumer-coverage","quality","coverage-plan","ci-python-312"]
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
-                      "dashboard","cisco-full","pi-exact-continuation","cross-platform"]
+                      "dashboard","cisco-full","pi-exact-continuation","cross-platform","windows-frozen"]
           missing = [j for j in always_on + required if j not in needs]
           if missing:
               print("::error::required jobs absent from needs graph: "+", ".join(missing))
@@ -791,6 +893,8 @@ jobs:
               result = needs.get(name, {}).get("result")
               if name == "plan" and event != "pull_request":
                   return result in ("success", "skipped")
+              if name == "native-consumer-coverage" and event == "pull_request":
+                  return result == "skipped"
               return result == "success"
           bad_providers = [j for j in always_on if not _provider_ok(j)]
           failed = [j for j in required

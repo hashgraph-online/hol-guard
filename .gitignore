@@ -27,6 +27,15 @@ env/
 coverage.xml
 htmlcov/
 coverage/
+# Source-bound CI coverage reports and raw counters are generated, never authored.
+/rust-coverage/
+/rust-consumer-coverage*/
+/native-consumer-coverage/
+/native-consumer-metadata/
+/native-consumer-*-selection.json
+/rust-consumer-coverage-selection.json
+*.profraw
+*.profdata
 mutants/
 
 # Tooling

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from codex_plugin_scanner.guard import native_runtime_resilience as resilience
 from codex_plugin_scanner.guard.native_runtime_resilience import (
     native_oneshot_lease,
     native_record_integrity_failure,
@@ -104,3 +107,36 @@ def test_compatibility_mismatches_are_recoverable() -> None:
     assert "native_version_mismatch" not in _INTEGRITY_FAILURE_REASONS
     assert "native_manifest_protocol_mismatch" in _INTEGRITY_FAILURE_REASONS
     assert "native_manifest_version_mismatch" in _INTEGRITY_FAILURE_REASONS
+
+
+def test_slow_home_resolution_does_not_delay_quarantine_or_restore_revoked_health(tmp_path, monkeypatch):
+    identity = _identity("9")
+    started = threading.Event()
+    release = threading.Event()
+    original_key = resilience._privacy_safe_key
+
+    def delayed_key(identity_sha256, guard_home):
+        if threading.current_thread().name.startswith("slow-home-resolution"):
+            started.set()
+            assert release.wait(5), "owned slow resolver was not released"
+        return original_key(identity_sha256, guard_home)
+
+    monkeypatch.setattr(resilience, "_privacy_safe_key", delayed_key)
+    with (
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix="slow-home-resolution") as slow,
+        ThreadPoolExecutor(max_workers=1) as urgent,
+    ):
+        pending_success = slow.submit(native_record_resident_success, identity, tmp_path)
+        try:
+            assert started.wait(2)
+            quarantine = urgent.submit(
+                native_record_integrity_failure, identity, tmp_path, reason="native_snapshot_invalid"
+            )
+            quarantine.result(timeout=2)
+        finally:
+            release.set()
+        pending_success.result(timeout=2)
+    snapshot = native_runtime_health_snapshot(identity, tmp_path)
+    assert snapshot.state == "quarantined"
+    with native_oneshot_lease(identity, tmp_path) as acquired:
+        assert acquired is False

@@ -8,11 +8,9 @@ import json
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
-from scripts.ci import wait_for_pytest_shards as barrier
-from scripts.ci.select_pytest_coverage import _pages, _time
+from scripts.ci.successful_job_artifact import select
 
 COMMAND = [
     "cargo",
@@ -131,77 +129,6 @@ def verify(root: Path, directory: Path, expected: dict) -> None:
     validate_report(directory / REPORT, root)
 
 
-def select(
-    repository: str,
-    run_id: int,
-    attempt: int,
-    *,
-    fetch=barrier.github_json,
-    clock=time.monotonic,
-    sleep=time.sleep,
-    timeout=960.0,
-) -> dict:
-    if barrier.REPOSITORY_PATTERN.fullmatch(repository) is None or any(p in {".", ".."} for p in repository.split("/")):
-        raise ValueError("Invalid repository")
-    if run_id <= 0 or attempt <= 0:
-        raise ValueError("Invalid run identity")
-    base = f"/repos/{repository}/actions/runs/{run_id}"
-    deadline = clock() + timeout
-    while clock() < deadline:
-        run = fetch(base, 10.0)
-        if (
-            not isinstance(run, dict)
-            or run.get("id") != run_id
-            or run.get("run_attempt") != attempt
-            or run.get("path") != ".github/workflows/ci.yml"
-            or not isinstance(run.get("repository"), dict)
-            or run["repository"].get("full_name") != repository
-        ):
-            raise ValueError("Workflow run identity changed")
-        jobs = [
-            job
-            for job in _pages(f"{base}/attempts/{attempt}/jobs", "jobs", fetch)
-            if job.get("name") == "Rust workspace (clippy)"
-        ]
-        if len(jobs) > 1:
-            raise ValueError("Ambiguous Clippy producer")
-        if not jobs:
-            if run.get("status") == "completed":
-                raise ValueError("Current attempt has no Clippy producer")
-            sleep(5.0)
-            continue
-        job = jobs[0]
-        if (
-            job.get("run_id") != run_id
-            or job.get("run_attempt") != attempt
-            or job.get("head_sha") != run.get("head_sha")
-        ):
-            raise ValueError("Clippy producer identity mismatch")
-        if barrier._job_state(job, "Clippy producer") != "success":
-            sleep(5.0)
-            continue
-        barrier._require_current_execution(job, "Clippy producer")
-        name = f"clippy-report-{attempt}"
-        artifacts = [item for item in _pages(f"{base}/artifacts", "artifacts", fetch) if item.get("name") == name]
-        if not artifacts:
-            sleep(5.0)
-            continue
-        if len(artifacts) != 1:
-            raise ValueError("Ambiguous Clippy artifact")
-        artifact = artifacts[0]
-        source = artifact.get("workflow_run")
-        if (
-            not isinstance(source, dict)
-            or source.get("id") != run_id
-            or source.get("head_sha") != run.get("head_sha")
-            or artifact.get("expired") is not False
-            or not _time(job["started_at"]) <= _time(artifact.get("created_at")) <= _time(job["completed_at"])
-        ):
-            raise ValueError("Clippy artifact is not bound to the successful execution")
-        return artifact
-    raise ValueError("Timed out waiting for current-attempt Clippy report")
-
-
 def print_diagnostics(directory: Path) -> None:
     report = directory / "clippy.jsonl"
     if directory.is_symlink() or report.is_symlink() or not report.is_file():
@@ -238,6 +165,8 @@ def main() -> None:
             os.environ["GITHUB_REPOSITORY"],
             int(os.environ["GITHUB_RUN_ID"]),
             int(os.environ["GITHUB_RUN_ATTEMPT"]),
+            job_name="Rust workspace (clippy)",
+            artifact_prefix="clippy-report",
         )
         with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
             output.write(f"artifact-id={artifact['id']}\n")

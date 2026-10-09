@@ -9177,6 +9177,7 @@ class GuardDaemonServer:
             if self._shutdown_started.is_set():
                 stop_reason = "requested_shutdown"
         except KeyboardInterrupt:
+            self._record_lifecycle("shutdown_requested", reason="keyboard_interrupt")
             self._shutdown_started.set()
             stop_reason = "requested_shutdown"
         except BaseException as error:
@@ -9441,6 +9442,7 @@ class GuardDaemonServer:
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue
             if time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds:
+                self._record_lifecycle("shutdown_requested", reason="idle_timeout")
                 self._shutdown_started.set()
                 self._server.shutdown()
                 return

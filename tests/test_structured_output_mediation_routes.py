@@ -234,6 +234,63 @@ def test_native_route_attaches_adapter_field_after_receipt_without_mutating_nati
     assert response["policy_action"] == "allow"
 
 
+def test_native_denial_does_not_bypass_revoked_structured_authority_on_next_allow(tmp_path: Path) -> None:
+    class _ChangingNativeRouteFixture(_NativeRouteFixture):
+        denied = True
+
+        def _review_raw_hook_native(self, **_kwargs: object) -> dict[str, object]:
+            if not self.denied:
+                return super()._review_raw_hook_native(**_kwargs)
+            return {
+                "event_name": "PostToolUse",
+                "harness": "pi",
+                "result": _native_result(
+                    decision="deny",
+                    model_output_action="block",
+                    policy_action="block",
+                    reason_code="native_secret_detected",
+                ),
+                "receipt": _receipt(decision="deny"),
+            }
+
+    fixture = _ChangingNativeRouteFixture(_config())
+
+    def review() -> dict[str, object]:
+        response, _native_used = fixture._review_native_edge_with_snapshot(
+            payload={
+                "hook_event_name": "PostToolUse",
+                "structured_output_json": '{"employee":{"email":"","id":7},"note":"x"}',
+            },
+            harness="pi",
+            event_name="PostToolUse",
+            default_harness="pi",
+            home_dir=tmp_path / "home",
+            guard_home=tmp_path / "guard",
+            workspace=tmp_path,
+            deadline=None,
+            policy_snapshot={"mode": "enforce"},
+            recording_only=False,
+        )
+        return response
+
+    denied = review()
+    assert denied["decision"] == "deny"
+    assert denied["policy_action"] == "block"
+    assert denied["reason_code"] == "native_secret_detected"
+    assert "structured_content_mediation" not in denied
+
+    fixture.config = _config(status="revoked")
+    fixture.denied = False
+    allowed = review()
+    assert allowed["decision"] == "allow"
+    assert allowed["policy_action"] == "allow"
+    mediation = allowed["structured_content_mediation"]
+    assert isinstance(mediation, dict)
+    assert mediation["action"] == "withhold"
+    assert mediation["reason_code"] == "structured_managed_authority_revoked"
+    assert "content_sha256" not in mediation
+
+
 @pytest.mark.parametrize("harness", ["pi", "omp"])
 def test_native_unavailable_required_structured_route_withholds_model_output(
     tmp_path: Path,
