@@ -3475,7 +3475,7 @@
                       ],
                       "options_with_values": [],
                       "required_flags": [
-                        "-V"
+                        "-v"
                       ],
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
@@ -3585,7 +3585,7 @@
                       ],
                       "options_with_values": [],
                       "required_flags": [
-                        "-V"
+                        "-v"
                       ],
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
@@ -3777,7 +3777,7 @@
                           "options_with_values": [],
                           "required_flags": [
                             "--help",
-                            "-V"
+                            "-v"
                           ],
                           "required_flags_in_all_arguments": false,
                           "required_option_values": [],
@@ -3889,7 +3889,7 @@
                           "options_with_values": [],
                           "required_flags": [
                             "--help",
-                            "-V"
+                            "-v"
                           ],
                           "required_flags_in_all_arguments": false,
                           "required_option_values": [],
@@ -13038,7 +13038,9 @@
         "command.librarybridge"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "fix.version-short",
       "rule_id": "command.librarybridge.fix"
     },
@@ -13211,7 +13213,9 @@
         "command.librarybridge"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "undo.version-short",
       "rule_id": "command.librarybridge.undo"
     },
@@ -13384,7 +13388,9 @@
         "command.librarybridge"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "backup.version-short",
       "rule_id": "command.librarybridge.backup"
     },
@@ -13557,7 +13563,9 @@
         "command.librarybridge"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "lutris-import.version-short",
       "rule_id": "command.librarybridge.lutris-import"
     },
@@ -13738,7 +13746,9 @@
         "command.librarybridge"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "evidence-record.version-short",
       "rule_id": "command.librarybridge.evidence-record"
     },
@@ -13911,7 +13921,9 @@
         "command.librarybridge"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "lutris-plan.version-short",
       "rule_id": "command.librarybridge.lutris-plan"
     },
@@ -14084,7 +14096,9 @@
         "command.librarybridge"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "lutris-forget.version-short",
       "rule_id": "command.librarybridge.lutris-forget"
     },
