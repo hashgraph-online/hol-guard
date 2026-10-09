@@ -55,6 +55,10 @@ _FORBIDDEN_WIRE_KEYS = frozenset(
 )
 
 
+class ExtensionCatalogLimitError(ValueError):
+    """A catalog exceeds a Cloud v1 count or byte limit."""
+
+
 class ExtensionCatalogPermissionWire(TypedDict):
     id: str
     name: str
@@ -164,7 +168,7 @@ def _extension_wire(extension: ExtensionLike) -> ExtensionCatalogEntryWire:
         key=lambda permission: permission["id"],
     )
     if len(permissions) > MAX_PERMISSIONS_PER_EXTENSION:
-        raise ValueError("Extension catalog permission limit exceeded")
+        raise ExtensionCatalogLimitError("Extension catalog permission limit exceeded")
     return {
         "id": extension.extension_id,
         "version": extension.version,
@@ -226,7 +230,7 @@ def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
 
     encoded = _canonical_json(payload).encode("utf-8")
     if len(encoded) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
-        raise ValueError("Extension catalog payload limit exceeded")
+        raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
     if not isinstance(payload, dict):
         raise ValueError("Extension catalog must be an object")
     expected_top_level = {
@@ -430,7 +434,7 @@ def build_extension_catalog_wire(
         key=lambda extension: extension["id"],
     )
     if len(extensions) > MAX_CATALOG_EXTENSIONS:
-        raise ValueError("Extension catalog limit exceeded")
+        raise ExtensionCatalogLimitError("Extension catalog limit exceeded")
     payload: ExtensionCatalogWire = {
         "schemaVersion": EXTENSION_CATALOG_SCHEMA_VERSION,
         "catalogDigest": catalog_digest_for_extensions(extensions),
@@ -447,7 +451,7 @@ def build_extension_catalog_wire(
     }
     _reject_private_wire_keys(payload)
     if len(_canonical_json(payload).encode("utf-8")) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
-        raise ValueError("Extension catalog payload limit exceeded")
+        raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
     return validate_extension_catalog_wire(payload)
 
 

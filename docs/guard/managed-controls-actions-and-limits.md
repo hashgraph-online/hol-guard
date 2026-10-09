@@ -64,13 +64,13 @@ The Extension catalog has several representations, and each one has its own byte
 |---|---:|---|
 | Cloud v1 catalog (canonical, privacy-safe) | 1,000,000 bytes | Runtime catalog sync before upload; Cloud ingestion |
 | Cloud v1 upload body (`idempotencyKey` + `catalog`) | 1,016,384 bytes | Runtime handshake before upload; Cloud route body limit |
-| Legacy daemon `GET /v1/extension-controls/catalog` response | 8,000,000 bytes, measured on the exact wire bytes after HTML-safe escaping | Daemon service before writing; dashboard and CLI client read limit |
+| Legacy daemon `GET /v1/extension-controls/catalog` response | 8,000,000 bytes, measured on the exact wire bytes after HTML-safe escaping | Daemon service before writing; Python daemon client read limit (the dashboard does not cap this response) |
 | Other daemon `GET` responses | 1,048,576 bytes | Daemon client |
 | Packaged `command-catalog.v1.json` artifact | 8,000,000 bytes | Build script before publishing; packaged loader before decoding |
 | Native compiled catalog projection | 8,000,000 bytes | Rust source compiler |
 | Native command program | 4 MiB | Rust compiler and admission; build script; packaged loader |
 
-The Cloud v1 profile stays at 1,000,000 bytes because Cloud requires the exact advertised value. If a catalog grows past it, the runtime stops advertising managed-controls capabilities and reports `catalog_upload_exceeds_cloud_limit`. It does not send a body that Cloud would reject.
+The Cloud v1 profile stays at 1,000,000 bytes because Cloud requires the exact advertised value. If a catalog grows past it, the runtime advertises no catalog digest and no managed-controls capabilities, and records `catalog_upload_exceeds_cloud_limit` as the `extension_catalog_sync_reason` in its runtime session summary. The same downgrade applies when Cloud requests an upload whose catalog or body exceeds its limit. The runtime never sends a body that Cloud would reject.
 
 The structural ceiling is still 512 Extensions with 512 permissions each. Byte budgets do not raise it. The current built-in catalog uses about 1.04 MB on the legacy daemon wire. Daemon clients released before these budgets read at most 1 MiB, so they cannot load a larger legacy catalog response. Paginated catalog routes replace the full-catalog response for growth beyond that.
 
