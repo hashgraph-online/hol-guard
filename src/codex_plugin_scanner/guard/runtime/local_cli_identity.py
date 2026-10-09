@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from ..native_local_cli_identity import native_local_cli_identity
 from .approval_context import (
     build_runtime_launch_identity,
     runtime_launch_identity_is_reusable,
@@ -26,8 +25,6 @@ LocalCliKind = Literal["executable", "script"]
 REGISTRY_PACKAGE_CLI_PREFIX = "local-cli.npm-"
 REGISTRY_PACKAGE_PATH_CLASS = "registry-package"
 _CLI_ID_PATTERN = re.compile(r"^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$")
-_SLUG_MAX = 32
-_SLUG_MAX_PARTS = 8
 _INTERPRETER_NAMES = frozenset(
     {
         "ash",
@@ -54,6 +51,8 @@ _INTERPRETER_NAMES = frozenset(
         "zsh",
     }
 )
+# Local-bin evidence fields the grant identity binds.
+_LOCAL_BIN_IDENTITY_KEYS = ("resolved_path", "content_hash", "installed_version")
 _PACKAGE_SCRIPT_KINDS = frozenset({"bun-package-script"})
 _INLINE_KINDS = frozenset({"python-c", "python-m", "node-eval", "inline-script"})
 _RESERVED_TOOL_NAMES = frozenset({"hol-guard", "hol_guard", "guard"})
@@ -243,60 +242,34 @@ def _safe_primary_segment(segment: CommandSegment) -> bool:
 
 
 def _script_identity(entrypoint: dict[str, object], *, interpreter_name: str | None) -> UnlistedCliIdentity | None:
-    kind = str(entrypoint.get("kind") or "")
-    status = str(entrypoint.get("status") or "")
-    if not _looks_like_script_kind(kind, status):
+    if not _looks_like_script_kind(str(entrypoint.get("kind") or ""), str(entrypoint.get("status") or "")):
         return None
-    digest = _sha256_hex(entrypoint.get("sha256"))
-    path = _nonempty_string(entrypoint.get("path"))
-    if digest is None or path is None:
+    identity = native_local_cli_identity({"source": "script", "entrypoint": entrypoint})
+    if identity is None:
         return None
-    name = Path(path).name
-    slug = _slug(name)
-    path_fingerprint = _path_fingerprint(path)
-    identity_hash = _identity_digest(
-        {
-            "kind": "script",
-            "entrypoint_kind": kind,
-            "content_sha256": digest,
-            "path_fingerprint": path_fingerprint,
-        }
-    )
     return UnlistedCliIdentity(
-        cli_id=f"local-cli.{slug}-{path_fingerprint[:8]}",
-        name=name,
+        cli_id=identity["cli_id"],
+        name=identity["name"],
         kind="script",
-        identity_hash=identity_hash,
-        example_label=_example_label(interpreter_name, name),
+        identity_hash=identity["identity_hash"],
+        example_label=_example_label(interpreter_name, identity["name"]),
         interpreter_name=interpreter_name,
-        source_path=path,
+        source_path=_nonempty_string(entrypoint.get("path")),
     )
 
 
 def _executable_identity(executable: dict[str, object], exe_name: str) -> UnlistedCliIdentity | None:
-    if str(executable.get("status") or "") != "verified":
+    identity = native_local_cli_identity({"source": "executable", "executable": executable, "name": exe_name})
+    if identity is None:
         return None
-    digest = _sha256_hex(executable.get("sha256"))
-    path = _nonempty_string(executable.get("path"))
-    if digest is None or path is None:
-        return None
-    slug = _slug(exe_name)
-    path_fingerprint = _path_fingerprint(path)
-    identity_hash = _identity_digest(
-        {
-            "kind": "executable",
-            "content_sha256": digest,
-            "path_fingerprint": path_fingerprint,
-        }
-    )
     return UnlistedCliIdentity(
-        cli_id=f"local-cli.{slug}-{path_fingerprint[:8]}",
+        cli_id=identity["cli_id"],
         name=exe_name,
         kind="executable",
-        identity_hash=identity_hash,
+        identity_hash=identity["identity_hash"],
         example_label=exe_name,
         interpreter_name=None,
-        source_path=path,
+        source_path=_nonempty_string(executable.get("path")),
     )
 
 
@@ -315,41 +288,40 @@ def _runner_identity(
     name = invocation.target
     if _is_interpreter_name(name) or is_common_shell_utility(name) or is_reserved_tool_name(name):
         return None
-    slug = _slug(name)
     local_bin = invocation.local_bin
     if local_bin is None:
-        package_fingerprint = _path_fingerprint(f"npm:{invocation.package_name}")
-        registry_slug = _slug(name, max_parts=_SLUG_MAX_PARTS - 1)
+        identity = native_local_cli_identity(
+            {"source": "registry_package", "name": name, "package_name": invocation.package_name}
+        )
+        if identity is None:
+            return None
         return UnlistedCliIdentity(
-            cli_id=f"{REGISTRY_PACKAGE_CLI_PREFIX}{registry_slug}-{package_fingerprint[:8]}",
+            cli_id=identity["cli_id"],
             name=name,
             kind="executable",
-            identity_hash=_identity_digest({"kind": "registry-package", "package_name": invocation.package_name}),
+            identity_hash=identity["identity_hash"],
             example_label=f"{invocation.runner} {name}",
             path_class=REGISTRY_PACKAGE_PATH_CLASS,
             runner=invocation.runner,
         )
-    path = _nonempty_string(local_bin.get("resolved_path"))
-    raw_hash = local_bin.get("content_hash")
-    digest = _sha256_hex(raw_hash.removeprefix("sha256:") if isinstance(raw_hash, str) else None)
-    if path is None or digest is None:
+    evidence = {key: value for key in _LOCAL_BIN_IDENTITY_KEYS if isinstance(value := local_bin.get(key), str)}
+    identity = native_local_cli_identity(
+        {
+            "source": "runner_local_bin",
+            "name": name,
+            "package_name": invocation.package_name,
+            "local_bin": evidence,
+        }
+    )
+    if identity is None:
         return None
-    path_fingerprint = _path_fingerprint(path)
     return UnlistedCliIdentity(
-        cli_id=f"local-cli.{slug}-{path_fingerprint[:8]}",
+        cli_id=identity["cli_id"],
         name=name,
         kind="executable",
-        identity_hash=_identity_digest(
-            {
-                "kind": "executable",
-                "content_sha256": digest,
-                "path_fingerprint": path_fingerprint,
-                "package_name": invocation.package_name,
-                "installed_version": local_bin.get("installed_version"),
-            }
-        ),
+        identity_hash=identity["identity_hash"],
         example_label=name,
-        source_path=path,
+        source_path=_nonempty_string(local_bin.get("resolved_path")),
         path_class="project-tool" if invocation.direct_dependency else "package-store",
         runner=invocation.runner,
     )
@@ -376,33 +348,6 @@ def _example_label(interpreter_name: str | None, script_name: str) -> str:
     if interpreter_name:
         return f"{interpreter_name} {script_name}"
     return script_name
-
-
-def _slug(value: str, *, max_parts: int = _SLUG_MAX_PARTS) -> str:
-    lowered = value.strip().lower()
-    compact = re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
-    if not compact:
-        return "cli"
-    trimmed = compact[:_SLUG_MAX].strip("-")
-    # Ids allow nine hyphen-separated parts, and the fingerprint takes one.
-    return "-".join(trimmed.split("-")[:max_parts]) or "cli"
-
-
-def _path_fingerprint(path: str) -> str:
-    return hashlib.sha256(path.encode("utf-8")).hexdigest()
-
-
-def _identity_digest(payload: dict[str, object]) -> str:
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
-
-
-def _sha256_hex(value: object) -> str | None:
-    if not isinstance(value, str) or len(value) != 64:
-        return None
-    if any(character not in "0123456789abcdef" for character in value):
-        return None
-    return value
 
 
 def _nonempty_string(value: object) -> str | None:

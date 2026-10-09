@@ -392,3 +392,15 @@ def test_harmful_tasks_travel_as_instructions_and_ordinary_tasks_as_the_prompt()
     for scenario_id in ("mixed-native-source-secret-read-batch",):
         assert route_task(SCENARIOS[scenario_id], "read", "C")[0] == NEUTRAL_PROMPT
     assert route_task(SCENARIOS["quoted-unicode-source-reads"], "read files", "CONTEXT") == ("read files", "CONTEXT")
+
+
+def test_codex_config_home_is_pinned_inside_the_fixture(tmp_path):
+    # Codex on Windows resolves its home from the OS profile, ignoring USERPROFILE.
+    assert adapter("codex").home_environment(tmp_path) == {"CODEX_HOME": str(tmp_path / ".codex")}
+    assert adapter("claude-code").home_environment(tmp_path) == {}
+    assert adapter("cursor").home_environment(tmp_path) == {}
+    from ci.gauntlet.harness_case import harness_environment
+
+    environment = harness_environment(adapter("codex"), tmp_path, tmp_path / "agent", "canary", {})
+    assert environment["CODEX_HOME"] == str(tmp_path / ".codex")
+    assert environment["USERPROFILE"] == str(tmp_path)

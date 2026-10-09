@@ -19,6 +19,7 @@ _HOOK_STARTED_MONOTONIC = time.monotonic()
 
 import json
 import os
+import re
 import stat
 import sys
 import urllib.error
@@ -126,6 +127,8 @@ def _stamp_hook_input(text: str) -> str:
     if payload is None:
         return text
     active = {key: value for key, value in os.environ.items() if value}
+    # Git pages through `less` by default; flags taking a file argument are excluded.
+    pager_ok = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?").fullmatch
     payload["guard_execution_environment"] = {
         "path": os.environ.get("PATH", ""),
         "environment_names": sorted(active),
@@ -137,10 +140,11 @@ def _stamp_hook_input(text: str) -> str:
             os.environ.get("GIT_CONFIG_NOSYSTEM")
         ),
         "home": os.environ.get("HOME"),
-        "git_pager_disabled": os.environ.get("GIT_PAGER") in ("", "cat"),
-        "pager_disabled": os.environ.get("PAGER") in ("", "cat"),
+        "git_pager_disabled": pager_ok(os.environ.get("GIT_PAGER", "-")) is not None,
+        "pager_disabled": pager_ok(os.environ.get("PAGER", "-")) is not None,
     }
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    stamped = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    return stamped if len(stamped) <= 1_000_000 else text
 
 
 def _compact(event_name: str) -> str:

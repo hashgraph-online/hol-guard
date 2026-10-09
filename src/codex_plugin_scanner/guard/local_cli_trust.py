@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from .models import GuardAction, GuardArtifact
+from .native_local_cli_identity import LocalCliIdentityUnavailableError, track_local_cli_identity_failures
 from .runtime.local_cli_commands import (
     OTHER_COMMAND_ID,
     ROOT_COMMAND_ID,
@@ -39,13 +40,21 @@ def matching_local_cli_grant(
     home_dir: Path | None,
     current_action: GuardAction,
 ) -> tuple[UnlistedCliIdentity, LocalCliGrantState] | None:
-    """Return an enrolled grant when the command matches an unlisted CLI identity."""
+    """Return an enrolled grant when the command matches an unlisted CLI identity.
+
+    Raises ``LocalCliIdentityUnavailableError`` when the identity could not be
+    derived, so callers can fail closed instead of treating it as no grant.
+    """
 
     if current_action not in {"allow", "review", "require-reapproval", "warn"}:
         return None
-    identity = identify_package_json_scripts(command, cwd=cwd, home_dir=home_dir)
-    if identity is None:
-        identity = identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
+    with track_local_cli_identity_failures() as failures:
+        identity = identify_package_json_scripts(command, cwd=cwd, home_dir=home_dir)
+        if identity is None:
+            identity = identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
+    # A failed script derivation can fall through to the binary's identity.
+    if failures:
+        raise LocalCliIdentityUnavailableError(failures[0])
     if identity is None:
         return None
     lookup = getattr(store, "read_local_cli_grant", None)

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .local_cli_trust import matching_local_cli_grant, utc_now
 from .models import GuardAction
+from .native_local_cli_identity import LocalCliIdentityUnavailableError, track_local_cli_identity_failures
 from .runtime.custom_extension_suggestion import observation_path_class
 from .runtime.local_cli_compound import identify_unlisted_cli_identities
 from .runtime.package_json_scripts import identify_package_json_scripts, recognize_package_json_scripts
@@ -18,13 +19,15 @@ def observe_unlisted_cli(
     cwd: Path,
     home_dir: Path | None,
 ) -> None:
-    package_identity = identify_package_json_scripts(command, cwd=cwd, home_dir=home_dir)
-    identities = (
-        (package_identity,)
-        if package_identity is not None
-        else identify_unlisted_cli_identities(command, cwd=cwd, home_dir=home_dir)
-    )
-    if not identities:
+    with track_local_cli_identity_failures() as failures:
+        package_identity = identify_package_json_scripts(command, cwd=cwd, home_dir=home_dir)
+        identities = (
+            (package_identity,)
+            if package_identity is not None
+            else identify_unlisted_cli_identities(command, cwd=cwd, home_dir=home_dir)
+        )
+    # A failed derivation can mistake a script for a plain binary; record nothing.
+    if failures or not identities:
         return
     recorder = getattr(store, "record_local_cli_observation", None)
     if not callable(recorder):
@@ -55,16 +58,32 @@ def apply_local_cli_grant(
     home_dir: Path | None,
     current_action: GuardAction,
 ) -> GuardAction:
-    matched = matching_local_cli_grant(
-        store=store,
-        command=command,
-        cwd=cwd,
-        home_dir=home_dir,
-        current_action=current_action,
-    )
+    try:
+        matched = matching_local_cli_grant(
+            store=store,
+            command=command,
+            cwd=cwd,
+            home_dir=home_dir,
+            current_action=current_action,
+        )
+    except LocalCliIdentityUnavailableError:
+        return unverified_local_cli_action(store, current_action)
     if matched is None:
         return current_action
     _identity, state = matched
     if state == "allowed":
         return "allow"
     return "block"
+
+
+def unverified_local_cli_action(store: object, current_action: GuardAction) -> GuardAction:
+    """Hold an otherwise allowed command for review while a block rule might apply."""
+
+    if current_action not in {"allow", "warn"}:
+        return current_action
+    probe = getattr(store, "has_local_cli_block_rules", None)
+    try:
+        has_blocks = bool(probe()) if callable(probe) else False
+    except Exception:
+        has_blocks = True
+    return "review" if has_blocks else current_action
