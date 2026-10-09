@@ -140,7 +140,8 @@ def test_wheel_cache_requires_a_matching_digest(tmp_path: Path, monkeypatch: pyt
     monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "arm64")
     tag = "macosx_11_0_arm64"
     store = tmp_path / "cache" / "wheels" / f"{SHA}-{tag}"
-    store.mkdir(parents=True)
+    for level in (store.parent.parent, store.parent, store):
+        level.mkdir(mode=0o700)
     wheel_bytes = b"fake wheel bytes"
     (store / f"hol_guard-1.0.0-{tag}.whl").write_bytes(wheel_bytes)
     calls: list[list[str]] = []
@@ -315,6 +316,7 @@ def test_a_missing_summary_or_failed_verification_never_qualifies(
     assert result["attempts"][0]["error"] and result["qualified"] is False
 
     cases = [{"id": "a", "outcome": "pass", "reason": "ok"}]
+    (tmp_path / "second").mkdir(mode=0o700)
     _fake_setup(monkeypatch, tmp_path / "second", [_summary(cases, True)])
     import ci.gauntlet.verify as verify
 
@@ -328,3 +330,92 @@ def test_driver_repo_is_the_checkout_root():
     from ci.gauntlet import qualify
 
     assert (qualify.REPO / "ci" / "gauntlet" / "qualify.py").is_file()
+
+
+def test_private_dir_requires_an_owned_mode_700_directory(tmp_path: Path) -> None:
+    path = tmp_path / "private"
+    assert qualify_setup.private_dir(path) == path
+    assert (path.stat().st_mode & 0o777) == 0o700
+    link = tmp_path / "link"
+    link.symlink_to(path, target_is_directory=True)
+    with pytest.raises(RuntimeError, match="real directory"):
+        qualify_setup.private_dir(link)
+    shared = tmp_path / "shared"
+    shared.mkdir(mode=0o770)
+    with pytest.raises(RuntimeError, match="not private"):
+        qualify_setup.private_dir(shared)
+
+
+def test_prepare_failure_still_cleans_the_candidate_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_setup(monkeypatch, tmp_path, [_summary([], True)])
+
+    def fake_prepare(_repo: Path, _sha: str, run_root: Path, _wheel: Path) -> Path:
+        (run_root / "candidate").mkdir(parents=True)
+        raise RuntimeError("wheel install failed")
+
+    removed: list[Path] = []
+    monkeypatch.setattr(qualify, "prepare_candidate", fake_prepare)
+    monkeypatch.setattr(qualify, "_remove_candidate", lambda _r, candidate: removed.append(candidate) or True)
+    assert qualify.main(_args(tmp_path)) == 1
+    assert removed == [(tmp_path / "run" / "candidate").resolve()]
+    result = json.loads((tmp_path / "run" / "qualification.json").read_text())
+    assert result["cleanup"] == ["candidate-worktree-removed"]
+    assert "wheel install failed" in result["error"]
+
+
+def test_remove_candidate_tolerates_a_missing_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pruned: list[list[str]] = []
+    monkeypatch.setattr(qualify_setup, "git", lambda _r, *args: pruned.append(list(args)) or "")
+    assert qualify._remove_candidate(tmp_path, tmp_path / "missing") is True
+    assert pruned == [["worktree", "prune"]]
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("max_load", float("nan")),
+        ("max_load", float("inf")),
+        ("max_load", float("-inf")),
+        ("max_load_wait", float("nan")),
+        ("max_load_wait", float("inf")),
+    ],
+)
+def test_driver_rejects_non_finite_load_bounds(tmp_path: Path, field: str, value: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        qualify.main(_args(tmp_path, **{field: value}))
+
+
+@pytest.mark.parametrize(
+    "flag, value",
+    [
+        ("--max-load", "nan"),
+        ("--max-load", "inf"),
+        ("--max-load-wait", "nan"),
+        ("--max-load-wait", "inf"),
+    ],
+)
+def test_run_cli_rejects_non_finite_load_bounds(tmp_path: Path, flag: str, value: str) -> None:
+    argv = [
+        sys.executable,
+        "-m",
+        "ci.gauntlet",
+        "run",
+        "--expected-source-sha",
+        "a" * 40,
+        "--output",
+        str(tmp_path / "o"),
+        "--provider-url",
+        "https://x",
+        "--model",
+        "m",
+        "--provider-identity",
+        "i",
+        flag,
+        value,
+    ]
+    if flag == "--max-load-wait":
+        argv += ["--max-load", "8"]
+    env = {**os.environ, "GUARD_GAUNTLET_API_KEY": "k"}
+    result = subprocess.run(argv, cwd=qualify.REPO, env=env, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 2
+    assert "finite" in result.stderr

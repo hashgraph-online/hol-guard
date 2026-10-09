@@ -12,12 +12,15 @@ import json
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
+from .fixtures import digest_file
 
 REQUIRED_TOOLS = ("git", "uv", "bun", "npm", "rg", "curl")
 GNU_SED_DIRS = (
@@ -61,12 +64,25 @@ def git_show(repo: Path, sha: str, path: str) -> bytes:
     )
 
 
+def private_dir(path: Path) -> Path:
+    """Create or verify a directory only this user can enter, rejecting shared parents."""
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = os.lstat(path)
+    if not stat.S_ISDIR(info.st_mode):
+        raise RuntimeError("not a real directory: " + str(path))
+    if info.st_uid != os.getuid():
+        raise RuntimeError("not owned by this user: " + str(path))
+    if info.st_mode & 0o077:
+        raise RuntimeError("directory is not private to this user: " + str(path))
+    return path
+
+
 @contextmanager
 def file_lock(path: Path) -> Iterator[None]:
     """Serialize cache writers across driver processes; POSIX flock only."""
     import fcntl
 
-    path.parent.mkdir(parents=True, exist_ok=True)
+    private_dir(path.parent)
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
@@ -140,10 +156,12 @@ def ensure_sdk(cache_root: Path, repo: Path, sha: str, log: Path) -> dict[str, A
     """One pinned Oh My Pi dependency tree per candidate lock digest, built under flock."""
     package = git_show(repo, sha, f"{LOCK_DIR}/package.json")
     lock = git_show(repo, sha, f"{LOCK_DIR}/package-lock.json")
-    key = hashlib.sha256(lock).hexdigest()
-    root = cache_root / "sdk" / key
+    lock_digest = hashlib.sha256(lock).hexdigest()
+    private_dir(cache_root / "sdk")
+    private_dir(cache_root / "locks")
+    root = cache_root / "sdk" / lock_digest
     pinned = json.loads(package)["dependencies"]["@oh-my-pi/pi-coding-agent"]
-    with file_lock(cache_root / "locks" / f"sdk-{key}.lock"):
+    with file_lock(cache_root / "locks" / f"sdk-{lock_digest}.lock"):
         if not (root / ".complete").is_file():
             shutil.rmtree(root, ignore_errors=True)
             root.mkdir(parents=True)
@@ -156,7 +174,7 @@ def ensure_sdk(cache_root: Path, repo: Path, sha: str, log: Path) -> dict[str, A
             if installed != pinned:
                 raise RuntimeError("installed Oh My Pi version differs from the candidate pin")
             (root / ".complete").touch()
-    return {"root": str(root), "lock_sha256": key, "omp_version": pinned}
+    return {"root": str(root), "lock_sha256": lock_digest, "omp_version": pinned}
 
 
 def macos_platform() -> tuple[str, str, str]:
@@ -174,11 +192,11 @@ def macos_platform() -> tuple[str, str, str]:
 def _cached_wheel(store: Path) -> dict[str, Any] | None:
     """Reuse a cached wheel only when its recorded digest matches its bytes."""
     wheels = list(store.glob("*.whl"))
-    digest_file = store / "wheel.sha256"
-    if len(wheels) != 1 or not digest_file.is_file():
+    digest_record = store / "wheel.sha256"
+    if len(wheels) != 1 or not digest_record.is_file():
         return None
-    digest = hashlib.sha256(wheels[0].read_bytes()).hexdigest()
-    if digest_file.read_text(encoding="utf-8").strip() != digest:
+    digest = digest_file(wheels[0])
+    if digest_record.read_text(encoding="utf-8").strip() != digest:
         return None
     return {"path": str(wheels[0]), "sha256": digest, "cached": True}
 
@@ -209,7 +227,7 @@ def _build_wheel(store: Path, repo: Path, sha: str, tag: str, target: str, deplo
                 env=git_env,
                 log=setup_log,
             )
-        env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+        env = {name: value for name, value in os.environ.items() if name != "VIRTUAL_ENV"}
         run_logged(
             ["uv", "sync", "--frozen", "--no-dev", "--group", "ci-test", "--no-install-project", "--python", "3.12"],
             cwd=worktree,
@@ -241,7 +259,7 @@ def _build_wheel(store: Path, repo: Path, sha: str, tag: str, target: str, deplo
             stale.unlink()
         destination = store / built[0].name
         shutil.copy2(built[0], destination)
-        (store / "wheel.sha256").write_text(hashlib.sha256(destination.read_bytes()).hexdigest() + "\n")
+        (store / "wheel.sha256").write_text(digest_file(destination) + "\n")
 
 
 def ensure_wheel(
@@ -249,8 +267,9 @@ def ensure_wheel(
 ) -> dict[str, Any]:
     """The tested commit's platform wheel: supplied, cache-hit, or built under one host lock."""
     if wheel is not None:
-        return {"path": str(wheel), "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(), "cached": False}
+        return {"path": str(wheel), "sha256": digest_file(wheel), "cached": False}
     tag, target, deployment = macos_platform()
+    private_dir(cache_root / "wheels")
     store = cache_root / "wheels" / f"{sha}-{tag}"
     store.mkdir(parents=True, exist_ok=True)
     cached = _cached_wheel(store)

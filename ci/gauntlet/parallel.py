@@ -141,23 +141,45 @@ class HostSlots:
 
     One ``slot-<i>.lock`` file per slot is ``flock``'d for the life of a case worker;
     the kernel frees the lease when the holder's process dies, so crashes cannot pin
-    a slot forever.
+    a slot forever. The pool size lives in ``capacity`` under the slot directory:
+    every new requester overwrites it, so the most recently requested count wins
+    and holders of slots above a lowered cap simply finish their cases.
     """
 
     def __init__(self, directory: Path, count: int):
-        """Create the private slot directory and bound the shared slot inventory."""
+        """Create the private slot directory and publish the shared slot inventory."""
         if os.name != "posix":
             raise ValueError("host slots require a POSIX host")
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= MAX_SLOTS:
             raise ValueError(f"host slot count must be an integer from 1 to {MAX_SLOTS}")
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.directory = directory
-        self.paths = tuple(directory / f"slot-{index}.lock" for index in range(count))
+        self.count = count
+        staging = directory / f".capacity-{os.getpid()}.tmp"
+        fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, f"{count}\n".encode("ascii"))
+        finally:
+            os.close(fd)
+        try:
+            os.replace(staging, directory / "capacity")
+        except BaseException:
+            with suppress(OSError):
+                staging.unlink()
+            raise
+
+    def _capacity(self) -> int:
+        """The most recently requested pool size, or this instance's own count."""
+        try:
+            value = int((self.directory / "capacity").read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            value = self.count
+        return max(1, min(MAX_SLOTS, value))
 
     def try_acquire(self) -> Lease | None:
-        """Take the first free slot without blocking, or return None."""
-        for path in self.paths:
-            fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        """Take the first free slot below the current capacity, or return None."""
+        for index in range(self._capacity()):
+            fd = os.open(self.directory / f"slot-{index}.lock", os.O_RDWR | os.O_CREAT, 0o600)
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:

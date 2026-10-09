@@ -48,16 +48,21 @@ def scenario_fixture_name(scenario_id: str) -> str:
         raise ValueError("unknown scenario id: " + scenario_id) from None
 
 
-def create_run_root(parent: Path) -> Path:
-    """Allocate a short copy-safe run directory; never reuse a pre-existing entry."""
+def create_numbered_dir(parent: Path, prefix: str = "") -> Path:
+    """Allocate a short copy-safe directory; never reuse a pre-existing entry."""
     for number in range(1, 1000):
-        root = parent / f"run-{number}"
+        path = parent / f"{prefix}{number}"
         try:
-            root.mkdir(mode=0o700)
-            return root.resolve()
+            path.mkdir(mode=0o700)
+            return path.resolve()
         except FileExistsError:
             continue
-    raise RuntimeError("no free run directory under " + str(parent))
+    raise RuntimeError("no free numbered directory under " + str(parent))
+
+
+def create_run_root(parent: Path) -> Path:
+    """Allocate a short copy-safe run directory; never reuse a pre-existing entry."""
+    return create_numbered_dir(parent, "run-")
 
 
 @dataclass(frozen=True)

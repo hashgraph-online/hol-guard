@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import platform
 import shutil
@@ -24,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from . import qualify_setup
+from .fixtures import create_numbered_dir
 from .parallel import terminate_as_exit
 from .source_identity import SHA
 
@@ -103,7 +105,7 @@ def attempt_argv(
 
 def attempt_env(base: dict[str, str], *, venv_bin: Path, sdk_root: Path, gnu_sed: Path | None = None) -> dict[str, str]:
     """Strip provider credentials and put the candidate venv, SDK and GNU sed first."""
-    env = {key: value for key, value in base.items() if key not in PROVIDER_ENV and key != "VIRTUAL_ENV"}
+    env = {name: value for name, value in base.items() if name not in PROVIDER_ENV and name != "VIRTUAL_ENV"}
     parts = [str(venv_bin), str(sdk_root / "node_modules" / ".bin")]
     if gnu_sed is not None:
         parts.insert(0, str(gnu_sed))
@@ -113,15 +115,7 @@ def attempt_env(base: dict[str, str], *, venv_bin: Path, sdk_root: Path, gnu_sed
 
 def attempt_work_root(parent: Path) -> Path:
     """Allocate a short copy-safe attempt workspace; never reuse an existing entry."""
-    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for number in range(1, 1000):
-        work = parent / str(number)
-        try:
-            work.mkdir(mode=0o700)
-            return work.resolve()
-        except FileExistsError:
-            continue
-    raise RuntimeError("no free attempt work directory under " + str(parent))
+    return create_numbered_dir(qualify_setup.private_dir(parent))
 
 
 def summarize_attempt(
@@ -188,7 +182,7 @@ def prepare_candidate(repo: Path, sha: str, run_root: Path, wheel: Path) -> Path
         env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1"},
         log=setup_log,
     )
-    env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+    env = {name: value for name, value in os.environ.items() if name != "VIRTUAL_ENV"}
     qualify_setup.run_logged(
         ["uv", "sync", "--frozen", "--no-dev", "--group", "ci-test", "--no-install-project", "--python", "3.12"],
         cwd=candidate,
@@ -234,16 +228,18 @@ def prepare_candidate(repo: Path, sha: str, run_root: Path, wheel: Path) -> Path
 
 def _remove_candidate(repo: Path, candidate: Path) -> bool:
     """Remove only the worktree this driver created, then prune stale records."""
-    result = subprocess.run(
+    subprocess.run(
         ["git", "worktree", "remove", "--force", str(candidate)],
         cwd=repo,
         env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1"},
         capture_output=True,
         text=True,
     )
+    if candidate.exists():
+        shutil.rmtree(candidate, ignore_errors=True)
     with suppress(Exception):
         qualify_setup.git(repo, "worktree", "prune")
-    return result.returncode == 0
+    return not candidate.exists()
 
 
 def _read_summary(evidence: Path) -> dict[str, Any] | None:
@@ -271,14 +267,15 @@ def main(args: Any) -> int:
         raise ValueError("--jobs must be from 1 to 8")
     if not 1 <= args.host_slots <= 64:
         raise ValueError("--host-slots must be from 1 to 64")
-    if not args.max_load > 0:
-        raise ValueError("--max-load must be positive")
-    if args.max_load_wait < 0:
-        raise ValueError("--max-load-wait must be >= 0")
+    if not math.isfinite(args.max_load) or not args.max_load > 0:
+        raise ValueError("--max-load must be a positive finite number")
+    if not math.isfinite(args.max_load_wait) or args.max_load_wait < 0:
+        raise ValueError("--max-load-wait must be a finite number >= 0")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_root = (args.run_root or Path("/tmp/hol-guard-gauntlet") / f"{sha[:12]}-{stamp}").resolve()
+    run_root = (args.run_root or Path(f"/tmp/hol-guard-gauntlet-{os.getuid()}") / f"{sha[:12]}-{stamp}").resolve()
     if run_root.exists():
         raise ValueError("run root must not already exist: " + str(run_root))
+    qualify_setup.private_dir(run_root.parent)
     run_root.mkdir(mode=0o700, parents=True)
     (run_root / "logs").mkdir()
 
@@ -292,7 +289,7 @@ def main(args: Any) -> int:
     error = None
     try:
         with terminate_as_exit():
-            args.cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            qualify_setup.private_dir(args.cache_root)
             info = qualify_setup.preflight(REPO)
             progress(f"preflight trusted_verifier={info['trusted_verifier']}")
             qualify_setup.ensure_commit(REPO, sha)
@@ -311,6 +308,7 @@ def main(args: Any) -> int:
             progress(f"sdk {sdk_info['omp_version']} {sdk_info['lock_sha256'][:12]}")
             wheel_info = qualify_setup.ensure_wheel(args.cache_root, REPO, sha, run_root, wheel=args.wheel)
             progress(f"wheel {wheel_info['sha256'][:12]} cached={wheel_info['cached']}")
+            candidate = run_root / "candidate"
             candidate = prepare_candidate(REPO, sha, run_root, Path(wheel_info["path"]))
             progress("candidate installed")
             for k in range(1, args.attempts + 1):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import signal
 import sys
@@ -143,11 +144,15 @@ def main() -> int:
     )
     qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
     qualify.add_argument("--cache-root", type=Path, default=Path.home() / ".cache" / "hol-guard-gauntlet")
-    qualify.add_argument("--run-root", type=Path, help="New directory for this driver's work and evidence")
+    qualify.add_argument(
+        "--run-root",
+        type=Path,
+        help="New directory for this driver's work and evidence (default /tmp/hol-guard-gauntlet-<uid>/<sha>-<stamp>)",
+    )
     qualify.add_argument(
         "--work-parent",
         type=Path,
-        default=Path("/tmp/hol-guard-gauntlet/w"),
+        default=Path(f"/tmp/hol-guard-gauntlet-{os.getuid()}/w"),
         help="Parent for the short per-attempt fixture work directories",
     )
     qualify.add_argument("--wheel", type=Path, help="Prebuilt native wheel; required off macOS")
@@ -243,12 +248,12 @@ def main() -> int:
             raise ValueError(f"--host-slots must be an integer from 1 to {MAX_SLOTS}")
         if args.host_slots is not None and os.name == "nt":
             raise ValueError("--host-slots requires a POSIX host")
-        if args.max_load is not None and not args.max_load > 0:
-            raise ValueError("--max-load must be positive")
+        if args.max_load is not None and not (math.isfinite(args.max_load) and args.max_load > 0):
+            raise ValueError("--max-load must be a positive finite number")
         if args.max_load is not None and os.name == "nt":
             raise ValueError("--max-load requires a POSIX host")
-        if args.max_load_wait is not None and args.max_load_wait < 0:
-            raise ValueError("--max-load-wait must be >= 0")
+        if args.max_load_wait is not None and not (math.isfinite(args.max_load_wait) and args.max_load_wait >= 0):
+            raise ValueError("--max-load-wait must be a finite number >= 0")
         if args.max_load_wait is not None and args.max_load is None:
             raise ValueError("--max-load-wait requires --max-load")
         api_key = os.environ.pop(args.api_key_env, None)
