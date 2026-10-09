@@ -8691,6 +8691,10 @@ class GuardDaemonServer:
         try:
             self._isolation_provider_registry = load_managed_provider_registry()
             _validate_dashboard_bundle()
+            # Pin this process's identity before serving. Computing it lazily
+            # after an in-place upgrade would advertise the replacement
+            # install's fingerprint for code that is still the old generation.
+            current_guard_daemon_runtime_fingerprint()
         except BaseException:
             self._diagnostics.record_exception("daemon_initialization_failed")
             self._diagnostics.close(timeout_seconds=0.5)
