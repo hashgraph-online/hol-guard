@@ -111,6 +111,19 @@ def attempt_env(base: dict[str, str], *, venv_bin: Path, sdk_root: Path, gnu_sed
     return env
 
 
+def attempt_work_root(parent: Path) -> Path:
+    """Allocate a short copy-safe attempt workspace; never reuse an existing entry."""
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for number in range(1, 1000):
+        work = parent / str(number)
+        try:
+            work.mkdir(mode=0o700)
+            return work.resolve()
+        except FileExistsError:
+            continue
+    raise RuntimeError("no free attempt work directory under " + str(parent))
+
+
 def summarize_attempt(
     attempt: int, evidence: Path, exit_code: int, elapsed: float, summary: dict[str, Any] | None
 ) -> dict[str, Any]:
@@ -302,6 +315,7 @@ def main(args: Any) -> int:
             progress("candidate installed")
             for k in range(1, args.attempts + 1):
                 evidence = run_root / "evidence" / f"attempt-{k}"
+                work = attempt_work_root(args.work_parent)
                 argv = attempt_argv(
                     python=candidate / ".venv" / "bin" / "python",
                     effort=args.effort,
@@ -313,7 +327,7 @@ def main(args: Any) -> int:
                     sha=sha,
                     candidate_sha=args.candidate_sha,
                     evidence=evidence,
-                    work_root=run_root / f"work-{k}",
+                    work_root=work,
                     timeout=args.timeout,
                     max_rounds=args.max_inference_rounds,
                 )
@@ -327,6 +341,7 @@ def main(args: Any) -> int:
                 t0 = time.monotonic()
                 rc = run_attempt(argv, cwd=candidate, env=env, log=run_root / "logs" / f"attempt-{k}.log")
                 record = summarize_attempt(k, evidence, rc, time.monotonic() - t0, _read_summary(evidence))
+                record["work_root"] = str(work)
                 attempts.append(record)
                 progress(f"attempt {k} exit={rc} pass={record['pass']}")
                 if "error" in record:
@@ -362,11 +377,13 @@ def main(args: Any) -> int:
                 removed = False
             cleanup.append("candidate-worktree-removed" if removed else "candidate-worktree-kept")
         for record in attempts:
-            work = run_root / f"work-{record['attempt']}"
+            work = Path(record["work_root"])
             if record.get("pass") and not args.keep_work and work.exists():
                 shutil.rmtree(work, ignore_errors=True)
                 cleanup.append(f"work-{record['attempt']}-removed")
         kept = sorted(str(path) for path in run_root.iterdir())
+        kept.extend(str(Path(record["work_root"])) for record in attempts if Path(record["work_root"]).exists())
+        kept.sort()
         result = {
             "sha": sha,
             "candidate_sha": args.candidate_sha,

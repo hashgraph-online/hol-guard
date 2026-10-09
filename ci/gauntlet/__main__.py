@@ -144,6 +144,12 @@ def main() -> int:
     qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
     qualify.add_argument("--cache-root", type=Path, default=Path.home() / ".cache" / "hol-guard-gauntlet")
     qualify.add_argument("--run-root", type=Path, help="New directory for this driver's work and evidence")
+    qualify.add_argument(
+        "--work-parent",
+        type=Path,
+        default=Path("/tmp/hol-guard-gauntlet/w"),
+        help="Parent for the short per-attempt fixture work directories",
+    )
     qualify.add_argument("--wheel", type=Path, help="Prebuilt native wheel; required off macOS")
     qualify.add_argument("--sdk-root", type=Path, help="Pinned SDK directory; skips the lock-keyed SDK cache")
     qualify.add_argument("--keep-work", action="store_true", help="Keep passing attempts' work roots")

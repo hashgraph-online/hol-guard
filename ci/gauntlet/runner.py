@@ -9,7 +9,6 @@ import platform
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,7 +33,7 @@ from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load
 from .cleanup import cleanup_case_resources
 from .evidence import assess_case, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
-from .fixtures import create_fixture, digest_file, filesystem_checks, scenario_fixture_name
+from .fixtures import create_fixture, create_run_root, digest_file, filesystem_checks, scenario_fixture_name
 from .host_process import clean_environment, run_process
 from .input_evidence import (
     public_native_extension_evidence,
@@ -330,7 +329,7 @@ def run_suite(
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
     parent = (work_root or output.parent).resolve()
     parent.mkdir(parents=True, exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="guard-gauntlet-", dir=parent)).resolve()
+    root = create_run_root(parent)
     binding = source_identity(REPO, candidate_sha)
     source_sha = binding["tested_source_sha"]
     dirty = binding["source_dirty"]

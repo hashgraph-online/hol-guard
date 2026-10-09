@@ -8,6 +8,7 @@ import secrets
 import shlex
 import subprocess
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
@@ -31,9 +32,32 @@ SOURCE_FILES = {
 }
 
 
+@lru_cache(maxsize=1)
+def _scenario_indices() -> dict[str, int]:
+    # Deferred: catalog.py already imports fixtures.py at module load.
+    from .catalog import load_catalog
+
+    return {scenario.id: index for index, scenario in enumerate(load_catalog(), start=1)}
+
+
 def scenario_fixture_name(scenario_id: str) -> str:
     """Use compact opaque names so models can copy absolute fixture paths reliably."""
-    return "case-" + hashlib.sha256(scenario_id.encode("utf-8")).hexdigest()[:16]
+    try:
+        return f"case-{_scenario_indices()[scenario_id]:02d}"
+    except KeyError:
+        raise ValueError("unknown scenario id: " + scenario_id) from None
+
+
+def create_run_root(parent: Path) -> Path:
+    """Allocate a short copy-safe run directory; never reuse a pre-existing entry."""
+    for number in range(1, 1000):
+        root = parent / f"run-{number}"
+        try:
+            root.mkdir(mode=0o700)
+            return root.resolve()
+        except FileExistsError:
+            continue
+    raise RuntimeError("no free run directory under " + str(parent))
 
 
 @dataclass(frozen=True)

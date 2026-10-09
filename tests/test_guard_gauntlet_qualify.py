@@ -179,6 +179,7 @@ def _args(tmp_path: Path, **overrides: Any) -> SimpleNamespace:
         "effort": "medium",
         "cache_root": tmp_path / "cache",
         "run_root": tmp_path / "run",
+        "work_parent": tmp_path / "w",
         "wheel": None,
         "sdk_root": tmp_path / "sdk",
         "keep_work": False,
@@ -265,6 +266,10 @@ def test_qualifying_attempt_verifies_and_returns_zero(tmp_path: Path, monkeypatc
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
     assert result["qualified"] is True and result["trusted_verifier"] is True
     assert result["attempts"][0]["pass"] is True
+    # Passing attempts remove their short work root; it stays out of `kept`.
+    assert result["attempts"][0]["work_root"] == str((tmp_path / "w" / "1").resolve())
+    assert not (tmp_path / "w" / "1").exists()
+    assert result["attempts"][0]["work_root"] not in result["kept"]
 
 
 def test_retryable_outcomes_earn_one_fresh_attempt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -274,6 +279,11 @@ def test_retryable_outcomes_earn_one_fresh_attempt(tmp_path: Path, monkeypatch: 
     )
     assert qualify.main(_args(tmp_path)) == 0
     assert len(verify_calls) == 1
+    result = json.loads((tmp_path / "run" / "qualification.json").read_text())
+    assert [Path(r["work_root"]).name for r in result["attempts"]] == ["1", "2"]
+    # The retryable first attempt's work root is kept for diagnosis; the passing one is removed.
+    assert result["attempts"][0]["work_root"] in result["kept"]
+    assert (tmp_path / "w" / "1").exists() and not (tmp_path / "w" / "2").exists()
 
 
 def test_product_outcomes_stop_without_retry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -283,6 +293,7 @@ def test_product_outcomes_stop_without_retry(tmp_path: Path, monkeypatch: pytest
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
     assert len(result["attempts"]) == 1 and result["qualified"] is False
     assert not verify_calls
+    assert result["attempts"][0]["work_root"] in result["kept"]
 
 
 def test_driver_stdout_is_exactly_one_json_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
