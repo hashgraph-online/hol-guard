@@ -89,16 +89,22 @@ def build_inventory(
     )
 
 
-def collect_inventory(root: Path) -> TestInventory:
+def collect_test_items(root: Path, *, validate_invariants: bool = False) -> list[pytest.Item]:
     collector = _NodeCollector()
-    result = pytest.main(
-        [str(root / "tests"), "--collect-only", "-p", "no:terminal", "--validate-test-invariants"],
-        plugins=[collector],
-    )
+    # Collection needs assertions, not execution's assertion-message rewriting.
+    arguments = [str(root / "tests"), "--collect-only", "--assert=plain", "-p", "no:terminal"]
+    if validate_invariants:
+        arguments.append("--validate-test-invariants")
+    result = pytest.main(arguments, plugins=[collector])
     if result != pytest.ExitCode.OK:
         raise RuntimeError(f"pytest collection failed with exit code {result}")
-    node_ids = [item.nodeid for item in collector.items]
-    markers = {item.nodeid: tuple(marker.name for marker in item.iter_markers()) for item in collector.items}
+    return collector.items
+
+
+def collect_inventory(root: Path) -> TestInventory:
+    items = collect_test_items(root, validate_invariants=True)
+    node_ids = [item.nodeid for item in items]
+    markers = {item.nodeid: tuple(marker.name for marker in item.iter_markers()) for item in items}
     return build_inventory(node_ids, markers)
 
 

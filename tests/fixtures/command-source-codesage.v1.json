@@ -1,0 +1,969 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "extension_id": "command.codesage",
+          "version": "1.0.0",
+          "name": "CodeSage command protection",
+          "description": "Reviews CodeSage commands that install Git hooks or change MCP server registration. doctor, status, and search are outside these rules.",
+          "action_classes": [
+            "CodeSage hook installation command",
+            "CodeSage MCP registration command",
+            "CodeSage MCP unregistration command"
+          ],
+          "risk_classes": [
+            "destructive_shell"
+          ],
+          "safer_alternatives": [
+            "Inspect existing Git hooks and review codesage install-hooks --help before installing hooks.",
+            "Review the target agent configuration and the scope of --global before registering CodeSage.",
+            "Review the target agent configuration and the scope of --global before unregistering CodeSage."
+          ],
+          "reference_urls": [
+            "https://github.com/iliaal/codesage"
+          ],
+          "required": false,
+          "source": "built-in",
+          "aliases": [],
+          "dependencies": [],
+          "conflicts": [],
+          "ecosystem_ids": [
+            "codesage"
+          ],
+          "executables": [
+            "codesage",
+            "codesage.cmd",
+            "codesage.exe"
+          ],
+          "project_markers": [],
+          "publisher": {
+            "id": "community.iliaal",
+            "display_name": "Ilia Alshanetsky",
+            "url": "https://github.com/iliaal"
+          },
+          "homepage": "https://github.com/iliaal/codesage",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "Apache-2.0",
+          "permissions": [
+            {
+              "permission_id": "command.codesage.permission.install-hooks",
+              "implementation_version": "1.0.0",
+              "label": "Install CodeSage Git hooks",
+              "description": "Reviews installation of CodeSage Git hooks, including the optional repository leak-check hook.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "CodeSage hook installation command"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Inspect existing Git hooks and review codesage install-hooks --help before installing hooks."
+              ],
+              "example_command": "codesage install-hooks"
+            },
+            {
+              "permission_id": "command.codesage.permission.install",
+              "implementation_version": "1.0.0",
+              "label": "Register CodeSage MCP server",
+              "description": "Reviews registration of the CodeSage MCP server in a project-local or user-level agent configuration.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "CodeSage MCP registration command"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Review the target agent configuration and the scope of --global before registering CodeSage."
+              ],
+              "example_command": "codesage install codex"
+            },
+            {
+              "permission_id": "command.codesage.permission.uninstall",
+              "implementation_version": "1.0.0",
+              "label": "Remove CodeSage MCP server",
+              "description": "Reviews removal of the CodeSage MCP server from a project-local or user-level agent configuration.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "typed_capabilities": [],
+              "action_classes": [
+                "CodeSage MCP unregistration command"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "safer_guidance": [
+                "Review the target agent configuration and the scope of --global before unregistering CodeSage."
+              ],
+              "example_command": "codesage uninstall codex"
+            }
+          ],
+          "rules": [
+            {
+              "rule_id": "command.codesage.install-hooks",
+              "rule_version": "1.0.0",
+              "permission_id": "command.codesage.permission.install-hooks",
+              "title": "CodeSage hook installation",
+              "description": "Identifies codesage install-hooks, which writes repository Git hooks that reindex the project and can install an optional leak-check hook.",
+              "severity": "medium",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "CodeSage hook installation command"
+              ],
+              "safer_alternatives": [
+                "Inspect existing Git hooks and review codesage install-hooks --help before installing hooks."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "executable.v1",
+                "config": {
+                  "executables": [
+                    "codesage",
+                    "codesage.cmd",
+                    "codesage.exe"
+                  ],
+                  "subcommands": [
+                    "install-hooks"
+                  ],
+                  "allow_leading_options": false,
+                  "leading_options_with_values": [],
+                  "interspersed_options_with_values": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--strict",
+                    "--with-leak-check",
+                    "-h"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "forbidden_flags": [],
+                  "inverse_flag_pairs": []
+                }
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "CodeSage command help",
+                  "matcher": {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "codesage",
+                        "codesage.cmd",
+                        "codesage.exe"
+                      ],
+                      "subcommands": [
+                        "install-hooks"
+                      ],
+                      "allow_leading_options": false,
+                      "leading_options_with_values": [],
+                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "--strict",
+                        "--with-leak-check",
+                        "-h"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "forbidden_flags": [],
+                      "inverse_flag_pairs": []
+                    }
+                  }
+                },
+                {
+                  "variant_id": "short-help",
+                  "title": "CodeSage command help",
+                  "matcher": {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "codesage",
+                        "codesage.cmd",
+                        "codesage.exe"
+                      ],
+                      "subcommands": [
+                        "install-hooks"
+                      ],
+                      "allow_leading_options": false,
+                      "leading_options_with_values": [],
+                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "--strict",
+                        "--with-leak-check",
+                        "-h"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "forbidden_flags": [],
+                      "inverse_flag_pairs": []
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.codesage.install",
+              "rule_version": "1.0.0",
+              "permission_id": "command.codesage.permission.install",
+              "title": "CodeSage MCP registration",
+              "description": "Identifies codesage install, which writes CodeSage MCP server registration into project-local or user-level agent configuration.",
+              "severity": "medium",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "CodeSage MCP registration command"
+              ],
+              "safer_alternatives": [
+                "Review the target agent configuration and the scope of --global before registering CodeSage."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "executable.v1",
+                "config": {
+                  "executables": [
+                    "codesage",
+                    "codesage.cmd",
+                    "codesage.exe"
+                  ],
+                  "subcommands": [
+                    "install"
+                  ],
+                  "allow_leading_options": false,
+                  "leading_options_with_values": [],
+                  "interspersed_options_with_values": [],
+                  "interspersed_flags": [
+                    "--global",
+                    "--help",
+                    "-h"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "forbidden_flags": [],
+                  "inverse_flag_pairs": []
+                }
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "CodeSage command help",
+                  "matcher": {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "codesage",
+                        "codesage.cmd",
+                        "codesage.exe"
+                      ],
+                      "subcommands": [
+                        "install"
+                      ],
+                      "allow_leading_options": false,
+                      "leading_options_with_values": [],
+                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "--global",
+                        "--help",
+                        "-h"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "forbidden_flags": [],
+                      "inverse_flag_pairs": []
+                    }
+                  }
+                },
+                {
+                  "variant_id": "short-help",
+                  "title": "CodeSage command help",
+                  "matcher": {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "codesage",
+                        "codesage.cmd",
+                        "codesage.exe"
+                      ],
+                      "subcommands": [
+                        "install"
+                      ],
+                      "allow_leading_options": false,
+                      "leading_options_with_values": [],
+                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "--global",
+                        "--help",
+                        "-h"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "forbidden_flags": [],
+                      "inverse_flag_pairs": []
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.codesage.uninstall",
+              "rule_version": "1.0.0",
+              "permission_id": "command.codesage.permission.uninstall",
+              "title": "CodeSage MCP unregistration",
+              "description": "Identifies codesage uninstall, which removes CodeSage MCP server registration from project-local or user-level agent configuration.",
+              "severity": "medium",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "action_classes": [
+                "CodeSage MCP unregistration command"
+              ],
+              "safer_alternatives": [
+                "Review the target agent configuration and the scope of --global before unregistering CodeSage."
+              ],
+              "default_mode": "review",
+              "matcher": {
+                "op": "executable.v1",
+                "config": {
+                  "executables": [
+                    "codesage",
+                    "codesage.cmd",
+                    "codesage.exe"
+                  ],
+                  "subcommands": [
+                    "uninstall"
+                  ],
+                  "allow_leading_options": false,
+                  "leading_options_with_values": [],
+                  "interspersed_options_with_values": [],
+                  "interspersed_flags": [
+                    "--global",
+                    "--help",
+                    "-h"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "forbidden_flags": [],
+                  "inverse_flag_pairs": []
+                }
+              },
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "CodeSage command help",
+                  "matcher": {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "codesage",
+                        "codesage.cmd",
+                        "codesage.exe"
+                      ],
+                      "subcommands": [
+                        "uninstall"
+                      ],
+                      "allow_leading_options": false,
+                      "leading_options_with_values": [],
+                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "--global",
+                        "--help",
+                        "-h"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "forbidden_flags": [],
+                      "inverse_flag_pairs": []
+                    }
+                  }
+                },
+                {
+                  "variant_id": "short-help",
+                  "title": "CodeSage command help",
+                  "matcher": {
+                    "op": "executable.v1",
+                    "config": {
+                      "executables": [
+                        "codesage",
+                        "codesage.cmd",
+                        "codesage.exe"
+                      ],
+                      "subcommands": [
+                        "uninstall"
+                      ],
+                      "allow_leading_options": false,
+                      "leading_options_with_values": [],
+                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "--global",
+                        "--help",
+                        "-h"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "forbidden_flags": [],
+                      "inverse_flag_pairs": []
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mcp_sources": [],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
+      "classes": {
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ],
+        "external": [
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.codesage",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.keibidrop",
+          "command.kranz",
+          "command.mcp-asdecided",
+          "command.mcp-contribos",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-loomdesk",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge"
+        ]
+      }
+    },
+    "base": "packaged"
+  },
+  "cases": [
+    {
+      "id": "install-hooks",
+      "command": "codesage install-hooks",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-hooks-flags",
+      "command": "codesage install-hooks --with-leak-check --strict",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-hooks-exe",
+      "command": "codesage.exe install-hooks",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-hooks-cmd",
+      "command": "codesage.cmd install-hooks",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-hooks-path",
+      "command": "\"/opt/Code Sage/codesage\" install-hooks",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-agent",
+      "command": "codesage install codex",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-global",
+      "command": "codesage install --global all",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-quoted",
+      "command": "codesage install \"codex\"",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-unknown-option",
+      "command": "codesage install codex --unknown",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-unknown-with-help",
+      "command": "codesage install codex --unknown --help",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-end-of-options-help",
+      "command": "codesage install -- --help",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-agent",
+      "command": "codesage uninstall opencode --global",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.uninstall",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-hooks-help",
+      "command": "codesage install-hooks --help",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-hooks-short-help",
+      "command": "codesage install-hooks -h",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-help",
+      "command": "codesage install --help",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "install-help-with-known-flag",
+      "command": "codesage install codex --global --help",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-help",
+      "command": "codesage uninstall --help",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "uninstall-short-help",
+      "command": "codesage uninstall -h",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.uninstall",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "doctor-outside-rules",
+      "command": "codesage doctor",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "status-outside-rules",
+      "command": "codesage status --json",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "search-outside-rules",
+      "command": "codesage search \"install hooks\"",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "root-help-outside-rules",
+      "command": "codesage --help",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "version-outside-rules",
+      "command": "codesage --version",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "similar-executable",
+      "command": "other-codesage install codex",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "extension-inactive",
+      "command": "codesage install-hooks",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "permission-disabled",
+      "command": "codesage install-hooks",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [
+        "command.codesage.permission.install-hooks"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.codesage.install-hooks",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "install-after-help",
+      "command": "codesage install --help && codesage install codex",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "uninstall-after-status",
+      "command": "codesage status; codesage uninstall all",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.uninstall",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "install-pipeline",
+      "command": "codesage install codex | cat",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "exec-stays-blocked",
+      "command": "exec codesage install codex",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "xargs-help-stays-blocked",
+      "command": "xargs -n 1 codesage install codex --help",
+      "enabled_extensions": [
+        "command.codesage"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.codesage.install",
+      "expected_effective_segments": []
+    }
+  ]
+}

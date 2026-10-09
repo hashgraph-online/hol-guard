@@ -10,6 +10,8 @@ from typing import Any
 CREATE_SUSPENDED = 0x00000004
 _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+_SYNCHRONIZE = 0x00100000
+_INFINITE = 0xFFFFFFFF
 
 
 class _BasicLimitInformation(ctypes.Structure):
@@ -112,3 +114,23 @@ class KillOnCloseJob:
         if handle is not None:
             # Closing the last handle also kills anything still in the job.
             self._kernel32.CloseHandle(handle)
+
+
+def wait_for_process_exit(pid: int) -> None:
+    """Block until process ``pid`` exits; return at once if it cannot be opened.
+
+    The open handle pins the process object, so a reused PID cannot stand in for it.
+    """
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    handle = kernel32.OpenProcess(_SYNCHRONIZE, False, pid)
+    if not handle:
+        return
+    try:
+        kernel32.WaitForSingleObject(handle, _INFINITE)
+    finally:
+        kernel32.CloseHandle(handle)

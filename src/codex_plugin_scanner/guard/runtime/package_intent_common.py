@@ -127,32 +127,37 @@ class PackageIntent:
         return payload
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, object]) -> PackageIntent:
-        """Decode a public projection or a private native execution payload.
-
-        Private command tokens retain exact acquisition spelling; public
-        projections use the redacted command tokens.
-        """
+    def from_dict(
+        cls,
+        payload: Mapping[str, object],
+        *,
+        runtime_private_metadata: Mapping[str, object] | None = None,
+    ) -> PackageIntent:
+        """Hydrate exact private targets and argv without rehashing redacted sources."""
 
         if not isinstance(payload.get("package_manager"), str):
             raise ValueError("package intent payload missing package_manager")
         intent_kind = payload.get("intent_kind")
         if intent_kind not in ("install", "execute", "sync"):
             raise ValueError("package intent payload missing intent_kind")
+        targets = _package_intent_targets_from_dict(payload.get("targets"), runtime_private_metadata)
         redacted_command = payload.get("redacted_command")
-        command_tokens = payload.get("command_tokens")
-        if not isinstance(command_tokens, (list, tuple)) and isinstance(redacted_command, str):
-            command_tokens = shlex.split(redacted_command)
+        if runtime_private_metadata is not None:
+            command_tokens = runtime_private_metadata.get("command_tokens")
+            if not isinstance(command_tokens, (list, tuple)) or any(
+                not isinstance(token, str) for token in command_tokens
+            ):
+                raise ValueError("package intent exact command metadata missing")
+        else:
+            command_tokens = payload.get("command_tokens")
+            if not isinstance(command_tokens, (list, tuple)) and isinstance(redacted_command, str):
+                command_tokens = shlex.split(redacted_command)
         return cls(
             package_manager=str(payload["package_manager"]),
             intent_kind=cast(IntentKind, intent_kind),
             command_tokens=_str_tuple(command_tokens),
             redacted_command=str(redacted_command) if isinstance(redacted_command, str) else "",
-            targets=tuple(
-                evidence
-                for evidence in (_package_intent_target_from_dict(item) for item in _dict_items(payload.get("targets")))
-                if evidence is not None
-            ),
+            targets=targets,
             manifest_paths=_str_tuple(payload.get("manifest_paths")),
             lockfile_paths=_str_tuple(payload.get("lockfile_paths")),
             flags=_str_tuple(payload.get("flags")),
@@ -260,6 +265,46 @@ def _local_execution_evidence_from_dict(value: object) -> LocalPackageExecutionE
         ),
         typescript_launch=_typescript_launch_evidence_from_dict(value.get("typescript_launch")),
     )
+
+
+def _package_intent_targets_from_dict(
+    public_targets: object,
+    runtime_private_metadata: Mapping[str, object] | None,
+) -> tuple[PackageIntentTarget, ...]:
+    targets: list[PackageIntentTarget] = []
+    if runtime_private_metadata is None:
+        for public_target in _dict_items(public_targets):
+            target = _package_intent_target_from_dict(public_target)
+            if target is None:
+                continue
+            expected = target.to_dict()
+            if any(
+                key in public_target and public_target[key] != expected.get(key)
+                for key in ("raw_spec_hash", "source_url_hash")
+            ):
+                raise ValueError("package intent exact target metadata missing")
+            targets.append(target)
+        return tuple(targets)
+
+    private_targets = runtime_private_metadata.get("package_targets")
+    if (
+        not isinstance(public_targets, (list, tuple))
+        or not isinstance(private_targets, (list, tuple))
+        or len(private_targets) != len(public_targets)
+    ):
+        raise ValueError("package intent private target integrity invalid")
+    for private_target, public_target in zip(private_targets, public_targets, strict=True):
+        target = _package_intent_target_from_dict(private_target)
+        if target is None or not isinstance(public_target, Mapping):
+            raise ValueError("package intent private target integrity invalid")
+        public_fields = dict(public_target)
+        extras = public_fields.get("extras")
+        if isinstance(extras, list):
+            public_fields["extras"] = tuple(extras)
+        if target.to_dict() != public_fields:
+            raise ValueError("package intent private target integrity invalid")
+        targets.append(target)
+    return tuple(targets)
 
 
 def _package_intent_target_from_dict(value: object) -> PackageIntentTarget | None:
@@ -459,8 +504,15 @@ def _fingerprint_command_shape(intent: PackageIntent) -> str:
     for target in intent.targets:
         if target.source_kind != "git":
             continue
-        for source_spelling in (target.raw_spec, target.source_url):
-            if not source_spelling:
+        public_target = target.to_dict()
+        source_spellings = (
+            target.raw_spec,
+            target.source_url,
+            public_target.get("raw_spec"),
+            public_target.get("source_url"),
+        )
+        for source_spelling in source_spellings:
+            if not isinstance(source_spelling, str) or not source_spelling:
                 continue
             tokens = [token.replace(source_spelling, "<canonical-git-source>") for token in tokens]
     return shlex.join(tokens)

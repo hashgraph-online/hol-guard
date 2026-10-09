@@ -8,7 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_vitest as vitest
-from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError, RestrictedPytestPlan
 
 
 @pytest.mark.parametrize("version, supported", [("4.1.8", True), ("3.2.0", False), ("invalid", False)])
@@ -224,4 +224,31 @@ def test_bun_cwd_resolves_before_local_dependency_preparation(tmp_path, monkeypa
     monkeypatch.setattr(vitest, "prepare_restricted_node_test", prepare)
     with pytest.raises(RestrictedPytestError, match="stop before backend"):
         vitest.prepare_restricted_vitest(["bun", *arguments, "x", "vitest", "run"], workspace=tmp_path, cwd=tmp_path)
-    assert captured == [(target.resolve(), target.resolve())]
+    # The approved workspace stays the root; --cwd only selects the working directory.
+    assert captured == [(tmp_path, target.resolve())]
+
+
+@pytest.mark.parametrize("launcher", [["bunx", "--cwd", "web"], ["bun", "--cwd", "web", "x"]])
+def test_bun_cwd_finds_vitest_hoisted_to_the_workspace_root(tmp_path, monkeypatch, launcher):
+    (tmp_path / "web").mkdir()
+    entry = tmp_path / "node_modules" / "vitest" / "vitest.mjs"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("")
+
+    def prepare(command, *, workspace, cwd):
+        return RestrictedPytestPlan(
+            profile_version="node",
+            backend="macos-seatbelt",
+            backend_executable=Path("/usr/bin/sandbox-exec"),
+            workspace=workspace.resolve(),
+            cwd=cwd,
+            command=("/usr/bin/node", "--test"),
+            executable=Path("/usr/bin/node"),
+            allowed_executables=(),
+            denied_capabilities=(),
+        )
+
+    monkeypatch.setattr(vitest, "prepare_restricted_node_test", prepare)
+    plan = vitest.prepare_restricted_vitest([*launcher, "vitest", "run"], workspace=tmp_path, cwd=tmp_path)
+    assert (plan.workspace, plan.cwd) == (tmp_path.resolve(), (tmp_path / "web").resolve())
+    assert plan.command[1] == str(entry.resolve())

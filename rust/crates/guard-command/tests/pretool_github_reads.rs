@@ -134,7 +134,7 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             ("sleep 0.01 && gh pr view 1 --json title", true),
             ("gh pr view 1 --json title; sleep 1", true),
             ("sleep 60; gh pr view 1 --json title", true),
-            ("sleep 61; gh pr view 1 --json title", false),
+            ("sleep 3601; gh pr view 1 --json title", false),
             ("sleep infinity; gh pr view 1 --json title", false),
             ("sleep 1 2; gh pr view 1 --json title", false),
             ("sleep 1; cat .env", false),

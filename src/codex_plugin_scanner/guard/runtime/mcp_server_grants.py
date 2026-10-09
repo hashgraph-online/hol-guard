@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 
 from ..models import GuardAction, GuardArtifact
 from .extension_control_contract import ExtensionControlLayer
 from .extension_trust import extension_is_active
+from .mcp_protection import package_launcher_name
 from .mcp_server_contribution import (
     catalog_id_for_mcp_id,
     direct_mcp_command_name,
@@ -18,6 +20,9 @@ from .mcp_server_contribution import (
 
 _REVIEW_ACTIONS = frozenset({"review", "require-reapproval", "warn"})
 _REMOTE_TRANSPORTS = frozenset({"http", "https", "remote", "sse", "streamable-http", "streamable_http"})
+_REGISTRY_SELECTOR = re.compile(r"[A-Za-z0-9*^~<>=|_+-][A-Za-z0-9*^~<>=|.+ _-]*", re.ASCII)
+_ARCHIVE_SELECTOR = re.compile(r"\.(?:tgz|tar(?:\.gz)?|zip|whl)$", re.IGNORECASE)
+_PACKAGE_CONFIG_ENV_PREFIXES = ("npm_config_", "yarn_", "uv_", "pip_", "pipx_")
 
 
 def apply_contributed_mcp_decision(
@@ -58,7 +63,7 @@ def apply_contributed_mcp_decision(
         )
     if current_action not in _REVIEW_ACTIONS:
         return None
-    if state == "allow" and not lockdown:
+    if state == "allow" and not lockdown and _matches_package_launch_for_allow(artifact, payload):
         return (
             "allow",
             "catalog-mcp-extension",
@@ -92,6 +97,61 @@ def matching_mcp_contribution(artifact: GuardArtifact) -> dict[str, object] | No
         elif launch.get("kind") == "remote-http" and _matches_remote_http_contribution(artifact, launch):
             return payload
     return None
+
+
+def _matches_package_launch_for_allow(artifact: GuardArtifact, payload: Mapping[str, object]) -> bool:
+    """Bind automatic allows to the reviewed launcher, source and transport.
+
+    Package-name selection remains sufficient for tightening review/block
+    defaults. Lowering policy additionally requires a stdio identity using the
+    declared launcher and an explicit default package-source token.
+    """
+    launch = payload.get("launch")
+    if not isinstance(launch, Mapping) or launch.get("kind") != "package-launcher":
+        return False
+    identity = artifact.metadata.get("mcp_server_identity")
+    if not isinstance(identity, Mapping) or "package_version" not in identity:
+        return False
+    command = identity.get("command")
+    return (
+        isinstance(command, str)
+        and "://" not in command
+        and package_launcher_name(command) == launch.get("command")
+        and identity.get("package_source") == "default"
+        and identity.get("transport") == "stdio"
+        and _registry_package_selector(identity.get("package_version"))
+        and _default_package_environment(identity.get("env_keys"))
+    )
+
+
+def _registry_package_selector(version: object) -> bool:
+    """Accept registry selectors without treating aliases or files as versions."""
+    if version is None:
+        return True
+    if not isinstance(version, str):
+        return False
+    selector = version.strip()
+    # Leading-dot directories and archive basenames select local code even
+    # without a slash or scheme; they are not registry tags.
+    return _REGISTRY_SELECTOR.fullmatch(selector) is not None and _ARCHIVE_SELECTOR.search(selector) is None
+
+
+def _default_package_environment(env_keys: object) -> bool:
+    """Require explicit environment evidence without package-manager overrides.
+
+    Manager configuration can redirect sources indirectly through config files,
+    so unreviewed manager variables keep host policy even if no argv flag exists.
+    Ordinary server environment and credentials do not change this selection.
+    """
+    if not isinstance(env_keys, (list, tuple)):
+        return False
+    for key in env_keys:
+        if not isinstance(key, str) or not key.strip():
+            return False
+        normalized = key.strip().lower()
+        if normalized.startswith(_PACKAGE_CONFIG_ENV_PREFIXES) or normalized.endswith(":registry"):
+            return False
+    return True
 
 
 def _matches_remote_http_contribution(artifact: GuardArtifact, launch: Mapping[str, object]) -> bool:
