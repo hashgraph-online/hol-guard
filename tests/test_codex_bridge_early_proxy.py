@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -12,6 +13,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 FROZEN_ENTRYPOINT = ROOT / "scripts" / "mdm" / "hol-guard-entry.py"
@@ -179,14 +182,18 @@ class _FakeDaemon:
 
 
 def _run_bridge(
-    tmp_path: Path, stdin_payload: dict[str, object], env: dict[str, str]
+    tmp_path: Path, stdin_payload: dict[str, object], env: dict[str, str], *, encode_config: bool = False
 ) -> subprocess.CompletedProcess[str]:
+    config = _bridge_config(tmp_path)
+    if encode_config:
+        # Windows installs pass the config as unpadded base64url text.
+        config = base64.urlsafe_b64encode(config.encode("utf-8")).decode("ascii").rstrip("=")
     return subprocess.run(
         [
             sys.executable,
             str(FROZEN_ENTRYPOINT),
             "--_hol-guard-codex-bridge",
-            _bridge_config(tmp_path),
+            config,
         ],
         input=json.dumps(stdin_payload),
         capture_output=True,
@@ -196,7 +203,8 @@ def _run_bridge(
     )
 
 
-def test_codex_bridge_proxy_answers_allow_before_guard_imports(tmp_path: Path) -> None:
+@pytest.mark.parametrize("encode_config", [False, True])
+def test_codex_bridge_proxy_answers_allow_before_guard_imports(tmp_path: Path, encode_config: bool) -> None:
     fake = _FakeDaemon(
         {
             "continue": True,
@@ -223,6 +231,7 @@ def test_codex_bridge_proxy_answers_allow_before_guard_imports(tmp_path: Path) -
                 "session_id": "session-1",
             },
             environment,
+            encode_config=encode_config,
         )
     finally:
         fake.server.shutdown()  # type: ignore[union-attr]

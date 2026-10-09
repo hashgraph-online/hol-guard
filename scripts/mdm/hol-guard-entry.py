@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import base64
+import binascii
 import hashlib
 import hmac
 import http.client
@@ -301,13 +303,26 @@ class _CodexHookRequestSentError(Exception):
     """The daemon hook request was sent but no usable response was received."""
 
 
+def _codex_bridge_config_text(argument: str) -> str:
+    """Return the bridge config JSON; Windows installs pass it as unpadded base64url."""
+
+    if argument.startswith("{"):
+        return argument
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", argument):
+        raise ValueError("bridge config argument is neither JSON nor base64url")
+    try:
+        return base64.urlsafe_b64decode(argument + "=" * (-len(argument) % 4)).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError) as exc:
+        raise ValueError("bridge config argument is not valid base64url") from exc
+
+
 def _codex_bridge_request_config() -> dict[str, object] | None:
     """Parse the managed bridge argv contract without importing Guard."""
 
     if len(sys.argv) != 3 or sys.argv[1] != _CODEX_BRIDGE_ARG:
         return None
     try:
-        payload = json.loads(sys.argv[2])
+        payload = json.loads(_codex_bridge_config_text(sys.argv[2]))
     except (ValueError, json.JSONDecodeError):
         return None
     if not isinstance(payload, dict):

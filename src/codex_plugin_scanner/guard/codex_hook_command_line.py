@@ -152,6 +152,13 @@ def split_hook_command_line(command: str, *, windows: bool | None = None) -> lis
     return _split_windows_command_line(command)
 
 
+def hook_command_tokens(command: str, *, windows: bool | None = None) -> list[str]:
+    """Return hook argv tokens, falling back to whitespace splitting for unparsable text."""
+
+    tokens = split_hook_command_line(command, windows=windows)
+    return command.split() if tokens is None else tokens
+
+
 def hook_command_launchable(command: str, *, windows: bool | None = None) -> bool:
     """Return whether the session shell can launch this hook command."""
 
@@ -163,6 +170,7 @@ def hook_command_launchable(command: str, *, windows: bool | None = None) -> boo
 __all__ = [
     "encode_hook_config_argument",
     "hook_command_launchable",
+    "hook_command_tokens",
     "hook_commands_use_windows_syntax",
     "hook_token_name",
     "is_legacy_posix_hook_command",

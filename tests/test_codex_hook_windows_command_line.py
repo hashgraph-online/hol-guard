@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 from pathlib import Path
@@ -23,6 +24,10 @@ from codex_plugin_scanner.guard.codex_hook_registration import (
     live_guard_codex_hooks_intercept,
     live_owned_codex_event_matches,
     require_codex_hook_owner,
+)
+from codex_plugin_scanner.guard.frozen_runtime_commands import (
+    FROZEN_CODEX_BRIDGE_ARG,
+    frozen_codex_bridge_tokens_are_live,
 )
 
 _PYTHON = r"C:\Users\tester\.venv\Scripts\python.exe"
@@ -124,7 +129,7 @@ def test_bridge_accepts_encoded_and_plain_config_arguments(tmp_path: Path) -> No
 
     assert decode_bridge_config_argument(encoded) == plain
     assert decode_bridge_config_argument(plain) == plain
-    installed_json = codex_adapter._hook_command_parts(_context(tmp_path))[-1]
+    installed_json = decode_bridge_config_argument(codex_adapter._hook_command_parts(_context(tmp_path))[-1])
     bridge_argument = encode_hook_config_argument(installed_json, windows=True)
     parsed = bridge_config_from_argv(["bridge.py", bridge_argument], timeout_grace_seconds=1)
     assert (parsed["query"], parsed["config_json"]) == (json.loads(installed_json)["query"], bridge_argument)
@@ -188,9 +193,18 @@ def test_windows_legacy_adoption_matches_current_and_plain_json_entries(legacy: 
     )
 
 
+@pytest.mark.skipif(os.name == "nt", reason="installs on Windows hosts render the Windows form")
 def test_installed_posix_hook_command_is_byte_identical(tmp_path: Path) -> None:
     context = _context(tmp_path)
     parts = codex_adapter._hook_command_parts(context)
 
     assert codex_adapter._hook_command(context) == shlex.join(parts)
     assert parts[-1] == json.dumps(json.loads(parts[-1]), separators=(",", ":"))
+
+
+@pytest.mark.parametrize("windows", [False, True])
+def test_frozen_bridge_tokens_accept_the_platform_config_form(windows: bool) -> None:
+    argument = encode_hook_config_argument(json.dumps(_CONFIG), windows=windows)
+
+    assert frozen_codex_bridge_tokens_are_live(["hol-guard.exe", FROZEN_CODEX_BRIDGE_ARG, argument])
+    assert not frozen_codex_bridge_tokens_are_live(["hol-guard.exe", FROZEN_CODEX_BRIDGE_ARG, "not-json!"])
