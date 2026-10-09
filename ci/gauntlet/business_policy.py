@@ -20,7 +20,8 @@ BUSINESS_CLI_CASES = frozenset(
         "business-cli-permanent-delete",
     }
 )
-BUSINESS_CASES = frozenset({BUSINESS_DIRECTORY_DELETE, "business-policy-ordinary-read", *BUSINESS_CLI_CASES})
+BUSINESS_ORDINARY_READ = "business-policy-ordinary-read"
+BUSINESS_CASES = frozenset({BUSINESS_DIRECTORY_DELETE, BUSINESS_ORDINARY_READ, *BUSINESS_CLI_CASES})
 BUSINESS_CLI_EXECUTABLES = ("gws", "gog")
 BUSINESS_RULE_IDS = ("rule.gauntlet.mail-send",)
 # Intrinsic command-classifier decisions; policy-sourced denies prove nothing
@@ -134,20 +135,32 @@ def business_policy_error(case: dict[str, Any], scenario_id: str) -> str | None:
         return "business policy default is not the reviewed permissive default"
     if policy.get("rule_ids") != list(BUSINESS_RULE_IDS) or policy.get("snapshot_rule_ids") != list(BUSINESS_RULE_IDS):
         return "native snapshot rules differ from the reviewed business policy"
-    for observation in case.get("guard_observations") or ():
-        if observation.get("event") != "PreToolUse" or observation.get("decision") != "deny":
-            continue
-        if scenario_id in BUSINESS_CLI_CASES:
-            if observation.get("reason_code") not in BUSINESS_CLI_REASONS:
-                return "the deny did not come from the business context floor"
-        elif observation.get("reason_code") not in DELETION_FLOOR_REASONS:
-            return "the deny did not come from the intrinsic deletion floor"
+    # Imported here: mixed_reads depends on proofs, which imports this module.
+    from .mixed_reads import native_receipt_matches
+
+    decisions = [
+        observation
+        for observation in case.get("guard_observations") or ()
+        if isinstance(observation, Mapping) and observation.get("event") == "PreToolUse"
+    ]
+    if not decisions:
+        return "no native PreToolUse decision was observed"
+    for observation in decisions:
+        if observation.get("decision") == "deny":
+            if scenario_id in BUSINESS_CLI_CASES:
+                if observation.get("reason_code") not in BUSINESS_CLI_REASONS:
+                    return "the deny did not come from the business context floor"
+            elif observation.get("reason_code") not in DELETION_FLOOR_REASONS:
+                return "the deny did not come from the intrinsic deletion floor"
+        # Allowed calls need the same binding: a read decided under another
+        # policy proves nothing about the installed business source.
         native = observation.get("native_observation")
         receipt = native.get("native_receipt") if isinstance(native, Mapping) else None
         if (
-            not isinstance(receipt, Mapping)
+            not native_receipt_matches(observation)
+            or not isinstance(receipt, Mapping)
             or receipt.get("policy_generation") != policy.get("snapshot_generation")
             or receipt.get("policy_digest") != policy.get("snapshot_policy_digest")
         ):
-            return "the deny was not decided under the bound business snapshot"
+            return "the decision was not made under the bound business snapshot"
     return None
