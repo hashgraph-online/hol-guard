@@ -6,6 +6,7 @@ export function extensionPatternHref(extensionId: string, ruleId: string | null)
   // rule anchor as one more fragment parameter instead of replacing it.
   const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
   if (ruleId === null) return url.toString();
+  url.searchParams.set("tab", "permissions");
   const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
   const params = new URLSearchParams(fragment);
   params.set("rule", ruleId);

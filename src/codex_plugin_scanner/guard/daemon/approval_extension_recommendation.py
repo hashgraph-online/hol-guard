@@ -84,6 +84,16 @@ def build_approval_extension_recommendation(
     local_states = _layer_states(snapshot, ControlLayerKind.LOCAL_ADMIN)
     managed_states = _layer_states(snapshot, ControlLayerKind.SIGNED_CLOUD)
     hinted_rule_ids = set(_hint_ids(hint, "rule_ids"))
+    enabled = ControlState.ENABLED.value
+    for relied_id in _hint_ids(hint, "relied_permission_ids"):
+        # The queue-time check assumed these were already allowed; if one has
+        # since been turned off, allowing the hinted permissions is not enough.
+        relied_key = (ControlTargetKind.PERMISSION.value, relied_id)
+        if managed_states.get(relied_key) == ControlState.DISABLED.value or enabled not in (
+            local_states.get(relied_key),
+            managed_states.get(relied_key),
+        ):
+            return None
     permissions: list[dict[str, object]] = []
     for permission_id in _hint_ids(hint, "permission_ids"):
         permission = registry.permission(permission_id)

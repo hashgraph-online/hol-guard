@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { HiMiniArrowTopRightOnSquare, HiMiniExclamationTriangle, HiMiniSparkles } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import { approvalExtensionRecommendationCopy } from "./approval-extension-recommendation";
@@ -13,6 +13,7 @@ import { buildDecisionPayload } from "./approval-scopes";
 import {
   approveWithExtensionAllow,
   defaultExtensionAllowDeps,
+  extensionAllowFailureMessage,
   type ExtensionAllowCredentials,
 } from "./approve-with-extension-allow";
 import { commitDashboardLocation } from "./dashboard-location";
@@ -27,6 +28,8 @@ export function ApprovalExtensionRecommendationCard(props: {
   disabled: boolean;
   onResolve: ReviewWorkspaceProps["onResolve"];
   onApproved: (message: string) => void;
+  /** Lets the parent pause its own decision shortcuts while this dialog is open or saving. */
+  onDialogActiveChange?: (active: boolean) => void;
 }) {
   const recommendation = props.item.extension_recommendation;
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -38,7 +41,12 @@ export function ApprovalExtensionRecommendationCard(props: {
     [recommendation],
   );
   const primary = recommendation?.permissions[0] ?? null;
-  const { item, allowScope, approvalGate, onResolve, onApproved } = props;
+  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange } = props;
+  const dialogActive = confirmOpen || busy;
+  useEffect(() => {
+    onDialogActiveChange?.(dialogActive);
+  }, [dialogActive, onDialogActiveChange]);
+  useEffect(() => () => onDialogActiveChange?.(false), [onDialogActiveChange]);
 
   const openPattern = useCallback(() => {
     if (primary) commitDashboardLocation(extensionPatternHref(primary.extension_id, primary.rule_id));
@@ -84,11 +92,7 @@ export function ApprovalExtensionRecommendationCard(props: {
             setSavedMessage(outcome.message);
           }
         } catch (caught) {
-          setError(
-            caught instanceof Error && caught.message
-              ? `${caught.message} Nothing was changed.`
-              : "Guard could not save the extension setting. Nothing was changed.",
-          );
+          setError(extensionAllowFailureMessage(caught));
         } finally {
           setBusy(false);
         }

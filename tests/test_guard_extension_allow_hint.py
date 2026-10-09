@@ -49,6 +49,7 @@ def test_git_add_review_recommends_git_add_permission(tmp_path: Path) -> None:
         "permission_ids": ["command.git.permission.add"],
         "rule_ids": ["command.git.add"],
         "extension_ids": ["command.git"],
+        "relied_permission_ids": [],
         "catalog_digest": BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
     }
     assert "src/app.py" not in repr(hint)
@@ -76,6 +77,19 @@ def test_no_hint_when_permission_already_enabled(tmp_path: Path) -> None:
 
     assert evaluation.decision_plane.action == "allow"
     assert hint is None
+
+
+def test_hint_records_permissions_it_relies_on(tmp_path: Path) -> None:
+    evaluation, hint = _hint(
+        "git add src/app.py && git commit -m wip",
+        tmp_path,
+        controls=(("permission", "command.git.permission.commit", "enabled"),),
+    )
+
+    assert evaluation.decision_plane.action == "review"
+    assert hint is not None
+    assert hint["permission_ids"] == ["command.git.permission.add"]
+    assert hint["relied_permission_ids"] == ["command.git.permission.commit"]
 
 
 def test_no_hint_for_allowed_command(tmp_path: Path) -> None:
@@ -117,7 +131,11 @@ def test_validated_hint_rejects_malformed_values() -> None:
         "catalog_digest": digest,
     }
 
-    assert validated_extension_allow_hint(good) == good
+    assert validated_extension_allow_hint(good) == {**good, "relied_permission_ids": []}
+    relied = {**good, "relied_permission_ids": ["command.git.permission.commit"]}
+    assert validated_extension_allow_hint(relied) == relied
+    assert validated_extension_allow_hint({**good, "relied_permission_ids": ["rm -rf /"]}) is None
+    assert validated_extension_allow_hint({**good, "relied_permission_ids": "command.git"}) is None
     assert validated_extension_allow_hint({**good, "schema": "other"}) is None
     assert validated_extension_allow_hint({**good, "permission_ids": []}) is None
     assert validated_extension_allow_hint({**good, "permission_ids": ["rm -rf /"]}) is None

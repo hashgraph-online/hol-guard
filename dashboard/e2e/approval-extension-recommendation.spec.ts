@@ -216,6 +216,7 @@ test("configure link opens the exact pattern without command text in the URL", a
   await expect(page).toHaveURL(/\/extensions\/command\.git/);
   const url = page.url();
   expect(url).toContain("rule=command.git.add");
+  expect(new URL(url).searchParams.get("tab")).toBe("permissions");
   expect(url).not.toContain("src");
   expect(url).not.toContain("app.py");
 });

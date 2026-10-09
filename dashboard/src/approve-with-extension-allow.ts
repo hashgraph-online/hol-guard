@@ -35,7 +35,23 @@ export const defaultExtensionAllowDeps: Omit<ExtensionAllowDeps, "resolve"> = {
   apply: applyExtensionMutation,
 };
 
-const CONFLICT_CODES = new Set(["revision_conflict", "catalog_conflict"]);
+// The apply endpoint reports a stale revision as authority_conflict; preview
+// reports revision_conflict. Both are safe to retry once against fresh state.
+const CONFLICT_CODES = new Set(["revision_conflict", "catalog_conflict", "authority_conflict"]);
+
+/** The apply call failed without a clean daemon rejection, so the setting may or may not have saved. */
+export class ExtensionAllowUncertainError extends Error {}
+
+function cleanRejection(caught: unknown): boolean {
+  return caught instanceof ExtensionControlApiError && caught.status >= 400 && caught.status < 500;
+}
+
+export function extensionAllowFailureMessage(caught: unknown): string {
+  if (caught instanceof ExtensionAllowUncertainError) return caught.message;
+  return caught instanceof Error && caught.message
+    ? `${caught.message} Nothing was changed.`
+    : "Guard could not save the extension setting. Nothing was changed.";
+}
 
 function isConflict(caught: unknown): boolean {
   return caught instanceof ExtensionControlApiError && CONFLICT_CODES.has(caught.code ?? "");
@@ -65,7 +81,15 @@ async function enablePermissions(
   );
   const proof = await deps.preview({ ...mutation, ...credentials, session_nonce: (deps.sessionNonce ?? randomNonce)() });
   if (!proof.proof_id) throw new Error("Guard did not issue an approval proof for this setting change.");
-  const applied = await deps.apply({ ...mutation, proof_id: proof.proof_id });
+  let applied: ExtensionMutationApplyResponse;
+  try {
+    applied = await deps.apply({ ...mutation, proof_id: proof.proof_id });
+  } catch (caught) {
+    if (cleanRejection(caught)) throw caught;
+    throw new ExtensionAllowUncertainError(
+      "Guard could not confirm whether the extension setting was saved. Nothing was approved. Check the setting on the extension page before trying again.",
+    );
+  }
   if (applied.revision <= effective.revision) {
     throw new Error("Guard did not save the extension setting. Nothing was approved.");
   }

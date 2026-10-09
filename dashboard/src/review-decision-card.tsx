@@ -98,6 +98,7 @@ export function ReviewDecisionCard(props: {
   const [approvalTotpCode, setApprovalTotpCode] = useState("");
   const [useCooldown, setUseCooldown] = useState(false);
   const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
+  const [extensionDialogActive, setExtensionDialogActive] = useState(false);
   const [pendingContractKey, setPendingContractKey] = useState<string | null>(null);
   const [rememberExactAction, setRememberExactAction] = useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = useState(props.approvalGate);
@@ -317,7 +318,15 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (submitting !== null || pendingAction !== null || resolved !== null || resolutionBlockReason !== null) return;
+      if (
+        submitting !== null ||
+        pendingAction !== null ||
+        extensionDialogActive ||
+        resolved !== null ||
+        resolutionBlockReason !== null
+      ) {
+        return;
+      }
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -337,7 +346,15 @@ export function ReviewDecisionCard(props: {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
+  }, [
+    availableScopeChoices,
+    extensionDialogActive,
+    handleRequestResolve,
+    pendingAction,
+    resolutionBlockReason,
+    resolved,
+    submitting,
+  ]);
 
   const handleModalSubmit = useCallback(() => {
     if (pendingAction === null || submitting !== null) {
@@ -546,6 +563,7 @@ export function ReviewDecisionCard(props: {
             disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
             onResolve={props.onResolve}
             onApproved={handleExtensionApproved}
+            onDialogActiveChange={setExtensionDialogActive}
           />
         )}
 

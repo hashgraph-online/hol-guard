@@ -3,7 +3,12 @@ import {
   approvalExtensionRecommendationCopy,
   normalizeApprovalExtensionRecommendation,
 } from "./approval-extension-recommendation";
-import { approveWithExtensionAllow, type ExtensionAllowDeps } from "./approve-with-extension-allow";
+import {
+  approveWithExtensionAllow,
+  extensionAllowFailureMessage,
+  ExtensionAllowUncertainError,
+  type ExtensionAllowDeps,
+} from "./approve-with-extension-allow";
 import { ExtensionControlApiError, type EffectiveExtensionControls } from "./extension-controls-api";
 
 function assert(condition: boolean, message: string): void {
@@ -93,7 +98,9 @@ assert(
 
 const hrefSource = readFileSync(new URL("./extension-pattern-href.ts", import.meta.url), "utf8");
 assert(
-  hrefSource.includes("`/extensions/${extensionId}`") && hrefSource.includes('params.set("rule", ruleId)'),
+  hrefSource.includes("`/extensions/${extensionId}`") &&
+    hrefSource.includes('params.set("rule", ruleId)') &&
+    hrefSource.includes('url.searchParams.set("tab", "permissions")'),
   "deep link carries only catalog ids",
 );
 
@@ -161,14 +168,38 @@ async function run(): Promise<void> {
       apply: async (payload) => {
         attempts += 1;
         conflictCalls.push(`apply:${payload.proof_id}`);
-        if (attempts === 1) throw new ExtensionControlApiError("stale", 409, "revision_conflict");
+        if (attempts === 1) throw new ExtensionControlApiError("stale", 409, "authority_conflict");
         return { schema_version: "1", status: "applied", revision: 6, catalog_digest: DIGEST };
       },
     }),
     ids,
     credentials,
   );
-  assert(retried.status === "approved" && attempts === 2, "revision conflict retries once");
+  assert(retried.status === "approved" && attempts === 2, "apply authority_conflict retries once");
+
+  const uncertainCalls: string[] = [];
+  let uncertain: unknown = null;
+  try {
+    await approveWithExtensionAllow(
+      fakeDeps({
+        calls: uncertainCalls,
+        apply: async () => {
+          throw new TypeError("Failed to fetch");
+        },
+      }),
+      ids,
+      credentials,
+    );
+  } catch (caught) {
+    uncertain = caught;
+  }
+  assert(uncertain instanceof ExtensionAllowUncertainError, "network failure during apply is uncertain");
+  assert(!extensionAllowFailureMessage(uncertain).includes("Nothing was changed"), "uncertain apply never claims no change");
+  assert(!uncertainCalls.some((call) => call.startsWith("resolve")), "uncertain apply never resolves the request");
+  assert(
+    extensionAllowFailureMessage(new ExtensionControlApiError("wrong password", 403)).endsWith("Nothing was changed."),
+    "clean rejection says nothing changed",
+  );
 
   const failCalls: string[] = [];
   let rejected = false;
@@ -229,6 +260,10 @@ async function run(): Promise<void> {
   assert(
     /<ApprovalExtensionRecommendationCard\s+key=\{item\.request_id\}/.test(cardSource),
     "recommendation card state resets when the reviewed request changes",
+  );
+  assert(
+    cardSource.includes("onDialogActiveChange={setExtensionDialogActive}") && cardSource.includes("extensionDialogActive ||"),
+    "decision shortcuts pause while the always-allow dialog is open",
   );
   console.log("approval-extension-recommendation tests passed");
 }

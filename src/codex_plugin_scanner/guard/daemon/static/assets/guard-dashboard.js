@@ -26395,6 +26395,7 @@ function WorkspacePageHeader(props) {
 function extensionPatternHref(extensionId, ruleId) {
   const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
   if (ruleId === null) return url.toString();
+  url.searchParams.set("tab", "permissions");
   const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
   const params = new URLSearchParams(fragment);
   params.set("rule", ruleId);
@@ -31139,7 +31140,16 @@ const defaultExtensionAllowDeps = {
   preview: previewExtensionMutation,
   apply: applyExtensionMutation
 };
-const CONFLICT_CODES = /* @__PURE__ */ new Set(["revision_conflict", "catalog_conflict"]);
+const CONFLICT_CODES = /* @__PURE__ */ new Set(["revision_conflict", "catalog_conflict", "authority_conflict"]);
+class ExtensionAllowUncertainError extends Error {
+}
+function cleanRejection(caught) {
+  return caught instanceof ExtensionControlApiError && caught.status >= 400 && caught.status < 500;
+}
+function extensionAllowFailureMessage(caught) {
+  if (caught instanceof ExtensionAllowUncertainError) return caught.message;
+  return caught instanceof Error && caught.message ? `${caught.message} Nothing was changed.` : "Guard could not save the extension setting. Nothing was changed.";
+}
 function isConflict(caught) {
   return caught instanceof ExtensionControlApiError && CONFLICT_CODES.has(caught.code ?? "");
 }
@@ -31162,7 +31172,15 @@ async function enablePermissions(deps, permissionIds, credentials) {
   );
   const proof = await deps.preview({ ...mutation, ...credentials, session_nonce: (deps.sessionNonce ?? randomNonce)() });
   if (!proof.proof_id) throw new Error("Guard did not issue an approval proof for this setting change.");
-  const applied = await deps.apply({ ...mutation, proof_id: proof.proof_id });
+  let applied;
+  try {
+    applied = await deps.apply({ ...mutation, proof_id: proof.proof_id });
+  } catch (caught) {
+    if (cleanRejection(caught)) throw caught;
+    throw new ExtensionAllowUncertainError(
+      "Guard could not confirm whether the extension setting was saved. Nothing was approved. Check the setting on the extension page before trying again."
+    );
+  }
   if (applied.revision <= effective.revision) {
     throw new Error("Guard did not save the extension setting. Nothing was approved.");
   }
@@ -31200,7 +31218,12 @@ function ApprovalExtensionRecommendationCard(props) {
     [recommendation]
   );
   const primary = recommendation?.permissions[0] ?? null;
-  const { item, allowScope, approvalGate, onResolve, onApproved } = props;
+  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange } = props;
+  const dialogActive = confirmOpen || busy;
+  reactExports.useEffect(() => {
+    onDialogActiveChange?.(dialogActive);
+  }, [dialogActive, onDialogActiveChange]);
+  reactExports.useEffect(() => () => onDialogActiveChange?.(false), [onDialogActiveChange]);
   const openPattern = reactExports.useCallback(() => {
     if (primary) commitDashboardLocation(extensionPatternHref(primary.extension_id, primary.rule_id));
   }, [primary]);
@@ -31244,9 +31267,7 @@ function ApprovalExtensionRecommendationCard(props) {
             setSavedMessage(outcome.message);
           }
         } catch (caught) {
-          setError(
-            caught instanceof Error && caught.message ? `${caught.message} Nothing was changed.` : "Guard could not save the extension setting. Nothing was changed."
-          );
+          setError(extensionAllowFailureMessage(caught));
         } finally {
           setBusy(false);
         }
@@ -31352,6 +31373,7 @@ function ReviewDecisionCard(props) {
   const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
   const [useCooldown, setUseCooldown] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const [extensionDialogActive, setExtensionDialogActive] = reactExports.useState(false);
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [rememberExactAction, setRememberExactAction] = reactExports.useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(props.approvalGate);
@@ -31552,7 +31574,9 @@ function ReviewDecisionCard(props) {
   }, [handleRequestResolve]);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
-      if (submitting !== null || pendingAction !== null || resolved !== null || resolutionBlockReason !== null) return;
+      if (submitting !== null || pendingAction !== null || extensionDialogActive || resolved !== null || resolutionBlockReason !== null) {
+        return;
+      }
       const target2 = event.target;
       if (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable) return;
       if (event.key === "a" || event.key === "A") {
@@ -31571,7 +31595,15 @@ function ReviewDecisionCard(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
+  }, [
+    availableScopeChoices,
+    extensionDialogActive,
+    handleRequestResolve,
+    pendingAction,
+    resolutionBlockReason,
+    resolved,
+    submitting
+  ]);
   const handleModalSubmit = reactExports.useCallback(() => {
     if (pendingAction === null || submitting !== null) {
       return;
@@ -31744,7 +31776,8 @@ function ReviewDecisionCard(props) {
           allowScope,
           disabled: !hasAllowScope || submitting !== null || pendingAction !== null,
           onResolve: props.onResolve,
-          onApproved: handleExtensionApproved
+          onApproved: handleExtensionApproved,
+          onDialogActiveChange: setExtensionDialogActive
         },
         item.request_id
       ),

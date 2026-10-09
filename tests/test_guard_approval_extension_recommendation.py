@@ -145,11 +145,31 @@ def test_store_round_trips_and_refreshes_hint_on_dedupe() -> None:
 
 
 def test_existing_store_gains_hint_column(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-1", hint=_hint(GIT_ADD)), "2026-10-09T10:00:00+00:00")
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    legacy = sqlite3.connect(guard_home / "guard.db")
+    legacy.row_factory = sqlite3.Row
+    legacy.execute(approval_schema_statement())
+    add_approval_request(legacy, _request("req-old", hint=None), "2026-10-08T10:00:00+00:00")
+    # Recreate a pre-upgrade table: same row, no hint column.
+    legacy.execute("alter table approval_requests drop column extension_allow_hint_json")
+    legacy.commit()
+    assert "extension_allow_hint_json" not in {row[1] for row in legacy.execute("pragma table_info(approval_requests)")}
+    legacy.close()
 
-    assert store.get_approval_extension_allow_hint("req-1") == _hint(GIT_ADD)
-    assert "extension_allow_hint" not in (store.get_approval_request("req-1") or {})
+    store = GuardStore(guard_home)
+
+    with sqlite3.connect(guard_home / "guard.db") as upgraded:
+        columns = {row[1] for row in upgraded.execute("pragma table_info(approval_requests)")}
+    assert "extension_allow_hint_json" in columns
+    preserved = store.get_approval_request("req-old")
+    assert preserved is not None and preserved["launch_target"] == "git add src/app.py"
+    assert store.get_approval_extension_allow_hint("req-old") is None
+
+    # A repeat of the same action after upgrade refreshes the existing row's hint.
+    store.add_approval_request(_request("req-1", hint=_hint(GIT_ADD)), "2026-10-09T10:00:00+00:00")
+    assert store.get_approval_extension_allow_hint("req-old") == _hint(GIT_ADD)
+    assert "extension_allow_hint" not in (store.get_approval_request("req-old") or {})
 
 
 def test_available_recommendation_for_git_add() -> None:
@@ -198,6 +218,24 @@ def test_no_recommendation_when_not_applicable() -> None:
     locked = _snapshot()
     locked = replace(locked, layers=(replace(locked.layers[0], global_lockdown=True),))
     assert build(_approval(hint), locked) is None
+
+
+def test_relied_permission_must_still_be_enabled() -> None:
+    relied = "command.git.permission.commit"
+    assert REGISTRY.permission(relied) is not None
+    hint = {**_hint(GIT_ADD), "relied_permission_ids": [relied]}
+
+    def build(snapshot):
+        return build_approval_extension_recommendation(_approval(hint), registry=REGISTRY, snapshot=snapshot)
+
+    relied_on = ((ControlTargetKind.PERMISSION, relied, ControlState.ENABLED),)
+    relied_off = ((ControlTargetKind.PERMISSION, relied, ControlState.DISABLED),)
+    assert build(_snapshot(local=relied_on)) is not None
+    assert build(_snapshot(managed=relied_on)) is not None
+    assert build(_snapshot()) is None
+    assert build(_snapshot(local=relied_on, managed=relied_off)) is None
+    legacy = build_approval_extension_recommendation(_approval(_hint(GIT_ADD)), registry=REGISTRY, snapshot=_snapshot())
+    assert legacy is not None
 
 
 def test_unhealthy_authority_reports_unavailable() -> None:

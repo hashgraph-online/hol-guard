@@ -1,7 +1,7 @@
 import type {
   GuardApprovalExtensionRecommendation,
   GuardApprovalExtensionRecommendationPermission,
-} from "./guard-types";
+} from "./approval-extension-recommendation-types";
 
 const RECOMMENDATION_SCHEMA = "guard.approval-extension-recommendation.v1";
 const MAX_PERMISSIONS = 3;
