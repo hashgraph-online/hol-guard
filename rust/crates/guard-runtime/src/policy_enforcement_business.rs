@@ -4,6 +4,10 @@
 #[path = "policy_enforcement_business_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "policy_enforcement_business_golden_tests.rs"]
+mod golden_tests;
+
 use super::{ActionFloor, AdmittedPolicySnapshot};
 use guard_contracts::{BusinessActionV1, PreToolActionTypeV1, PreToolResultV1};
 use guard_policy_snapshot::business_policy::BusinessPolicyBindingV1;
