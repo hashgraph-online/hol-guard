@@ -68,6 +68,13 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_runtime.py::test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow",
         "tests/test_guard_surface_server.py::TestGuardSurfaceServer::"
         "test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload",
+        "tests/test_guard_headless_daemon_api.py::"
+        "test_supply_chain_package_firewall_paid_install_and_test_roundtrip",
+        "tests/test_guard_shim_intercept_proofs.py::"
+        "test_daemon_package_shim_test_uses_projected_shell_profile_path",
+        "tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque",
+        "tests/test_guard_command_corpus.py::"
+        "test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences",
     }
 )
 

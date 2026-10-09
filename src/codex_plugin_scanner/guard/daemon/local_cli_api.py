@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 import time
@@ -90,6 +91,8 @@ from .mcp_registry_undo import RegistrySetupUndo
 if TYPE_CHECKING:
     from ..store import GuardStore
 
+_LOGGER = logging.getLogger(__name__)
+
 _VALID_STATES = frozenset({"allowed", "blocked", "unset"})
 _DISCOVERY_TTL_SECONDS = 30.0
 
@@ -101,6 +104,18 @@ def _client_discovery_job_id(payload: dict[str, object]) -> str | None:
     if not isinstance(value, str) or len(value) != 32 or any(c not in "0123456789abcdef" for c in value):
         raise LocalCliApiError(400, "invalid_discovery_job")
     return value
+
+
+_FORGET_ERRORS: dict[str, tuple[int, str]] = {
+    "invalid_cli_id": (400, "This connection id is not valid."),
+    "local_cli_not_found": (404, "Guard no longer lists this connection."),
+    "identity_changed": (409, "This connection changed. Reload and try again."),
+    "local_cli_enrolled": (409, "Remove this custom extension before forgetting it."),
+    "local_cli_shared_server_enrolled": (
+        409,
+        "Another enrolled connection uses the same server, so Guard keeps this one to scope that permission.",
+    ),
+}
 
 
 class LocalCliApiService:
@@ -484,6 +499,10 @@ class LocalCliApiService:
         """
         # Connector history and configured launch discovery are independent.
         discovery_issue = None
+        try:
+            _ = self._store.prune_inactive_local_cli_observations(throttle=True)
+        except sqlite3.Error:
+            _LOGGER.warning("observed record retention failed", exc_info=True)
         try:
             saturated = discover_observed_mcp_tools(self._store, seen_at=utc_now())
             if saturated:
@@ -980,6 +999,21 @@ class LocalCliApiService:
             "cli_id": identity.cli_id,
             "state": state,
         }
+
+    def forget(self, payload: dict[str, object]) -> dict[str, object]:
+        """Drop a detected record the user never enrolled; it returns if seen again."""
+
+        from ..store_local_cli_retention import LocalCliForgetError
+
+        cli_id = self._required_string(payload, "cli_id")
+        identity_hash = self._required_string(payload, "identity_hash")
+        try:
+            self._store.forget_local_cli_observation(cli_id, identity_hash=identity_hash)
+        except LocalCliForgetError as exc:
+            code = str(exc)
+            status, message = _FORGET_ERRORS.get(code, (409, "Guard could not forget this connection."))
+            raise LocalCliApiError(status, code, message) from exc
+        return {"schema_version": _LOCAL_CLI_API_SCHEMA, "status": "forgotten", "cli_id": cli_id}
 
     @staticmethod
     def _provider_updates_from_payload(payload: dict[str, object]) -> tuple[tuple[str, str, int], ...]:

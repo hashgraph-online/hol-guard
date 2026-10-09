@@ -33,6 +33,7 @@ pub const NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES: &[&str] = &[
     "native_frame_timeout_failed",
     "native_frame_version_mismatch",
     "native_frame_write_failed",
+    "native_guard_home_mismatch",
     "native_json_array_too_wide",
     "native_json_depth_exceeded",
     "native_json_duplicate_key",

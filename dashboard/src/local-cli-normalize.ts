@@ -52,6 +52,7 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
     suggestion_score: optionalScore(value.suggestion_score),
     commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
     continuity: normalizeContinuity(value.continuity),
+    ...(value.shares_enrolled_server === true ? { shares_enrolled_server: true } : {}),
     ...(catalog ? { mcp_catalog: catalog } : {}),
     ...(providerCatalog ? { provider_catalog: providerCatalog } : {}),
     ...(["configured-connection", "host-namespace", "legacy-device"].includes(String(value.permission_scope))

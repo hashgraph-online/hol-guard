@@ -1571,6 +1571,10 @@
     flex-shrink: 0;
   }
 
+  .basis-full {
+    flex-basis: 100%;
+  }
+
   .border-collapse {
     border-collapse: collapse;
   }

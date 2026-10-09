@@ -206,11 +206,16 @@ def _decode_groups(value: object) -> dict[str, list[str]]:
 def _run_worker(worker_index: int) -> WorkerReport:
     completed = subprocess.run(
         [sys.executable, str(Path(__file__).resolve()), "--worker", str(worker_index)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=WORKER_TIMEOUT_SECONDS,
     )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"corpus worker {worker_index} exited {completed.returncode}: "
+            f"{completed.stderr[-3000:] if completed.stderr else 'no stderr'}"
+        )
     return _decode_worker(completed.stdout)
 
 

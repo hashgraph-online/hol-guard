@@ -320,4 +320,21 @@ for (const state of ["unset", "allowed", "blocked"] as const) {
   assert.match(detail, /Refresh inventory/);
 }
 
+// Detected connections that were never enrolled can be forgotten (issue 3819).
+// Enrolled ones must be removed first, so they never offer Forget.
+const renderDetail = (item: LocalCliItem) => renderToStaticMarkup(createElement(LocalCliDetail, {
+  item,
+  revision: 0,
+  continuity: { sync_local_only: true, continuity_enabled: false, summary: "Local fixture" },
+  onBack: () => undefined,
+  onRefresh: async () => undefined,
+}));
+const detectedDetail = renderDetail({ ...baseCustomExtension, surface: "mcp", state: "unset" });
+assert.match(detectedDetail, /Forget this connection/);
+assert.match(detectedDetail, /Last seen /);
+assert.doesNotMatch(renderDetail({ ...baseCustomExtension, state: "allowed" }), /Forget this connection/);
+assert.doesNotMatch(renderDetail({ ...baseCustomExtension, state: "unset", observed_count: 0 }), /Forget this connection/);
+// Siblings kept for an enrolled connection on the same server cannot be forgotten.
+assert.doesNotMatch(renderDetail({ ...baseCustomExtension, surface: "mcp", state: "unset", shares_enrolled_server: true }), /Forget this connection/);
+
 console.log("protection-center.test.tsx: all assertions passed");
