@@ -67,6 +67,7 @@ Thumbs.db
 !/docs/guard/extension-builder/README.md
 !/docs/guard/extension-builder/VALIDATION.md
 # Native command projections are build outputs, never merge inputs.
+/contributions/extensions/
 /contracts/extensions/command-catalog.v1.json
 /contracts/extensions/native-command-program.v1.json
 /contracts/extensions/command-projection-build.v1.json

@@ -24,7 +24,7 @@ operations and require no new Rust code.
 | `contracts/extensions/trust/command.<name>.v1.json` | Author-edited, separately reviewed per-extension trust classification |
 | `contracts/extensions/build-trust-class-map.v1.json` | Ignored package projection of `contracts/extensions/trust/`; activation defaults ship here |
 | `tests/fixtures/command-source-<slug>.v1.json` | Portable command and synthetic-control cases evaluated by Rust |
-| `contributions/extensions/command.<name>.json` | Generated v2 contribution descriptor |
+| `contributions/extensions/command.<name>.json` | Ignored generated v2 descriptor; staged for development, CI and snapshots, regenerated for packages |
 | `contracts/extensions/native-command-program.v1.json` | Generated admitted graph, rule coverage, candidate indexes, and program identity |
 | `contracts/extensions/command-catalog.v1.json` | Generated descriptive catalog and relationships used by product callers and documentation |
 

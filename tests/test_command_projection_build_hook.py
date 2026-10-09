@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import shlex
 import subprocess
 import sys
 import types
@@ -157,6 +158,10 @@ def test_generated_path_gate_permits_removal_but_rejects_reintroduction():
         for prefix in ("contracts/extensions", "src/codex_plugin_scanner/guard/contracts/data/extensions")
         for name in ("command-catalog", "native-command-program", "trust-class-map")
     ]
+    paths.extend(
+        f"contributions/extensions/command.{name}.json"
+        for name in ("macscope", "repro-surgeon", "storage-clearer", "where-are-we")
+    )
     files = [{"filename": path, "status": status} for path in paths for status in ("removed", "added", "modified")]
     result = subprocess.run(["jq", "-r", query], input=json.dumps(files), text=True, capture_output=True, check=True)
     owned = "".join(re.findall(r"owned\+?='([^']+)'", run))
@@ -176,5 +181,50 @@ def test_regeneration_prs_cannot_track_ignored_package_projections():
     path = "contracts/extensions/native-command-program.v1.json"
     files = [{"filename": path, "status": status} for status in ("removed", "added", "modified")]
     files.append({"filename": "contracts/extensions/trust-class-map.v1.json", "status": "modified"})
+    descriptor = "contributions/extensions/command.macscope.json"
+    files.extend({"filename": descriptor, "status": status} for status in ("removed", "added", "modified"))
     result = subprocess.run(["jq", "-r", query], input=json.dumps(files), text=True, capture_output=True, check=True)
-    assert result.stdout.splitlines() == [path, path, "contracts/extensions/trust-class-map.v1.json"]
+    assert result.stdout.splitlines() == [
+        path,
+        path,
+        "contracts/extensions/trust-class-map.v1.json",
+        descriptor,
+        descriptor,
+    ]
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_ci_restore_accepts_absent_descriptors_and_removes_stale_outputs(tmp_path, existing):
+    """A fresh checkout and a previously staged checkout both accept current artifacts."""
+    root = Path(__file__).parents[1]
+    action = yaml.safe_load((root / ".github/actions/restore-command-projections/action.yml").read_text())
+    descriptors = tmp_path / "contributions/extensions"
+    if existing:
+        descriptors.mkdir(parents=True)
+        (descriptors / "command.stale.json").write_text("{}\n")
+    command = shlex.split(action["runs"]["steps"][0]["run"])
+    command[0] = sys.executable  # Use the test environment's configured Python.
+    subprocess.run(command, cwd=tmp_path, check=True)
+    assert not descriptors.exists()
+    # The artifact download creates the directory with only the current output.
+    descriptors.mkdir(parents=True)
+    (descriptors / "command.current.json").write_text("{}\n")
+    assert [path.name for path in descriptors.iterdir()] == ["command.current.json"]
+
+
+def test_generated_descriptors_are_untracked_build_outputs():
+    """Native staging cannot introduce contribution metadata into ordinary Git diffs."""
+    root = Path(__file__).parents[1]
+    tracked = subprocess.run(
+        ["git", "ls-files", "contributions/extensions"], cwd=root, text=True, capture_output=True, check=True
+    )
+    # During the retirement PR, deleted paths remain in the index until commit.
+    assert not any((root / path).exists() for path in tracked.stdout.splitlines())
+    result = subprocess.run(
+        ["git", "check-ignore", "--no-index", "contributions/extensions/command.new.json"],
+        cwd=root,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert result.stdout.strip() == "contributions/extensions/command.new.json"

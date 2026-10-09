@@ -104,7 +104,7 @@ review kit with [Extension Builder](../extension-builder/README.md).
 | `tests/fixtures/command-source-<slug>.v1.json` | Portable command cases, synthetic controls, expected actions, and rule/segment observations |
 | `contracts/extensions/trust/command.<name>.v1.json` | Separately reviewed per-extension trust binding; community contributions are external |
 | `contracts/extensions/build-trust-class-map.v1.json` | Ignored package projection of `contracts/extensions/trust/`; never committed or edited by hand |
-| `contributions/extensions/command.<name>.json` | Maintainer-generated v2 descriptor, including source identity |
+| `contributions/extensions/command.<name>.json` | Ignored generated v2 descriptor, including source identity; included in packages and snapshots |
 | `contracts/extensions/native-command-program.v1.json` and `command-catalog.v1.json` | Maintainer-generated native program and catalog; the build also updates package resource copies |
 | `contributions/extension-listings/<contribution-id>.json` | Optional public presentation and reviewed numeric GitHub claimant IDs |
 | `rust/crates/guard-command/` | Native source contract, lowering, matcher evaluation, and portable fixture runner |
