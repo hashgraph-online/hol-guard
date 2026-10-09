@@ -15,6 +15,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..native_local_cli_identity import track_local_cli_identity_failures
 from .custom_extension_suggestion import observation_path_class
 from .local_cli_compound import identify_unlisted_cli_identities
 
@@ -54,7 +55,11 @@ def discover_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
     for command, workspace in commands_from_requests(records):
         if not workspace.is_dir():
             continue
-        for identity in identify_unlisted_cli_identities(command, cwd=workspace, home_dir=home_dir):
+        with track_local_cli_identity_failures() as failures:
+            identities = identify_unlisted_cli_identities(command, cwd=workspace, home_dir=home_dir)
+        if failures:
+            continue
+        for identity in identities:
             if identity.cli_id in known:
                 continue
             store.record_local_cli_observation(

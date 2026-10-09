@@ -55,3 +55,42 @@ def test_malformed_or_missing_identity_yields_none(
     _answer(monkeypatch, result)
 
     assert module.native_local_cli_identity({"source": "script", "entrypoint": {}}, guard_home=tmp_path) is None
+
+
+def test_failures_are_tracked_but_not_applicability(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    source = {"source": "script", "entrypoint": {}}
+    _answer(monkeypatch, {"status": "ok"})
+    with module.track_local_cli_identity_failures() as failures:
+        assert module.native_local_cli_identity(source, guard_home=tmp_path) is None
+    assert failures == []
+
+    _answer(monkeypatch, None)
+    with module.track_local_cli_identity_failures() as failures:
+        assert module.native_local_cli_identity(source, guard_home=tmp_path) is None
+    assert failures == ["native_local_cli_identity_unavailable"]
+
+
+def test_block_rule_holds_allowed_command_when_identity_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard import local_cli_hook
+
+    def unavailable(**_kwargs: object) -> None:
+        raise module.LocalCliIdentityUnavailableError("native_local_cli_identity_unavailable")
+
+    monkeypatch.setattr(local_cli_hook, "matching_local_cli_grant", unavailable)
+
+    class Store:
+        def __init__(self, blocks: bool) -> None:
+            self.blocks = blocks
+
+        def has_local_cli_block_rules(self) -> bool:
+            return self.blocks
+
+    def apply(store: object, action: str) -> str:
+        return local_cli_hook.apply_local_cli_grant(
+            store=store, command="tool", cwd=tmp_path, home_dir=tmp_path, current_action=action
+        )
+
+    assert apply(Store(blocks=True), "allow") == "review"
+    assert apply(Store(blocks=True), "warn") == "review"
+    assert apply(Store(blocks=True), "block") == "block"
+    assert apply(Store(blocks=False), "allow") == "allow"
