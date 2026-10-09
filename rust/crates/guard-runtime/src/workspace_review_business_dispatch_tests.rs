@@ -12,7 +12,14 @@ use serde_json::json;
 use std::cell::Cell;
 
 fn claimed(f: &Fixture) -> ClaimedBusinessReview<PreparedBusinessInputV1> {
-    let prepared = super::super::super::prepare(input(b"private-owned-send", &[])).unwrap();
+    claimed_with(f, input(b"private-owned-send", &[]))
+}
+
+fn claimed_with(
+    f: &Fixture,
+    value: serde_json::Value,
+) -> ClaimedBusinessReview<PreparedBusinessInputV1> {
+    let prepared = super::super::super::prepare(value).unwrap();
     let binding = prepared.binding().to_owned();
     persist_prepared_review(&f.store, "business-test", &prepared, || true).unwrap();
     let decision = super::super::super::tests::owned_input_tests::owned_decision(f);
@@ -408,4 +415,29 @@ fn policy_push_cannot_replace_snapshot_during_the_owned_call() {
         f.store.current_snapshot().unwrap().generation,
         generation + 1
     );
+}
+
+#[test]
+fn multi_record_or_empty_batches_never_reach_transport() {
+    for records in [0, 2, 50] {
+        let f = Fixture::new(&format!("business-dispatch-records-{records}"));
+        let mut value = input(b"private-owned-send", &[]);
+        value["facts"]["volume"]["record_count"] = json!(records);
+        let c = claimed_with(&f, value);
+        let time = c.lease.claimed_at_ms;
+        let count = Cell::new(0);
+        let Err(error) = c.dispatch_with(
+            &f.store,
+            |_| true,
+            |_, _| {
+                count.set(count.get() + 1);
+                Ok(GoogleSendAttempt::Unconfirmed)
+            },
+            || Ok(time),
+        ) else {
+            panic!("records={records} dispatched");
+        };
+        assert_eq!(error, "native_business_dispatch_batch_unsupported");
+        assert_eq!(count.get(), 0);
+    }
 }
