@@ -37,6 +37,7 @@ pub enum BusinessOperationV1 {
     DriveRead,
     DriveEdit,
     DriveShare,
+    DriveExport,
     CalendarRead,
     CalendarInvite,
 }
@@ -50,10 +51,41 @@ impl BusinessOperationV1 {
             | Self::MailLabel
             | Self::MailPermanentDelete
             | Self::MailSettings => BusinessServiceV1::GoogleGmail,
-            Self::DriveRead | Self::DriveEdit | Self::DriveShare => BusinessServiceV1::GoogleDrive,
+            Self::DriveRead | Self::DriveEdit | Self::DriveShare | Self::DriveExport => {
+                BusinessServiceV1::GoogleDrive
+            }
             Self::CalendarRead | Self::CalendarInvite => BusinessServiceV1::GoogleCalendar,
         }
     }
+
+    /// Effect class of the operation. It is derived from the operation only,
+    /// so a producer cannot assert a different class.
+    pub fn action_class(self) -> BusinessActionClassV1 {
+        use BusinessActionClassV1 as Class;
+        match self {
+            Self::MailRead | Self::DriveRead | Self::CalendarRead => Class::Read,
+            Self::MailDraft => Class::Draft,
+            Self::MailSend | Self::CalendarInvite => Class::Send,
+            Self::DriveShare => Class::Share,
+            Self::DriveExport => Class::Export,
+            Self::MailLabel | Self::DriveEdit => Class::Update,
+            Self::MailPermanentDelete => Class::Delete,
+            Self::MailSettings => Class::Admin,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum BusinessActionClassV1 {
+    Read,
+    Draft,
+    Send,
+    Share,
+    Export,
+    Update,
+    Delete,
+    Admin,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -339,6 +371,10 @@ impl BusinessActionV1 {
                 BusinessOperationV1::MailSend | BusinessOperationV1::CalendarInvite
             ) && self.audience.kind != BusinessAudienceKindV1::Unknown
                 && self.audience.kind != BusinessAudienceKindV1::Named)
+            // An export copies content to the caller; sharing is DriveShare.
+            || (self.operation == BusinessOperationV1::DriveExport
+                && self.audience.kind != BusinessAudienceKindV1::Unknown
+                && self.audience.kind != BusinessAudienceKindV1::Private)
         {
             return Err(Error::Inconsistent);
         }

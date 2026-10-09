@@ -135,6 +135,37 @@ def test_exact_reviewed_cli_and_mcp_decisions_compile(tmp_path: Path) -> None:
     assert cli.summary()["activeProtectionChanged"] is False
 
 
+@pytest.mark.parametrize("reviewed", [False, True])
+def test_mcp_review_requires_evidence_and_compiles_without_allowing_other_tools(tmp_path: Path, reviewed: bool) -> None:
+    discovery = make_discovery(tmp_path, "mcp")
+    payload = default_review(discovery).to_dict()
+    operation = next(row for row in discovery.operations if row.name == "delete_item")
+    entries = payload["entries"]
+    assert isinstance(entries, dict)
+    entry = entries[operation.operation_id]
+    assert isinstance(entry, dict)
+    entry["state"] = "review"
+    if not reviewed:
+        with pytest.raises(BuilderError, match="explicit completed review"):
+            load_review(payload, discovery)
+        return
+    entry.update(
+        reviewed=True,
+        rationale="The fixture delete tool needs approval before it runs.",
+        evidenceUrl=discovery.metadata.homepage,
+    )
+    kit = build_kit(discovery, load_review(payload, discovery))
+    contribution = json.loads(next(content for path, content in kit.files if "/mcp-servers/" in path))
+    assert {row["name"]: row["state"] for row in contribution["tools"]} == {
+        "delete_item": "review",
+        "read_item": "inherit",
+        "other": "inherit",
+    }
+    assert contribution["trustClass"] == "external"
+    assert contribution["activation"] == "opt-in"
+    assert kit.summary()["activeProtectionChanged"] is False
+
+
 @pytest.mark.parametrize(
     "argv",
     [

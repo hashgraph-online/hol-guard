@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 
 from ..runtime.harness_attribution import cursor_hook_query_extras
 from .base import HarnessContext
+from .claude_frozen_hook import FROZEN_CLAUDE_HOOK_COMMAND
 from .claude_hook_config import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
@@ -18,6 +19,10 @@ from .claude_hook_config import (
 _SESSION_START_ERROR = (
     "claude_session_start_argv_invalid: reinstall the managed Claude hooks with `hol-guard install claude`"
 )
+
+
+def _is_frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
 
 
 def run_session_start_from_argv(
@@ -64,6 +69,9 @@ def guard_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
         guard_args.append(f"--home={context.home_dir}")
     if context.workspace_dir is not None:
         guard_args.append(f"--workspace={context.workspace_dir}")
+    if _is_frozen():
+        # The frozen binary is the hol-guard program, where `hook` is a top-level command.
+        return (sys.executable, *guard_args[1:])
     package_root = Path(__file__).resolve().parents[3]
     code = (
         "import sys;"
@@ -92,6 +100,8 @@ def daemon_hook_command_parts(
         ensure_ascii=False,
         separators=(",", ":"),
     )
+    if _is_frozen():
+        return (sys.executable, FROZEN_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_DAEMON_HOOK_MARKER, bridge_config)
     code = (
         f"_HOL_GUARD_CLAUDE_DAEMON_HOOK_MARKER = {CLAUDE_GUARD_DAEMON_HOOK_MARKER!r};"
         "import sys;"
@@ -106,6 +116,11 @@ def daemon_hook_command_parts(
 
 
 def session_start_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    if _is_frozen():
+        path_argv = (str(context.guard_home), str(context.home_dir))
+        if context.workspace_dir is not None:
+            path_argv = (*path_argv, str(context.workspace_dir))
+        return (sys.executable, FROZEN_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_SESSION_START_HOOK_MARKER, *path_argv)
     package_root = Path(__file__).resolve().parents[3]
     code = (
         f"_HOL_GUARD_CLAUDE_SESSION_START_HOOK_MARKER = {CLAUDE_GUARD_SESSION_START_HOOK_MARKER!r};"

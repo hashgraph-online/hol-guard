@@ -136,6 +136,7 @@ function publisher(value, label) {
 function icon(value, label) {
   if (value === void 0 || value === null) return { kind: "none" };
   const item = record$1(value, label);
+  if (typeof item.kind === "string" && !["react-icon", "svg-ref", "none"].includes(item.kind)) return { kind: "none" };
   const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"]);
   const name = item.name === void 0 ? void 0 : string$1(item.name, `${label}.name`);
   const background = item.background === void 0 ? void 0 : string$1(item.background, `${label}.background`);
@@ -255,6 +256,9 @@ function permission(value, extensionId, label) {
 }
 function mcpLaunch(value, label) {
   const item = record$1(value, label);
+  if (typeof item.kind === "string" && !["package-launcher", "direct-command", "remote-http"].includes(item.kind)) {
+    return { kind: "unsupported" };
+  }
   const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "direct-command", "remote-http"]);
   if (kind === "direct-command") {
     return { kind, command: string$1(item.command, `${label}.command`) };
@@ -281,6 +285,7 @@ function mcpTool(value, label) {
 }
 function mcpCatalogFields(item, label) {
   if (item.surface === void 0) return {};
+  if (typeof item.surface === "string" && item.surface !== "mcp") return { surface: "unsupported" };
   const surface = enumValue(item.surface, `${label}.surface`, ["mcp"]);
   const launch = item.mcp_launch === void 0 ? void 0 : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
   const tools = item.mcp_tools === void 0 ? void 0 : array(item.mcp_tools, `${label}.mcp_tools`, 80).map((entry, index) => mcpTool(entry, `${label}.mcp_tools[${index}]`));

@@ -1,0 +1,500 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "Dispat release command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews Dispat release starts while leaving status previews quiet.",
+          "ecosystem_ids": [
+            "dispat"
+          ],
+          "executables": [
+            "dispat",
+            "dispat.cmd",
+            "dispat.exe"
+          ],
+          "extension_id": "command.dispat",
+          "homepage": "https://dispat.dev/",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "Dispat release protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "Dispat release command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies explicit `dispat release` starts, which execute configured version, build and publish stages and may create commits, push tags and publish GitHub releases. Bare `dispat` invocations and other commands still receive Guard's review floor.",
+              "example_command": "dispat release",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Dispat release start",
+              "permission_id": "command.dispat.permission.release",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run dispat status with the same selection flags and review the plan before releasing."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.dispat",
+            "url": "https://github.com/yohimik/dispat"
+          },
+          "reference_urls": [
+            "https://github.com/yohimik/dispat",
+            "https://dispat.dev/"
+          ],
+          "required": false,
+          "risk_classes": [
+            "execution",
+            "network_egress"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "Dispat release command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies explicit `dispat release` starts, which execute configured version, build and publish stages and may create commits, push tags and publish GitHub releases. Bare `dispat` invocations and other commands still receive Guard's review floor.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "dispat",
+                        "dispat.cmd",
+                        "dispat.exe"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ],
+                      "options_with_values": [
+                        "--api-url",
+                        "--concurrency",
+                        "--config",
+                        "--env-file",
+                        "--group",
+                        "--log-format",
+                        "--log-level",
+                        "--owner",
+                        "--package",
+                        "--repo",
+                        "--root",
+                        "--space",
+                        "--token-env",
+                        "-g",
+                        "-p",
+                        "-s"
+                      ],
+                      "required_flags_anywhere": [],
+                      "subcommands": [
+                        "release"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.dispat.permission.release",
+              "risk_classes": [
+                "execution",
+                "network_egress"
+              ],
+              "rule_id": "command.dispat.release",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run dispat status with the same selection flags and review the plan before releasing."
+              ],
+              "severity": "high",
+              "title": "Dispat release start"
+            }
+          ],
+          "safer_alternatives": [
+            "Run dispat status with the same selection flags before releasing."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.dispat",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "dispat release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "release",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat.exe release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "release-exe",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat.cmd release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "release-cmd",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat --package=status release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pkg-eq-release",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat release --package status --space tools --group libraries",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "release-flags",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat --root /work/repo --config release.yaml --log-format json release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "release-global-opts",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat release --strict --require-release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "release-bool-flags",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bare",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "status-floor",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat --package status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "pkg-status-floor",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat release --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "release-help",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "version",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "dispat --",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "delimiter",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "exec dispat release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "xargs -n1 dispat release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs",
+      "rule_id": "command.dispat.release"
+    },
+    {
+      "command": "echo dispat release",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.dispat"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "echo",
+      "rule_id": "command.dispat.release"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

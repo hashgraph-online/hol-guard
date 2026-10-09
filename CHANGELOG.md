@@ -9,6 +9,7 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 ## Unreleased
 
 ### Fixed
+* **daemon:** retire a same-install daemon left running across an in-place upgrade that changes only the native runtime. The daemon pins its runtime fingerprint at start and reports its install root in authenticated health details, so the upgraded CLI can neither adopt nor relabel the previous generation; the runtime manifest joins that fingerprint, and the managed OMP and Pi extensions request one bounded recovery when readiness reports `native_policy_not_ready`, then retry once without further recovery. Admission, native fail-closed behavior, and current-daemon adoption are unchanged.
 * **approval:** native authenticated SQLite and inline lookup qualify exact artifact-context grants for reapproval reuse. Generic hooks and harness-start consumers preserve qualification across atomic claims and revalidation; retained generic grants must match the fresh authenticated grant fields after claiming, excluding global authority and integrity ledger counters changed by unrelated approvals, while consumed one-shot grants retain their claim proof. Final native decision contracts accept qualified reapproval claims. Changed artifacts, incomplete directory identities, invalid integrity, revoked retained grants, and terminal restrictions remain enforced.
 * **launch:** compute launch argv and canonical authority digests in Rust instead of emitting unbound sentinels; hash verification material once, retaining fail-closed encoding checks; bind previews and execution to the selected store Guard home, including explicit prompt transport. Qualified installed-wheel OMP launches and managed-extension reads retain native content and context verification. Launch approvals issued with the former unbound digests require fresh approval after upgrading.
 * **tests:** isolate the cloud graph snapshot-without-workspace fixture from host Node and repository cwd using an owned launcher, retaining real native launch identity, original graph assertions, and unchanged deadlines.
@@ -90,6 +91,21 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a context-digest request whose deadline ran out — the client's `native_client_timed_out` or the resident's own `native_client_deadline_exceeded` — is retried once with twice the cold-start allowance. The pooled resident serves one request at a time, so a sibling's long RPC could consume the steady-state budget and fail a request that was neither slow nor dead, and the resident's own bound (which the request carries) must not make the retry hopeless. Only a request that has already failed pays for the retry; every other failure still fails after a single attempt, and the reason names the transport, the attempt count and the budget that actually failed.
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
+
+## [3.36.1](https://github.com/hashgraph-online/hol-guard/compare/v3.36.0...v3.36.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** reject missing authored trust before preparation ([4ca519d](https://github.com/hashgraph-online/hol-guard/commit/4ca519d37aeb890d0834a010143db3c07d913761))
+* honor verified exact approval for native OMP launch ([#3778](https://github.com/hashgraph-online/hol-guard/issues/3778)) ([8eb477e](https://github.com/hashgraph-online/hol-guard/commit/8eb477ede17aec341998c26a2ced6f248f514849))
+* **release:** compare cached and cold builds under the same compiler wrapper ([#3786](https://github.com/hashgraph-online/hol-guard/issues/3786)) ([1f6bb79](https://github.com/hashgraph-online/hol-guard/commit/1f6bb79f1d47c19156ce642e7626dc6304a78ac6))
+* **runtime:** keep hooks working when two Guard installs share a home ([#3791](https://github.com/hashgraph-online/hol-guard/issues/3791)) ([0eac18e](https://github.com/hashgraph-online/hol-guard/commit/0eac18eb043ebd814ca6daeeaf29880c75864b73))
+
+
+### Performance Improvements
+
+* **release:** cross-compile Intel macOS binaries on Apple silicon ([#3783](https://github.com/hashgraph-online/hol-guard/issues/3783)) ([08a84ee](https://github.com/hashgraph-online/hol-guard/commit/08a84ee34f5d004fec3babf3a39f1df224391745))
 
 ## [3.36.0](https://github.com/hashgraph-online/hol-guard/compare/v3.35.0...v3.36.0) (2026-10-08)
 

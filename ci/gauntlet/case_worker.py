@@ -158,15 +158,30 @@ def main() -> int:
         raise RuntimeError("installed Guard changed between runner and case worker")
     host_process.group_ledger = Path(spec["groups"])
     scenario = next(s for s in load_catalog() if s.id == spec["scenario_id"])
-    case = run_case(
-        scenario,
-        root=Path(spec["root"]),
-        public=Path(spec["public"]),
-        executable=spec["executable"],
-        identity=identity,
-        provider=spec["provider"],
-        timeout=float(spec["timeout"]),
-    )
+    if spec.get("harness", "omp") != "omp":
+        from .harness_case import run_harness_case
+
+        case = run_harness_case(
+            scenario,
+            harness=spec["harness"],
+            root=Path(spec["root"]),
+            public=Path(spec["public"]),
+            executable=spec["executable"],
+            identity=identity,
+            timeout=float(spec["timeout"]),
+            model=spec.get("harness_model"),
+        )
+        case.setdefault("guard_observations", [])
+    else:
+        case = run_case(
+            scenario,
+            root=Path(spec["root"]),
+            public=Path(spec["public"]),
+            executable=spec["executable"],
+            identity=identity,
+            provider=spec["provider"],
+            timeout=float(spec["timeout"]),
+        )
     result = Path(spec["result"])
     temporary = result.with_suffix(".tmp")
     temporary.write_text(

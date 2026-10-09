@@ -31,6 +31,7 @@ from .durable_io import fsync_directory
 from .live_process_identity import current_process_identity
 from .local_authority_integrity import sign_local_authority_payload, verify_local_authority_payload
 from .private_file_io import read_private_regular_text
+from .runtime_transition_modes import normalized_after_mode, publishes_user_file, recorded_noop
 from .sqlite_tuning import sqlite_operation_deadline
 
 _PURPOSE = "guard-runtime-transition-inverse"
@@ -51,9 +52,11 @@ _FORWARD = {
 
 
 class TransitionError(RuntimeError):
-    def __init__(self, reason: str):
-        super().__init__(f"Runtime transition requires recovery: {reason}")
+    def __init__(self, reason: str, detail: str | None = None):
+        suffix = f" ({detail})" if detail else ""
+        super().__init__(f"Runtime transition requires recovery: {reason}{suffix}")
         self.reason = reason
+        self.detail = detail
 
 
 def _check_inverse_deadline() -> None:
@@ -312,8 +315,12 @@ def _record_files(payload: Mapping[str, object]) -> list[dict[str, object]]:
                 raise TransitionError("file_mode_invalid")
             if recorded_mode & ~0o777:
                 raise TransitionError("file_mode_invalid")
-            if generation == "after" and _unsafe_file_mode(recorded_mode, change.get("artifact_identity")):
-                raise TransitionError("file_mode_invalid")
+            if (
+                generation == "after"
+                and _unsafe_file_mode(recorded_mode, change.get("artifact_identity"))
+                and not recorded_noop(change)
+            ):
+                raise TransitionError("file_mode_invalid", path)
             encoded = change[generation]
             if encoded is not None and not isinstance(encoded, str):
                 raise TransitionError("files_invalid")
@@ -469,6 +476,21 @@ class TransitionFile:
     artifact_identity: dict[str, object] | None = None
     invocation_identity: dict[str, object] | None = None
 
+    def __post_init__(self) -> None:
+        # An existing user file carries its own mode forward, minus the group/world
+        # write bits Guard never publishes (umask 0002 dotfiles are 0664). Normalize
+        # here so payload() and every direct writer publish the same mode. A new
+        # file's mode is chosen by Guard, so an unsafe request there stays an error.
+        if self.before is not None and publishes_user_file(
+            before=self.before,
+            after=self.after,
+            before_mode=self.before_mode,
+            after_mode=self.after_mode,
+            expected_digest=self.expected_digest,
+            artifact_identity=self.artifact_identity,
+        ):
+            object.__setattr__(self, "after_mode", normalized_after_mode(self.after_mode))
+
     @classmethod
     def identity_dependency(cls, path: Path) -> TransitionFile:
         """Pin existing authority without copying its secret bytes into the journal."""
@@ -539,10 +561,19 @@ class TransitionFile:
             raise TransitionError("file_kind_invalid")
         for mode in (self.before_mode, self.after_mode):
             if isinstance(mode, bool) or bool(mode & ~0o777):
-                raise TransitionError("file_mode_invalid")
+                raise TransitionError("file_mode_invalid", str(self.path))
+        pinned = self.expected_digest is not None or self.artifact_identity is not None
+        publishes = publishes_user_file(
+            before=self.before,
+            after=self.after,
+            before_mode=self.before_mode,
+            after_mode=self.after_mode,
+            expected_digest=self.expected_digest,
+            artifact_identity=self.artifact_identity,
+        )
         # The previous mode is the user's file. Only the published mode must be private.
-        if _unsafe_file_mode(self.after_mode, self.artifact_identity):
-            raise TransitionError("file_mode_invalid")
+        if (publishes or pinned) and _unsafe_file_mode(self.after_mode, self.artifact_identity):
+            raise TransitionError("file_mode_invalid", str(self.path))
         payload: dict[str, object] = {
             "path": str(self.path.resolve(strict=False)),
             "before": _encode(self.before),

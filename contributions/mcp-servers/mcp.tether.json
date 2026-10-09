@@ -3,7 +3,7 @@
   "id": "mcp.tether",
   "version": "1.0.0",
   "name": "tether memory MCP",
-  "description": "Reviews tether memory writes: remember, link, forget, and the association updates recall makes. Off until you turn it on.",
+  "description": "Adds the tether memory server: remember, recall, link and forget. Each tool keeps your existing approval policy until you change it. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {

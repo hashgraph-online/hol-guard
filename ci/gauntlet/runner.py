@@ -19,7 +19,7 @@ from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_configuration import write_agent_configuration
 from .agent_prompt import fixture_authorization, scenario_prompt
-from .business_policy import BUSINESS_DIRECTORY_DELETE, bind_business_snapshot, install_business_policy
+from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_worker import SubprocessCaseWorker
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
@@ -197,10 +197,10 @@ def run_case(
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
                 )
-            if scenario.id == BUSINESS_DIRECTORY_DELETE:
+            if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
-            if scenario.id == BUSINESS_DIRECTORY_DELETE:
+            if scenario.id in BUSINESS_CASES:
                 publisher = daemon._server.hook_worker.policy_snapshot_publisher
                 case["business_policy"] = bind_business_snapshot(
                     case["business_policy"], publisher.current_snapshot(), policy_snapshot
@@ -253,7 +253,7 @@ def run_case(
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
             if scenario.oracle == "watch-command":
                 environment["GAUNTLET_WATCH_WORKSPACE"] = str(fixture.workspace)
-            if scenario.oracle == "blocked-extension":
+            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES:
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),

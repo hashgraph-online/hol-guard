@@ -215,3 +215,20 @@ def test_append_artifact_enriches_mcp_server_metadata() -> None:
 
     assert len(artifacts) == 1
     assert "mcpSkillFirewall" in artifacts[0].metadata
+
+
+def test_descriptor_digest_failure_names_the_native_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import mcp_skill_firewall
+
+    monkeypatch.setattr(mcp_skill_firewall, "context_sha256_digest", lambda *_a, **_k: "guard-context-unbound:x:y")
+    monkeypatch.setattr(mcp_skill_firewall, "is_unbound_context_digest", lambda _digest: True)
+    monkeypatch.setattr(
+        mcp_skill_firewall, "native_context_failure_reason", lambda: "native_resident_runtime_identity_mismatch"
+    )
+    with pytest.raises(
+        ValueError, match=r"^native_mcp_descriptor_digest_unavailable:native_resident_runtime_identity_mismatch$"
+    ):
+        mcp_skill_firewall._descriptor_digest({"a": 1})
+    monkeypatch.setattr(mcp_skill_firewall, "native_context_failure_reason", lambda: None)
+    with pytest.raises(ValueError, match=r"^native_mcp_descriptor_digest_unavailable$"):
+        mcp_skill_firewall._descriptor_digest({"a": 1})

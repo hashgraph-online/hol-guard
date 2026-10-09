@@ -9,7 +9,6 @@ the reviewed command, or the Rust rules that judged it change.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
 import sqlite3
@@ -22,6 +21,7 @@ from ..runtime.approval_context import (
     parse_approval_context_token,
     runtime_launch_identity_is_reusable,
 )
+from ..runtime.local_cli_runner import LOCAL_BIN_RUNNERS, runner_local_bin
 from ..store_policy_decision import policy_decision_hash_exists
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
@@ -33,12 +33,7 @@ EXACT_ACTION_CONTEXT_TOKEN_KEY = "exact_context_token"
 _NATIVE_EXACT_ACTION_POLICY_VERSION = "native-exact-action-v1"
 # Runners whose target is accepted only when it resolves to a content-hashed
 # project-local binary. Registry and cache fetches stay once-only.
-_LOCAL_BIN_RUNNERS = frozenset({"npx", "bunx", "pnpm", "pnpx", "yarn", "npm"})
-# Only these options may precede a runner target. Package selectors such as
-# ``--package``/``-p`` or ``--call``/``-c`` make the runner execute something
-# other than the local bin, so any other pre-target option stays once-only.
-_RUNNER_PRETARGET_OPTIONS = frozenset({"-y", "--yes"})
-_RUNNER_EXEC_SUBCOMMANDS = frozenset({"exec", "x"})
+_LOCAL_BIN_RUNNERS = LOCAL_BIN_RUNNERS
 # Interpreters, task runners and wrappers beyond the once-retry list whose
 # launch identity does not bind the code they load or run.
 _EXTRA_MUTABLE_LAUNCHERS = frozenset(
@@ -88,7 +83,6 @@ _EXTRA_MUTABLE_LAUNCHERS = frozenset(
     }
 )
 _FIND_EXEC_OPTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
-_MAX_PACKAGE_MANIFEST_BYTES = 1_048_576
 # Existing file operands are content-bound so an edited script, program or
 # input re-prompts. Larger or more numerous operands stay once-only.
 _MAX_BOUND_OPERANDS = 16
@@ -350,99 +344,11 @@ def _is_mutable_launcher(name: str) -> bool:
     return name in _MUTABLE_CODE_LAUNCHERS or name in _EXTRA_MUTABLE_LAUNCHERS or bool(_PYTHON_LAUNCHER.fullmatch(name))
 
 
-def _runner_target(runner: str, arguments: list[str]) -> str | None:
-    """Return the bin a runner launches, or ``None`` for any selector form."""
-
-    exec_subcommand_allowed = runner in {"npm", "pnpm", "yarn"}
-    for argument in arguments:
-        if argument == "--" or argument in _RUNNER_PRETARGET_OPTIONS:
-            continue
-        if argument.startswith("-"):
-            return None
-        if exec_subcommand_allowed and argument in _RUNNER_EXEC_SUBCOMMANDS:
-            exec_subcommand_allowed = False
-            continue
-        return argument
-    return None
-
-
 def _runner_local_bin(
     command: str, runner: str, arguments: list[str], *, cwd: Path, home_dir: Path | None
 ) -> dict[str, object] | None:
-    from ..runtime.package_intent_parser import parse_package_intent
-
-    intent = parse_package_intent(command, workspace=cwd, home_dir=home_dir)
-    executions = getattr(intent, "local_executions", None) if intent is not None else None
-    if not executions or len(executions) != 1:
-        return None
-    evidence = executions[0]
-    local = getattr(evidence, "local_executable", None)
-    manager = getattr(evidence, "manager", None)
-    if local is None or manager is None or getattr(evidence, "manager_is_guard_shim", False):
-        return None
-    resolved = getattr(local, "resolved_path", None)
-    content_hash = getattr(local, "content_hash", None)
-    if getattr(local, "status", None) != "available" or not resolved or not content_hash:
-        return None
-    # A versioned or aliased spec (``wrangler@3``) can make the runner fetch a
-    # different release than the local bin, so only the bare bin name binds.
-    target = _runner_target(runner, arguments)
-    if target is None or target != getattr(evidence, "executable_name", None):
-        return None
     # A local interpreter or task runner loads code its identity does not bind.
-    if _is_mutable_launcher(target.lower()):
-        return None
-    package_name = getattr(evidence, "package_name", None)
-    version = _installed_package_version(Path(resolved), package_name)
-    if version is None:
-        return None
-    return {
-        "package_name": package_name,
-        "executable_name": getattr(evidence, "executable_name", None),
-        "installed_version": version,
-        "resolved_path": resolved,
-        "content_hash": content_hash,
-        "manager": {
-            "resolved_path": getattr(manager, "resolved_path", None),
-            "content_hash": getattr(manager, "content_hash", None),
-        },
-        "manifests": _file_hashes(getattr(evidence, "manifests", ())),
-        "lockfiles": _file_hashes(getattr(evidence, "lockfiles", ())),
-    }
-
-
-def _installed_package_version(resolved_bin: Path, package_name: object) -> str | None:
-    """Read the installed package version that owns the resolved bin."""
-
-    if not isinstance(package_name, str) or not package_name:
-        return None
-    for parent in resolved_bin.parents:
-        if parent.name == "node_modules":
-            return None
-        manifest = parent / "package.json"
-        try:
-            if not manifest.is_file() or manifest.stat().st_size > _MAX_PACKAGE_MANIFEST_BYTES:
-                continue
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError):
-            return None
-        if isinstance(data, dict) and data.get("name") == package_name:
-            version = data.get("version")
-            return version if isinstance(version, str) and version else None
-    return None
-
-
-def _file_hashes(entries: object) -> list[dict[str, object]]:
-    if not isinstance(entries, (list, tuple)):
-        return []
-    return [
-        {
-            "path": getattr(entry, "path", None),
-            "status": getattr(entry, "status", None),
-            "content_hash": getattr(entry, "content_hash", None),
-        }
-        for entry in entries
-    ]
+    return runner_local_bin(command, runner, arguments, cwd=cwd, home_dir=home_dir, reject_target=_is_mutable_launcher)
 
 
 def _file_operand_hashes(arguments: list[str], *, cwd: Path) -> list[dict[str, str]] | None:

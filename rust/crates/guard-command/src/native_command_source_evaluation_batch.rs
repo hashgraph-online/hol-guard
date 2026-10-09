@@ -223,6 +223,10 @@ mod tests {
                 payload["reason_code"],
                 "native_command_control_authority_block"
             );
+            assert!(!payload["reason"]
+                .as_str()
+                .unwrap()
+                .contains("hol-guard command controls"));
             assert_ne!(
                 blocked["control_binding"]["effective_digest"],
                 allowed["control_binding"]["effective_digest"]

@@ -1322,6 +1322,11 @@ def _daemon_healthz_details_match_current_runtime(payload: dict[str, object]) ->
     """Match live daemon identity including protocol compatibility."""
 
     # Same-release peers still require a current compatibility version.
+    # A peer with a different fingerprint must name its install root: a daemon
+    # from before the upgrade omits it and would otherwise pass as a same-release peer.
+    fingerprint = payload.get("runtime_fingerprint")
+    if fingerprint != _current_guard_daemon_runtime_fingerprint() and not isinstance(payload.get("source_root"), str):
+        return False
     return _guard_daemon_state_matches_current_runtime(payload)
 
 
@@ -3066,6 +3071,9 @@ def _runtime_identity_paths(source_root: Path) -> list[Path]:
     package_root = source_root / "codex_plugin_scanner"
     static_root = package_root / "guard" / "daemon" / "static"
     paths = [*package_root.rglob("*.py")]
+    native_manifest = package_root / "_native" / "runtime-manifest.json"
+    if native_manifest.is_file():
+        paths.append(native_manifest)
     if static_root.is_dir():
         paths.extend(path for path in static_root.rglob("*") if path.is_file())
     return paths
@@ -3182,6 +3190,12 @@ def current_guard_daemon_runtime_fingerprint() -> str:
     """Return the installed runtime identity used for daemon compatibility."""
 
     return _current_guard_daemon_runtime_fingerprint()
+
+
+def current_guard_daemon_source_root() -> str:
+    """Return the install root whose runtime identity this process reports."""
+
+    return _current_guard_daemon_source_root()
 
 
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:

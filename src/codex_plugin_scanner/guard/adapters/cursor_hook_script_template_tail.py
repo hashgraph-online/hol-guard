@@ -43,6 +43,9 @@ def _emit_cursor_response(
         if read_permission == "deny":
             response["user_message"] = reason
         return response, 2 if read_permission == "deny" else 0
+    if hook_event_name.strip().lower() == "pretooluse" and permission == "ask":
+        # Cursor's preToolUse only stops the tool on deny; ask would let the write run.
+        permission = "deny"
     response: dict[str, object] = {"permission": permission}
     if permission != "allow":
         response["user_message"] = reason

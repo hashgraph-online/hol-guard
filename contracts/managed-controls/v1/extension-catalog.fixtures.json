@@ -9,7 +9,7 @@
     "limits": {
       "maxExtensions": 512,
       "maxPermissionsPerExtension": 512,
-      "maxPayloadBytes": 1000000,
+      "maxPayloadBytes": 8000000,
       "maxStringLength": 8192
     },
     "extensions": [
@@ -109,7 +109,7 @@
     "duplicateExtension": "duplicate Extension IDs",
     "duplicatePermission": "duplicate permission IDs",
     "unknownField": "unknown fields are rejected",
-    "oversized": "wire bodies above 1000000 bytes are rejected",
+    "oversized": "wire bodies above 8000000 bytes are rejected",
     "unicode": "Unicode is accepted only inside bounded text fields and canonicalized as UTF-8",
     "privateField": "raw command history, environment, file contents, source paths, and secrets are rejected"
   }

@@ -4,9 +4,9 @@ export type SupplyChainRepairStepFailure = {
 };
 
 export type SupplyChainRepairRemainingStep = {
-  step: "intelligence_sync";
+  step: "intelligence_sync" | "package_shims";
   message: string;
-  action: "connect";
+  action: "connect" | "check_access";
 };
 
 export type SupplyChainRepairResult = {

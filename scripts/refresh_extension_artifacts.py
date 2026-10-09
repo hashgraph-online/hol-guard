@@ -53,7 +53,7 @@ def _write_json(path: Path, value: object, *, sort_keys: bool = True) -> bool:
     if path.is_file() and path.read_bytes() == content.encode():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_bytes(content.encode("utf-8"))
     return True
 
 

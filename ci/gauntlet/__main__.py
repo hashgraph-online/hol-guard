@@ -51,6 +51,15 @@ def main() -> int:
     )
     run.add_argument("--max-inference-rounds", type=int, default=32)
     run.add_argument("--omp", help="Path to the repository-pinned Oh My Pi executable")
+    run.add_argument(
+        "--harness",
+        choices=("omp", "claude-code", "codex", "cursor"),
+        default="omp",
+        help="Agent CLI to drive. omp (default) is the qualification harness; claude-code, codex and cursor "
+        "run through their own login and Guard's installed hooks and are never merge-qualifying",
+    )
+    run.add_argument("--harness-cli", help="Path to the claude, codex or cursor-agent executable (default: PATH)")
+    run.add_argument("--harness-model", help="Model for --harness claude-code, codex or cursor (default: the CLI's)")
     run.add_argument("--work-root", type=Path, help="Parent for newly created disposable fixtures")
     run.add_argument(
         "--profile",
@@ -122,6 +131,10 @@ def main() -> int:
                 )
             )
             return 0
+        if args.harness != "omp":
+            return _run_harness(args)
+        if args.harness_cli or args.harness_model:
+            raise ValueError("--harness-cli and --harness-model need --harness claude-code, codex or cursor")
         if args.native_luna_route:
             if args.provider_url or args.model or args.provider_identity or args.allow_loopback_provider:
                 raise ValueError("--native-luna-route selects the provider, model, identity and loopback itself")
@@ -217,6 +230,51 @@ def main() -> int:
     except (ValueError, RuntimeError, OSError) as exc:
         print(json.dumps({"pass": False, "error_type": type(exc).__name__, "error": str(exc)}), file=sys.stderr)
         return 2
+
+
+def _run_harness(args: argparse.Namespace) -> int:
+    """Drive a non-omp agent CLI; inference goes through that CLI's own login."""
+    if (
+        args.native_luna_route
+        or args.provider_url
+        or args.provider_identity
+        or args.allow_loopback_provider
+        or args.model
+        or args.reasoning_effort
+        or args.omp
+    ):
+        raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
+    if args.profile != "core":
+        raise ValueError("--harness supports only the core profile")
+    if not 30 <= args.timeout <= 1800:
+        raise ValueError("host timeout is outside supported bounds")
+    from .harness_suite import run_harness_suite
+
+    report = run_harness_suite(
+        harness=args.harness,
+        expected_source_sha=args.expected_source_sha,
+        output=args.output,
+        model_timeout=args.timeout,
+        selected_ids=args.cases,
+        executable=args.harness_cli,
+        model=args.harness_model,
+        work_root=args.work_root,
+        candidate_sha=args.candidate_sha,
+        jobs=args.jobs,
+    )
+    print(
+        json.dumps(
+            {
+                "harness": args.harness,
+                "pass": report["pass"],
+                "merge_qualified": False,
+                "scenarios": len(report["cases"]),
+                "outcomes": report["outcomes"],
+                "evidence": str(args.output),
+            }
+        )
+    )
+    return 0 if report["pass"] else 1
 
 
 if __name__ == "__main__":

@@ -79,7 +79,7 @@ def _write_cursor_runtime_hooks(
     }
     if include_file_io_hooks:
         hooks["beforeReadFile"] = [{"command": resolved, "timeout": 45, "failClosed": True}]
-        hooks["beforeWriteFile"] = [{"command": resolved, "timeout": 45, "failClosed": True}]
+        hooks["preToolUse"] = [{"command": resolved, "timeout": 45, "failClosed": True}]
     (cursor_home / "hooks.json").write_text(json.dumps({"version": 1, "hooks": hooks}), encoding="utf-8")
     return script_path
 

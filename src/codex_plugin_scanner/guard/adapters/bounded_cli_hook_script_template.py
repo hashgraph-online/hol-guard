@@ -79,8 +79,7 @@ _APPROVAL_KEYS = (
 _FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
 _AUTHORITY_MARKER = "native command extension policy"
 _AUTHORITY_REMEDIATION = (
-    " Run `hol-guard command controls acknowledge-degraded` after reviewing the "
-    "degradation, or `hol-guard command controls recover-authority`, to restore the "
+    " Run `hol-guard command controls recover-authority` in a terminal to restore the "
     "protected control floor."
 )
 _GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})

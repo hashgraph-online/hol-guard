@@ -203,7 +203,12 @@ from ..runtime.secret_sensitivity import (
 from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
-from ..shims import activate_package_shims, package_shim_status, uninstall_package_shims
+from ..shims import (
+    activate_package_shims,
+    package_shim_status,
+    probe_package_shim_intercepts,
+    uninstall_package_shims,
+)
 from ..store import GuardStore
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 from .connect_flow import (
