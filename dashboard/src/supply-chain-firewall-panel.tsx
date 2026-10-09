@@ -556,7 +556,12 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       let checkingAccess = true;
       try {
         onFixAllStateChange?.({ phase: "checking", message: "Checking Cloud access before device approval…", completedSteps: [], failedSteps: [] });
+        const requestId = ++statusRequestId.current;
         const latest = await fetchPackageFirewallStatus();
+        if (requestId !== statusRequestId.current) {
+          onFixAllStateChange?.({ phase: "error", message: "Package status changed while checking. Check again before restoring protection.", completedSteps: [], failedSteps: [] });
+          return;
+        }
         checkingAccess = false;
         setPanelLoad({ phase: "loaded", data: latest });
         if (supplyChainFixAllRequiresConnection(latest) || (repairNeedsCloudConnectRef.current && !latest.entitlement.allowed)) {
@@ -576,7 +581,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         refreshInBackground();
       } catch (error) {
         if (checkingAccess) {
-          onFixAllStateChange?.(supplyChainFixAllAccessState("Could not check Cloud access. No repair was attempted. Check the local Guard connection, then try again."));
+          onFixAllStateChange?.({ phase: "error", message: "Could not check package status. No repair was attempted. Check that Guard is running, then try again.", completedSteps: [], failedSteps: [] });
           return;
         }
         if (credentials === undefined && isApprovalGateRequiredError(error)) {

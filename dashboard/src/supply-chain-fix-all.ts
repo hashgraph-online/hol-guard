@@ -110,12 +110,14 @@ export function supplyChainFixAllAccessState(
 }
 
 export function supplyChainFixAllCanRepair(data: PackageFirewallStatusResponse): boolean {
-  return data.entitlement.allowed || data.package_shims.some((entry) => entry.installed);
+  return data.entitlement.allowed
+    || (data.protection?.installed_managers.length ?? 0) > 0
+    || data.package_shims.some((entry) => entry.installed);
 }
 
 export function supplyChainFixAllRequiresConnection(data: PackageFirewallStatusResponse): boolean {
   if (data.entitlement.allowed) return false;
   if (data.entitlement.reason === "guard_cloud_reconnect_required") return true;
   if (data.entitlement.reason !== "guard_cloud_connect_required") return false;
-  return !data.package_shims.some((entry) => entry.installed);
+  return !supplyChainFixAllCanRepair(data);
 }

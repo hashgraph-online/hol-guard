@@ -160,3 +160,65 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await page.screenshot({ path: test.info().outputPath("paid-first-activation.png") });
   });
 }
+
+for (const scenario of ["missing-shim", "local-disconnection", "newer-status"] as const) {
+  test(`recovery distinguishes ${scenario} without billing or approval loops`, async ({ page }) => {
+    let statuses = 0;
+    let repairs = 0;
+    let releaseOldStatus: () => void = () => undefined;
+    const oldStatus = new Promise<void>((resolve) => { releaseOldStatus = resolve; });
+    await page.route("**/v1/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      let payload: unknown = {};
+      if (path === "/v1/supply-chain/package-shims") {
+        statuses += 1;
+        if (scenario === "local-disconnection" && statuses > 1) {
+          await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+          return;
+        }
+        if (scenario === "newer-status" && statuses === 2) await oldStatus;
+        payload = {
+          ...packageStatus,
+          entitlement: { allowed: false, reason: "paid_guard_cloud_required", tier: "free" },
+          connect_flow: scenario === "newer-status" && statuses === 1
+            ? { state: "running", poll_after_ms: 1000, title: "Checking sign-in",
+              detail: "Waiting for this test connection.", action_label: "Connect",
+              connect_url: "https://example.test/connect" } : null,
+          package_shims: { ...packageStatus.package_shims, missing_managers: ["npm"],
+            manager_details: [{ manager: "npm", integrity: "missing", path_active: false }] },
+        };
+      } else if (path === "/v1/supply-chain/repair") {
+        repairs += 1;
+        payload = { status: "completed", operation: "repair_all", result: {
+          repaired: true, completed_steps: ["package_shims"], failed_steps: [], remaining_steps: [],
+          message: "Existing package protection restored.",
+        } };
+      } else if (path === "/v1/runtime") {
+        payload = { ...paidStateSnapshot, supply_chain: { package_manager_protection: { installed_managers: [], active_managers: [], supported_managers: ["npm"] } } };
+      } else if (path === "/v1/settings") payload = defaultSettingsPayload;
+      else if (path === "/v1/inventory") payload = emptyInventoryPayload;
+      else if (path === "/v1/receipts") payload = emptyReceiptsPayload;
+      else if (path === "/v1/policy") payload = emptyPoliciesPayload;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+    });
+    try {
+      await page.goto("/supply-chain?guard-token=e2e-token&guardDaemon=http://127.0.0.1:4175");
+      const recovery = page.getByTestId("supply-chain-recovery");
+      await recovery.getByRole("button", { name: "Restore protection", exact: true }).click();
+      if (scenario === "newer-status") {
+        await expect.poll(() => statuses).toBeGreaterThanOrEqual(3);
+        releaseOldStatus();
+        await expect(recovery.getByText("Package status changed while checking. Check again before restoring protection.", { exact: true })).toBeVisible();
+      } else if (scenario === "local-disconnection") {
+        await expect(recovery.getByText("Could not check package status. No repair was attempted. Check that Guard is running, then try again.", { exact: true })).toBeVisible();
+      } else {
+        await expect(recovery.getByText("Existing package protection restored.", { exact: true })).toBeVisible();
+      }
+      expect(repairs).toBe(scenario === "missing-shim" ? 1 : 0);
+      await expect(recovery.getByRole("link", { name: "Review Cloud plan" })).toHaveCount(0);
+      await expect(page.getByRole("dialog", { name: "Restore package protection" })).toHaveCount(0);
+    } finally {
+      releaseOldStatus();
+    }
+  });
+}
