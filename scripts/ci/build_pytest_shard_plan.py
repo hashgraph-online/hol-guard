@@ -73,6 +73,8 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_shim_intercept_proofs.py::"
         "test_daemon_package_shim_test_uses_projected_shell_profile_path",
         "tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque",
+        "tests/test_guard_command_corpus.py::"
+        "test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences",
     }
 )
 
