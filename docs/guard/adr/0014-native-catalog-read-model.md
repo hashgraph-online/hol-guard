@@ -43,6 +43,21 @@ The legacy `GET /v1/extension-controls/catalog` returns every extension, permiss
 
 The legacy v1 route stays supported and keeps its shape. In-repo callers move to v2 in Stage C. The Python `catalog()` full materialization stays the v1 implementation until v1 has no supported callers. That removal is tracked separately and needs its own deprecation window.
 
+The v1 body is not served from Rust bytes. A wheel without a native runtime must still serve v1, so the Python serializer has to stay. Serving Rust bytes when native is present would add a second v1 serializer, and the two outputs could drift. The v1 size check measures the exact HTML-escaped bytes the daemon writes, so it does not depend on another serializer's output.
+
+Each Python piece on the catalog read path is either a permanent boundary or a temporary bridge:
+
+| Piece | Status | Removal condition |
+| --- | --- | --- |
+| `native_catalog_read.py` (bounded resident transport) | Permanent while Python owns the daemon HTTP boundary | Removed only if HTTP moves out of Python, under a separate ADR |
+| `daemon/catalog_read_v2.py` (auth, raw bounds, status mapping, rollback switch) | Permanent while Python owns the daemon HTTP boundary | Same as above |
+| `daemon/catalog_v2_client.py` and `cli/extension_catalog_reads.py` v2 paths (CLI formatting) | Permanent CLI client | None; they format Rust pages and build no catalog state |
+| `ExtensionControlApi.catalog()` and `GET /v1/extension-controls/catalog` | Temporary bridge, still supported | Every supported CLI, dashboard and desktop release reads v2; wheels without a native runtime are no longer supported; then a deprecation window of at least one minor release with a `Deprecation` header |
+| CLI `_v1_extensions` fallback and dashboard `catalogReadModelFromCatalog`/`localSearch` | Temporary bridge for daemons without v2 and for the rollback switch | Removed together with the v1 route, after the rollback switch has been unused for one release |
+| Cloud v1 catalog metadata and handshake | Separate contract, unchanged | Only a negotiated Cloud protocol version can change it |
+
+No bridge may become a second authority. `test_v2_python_boundary_never_reserializes_the_catalog` keeps the v2 modules from building catalog content. `test_v2_read_model_is_reachable_only_from_read_paths` keeps read metadata out of store, authority, policy and Cloud sync code. `test_protocol_absence_is_the_only_fallback_signal` and the dashboard fallback tests keep the v1 bridges limited to protocol absence. Python control-plane functions are not removed to raise the Rust share; each removal needs its condition above.
+
 ## Consequences
 
 A wheel without a native runtime still serves v1. A resident restart, or a binary with a different catalog, changes `snapshot_id`. Cursors from the old snapshot then return 409 `catalog_snapshot_expired`, and clients restart the traversal once. The snapshot is immutable for the life of the process, so there is no replacement race; a new catalog arrives only with a new native binary.

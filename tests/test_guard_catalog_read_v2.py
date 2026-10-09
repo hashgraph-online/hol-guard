@@ -375,6 +375,40 @@ def test_v2_python_boundary_never_reserializes_the_catalog() -> None:
     assert transport_source.count("json.loads(") == 1
 
 
+_V2_READ_MODULES = frozenset({"native_catalog_read", "catalog_read_v2", "catalog_v2_client"})
+
+
+def _imported_modules(tree: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            names.update((node.module or "").split("."))
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                names.update(alias.name.split("."))
+    return names
+
+
+def test_v2_read_model_is_reachable_only_from_read_paths() -> None:
+    """Catalog read metadata must not reach authority, mutation, hook or Cloud code."""
+
+    package = Path(transport.__file__ or "").parent
+    importers = {
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*.py")
+        if path.stem not in _V2_READ_MODULES
+        and _imported_modules(ast.parse(path.read_text(encoding="utf-8"))) & _V2_READ_MODULES
+    }
+    # The daemon GET route and the CLI catalog readers are the only callers.
+    assert importers == {"daemon/server.py", "cli/extension_catalog_reads.py"}
+    # The v2 modules import transport helpers only: no store, authority, policy or sync code.
+    for module in _V2_READ_MODULES:
+        source = next(package.rglob(f"{module}.py")).read_text(encoding="utf-8")
+        imported = _imported_modules(ast.parse(source))
+        assert not imported & {"store", "authority", "extension_control_api", "extension_catalog_sync", "policy"}
+
+
 def test_real_native_read_model_traverses_index_and_revalidates(
     native_hook_force: Path, daemon: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
