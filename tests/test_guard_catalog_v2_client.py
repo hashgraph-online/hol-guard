@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -348,3 +349,66 @@ def test_real_native_patterns_search_is_bounded_and_rust_filtered(native_daemon:
     assert reads.pattern_extensions(native_daemon.client, "command.missing") == []
     with pytest.raises(ValueError, match="unknown extension target"):
         reads.catalog_show(native_daemon.client, "command.missing")
+
+
+def test_patterns_search_skips_q_when_its_encoding_exceeds_the_query_cap() -> None:
+    sent: list[dict[str, str] | None] = []
+
+    class _Reader:
+        def traverse(self, route: str, *, item_key: str, params: dict[str, str] | None = None) -> SimpleNamespace:
+            if route == "permissions":
+                sent.append(params)
+            return SimpleNamespace(items=[])
+
+    reader = cast(CatalogV2Client, _Reader())
+    reads._v2_permission_search(reader, "git push")
+    # 220 CJK characters fit the character bound but percent-encode to 1,980 bytes.
+    reads._v2_permission_search(reader, "推" * 220)
+    assert sent == [{"q": "git push"}, None]
+
+
+def _detail(snapshot: str, *, permissions: int) -> dict[str, object]:
+    return {
+        "snapshot_id": snapshot,
+        "native_catalog_digest": "d" * 64,
+        "extension": {"extension_id": "command.a", "catalog_defaults": {"enabled": True, "activation": "default"}},
+        "collections": {"permissions": {"total_count": permissions}, "rules": {"total_count": 0}},
+    }
+
+
+def _collection(snapshot: str, key: str, ids: list[str]) -> dict[str, object]:
+    return {
+        "snapshot_id": snapshot,
+        "native_catalog_digest": "d" * 64,
+        "total_count": len(ids),
+        "items": [{key: item} for item in ids],
+        "next_cursor": None,
+    }
+
+
+def test_show_restarts_when_a_collection_comes_from_another_snapshot(serve: Callable[[Responder], _Server]) -> None:
+    details = iter(["cs1-old", "cs1-new"])
+
+    def responder(path: str, _query: dict[str, list[str]], _validator: str | None) -> Reply:
+        if path.endswith("/permissions"):
+            return _json(200, _collection("cs1-new", "permission_id", ["p1", "p2"]), '"cr1-p"')
+        if path.endswith("/rules"):
+            return _json(200, _collection("cs1-new", "rule_id", []), '"cr1-r"')
+        snapshot = next(details)
+        return _json(200, _detail(snapshot, permissions=2), f'"cr1-{snapshot}"')
+
+    server = serve(responder)
+    extension = reads.v1_extension_from_v2(CatalogV2Client(server.client()), "command.a")
+    assert [item["permission_id"] for item in extension["permissions"]] == ["p1", "p2"]  # type: ignore[index]
+    assert sum(path.endswith("/command.a") for path, _ in server.requests) == 2
+
+
+def test_show_rejects_a_collection_that_disagrees_with_its_detail(serve: Callable[[Responder], _Server]) -> None:
+    def responder(path: str, _query: dict[str, list[str]], _validator: str | None) -> Reply:
+        if path.endswith("/permissions"):
+            return _json(200, _collection("cs1-a", "permission_id", ["p1"]), '"cr1-p"')
+        return _json(200, _detail("cs1-a", permissions=2), '"cr1-a"')
+
+    server = serve(responder)
+    with pytest.raises(CatalogTraversalError, match="does not match its detail"):
+        reads.v1_extension_from_v2(CatalogV2Client(server.client()), "command.a")

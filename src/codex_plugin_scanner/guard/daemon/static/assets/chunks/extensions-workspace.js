@@ -1132,9 +1132,9 @@ function isRecord(value) {
 function protocolError(message, code) {
   return new ExtensionControlApiError(message, code === CATALOG_SNAPSHOT_EXPIRED ? 409 : 502, code);
 }
-async function readOnce(path, ifNoneMatch) {
+async function readOnce(path, ifNoneMatch, signal) {
   const headers = ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {};
-  const response = await fetchExtensionCatalogV2Api(path, { headers, cache: "no-store" });
+  const response = await fetchExtensionCatalogV2Api(path, { headers, cache: "no-store", signal });
   const etag = response.headers.get("ETag");
   if (response.status === 304) return { status: 304, etag };
   const declared = Number(response.headers.get("Content-Length") ?? "0");
@@ -1158,18 +1158,18 @@ async function readOnce(path, ifNoneMatch) {
   if (!isRecord(payload)) throw protocolError(`Guard returned invalid JSON (${response.status})`);
   return { status: 200, etag, payload, size };
 }
-async function readSized(route, query) {
+async function readSized(route, query, signal) {
   const path = `${CATALOG_V2_PATH}${route}${query ? `?${query}` : ""}`;
   const key = `${guardApiCacheScope()}|${path}`;
   const cached = readCache.get(key);
-  let response = await readOnce(path, cached?.etag ?? null);
+  let response = await readOnce(path, cached?.etag ?? null, signal);
   if (response.status === 304) {
     if (cached && response.etag === cached.etag) {
       readCache.delete(key);
       readCache.set(key, cached);
       return cached;
     }
-    response = await readOnce(path, null);
+    response = await readOnce(path, null, signal);
     if (response.status !== 200) throw protocolError("Guard answered 304 to an unconditional catalog request");
   }
   if (!response.etag) throw protocolError("Guard catalog response is missing its validator");
@@ -1190,7 +1190,7 @@ function pageFields(page) {
   }
   return { snapshot_id, digest: native_catalog_digest, total: total_count, items, next: next_cursor ?? null };
 }
-async function traverseOnce(route, itemKey, params) {
+async function traverseOnce(route, itemKey, params, signal) {
   const items = [];
   const seenItems = /* @__PURE__ */ new Set();
   const seenCursors = /* @__PURE__ */ new Set();
@@ -1198,9 +1198,10 @@ async function traverseOnce(route, itemKey, params) {
   let cursor = null;
   let consumed = 0;
   for (let index = 0; index < MAX_TRAVERSAL_PAGES; index += 1) {
+    signal?.throwIfAborted();
     const query = { limit: String(PAGE_LIMIT), ...params, ...cursor ? { cursor } : {} };
     const encoded = new URLSearchParams(Object.entries(query).sort(([left], [right]) => left.localeCompare(right))).toString();
-    const read = await readSized(route, encoded);
+    const read = await readSized(route, encoded, signal);
     consumed += read.size;
     if (consumed > MAX_TRAVERSAL_BYTES) throw protocolError("Guard catalog traversal exceeded its byte budget");
     const page = pageFields(read.payload);
@@ -1225,13 +1226,13 @@ async function traverseOnce(route, itemKey, params) {
   }
   throw protocolError("Guard catalog traversal exceeded its page budget");
 }
-async function traverse(route, itemKey, params = {}) {
+async function traverse(route, itemKey, params = {}, signal) {
   try {
-    return await traverseOnce(route, itemKey, params);
+    return await traverseOnce(route, itemKey, params, signal);
   } catch (error) {
     if (!(error instanceof ExtensionControlApiError) || error.code !== CATALOG_SNAPSHOT_EXPIRED) throw error;
   }
-  return traverseOnce(route, itemKey, params);
+  return traverseOnce(route, itemKey, params, signal);
 }
 function extensionRoute(extensionId, collection) {
   const route = `extensions/${encodeURIComponent(extensionId)}`;
@@ -1291,10 +1292,10 @@ async function loadV2() {
       }
       return pending;
     },
-    async searchPermissions(query) {
+    async searchPermissions(query, signal) {
       const terms = searchTerms(query);
       if (!terms.length) return [];
-      const result = await traverse("permissions", "permission_id", { q: terms.join(" ") });
+      const result = await traverse("permissions", "permission_id", { q: terms.join(" ") }, signal);
       requireSnapshot(result.snapshot_id, index.snapshot_id);
       return result.items.map((item, position) => {
         const permission = normalizeExtensionPermission(item, `catalog.permissions[${position}]`);
@@ -8193,18 +8194,17 @@ function useCatalogPermissionSearch(catalog, rawQuery) {
       setState({ query, hits: [], error: null });
       return;
     }
-    let cancelled = false;
-    catalog.searchPermissions(query).then(
+    const controller = new AbortController();
+    catalog.searchPermissions(query, controller.signal).then(
       (hits) => {
-        if (!cancelled) setState({ query, hits, error: null });
+        if (!controller.signal.aborted) setState({ query, hits, error: null });
       },
       (error) => {
-        if (!cancelled) setState({ query, hits: [], error: error instanceof Error ? error.message : "Guard could not search command patterns." });
+        if (controller.signal.aborted) return;
+        setState({ query, hits: [], error: error instanceof Error ? error.message : "Guard could not search command patterns." });
       }
     );
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [catalog, local, query]);
   if (local) return { ...local, pending: false };
   return { ...state, pending: current !== "" && state.query !== current };

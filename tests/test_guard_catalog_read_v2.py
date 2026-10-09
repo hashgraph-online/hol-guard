@@ -99,8 +99,14 @@ class _Resident:
 
     def install(self, monkeypatch: pytest.MonkeyPatch, *, available: bool = True) -> None:
         identity = SimpleNamespace(path=Path("/native"), sha256="0" * 64)
-        monkeypatch.setattr(transport, "native_runtime_status", lambda: SimpleNamespace(identity=identity))
-        monkeypatch.setattr(transport, "native_catalog_read_available", lambda: available)
+        self.status_probes: list[float | None] = []
+
+        def status(*, deadline_monotonic: float | None = None) -> SimpleNamespace:
+            self.status_probes.append(deadline_monotonic)
+            return SimpleNamespace(identity=identity)
+
+        monkeypatch.setattr(transport, "native_runtime_status", status)
+        monkeypatch.setattr(transport, "_supports_catalog_read", lambda _status: available)
         monkeypatch.setattr(transport, "_isolated_environment", dict)
         monkeypatch.setattr(transport, "native_resident_client_request", self.request)
         monkeypatch.setattr(
@@ -148,12 +154,22 @@ def test_transport_forwards_raw_request_and_returns_body_bytes(tmp_path: Path, m
         "expected_catalog_digest": DIGEST,
     }
     assert resident.successes == 1 and resident.failures == []
+    # One status probe per read, bounded by the same deadline as the resident call.
+    assert len(resident.status_probes) == 1 and resident.status_probes[0] is not None
+
+
+def test_busy_resident_is_a_retryable_fault_not_protocol_absence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    resident = _Resident(None)
+    resident.install(monkeypatch)
+    assert _read(tmp_path) == NativeCatalogReadResult(status=503, error_code=transport.CATALOG_READ_TRANSPORT_FAILED)
+    assert resident.failures == ["native_catalog_read_transport"]
 
 
 @pytest.mark.parametrize(
     ("response", "reason"),
     [
-        (None, "native_catalog_read_transport"),
         (b"\xff", "native_catalog_read_malformed"),
         (b'{"schema":"a","schema":"b"}', "native_catalog_read_malformed"),
         (json.dumps(_frame(http_status=201)).encode(), "native_catalog_read_schema"),

@@ -16,8 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .native_resident_client import native_resident_client_request
-from .native_runtime import _isolated_environment, native_runtime_status
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
+from .strict_json_pairs import unique_json_object
 
 CATALOG_READ_FEATURE = "catalog-read-model-v1"
 MAX_CATALOG_V2_BODY_BYTES = 262_144
@@ -41,6 +42,9 @@ _ERROR_STATUS = {
     "catalog_snapshot_mismatch": 503,
     "catalog_read_model_unavailable": 503,
 }
+# A resident that is busy or timed out is a temporary fault, not protocol absence:
+# answering 501 would send every client to the whole v1 catalog under load.
+CATALOG_READ_TRANSPORT_FAILED = "catalog_read_transport_failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,15 +53,6 @@ class NativeCatalogReadResult:
     etag: str | None = None
     body: bytes | None = None
     error_code: str | None = None
-
-
-def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate native response field")
-        result[key] = value
-    return result
 
 
 def _validated_result(decoded: object) -> NativeCatalogReadResult | None:
@@ -89,12 +84,15 @@ def _validated_result(decoded: object) -> NativeCatalogReadResult | None:
     return None
 
 
-def native_catalog_read_available() -> bool:
-    status = native_runtime_status()
+def _supports_catalog_read(status: NativeRuntimeStatus) -> bool:
     if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
         return False
     features = set(status.capabilities.features)
     return _RESIDENT_PROTOCOL_FEATURE in features and CATALOG_READ_FEATURE in features
+
+
+def native_catalog_read_available() -> bool:
+    return _supports_catalog_read(native_runtime_status())
 
 
 def native_catalog_read(
@@ -108,8 +106,10 @@ def native_catalog_read(
 ) -> NativeCatalogReadResult | None:
     """Return the native result, or ``None`` when the read model is unavailable.
 
-    ``None`` means protocol absence (no native runtime, no capability, transport
-    or frame failure); callers answer 501 so clients may use the v1 route.
+    ``None`` means protocol absence (no native runtime, no capability, or a frame
+    this daemon cannot validate); callers answer 501 so clients may use the v1
+    route. A busy or timed-out resident answers 503 ``catalog_read_transport_failed``.
+    One deadline covers runtime discovery and the resident call.
     """
 
     if len(route.encode("utf-8")) > MAX_CATALOG_V2_ROUTE_BYTES:
@@ -121,8 +121,9 @@ def native_catalog_read(
         if_none_match = None
     if not _DIGEST.fullmatch(expected_catalog_digest):
         return None
-    status = native_runtime_status()
-    if not native_catalog_read_available() or status.identity is None:
+    deadline = time.monotonic() + timeout_seconds
+    status = native_runtime_status(deadline_monotonic=deadline)
+    if not _supports_catalog_read(status) or status.identity is None:
         return None
     envelope = {
         "operation": "catalog_read",
@@ -133,7 +134,7 @@ def native_catalog_read(
             "if_none_match": if_none_match,
             "expected_catalog_digest": expected_catalog_digest,
         },
-        "deadline_budget_ms": max(1, int(timeout_seconds * 1000)),
+        "deadline_budget_ms": max(1, int((deadline - time.monotonic()) * 1000)),
     }
     payload = json.dumps(envelope, separators=(",", ":")).encode("utf-8")
     response = native_resident_client_request(
@@ -141,14 +142,14 @@ def native_catalog_read(
         guard_home=guard_home,
         environment=_isolated_environment(),
         payload=payload,
-        timeout_seconds=timeout_seconds,
-        deadline_monotonic=time.monotonic() + timeout_seconds,
+        timeout_seconds=max(0.001, deadline - time.monotonic()),
+        deadline_monotonic=deadline,
     )
     if response is None:
         native_record_resident_failure(status.identity.sha256, guard_home, reason="native_catalog_read_transport")
-        return None
+        return NativeCatalogReadResult(status=503, error_code=CATALOG_READ_TRANSPORT_FAILED)
     try:
-        decoded = json.loads(response.decode("utf-8"), object_pairs_hook=_unique_object)
+        decoded = json.loads(response.decode("utf-8"), object_pairs_hook=unique_json_object)
     except (UnicodeDecodeError, ValueError):
         native_record_resident_failure(status.identity.sha256, guard_home, reason="native_catalog_read_malformed")
         return None
@@ -162,6 +163,7 @@ def native_catalog_read(
 
 __all__ = [
     "CATALOG_READ_FEATURE",
+    "CATALOG_READ_TRANSPORT_FAILED",
     "MAX_CATALOG_V2_BODY_BYTES",
     "NativeCatalogReadResult",
     "native_catalog_read",

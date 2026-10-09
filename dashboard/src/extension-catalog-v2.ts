@@ -49,7 +49,7 @@ export type CatalogReadModel = {
   /** Full extension (permissions, rules, MCP tools), read only when needed. */
   detail(extensionId: string): Promise<ExtensionCatalogItem>;
   /** Permissions whose search text contains every whitespace-separated term. */
-  searchPermissions(query: string): Promise<CatalogPermissionHit[]>;
+  searchPermissions(query: string, signal?: AbortSignal): Promise<CatalogPermissionHit[]>;
   /** Present when every permission is already in memory (legacy catalog). */
   localSearch?(query: string): CatalogPermissionHit[];
 };
@@ -74,10 +74,10 @@ function protocolError(message: string, code?: string): ExtensionControlApiError
   return new ExtensionControlApiError(message, code === CATALOG_SNAPSHOT_EXPIRED ? 409 : 502, code);
 }
 
-async function readOnce(path: string, ifNoneMatch: string | null): Promise<Read> {
+async function readOnce(path: string, ifNoneMatch: string | null, signal?: AbortSignal): Promise<Read> {
   const headers: Record<string, string> = ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {};
   // The module keeps its own validators, so bypass the HTTP cache and see 304s.
-  const response = await fetchExtensionCatalogV2Api(path, { headers, cache: "no-store" });
+  const response = await fetchExtensionCatalogV2Api(path, { headers, cache: "no-store", signal });
   const etag = response.headers.get("ETag");
   if (response.status === 304) return { status: 304, etag };
   const declared = Number(response.headers.get("Content-Length") ?? "0");
@@ -102,11 +102,11 @@ async function readOnce(path: string, ifNoneMatch: string | null): Promise<Read>
   return { status: 200, etag, payload, size };
 }
 
-async function readSized(route: string, query: string): Promise<CachedRead> {
+async function readSized(route: string, query: string, signal?: AbortSignal): Promise<CachedRead> {
   const path = `${CATALOG_V2_PATH}${route}${query ? `?${query}` : ""}`;
   const key = `${guardApiCacheScope()}|${path}`;
   const cached = readCache.get(key);
-  let response = await readOnce(path, cached?.etag ?? null);
+  let response = await readOnce(path, cached?.etag ?? null, signal);
   if (response.status === 304) {
     if (cached && response.etag === cached.etag) {
       readCache.delete(key);
@@ -114,7 +114,7 @@ async function readSized(route: string, query: string): Promise<CachedRead> {
       return cached;
     }
     // A 304 that cannot be satisfied locally gets exactly one unconditional retry.
-    response = await readOnce(path, null);
+    response = await readOnce(path, null, signal);
     if (response.status !== 200) throw protocolError("Guard answered 304 to an unconditional catalog request");
   }
   if (!response.etag) throw protocolError("Guard catalog response is missing its validator");
@@ -146,7 +146,12 @@ function pageFields(page: Record<string, unknown>): Page {
 
 type Traversal = { snapshot_id: string; digest: string; items: Record<string, unknown>[] };
 
-async function traverseOnce(route: string, itemKey: string, params: Record<string, string>): Promise<Traversal> {
+async function traverseOnce(
+  route: string,
+  itemKey: string,
+  params: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<Traversal> {
   const items: Record<string, unknown>[] = [];
   const seenItems = new Set<string>();
   const seenCursors = new Set<string>();
@@ -154,9 +159,11 @@ async function traverseOnce(route: string, itemKey: string, params: Record<strin
   let cursor: string | null = null;
   let consumed = 0;
   for (let index = 0; index < MAX_TRAVERSAL_PAGES; index += 1) {
+    // A superseded read stops between pages instead of walking to the end.
+    signal?.throwIfAborted();
     const query: Record<string, string> = { limit: String(PAGE_LIMIT), ...params, ...(cursor ? { cursor } : {}) };
     const encoded = new URLSearchParams(Object.entries(query).sort(([left], [right]) => left.localeCompare(right))).toString();
-    const read = await readSized(route, encoded);
+    const read = await readSized(route, encoded, signal);
     consumed += read.size;
     if (consumed > MAX_TRAVERSAL_BYTES) throw protocolError("Guard catalog traversal exceeded its byte budget");
     const page = pageFields(read.payload);
@@ -182,14 +189,19 @@ async function traverseOnce(route: string, itemKey: string, params: Record<strin
   throw protocolError("Guard catalog traversal exceeded its page budget");
 }
 
-async function traverse(route: string, itemKey: string, params: Record<string, string> = {}): Promise<Traversal> {
+async function traverse(
+  route: string,
+  itemKey: string,
+  params: Record<string, string> = {},
+  signal?: AbortSignal,
+): Promise<Traversal> {
   try {
-    return await traverseOnce(route, itemKey, params);
+    return await traverseOnce(route, itemKey, params, signal);
   } catch (error) {
     // A stale cursor means the snapshot was replaced; restart exactly once.
     if (!(error instanceof ExtensionControlApiError) || error.code !== CATALOG_SNAPSHOT_EXPIRED) throw error;
   }
-  return traverseOnce(route, itemKey, params);
+  return traverseOnce(route, itemKey, params, signal);
 }
 
 function extensionRoute(extensionId: string, collection?: string): string {
@@ -256,10 +268,10 @@ async function loadV2(): Promise<CatalogReadModel> {
       }
       return pending;
     },
-    async searchPermissions(query) {
+    async searchPermissions(query, signal) {
       const terms = searchTerms(query);
       if (!terms.length) return [];
-      const result = await traverse("permissions", "permission_id", { q: terms.join(" ") });
+      const result = await traverse("permissions", "permission_id", { q: terms.join(" ") }, signal);
       requireSnapshot(result.snapshot_id, index.snapshot_id);
       return result.items.map((item, position) => {
         const permission = normalizeExtensionPermission(item, `catalog.permissions[${position}]`);

@@ -227,12 +227,24 @@ def v1_extension_from_v2(reader: CatalogV2Client, extension_id: str) -> dict[str
     """Assemble the legacy v1 extension object from bounded v2 reads.
 
     Presentation only: the result reproduces the v1 shape for CLI output by
-    combining one detail read with complete collection traversals.
+    combining one detail read with complete collection traversals. Every
+    traversal must come from the detail read's snapshot and match its declared
+    count; a changed snapshot restarts the whole assembly once.
     """
 
+    try:
+        return _assemble_v1_extension(reader, extension_id)
+    except CatalogTraversalError as error:
+        if error.code != _SNAPSHOT_EXPIRED:
+            raise
+    return _assemble_v1_extension(reader, extension_id)
+
+
+def _assemble_v1_extension(reader: CatalogV2Client, extension_id: str) -> dict[str, object]:
     detail = reader.get(extension_route(extension_id))
     extension = detail.get("extension")
     collections = detail.get("collections")
+    snapshot = (detail.get("snapshot_id"), detail.get("native_catalog_digest"))
     if not isinstance(extension, dict) or not isinstance(collections, dict):
         raise GuardDaemonResponseSchemaError("Guard daemon catalog detail schema is invalid")
     result = {key: value for key, value in extension.items() if key not in {"catalog_defaults", "content_revision"}}
@@ -241,12 +253,22 @@ def v1_extension_from_v2(reader: CatalogV2Client, extension_id: str) -> dict[str
         raise GuardDaemonResponseSchemaError("Guard daemon catalog detail schema is invalid")
     result["enabled"] = defaults["enabled"]
     result["activation"] = defaults["activation"]
-    result["permissions"] = reader.traverse(
-        extension_route(extension_id, "permissions"), item_key="permission_id"
-    ).items
-    result["rules"] = reader.traverse(extension_route(extension_id, "rules"), item_key="rule_id").items
+
+    def collection(name: str, route: str, item_key: str) -> list[dict[str, object]]:
+        declared = collections.get(name)
+        if not isinstance(declared, dict) or type(declared.get("total_count")) is not int:
+            raise GuardDaemonResponseSchemaError("Guard daemon catalog detail schema is invalid")
+        traversal = reader.traverse(extension_route(extension_id, route), item_key=item_key)
+        if (traversal.snapshot_id, traversal.native_catalog_digest) != snapshot:
+            raise CatalogTraversalError("Guard daemon catalog snapshot changed", code=_SNAPSHOT_EXPIRED)
+        if traversal.total_count != declared["total_count"]:
+            raise CatalogTraversalError("Guard daemon catalog collection does not match its detail")
+        return traversal.items
+
+    result["permissions"] = collection("permissions", "permissions", "permission_id")
+    result["rules"] = collection("rules", "rules", "rule_id")
     if "mcp_tools" in collections:
-        result["mcp_tools"] = reader.traverse(extension_route(extension_id, "mcp-tools"), item_key="name").items
+        result["mcp_tools"] = collection("mcp_tools", "mcp-tools", "name")
     return result
 
 

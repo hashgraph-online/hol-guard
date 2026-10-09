@@ -9,6 +9,8 @@ schema, limit and server errors propagate unchanged.
 
 from __future__ import annotations
 
+from urllib.parse import quote_plus
+
 from ..daemon.catalog_v2_client import (
     CatalogV2Client,
     CatalogV2UnsupportedError,
@@ -21,6 +23,9 @@ CATALOG_LIST_SCHEMA = "guard.cli.extension-catalog-list.v2"
 _NOT_FOUND = {"catalog_extension_not_found", "catalog_route_not_found"}
 # Mirrors the native read model's search-text bound; longer text is not sent.
 _MAX_SEARCH_CHARS = 256
+# Encoded ``q`` budget inside the 2048-byte raw query cap, leaving room for
+# ``limit`` and a cursor. Text that does not fit is filtered locally instead.
+_MAX_SEARCH_ENCODED_BYTES = 1900
 
 
 def catalog_reader(client: object) -> CatalogV2Client | None:
@@ -118,7 +123,12 @@ def _v2_pattern_extensions(reader: CatalogV2Client, tool: str | None, query: str
 def _v2_permission_search(reader: CatalogV2Client, query: str) -> list[dict[str, object]]:
     index = reader.traverse("index", item_key="extension_id").items
     text = query.strip()
-    sendable = text and len(text) <= _MAX_SEARCH_CHARS and text.isprintable()
+    sendable = (
+        text
+        and len(text) <= _MAX_SEARCH_CHARS
+        and text.isprintable()
+        and len(quote_plus(text)) <= _MAX_SEARCH_ENCODED_BYTES
+    )
     matches = reader.traverse("permissions", item_key="permission_id", params={"q": text} if sendable else None).items
     grouped: dict[str, list[dict[str, object]]] = {}
     for permission in matches:

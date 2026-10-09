@@ -297,6 +297,21 @@ try {
     const model = await loadCatalogReadModel();
     await assert.rejects(model.searchPermissions("git"), (error: unknown) => error instanceof ExtensionControlApiError && error.code === CATALOG_SNAPSHOT_EXPIRED);
   }
+
+  {
+    // A superseded search stops before requesting its next page.
+    const controller = new AbortController();
+    serve((path, params) => {
+      const index = indexHandler(path, params);
+      if (index) return index;
+      controller.abort();
+      return { status: 200, etag: '"s1"', body: page([permission(GIT, "push")], { total: 2, next: "c1" }) };
+    });
+    const model = await loadCatalogReadModel();
+    const before = requests.length;
+    await assert.rejects(model.searchPermissions("git", controller.signal), (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    assert.equal(requests.length, before + 1);
+  }
 } finally {
   globalThis.fetch = realFetch;
   Reflect.deleteProperty(globalThis, "window");

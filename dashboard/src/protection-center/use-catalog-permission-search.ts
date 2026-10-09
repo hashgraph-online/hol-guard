@@ -27,14 +27,16 @@ export function useCatalogPermissionSearch(catalog: CatalogReadModel, rawQuery: 
       setState({ query, hits: [], error: null });
       return;
     }
-    let cancelled = false;
-    catalog.searchPermissions(query).then(
-      (hits) => { if (!cancelled) setState({ query, hits, error: null }); },
+    // Aborting a superseded search stops its remaining page requests.
+    const controller = new AbortController();
+    catalog.searchPermissions(query, controller.signal).then(
+      (hits) => { if (!controller.signal.aborted) setState({ query, hits, error: null }); },
       (error: unknown) => {
-        if (!cancelled) setState({ query, hits: [], error: error instanceof Error ? error.message : "Guard could not search command patterns." });
+        if (controller.signal.aborted) return;
+        setState({ query, hits: [], error: error instanceof Error ? error.message : "Guard could not search command patterns." });
       },
     );
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, [catalog, local, query]);
   if (local) return { ...local, pending: false };
   return { ...state, pending: current !== "" && state.query !== current };
