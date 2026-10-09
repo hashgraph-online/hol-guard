@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import importlib.util
 import json
 import os
 import subprocess
 import sys
 import threading
 import time
+import types
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 FROZEN_ENTRYPOINT = ROOT / "scripts" / "mdm" / "hol-guard-entry.py"
@@ -246,6 +250,11 @@ def test_codex_bridge_proxy_answers_allow_before_guard_imports(tmp_path: Path) -
     assert isinstance(wait_process["pid"], int) and wait_process["pid"] > 0
     assert isinstance(wait_process["startToken"], str)
     assert body["guard_codex_browser_wait_timeout_seconds"] > 0
+    execution_environment = body["guard_execution_environment"]
+    assert execution_environment["path"] == environment["PATH"]
+    assert execution_environment["home"] == environment["HOME"]
+    assert "PATH" in execution_environment["environment_names"]
+    assert len(execution_environment["environment_digest"]) == 64
 
 
 def test_codex_bridge_proxy_preserves_deny(tmp_path: Path) -> None:
@@ -430,3 +439,34 @@ def test_codex_bridge_proxy_falls_through_on_worker_failure(tmp_path: Path) -> N
         fake.server.shutdown()  # type: ignore[union-attr]
     assert result.returncode != 0
     assert marker.is_file()
+
+
+def _load_entry() -> types.ModuleType:
+    spec = importlib.util.spec_from_file_location("hol_guard_entry_for_codex_env_test", FROZEN_ENTRYPOINT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        {"PAGER": "cat", "GIT_PAGER": "", "GIT_CONFIG_NOSYSTEM": "Yes", "XDG_CONFIG_HOME": "/tmp/xdg"},
+        {"PAGER": "less", "GIT_CONFIG_NOSYSTEM": "0", "EMPTY_VALUE": ""},
+        {"PAGER": "less -R", "GIT_PAGER": "delta"},
+    ],
+)
+def test_codex_bridge_proxy_execution_environment_matches_guard_collector(
+    monkeypatch: pytest.MonkeyPatch,
+    overrides: dict[str, str],
+) -> None:
+    from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+
+    for name in ("PAGER", "GIT_PAGER", "GIT_CONFIG_NOSYSTEM", "XDG_CONFIG_HOME"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in overrides.items():
+        monkeypatch.setenv(name, value)
+
+    assert _load_entry()._codex_execution_environment() == collect_hook_execution_environment()

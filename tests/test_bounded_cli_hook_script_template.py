@@ -481,3 +481,41 @@ def test_generated_client_devin_pretooluse_allow_has_no_decision(tmp_path: Path)
     payload = json.loads(stdout)
     assert code == 0
     assert "decision" not in payload
+
+
+@pytest.mark.parametrize(
+    ("pager", "expected"),
+    [
+        (None, False),
+        ("", True),
+        ("cat", True),
+        ("less", True),
+        ("less -R", True),
+        ("less -FRX -S", True),
+        ("more", False),
+        ("less; touch /tmp/x", False),
+        ("less --lesskey-src=/tmp/x", False),
+        ("delta", False),
+    ],
+)
+def test_generated_client_treats_default_equivalent_pagers_as_disabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pager: str | None,
+    expected: bool,
+) -> None:
+    from codex_plugin_scanner.guard.hook_execution_environment import pager_default_equivalent
+
+    module = _load_script(tmp_path, harness="zcode")
+    for name in ("PAGER", "GIT_PAGER"):
+        if pager is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, pager)
+
+    context = json.loads(module._stamp_hook_input(json.dumps({"hook_event_name": "PreToolUse"})))[
+        "guard_execution_environment"
+    ]
+    assert context["pager_disabled"] is expected
+    assert context["git_pager_disabled"] is expected
+    assert pager_default_equivalent(pager) is expected

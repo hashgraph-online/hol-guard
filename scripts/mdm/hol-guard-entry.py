@@ -285,6 +285,10 @@ _CODEX_CHALLENGE_TTL_MS = 5_000
 _CODEX_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _CODEX_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 _CODEX_WAIT_TIMEOUT_KEY = "guard_codex_browser_wait_timeout_seconds"
+_CODEX_EXECUTION_ENVIRONMENT_KEY = "guard_execution_environment"
+_CODEX_GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+# Same rule as hook_execution_environment: bare `less` is Git's default pager.
+_CODEX_DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[A-Za-z]+)*)?")
 _CODEX_TRUSTED_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 _CODEX_DISCOVERY_PROTOCOL_VERSION = 1
 _CODEX_DAEMON_RPC_TIMEOUT_SECONDS = 4.0
@@ -380,8 +384,36 @@ def _codex_process_start_token(pid: int) -> str | None:
     return None
 
 
+def _codex_pager_default_equivalent(value: str | None) -> bool:
+    return value is not None and _CODEX_DEFAULT_EQUIVALENT_PAGER.fullmatch(value) is not None
+
+
+def _codex_execution_environment() -> dict[str, object]:
+    """Mirror hook_execution_environment.collect_hook_execution_environment without importing Guard.
+
+    Native Git-helper and path checks need the environment Codex will run the
+    command in. Without it the Rust edge treats every Git read and `cd` as
+    unverifiable and asks for review.
+    """
+
+    active = {key: value for key, value in os.environ.items() if value}
+    no_system = os.environ.get("GIT_CONFIG_NOSYSTEM")
+    return {
+        "path": os.environ.get("PATH", ""),
+        "home": os.environ.get("HOME"),
+        "git_pager_disabled": _codex_pager_default_equivalent(os.environ.get("GIT_PAGER")),
+        "pager_disabled": _codex_pager_default_equivalent(os.environ.get("PAGER")),
+        "environment_names": sorted(active),
+        "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
+        "git_config_no_system": no_system is not None and no_system.casefold() in _CODEX_GIT_TRUE_VALUES,
+        "environment_digest": hashlib.sha256(
+            json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+
 def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float, rpc_deadline: float) -> str:
-    """Attach the wait-process identity and remaining budget the daemon expects."""
+    """Attach the execution context, wait-process identity and remaining budget the daemon expects."""
 
     try:
         payload = json.loads(data)
@@ -389,6 +421,7 @@ def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float, rpc_de
         return data
     if not isinstance(payload, dict):
         return data
+    payload[_CODEX_EXECUTION_ENVIRONMENT_KEY] = _codex_execution_environment()
     payload["guard_remaining_ms"] = min(60_000, max(1, int((rpc_deadline - time.monotonic()) * 1000)))
     if event_name == "PreToolUse":
         start_token = _codex_process_start_token(os.getpid())
