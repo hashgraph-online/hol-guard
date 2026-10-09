@@ -184,10 +184,10 @@ uv run --no-sync python scripts/export_extension_directory.py --check
 uv run --no-sync python scripts/render_command_extension_directory.py --check
 ```
 
-Maintainers commit the canonical sources, reviewed trust changes, generated
-descriptors, program/catalog artifacts, and changed public directory files
-together after preparation. Contributors need only submit the source and fixture;
-shared trust-map defaults and generated projections are maintainer-owned.
+Contributors submit the canonical source, portable fixture, and reviewed
+per-extension trust binding together. Maintainer regeneration publishes derived
+descriptors and public directory files after merge; program/catalog and aggregate
+trust projections are ignored package outputs. Do not commit those projections.
 Release packaging supplies the native compiler and its identity manifest from
 the platform build; an installed compiler does not fall back to a checkout.
 
@@ -276,10 +276,10 @@ restoring a Python fallback.
 
 ## Review bar
 
-- The canonical source, fixture, trust-map entry, and generated projections agree on IDs and digests.
+- The canonical source, fixture, per-extension trust binding, and generated projections agree on IDs and digests.
 - The source compiler accepts the build envelope and the portable fixture passes through native evaluation.
 - The [focused native, contribution, and directory checks](extensions/contributing.md#local-validation) pass against the regenerated program.
-- New catalog IDs are added to the trust-class map in the same change. CI fails if a built-in ID is missing.
+- Every new command or MCP catalog ID has its authored trust binding in the same change. Required CI fails before preparation if a canonical contribution lacks one.
 - Community command contributions are explicitly mapped as `external` and require local-admin enable; author metadata cannot promote them to a trusted class.
 - Generated metadata is inspected for publisher, homepage, references, risk classes, and safer guidance.
 - A signed-cloud enable cannot turn an external contribution on. Local-admin enable is required.
