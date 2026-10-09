@@ -22,7 +22,9 @@ from .local_cli_runner import runner_name, unwrap_local_runner
 
 LocalCliKind = Literal["executable", "script"]
 
-REGISTRY_PACKAGE_CLI_PREFIX = "local-cli.pkg-"
+# ``local-cli.pkg-`` is taken by package.json script identities.
+REGISTRY_PACKAGE_CLI_PREFIX = "local-cli.npm-"
+REGISTRY_PACKAGE_PATH_CLASS = "registry-package"
 _CLI_ID_PATTERN = re.compile(r"^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$")
 _SLUG_MAX = 32
 _INTERPRETER_NAMES = frozenset(
@@ -84,7 +86,7 @@ class UnlistedCliIdentity:
     def is_registry_package(self) -> bool:
         """Runner fetches without a proven local bin never carry a persistent allow."""
 
-        return self.cli_id.startswith(REGISTRY_PACKAGE_CLI_PREFIX)
+        return self.runner is not None and self.path_class == REGISTRY_PACKAGE_PATH_CLASS
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -134,7 +136,10 @@ def identify_unlisted_cli_from_command(
         return None
     segment = command.segments[0]
     if runner_name(segment.executable) is not None:
-        return _runner_identity(command, segment, cwd=cwd, home_dir=home_dir)
+        # ``pnpm run <script>`` and other non-launch forms keep the script path.
+        runner_identity = _runner_identity(command, segment, cwd=cwd, home_dir=home_dir)
+        if runner_identity is not None:
+            return runner_identity
     launch = build_runtime_launch_identity(
         segment.executable,
         args=segment.arguments,
@@ -319,7 +324,7 @@ def _runner_identity(
             kind="executable",
             identity_hash=_identity_digest({"kind": "registry-package", "package_name": invocation.package_name}),
             example_label=f"{invocation.runner} {name}",
-            path_class="registry-package",
+            path_class=REGISTRY_PACKAGE_PATH_CLASS,
             runner=invocation.runner,
         )
     path = _nonempty_string(local_bin.get("resolved_path"))
