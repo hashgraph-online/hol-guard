@@ -32,8 +32,19 @@ _MAX_NESTED_PROBES = 8
 _SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
 
 
-def parse_cli_help_text(text: str, *, parent_id: str | None = None) -> tuple[LocalCliCommand, ...]:
-    """Extract first-level commands from typical CLI --help output."""
+def parse_cli_help_text(
+    text: str,
+    *,
+    parent_id: str | None = None,
+    invocation: Sequence[str] = (),
+) -> tuple[LocalCliCommand, ...]:
+    """Extract first-level commands from typical CLI --help output.
+
+    ``invocation`` is the program and parent command path (for example
+    ``("wrangler", "d1")``). Yargs-style help repeats it at the start of every
+    row, so it is stripped, and such rows count even under unrecognised
+    section headings.
+    """
 
     found: list[LocalCliCommand] = []
     seen: set[str] = set()
@@ -49,6 +60,12 @@ def parse_cli_help_text(text: str, *, parent_id: str | None = None) -> tuple[Loc
             in_section = True
             for name in _argparse_names(stripped):
                 _append_command(found, seen, name, parent_id=parent_id)
+            continue
+        prefixed = _strip_invocation(stripped, invocation)
+        if prefixed is not None:
+            parsed = _row_command(prefixed)
+            if parsed is not None:
+                _append_command(found, seen, parsed[0], description=parsed[1], parent_id=parent_id)
             continue
         if not in_section:
             continue
@@ -123,7 +140,7 @@ def discover_local_cli_commands(
 
     probe: Callable[[Sequence[str]], str] = runner if runner is not None else run_cli_help
     output = str(probe(tuple(argv)))
-    discovered = parse_cli_help_text(output)
+    discovered = parse_cli_help_text(output, invocation=(identity.name,))
     if output.strip() == "":
         status: HelpStatus = "failed"
     elif not discovered:
@@ -131,7 +148,7 @@ def discover_local_cli_commands(
     else:
         status = "ok"
         if len(discovered) <= _MAX_NESTED_PROBES:
-            discovered = _with_nested_commands(tuple(argv), discovered, probe)
+            discovered = _with_nested_commands(tuple(argv), discovered, probe, program=identity.name)
     return merge_discovered_commands(identity.name, discovered), status
 
 
@@ -199,6 +216,8 @@ def _with_nested_commands(
     argv: Sequence[str],
     discovered: Sequence[LocalCliCommand],
     probe: Callable[[Sequence[str]], str],
+    *,
+    program: str,
 ) -> tuple[LocalCliCommand, ...]:
     nested: list[LocalCliCommand] = list(discovered)
     seen = {command.command_id for command in nested}
@@ -207,7 +226,7 @@ def _with_nested_commands(
         if command.parent_id is not None:
             continue
         child_output = probe((*prefix, command.name, "--help"))
-        for child in parse_cli_help_text(child_output):
+        for child in parse_cli_help_text(child_output, invocation=(program, command.name)):
             child_id = f"{command.command_id}.{child.command_id}"
             if child_id in seen or not _COMMAND_NAME.fullmatch(child.command_id):
                 continue
@@ -253,6 +272,16 @@ def _safe_probe_path(path_text: str) -> bool:
         return False
     parts = [part.lower() for part in resolved.parts]
     return not (len(parts) > 1 and parts[0] == "/" and parts[1] in {"proc", "dev", "sys"})
+
+
+def _strip_invocation(line: str, invocation: Sequence[str]) -> str | None:
+    words = [word.lower() for word in invocation if word]
+    if not words:
+        return None
+    parts = line.split(maxsplit=len(words))
+    if len(parts) <= len(words) or [part.lower() for part in parts[: len(words)]] != words:
+        return None
+    return parts[len(words)]
 
 
 def _row_command(line: str) -> tuple[str, str] | None:

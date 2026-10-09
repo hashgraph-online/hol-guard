@@ -16,6 +16,8 @@ from ..runtime.local_cli_commands import (
     LocalCliCommand,
     merge_discovered_commands,
 )
+from ..runtime.local_mcp_probe import is_package_mcp_launcher
+from ..runtime.mcp_protection import build_mcp_server_identity
 
 SEEDED_PROFILE_PREFIX = "local-cli.profile-"
 
@@ -35,6 +37,27 @@ def merge_profile_commands(tool_name: str, discovered: Sequence[LocalCliCommand]
     if profile is None:
         return tuple(discovered)
     return merge_discovered_commands(tool_name, (*discovered, *profile.local_cli_commands()))
+
+
+def profiled_cli_package_launch(tokens: Sequence[str]) -> bool:
+    """Return True when a package launcher runs a CLI with a curated profile.
+
+    ``npx wrangler`` is a CLI call, not an MCP server; probing it over stdio
+    would spawn the CLI and then reject the paste as a built-in launcher.
+    """
+
+    if not is_package_mcp_launcher(tokens):
+        return False
+    package_name = build_mcp_server_identity(
+        config_path="",
+        command=tokens[0],
+        args=tuple(tokens[1:]),
+        transport="stdio",
+    ).package_name
+    if not package_name:
+        return False
+    target = package_name.rsplit("/", 1)[-1]
+    return profile_for_executable(target) is not None
 
 
 _MCP_CLI_ID_PREFIX = "local-cli.mcp-"
