@@ -8,10 +8,12 @@ import os
 import re
 
 HOOK_EXECUTION_ENVIRONMENT_KEY = "guard_execution_environment"
+MAX_STAMPED_HOOK_INPUT_BYTES = 1_000_000
 _GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
-# Git pages through `less` when no pager is configured, so an explicit bare
-# `less` (with plain flags) adds no execution surface beyond the default.
-_DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[A-Za-z]+)*)?")
+# Git pages through `less` when no pager is configured, so an explicit `less`
+# adds no execution surface beyond the default. Only flags that take no
+# argument are accepted; -o/-O/-k/-T and similar name files.
+_DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?")
 
 
 def git_config_no_system_enabled(value: str | None) -> bool:
@@ -53,4 +55,6 @@ def stamp_hook_input_text(text: str) -> str:
     if not isinstance(payload, dict):
         return text
     payload[HOOK_EXECUTION_ENVIRONMENT_KEY] = collect_hook_execution_environment()
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    stamped = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    # A near-limit input stays forwardable; the edge then treats context as unavailable.
+    return text if len(stamped) > MAX_STAMPED_HOOK_INPUT_BYTES else stamped

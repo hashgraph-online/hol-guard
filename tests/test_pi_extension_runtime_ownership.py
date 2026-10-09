@@ -24,7 +24,7 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
     assert "guard_execution_environment" in source
     assert "home: typeof process.env.HOME" in source
     assert "['1', 'true', 'yes', 'on']" in source
-    pager_rule = "/^(?:cat|less(?: -[A-Za-z]+)*)?$/"
+    pager_rule = "/^(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?$/"
     assert f"{pager_rule}.test(process.env.GIT_PAGER)" in source
     assert f"{pager_rule}.test(process.env.PAGER)" in source
     assert pager_rule == f"/^{_DEFAULT_EQUIVALENT_PAGER.pattern}$/"

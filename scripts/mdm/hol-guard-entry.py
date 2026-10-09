@@ -287,8 +287,8 @@ _CODEX_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 _CODEX_WAIT_TIMEOUT_KEY = "guard_codex_browser_wait_timeout_seconds"
 _CODEX_EXECUTION_ENVIRONMENT_KEY = "guard_execution_environment"
 _CODEX_GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
-# Same rule as hook_execution_environment: bare `less` is Git's default pager.
-_CODEX_DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[A-Za-z]+)*)?")
+# Same rule as hook_execution_environment: `less` with argument-free flags only.
+_CODEX_DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?")
 _CODEX_TRUSTED_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 _CODEX_DISCOVERY_PROTOCOL_VERSION = 1
 _CODEX_DAEMON_RPC_TIMEOUT_SECONDS = 4.0
@@ -434,6 +434,11 @@ def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float, rpc_de
                 _CODEX_MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
                 max(1, int(deadline - time.monotonic())),
             )
+    hinted = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    if len(hinted) <= _CODEX_HOOK_MAX_INPUT_BYTES:
+        return hinted
+    # Keep a near-limit request forwardable; the edge then treats context as unavailable.
+    payload.pop(_CODEX_EXECUTION_ENVIRONMENT_KEY)
     return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
