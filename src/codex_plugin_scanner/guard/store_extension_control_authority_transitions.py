@@ -164,6 +164,64 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             return current
         raise ExtensionControlAuthorityError("idempotent transition state mismatch")
 
+    def _roll_back_abandoned_transition(
+        self,
+        revision: int,
+        *,
+        snapshot_digest: str,
+        anchor: AuthorityAnchor,
+        key: bytes,
+    ) -> bool:
+        """Discard a prepared transition the vault anchor never moved past.
+
+        A request that dies before its anchor write leaves a prepared row at
+        revision + 1 while the committed anchor still pins the current
+        snapshot. That row never took effect, so removing it restores the
+        previous authority without applying anything. The row is authenticated
+        first, and anchored or committed transitions are left for explicit
+        recovery. Returns whether the abandoned row was removed.
+        """
+
+        if (
+            anchor.revision != revision
+            or anchor.snapshot_digest != snapshot_digest
+            or anchor.phase is not AuthorityPhase.COMMITTED
+        ):
+            return False
+        pending = self._pending_transition(revision + 1)
+        if pending is None or _row_str(pending, "phase") != AuthorityPhase.PREPARED.value:
+            return False
+        from .native_policy_snapshot_constants import NativePolicySnapshotError
+
+        try:
+            with self._connect() as connection:
+                resumed = self._resume_idempotent_transition(
+                    connection,
+                    pending,
+                    current=ExtensionControlAuthorityView(
+                        AuthorityHealth.RECOVERY_REQUIRED, revision, _row_str(pending, "catalog_digest"), ()
+                    ),
+                    catalog_digest=_row_str(pending, "catalog_digest"),
+                    layers_json=_row_str(pending, "layers_json"),
+                    actor_hash=_row_str(pending, "actor_id_hash"),
+                    idempotency_hash=_row_str(pending, "idempotency_key_hash"),
+                    nonce_hash=_row_str(pending, "nonce_hash"),
+                    expected_revision=_row_int(pending, "previous_revision"),
+                    key=key,
+                )
+                if resumed is not None:
+                    return False
+                _ = connection.execute(
+                    "delete from extension_control_authority_proof "
+                    "where transition_revision = ? and consumed_at is null",
+                    (revision + 1,),
+                )
+        except (ExtensionControlAuthorityError, NativePolicySnapshotError):
+            # Readers holding only a shared lease cannot mutate; explicit
+            # recovery remains available.
+            return False
+        return True
+
     def _validate_transition_chain(
         self,
         revision: int,

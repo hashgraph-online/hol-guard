@@ -254,6 +254,7 @@ class ExtensionControlAuthorityReadsMixin:
         catalog_digest: str,
         *,
         migration_registry: CommandSafetyExtensionRegistry | None = None,
+        _healed: bool = False,
     ) -> ExtensionControlAuthorityView:
         with self._connect() as connection:
             if not ensure_extension_control_authority_schema(connection, require_compatible=False):
@@ -273,7 +274,13 @@ class ExtensionControlAuthorityReadsMixin:
         try:
             revision = int(row["revision"])
             stored_catalog_digest = str(row["catalog_digest"])
-            if stored_catalog_digest != catalog_digest:
+            validation_catalog_digest = catalog_digest
+            if stored_catalog_digest != catalog_digest and not layers_from_json(str(row["layers_json"])):
+                # No layers means nothing is bound to a catalog. Serving the
+                # authority as-is avoids committing an empty revision every time
+                # runtimes with different catalog digests read the same home.
+                validation_catalog_digest = stored_catalog_digest
+            elif stored_catalog_digest != catalog_digest:
                 if migration_registry is None or migration_registry.catalog_digest != catalog_digest:
                     raise ExtensionControlAuthorityError("extension control catalog digest changed")
                 pending = self._pending_transition(revision + 1)
@@ -320,7 +327,7 @@ class ExtensionControlAuthorityReadsMixin:
                 raise ExtensionControlAuthorityError("extension control snapshot field mismatch")
             self._validate_serialized_layers(str(row["layers_json"]))
             layers = layers_from_json(str(row["layers_json"]))
-            self._validate_layers(layers, catalog_digest)
+            self._validate_layers(layers, validation_catalog_digest)
             if anchor.revision != revision or anchor.snapshot_digest != str(row["snapshot_digest"]):
                 pending = self._pending_transition(revision + 1)
                 if not (
@@ -332,6 +339,12 @@ class ExtensionControlAuthorityReadsMixin:
                     raise ExtensionControlAuthorityError("extension control authority rollback detected")
                 return ExtensionControlAuthorityView(AuthorityHealth.RECOVERY_REQUIRED, revision, catalog_digest, ())
             if self._pending_transition(revision + 1) is not None:
+                if not _healed and self._roll_back_abandoned_transition(
+                    revision, snapshot_digest=_row_str(row, "snapshot_digest"), anchor=anchor, key=key
+                ):
+                    return self._read_extension_control_authority_locked(
+                        catalog_digest, migration_registry=migration_registry, _healed=True
+                    )
                 return ExtensionControlAuthorityView(
                     AuthorityHealth.RECOVERY_REQUIRED,
                     revision,
