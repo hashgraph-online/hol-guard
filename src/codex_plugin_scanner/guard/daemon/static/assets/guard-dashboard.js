@@ -14908,6 +14908,7 @@ function retryCannotReuseApprovalHint(item, harness) {
 function receiptDescribesRequest(item, receipt) {
   if (!item.artifact_id.includes(":native-pretool:")) return true;
   if (receipt.artifact_hash === item.artifact_hash) return true;
+  if (item.artifact_hash.startsWith("native-review-v4:")) return false;
   const receiptCommand = receipt.raw_command_text?.trim();
   return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
 }

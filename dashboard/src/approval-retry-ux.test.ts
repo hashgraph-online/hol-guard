@@ -136,6 +136,11 @@ assert(
   !receiptDescribesRequest(otherGit, { artifact_hash: "fresh-hash", raw_command_text: pythonChain }),
   "a different command's receipt still does not describe this request",
 );
+const boundReview = { ...unbound, artifact_hash: "native-review-v4:" + "b".repeat(64) + ":deny:review:review:native_command_review_required" };
+assert(
+  !receiptDescribesRequest(boundReview, { artifact_hash: "native-review-v4:" + "c".repeat(64), raw_command_text: pythonChain }),
+  "a bound review with a different action identity ignores a same-text receipt",
+);
 
 // Review feedback: "This time" never promises a retry when the agent stays blocked.
 const scopeControls = (oneTimeRetryBlocked: boolean) =>

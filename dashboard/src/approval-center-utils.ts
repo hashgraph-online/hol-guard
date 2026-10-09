@@ -149,6 +149,8 @@ export function receiptDescribesRequest(
 ): boolean {
   if (!item.artifact_id.includes(":native-pretool:")) return true;
   if (receipt.artifact_hash === item.artifact_hash) return true;
+  // A bound review's hash is its action identity: a different hash is a different action.
+  if (item.artifact_hash.startsWith("native-review-v4:")) return false;
   // Unbound reviews get a fresh hash per request, so a repeat of the same command matches by its text.
   const receiptCommand = receipt.raw_command_text?.trim();
   return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
