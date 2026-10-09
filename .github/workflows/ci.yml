@@ -24,7 +24,9 @@ env:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Main is the source of truth: queue its runs instead of cancelling an
+  # in-flight run on every push, so a main run can actually finish green.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Trusted change planner (shadow mode): computes which lanes the diff requires.
