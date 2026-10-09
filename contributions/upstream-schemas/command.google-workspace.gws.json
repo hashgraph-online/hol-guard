@@ -1,0 +1,1516 @@
+{
+  "schema": "hol.guard.upstream-discovery-pins.v1",
+  "extension_id": "command.google-workspace.gws",
+  "description": "Reviewed Google Discovery shapes for the API methods that the gws rules match. gws reads Discovery at runtime, so a change here can change what a matched command does.",
+  "apis": [
+    {
+      "name": "gmail",
+      "version": "v1",
+      "revision": "20261005",
+      "projection": {
+        "methods": {
+          "users.drafts.send": {
+            "httpMethod": "POST",
+            "path": "gmail/v1/users/{userId}/drafts/send",
+            "parameters": {
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Draft",
+            "requestProperties": [
+              "id",
+              "message"
+            ],
+            "scopes": [
+              "https://mail.google.com/",
+              "https://www.googleapis.com/auth/gmail.addons.current.action.compose",
+              "https://www.googleapis.com/auth/gmail.compose",
+              "https://www.googleapis.com/auth/gmail.modify"
+            ],
+            "supportsMediaUpload": true
+          },
+          "users.messages.batchDelete": {
+            "httpMethod": "POST",
+            "path": "gmail/v1/users/{userId}/messages/batchDelete",
+            "parameters": {
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "BatchDeleteMessagesRequest",
+            "requestProperties": [
+              "ids"
+            ],
+            "scopes": [
+              "https://mail.google.com/"
+            ],
+            "supportsMediaUpload": false
+          },
+          "users.messages.delete": {
+            "httpMethod": "DELETE",
+            "path": "gmail/v1/users/{userId}/messages/{id}",
+            "parameters": {
+              "id": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://mail.google.com/"
+            ],
+            "supportsMediaUpload": false
+          },
+          "users.messages.send": {
+            "httpMethod": "POST",
+            "path": "gmail/v1/users/{userId}/messages/send",
+            "parameters": {
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Message",
+            "requestProperties": [
+              "classificationLabelValues",
+              "historyId",
+              "id",
+              "internalDate",
+              "labelIds",
+              "payload",
+              "raw",
+              "sizeEstimate",
+              "snippet",
+              "threadId"
+            ],
+            "scopes": [
+              "https://mail.google.com/",
+              "https://www.googleapis.com/auth/gmail.addons.current.action.compose",
+              "https://www.googleapis.com/auth/gmail.compose",
+              "https://www.googleapis.com/auth/gmail.modify",
+              "https://www.googleapis.com/auth/gmail.send"
+            ],
+            "supportsMediaUpload": true
+          },
+          "users.messages.trash": {
+            "httpMethod": "POST",
+            "path": "gmail/v1/users/{userId}/messages/{id}/trash",
+            "parameters": {
+              "id": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://mail.google.com/",
+              "https://www.googleapis.com/auth/gmail.modify"
+            ],
+            "supportsMediaUpload": false
+          },
+          "users.settings.delegates.create": {
+            "httpMethod": "POST",
+            "path": "gmail/v1/users/{userId}/settings/delegates",
+            "parameters": {
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Delegate",
+            "requestProperties": [
+              "delegateEmail",
+              "verificationStatus"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/gmail.settings.sharing"
+            ],
+            "supportsMediaUpload": false
+          },
+          "users.settings.filters.create": {
+            "httpMethod": "POST",
+            "path": "gmail/v1/users/{userId}/settings/filters",
+            "parameters": {
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Filter",
+            "requestProperties": [
+              "action",
+              "criteria",
+              "id"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/gmail.settings.basic"
+            ],
+            "supportsMediaUpload": false
+          },
+          "users.settings.forwardingAddresses.create": {
+            "httpMethod": "POST",
+            "path": "gmail/v1/users/{userId}/settings/forwardingAddresses",
+            "parameters": {
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "ForwardingAddress",
+            "requestProperties": [
+              "forwardingEmail",
+              "verificationStatus"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/gmail.settings.sharing"
+            ],
+            "supportsMediaUpload": false
+          },
+          "users.settings.updateAutoForwarding": {
+            "httpMethod": "PUT",
+            "path": "gmail/v1/users/{userId}/settings/autoForwarding",
+            "parameters": {
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "AutoForwarding",
+            "requestProperties": [
+              "disposition",
+              "emailAddress",
+              "enabled"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/gmail.settings.sharing"
+            ],
+            "supportsMediaUpload": false
+          },
+          "users.threads.delete": {
+            "httpMethod": "DELETE",
+            "path": "gmail/v1/users/{userId}/threads/{id}",
+            "parameters": {
+              "id": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://mail.google.com/"
+            ],
+            "supportsMediaUpload": false
+          },
+          "users.threads.trash": {
+            "httpMethod": "POST",
+            "path": "gmail/v1/users/{userId}/threads/{id}/trash",
+            "parameters": {
+              "id": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "userId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://mail.google.com/",
+              "https://www.googleapis.com/auth/gmail.modify"
+            ],
+            "supportsMediaUpload": false
+          }
+        },
+        "resources": {
+          "users.drafts": [
+            "create",
+            "delete",
+            "get",
+            "list",
+            "send",
+            "update"
+          ],
+          "users.messages": [
+            "batchDelete",
+            "batchModify",
+            "delete",
+            "get",
+            "import",
+            "insert",
+            "list",
+            "modify",
+            "send",
+            "trash",
+            "untrash"
+          ],
+          "users.settings.delegates": [
+            "create",
+            "delete",
+            "get",
+            "list"
+          ],
+          "users.settings.filters": [
+            "create",
+            "delete",
+            "get",
+            "list"
+          ],
+          "users.settings.forwardingAddresses": [
+            "create",
+            "delete",
+            "get",
+            "list"
+          ],
+          "users.settings": [
+            "getAutoForwarding",
+            "getImap",
+            "getLanguage",
+            "getPop",
+            "getVacation",
+            "updateAutoForwarding",
+            "updateImap",
+            "updateLanguage",
+            "updatePop",
+            "updateVacation"
+          ],
+          "users.threads": [
+            "delete",
+            "get",
+            "list",
+            "modify",
+            "trash",
+            "untrash"
+          ]
+        }
+      }
+    },
+    {
+      "name": "drive",
+      "version": "v3",
+      "revision": "20261005",
+      "projection": {
+        "methods": {
+          "drives.delete": {
+            "httpMethod": "DELETE",
+            "path": "drives/{driveId}",
+            "parameters": {
+              "allowItemDeletion": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "driveId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "useDomainAdminAccess": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/drive"
+            ],
+            "supportsMediaUpload": false
+          },
+          "files.delete": {
+            "httpMethod": "DELETE",
+            "path": "files/{fileId}",
+            "parameters": {
+              "enforceSingleParent": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "fileId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsAllDrives": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsTeamDrives": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/drive",
+              "https://www.googleapis.com/auth/drive.appdata",
+              "https://www.googleapis.com/auth/drive.file"
+            ],
+            "supportsMediaUpload": false
+          },
+          "files.emptyTrash": {
+            "httpMethod": "DELETE",
+            "path": "files/trash",
+            "parameters": {
+              "driveId": {
+                "location": "query",
+                "type": "string",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "enforceSingleParent": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/drive"
+            ],
+            "supportsMediaUpload": false
+          },
+          "permissions.create": {
+            "httpMethod": "POST",
+            "path": "files/{fileId}/permissions",
+            "parameters": {
+              "emailMessage": {
+                "location": "query",
+                "type": "string",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "enforceExpansiveAccess": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "enforceSingleParent": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "fileId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "moveToNewOwnersRoot": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotificationEmail": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsAllDrives": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsTeamDrives": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "transferOwnership": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "useDomainAdminAccess": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Permission",
+            "requestProperties": [
+              "allowFileDiscovery",
+              "deleted",
+              "displayName",
+              "domain",
+              "emailAddress",
+              "expirationTime",
+              "id",
+              "inheritedPermissionsDisabled",
+              "kind",
+              "pendingOwner",
+              "permissionDetails",
+              "photoLink",
+              "role",
+              "teamDrivePermissionDetails",
+              "type",
+              "view"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/drive",
+              "https://www.googleapis.com/auth/drive.file"
+            ],
+            "supportsMediaUpload": false
+          },
+          "permissions.delete": {
+            "httpMethod": "DELETE",
+            "path": "files/{fileId}/permissions/{permissionId}",
+            "parameters": {
+              "enforceExpansiveAccess": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "fileId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "permissionId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsAllDrives": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsTeamDrives": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "useDomainAdminAccess": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/drive",
+              "https://www.googleapis.com/auth/drive.file"
+            ],
+            "supportsMediaUpload": false
+          },
+          "permissions.update": {
+            "httpMethod": "PATCH",
+            "path": "files/{fileId}/permissions/{permissionId}",
+            "parameters": {
+              "enforceExpansiveAccess": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "fileId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "permissionId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "removeExpiration": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsAllDrives": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsTeamDrives": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "transferOwnership": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "useDomainAdminAccess": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Permission",
+            "requestProperties": [
+              "allowFileDiscovery",
+              "deleted",
+              "displayName",
+              "domain",
+              "emailAddress",
+              "expirationTime",
+              "id",
+              "inheritedPermissionsDisabled",
+              "kind",
+              "pendingOwner",
+              "permissionDetails",
+              "photoLink",
+              "role",
+              "teamDrivePermissionDetails",
+              "type",
+              "view"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/drive",
+              "https://www.googleapis.com/auth/drive.file"
+            ],
+            "supportsMediaUpload": false
+          }
+        },
+        "resources": {
+          "drives": [
+            "create",
+            "delete",
+            "get",
+            "hide",
+            "list",
+            "unhide",
+            "update"
+          ],
+          "files": [
+            "copy",
+            "create",
+            "delete",
+            "download",
+            "emptyTrash",
+            "export",
+            "generateCseToken",
+            "generateIds",
+            "get",
+            "list",
+            "listLabels",
+            "modifyLabels",
+            "update",
+            "watch"
+          ],
+          "permissions": [
+            "create",
+            "delete",
+            "get",
+            "list",
+            "update"
+          ]
+        }
+      }
+    },
+    {
+      "name": "calendar",
+      "version": "v3",
+      "revision": "20261002",
+      "projection": {
+        "methods": {
+          "acl.delete": {
+            "httpMethod": "DELETE",
+            "path": "calendars/{calendarId}/acl/{ruleId}",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "ruleId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.acls"
+            ],
+            "supportsMediaUpload": false
+          },
+          "acl.insert": {
+            "httpMethod": "POST",
+            "path": "calendars/{calendarId}/acl",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotifications": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "AclRule",
+            "requestProperties": [
+              "etag",
+              "id",
+              "kind",
+              "role",
+              "scope"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.acls"
+            ],
+            "supportsMediaUpload": false
+          },
+          "acl.patch": {
+            "httpMethod": "PATCH",
+            "path": "calendars/{calendarId}/acl/{ruleId}",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "ruleId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotifications": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "AclRule",
+            "requestProperties": [
+              "etag",
+              "id",
+              "kind",
+              "role",
+              "scope"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.acls"
+            ],
+            "supportsMediaUpload": false
+          },
+          "acl.update": {
+            "httpMethod": "PUT",
+            "path": "calendars/{calendarId}/acl/{ruleId}",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "ruleId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotifications": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "AclRule",
+            "requestProperties": [
+              "etag",
+              "id",
+              "kind",
+              "role",
+              "scope"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.acls"
+            ],
+            "supportsMediaUpload": false
+          },
+          "calendars.clear": {
+            "httpMethod": "POST",
+            "path": "calendars/{calendarId}/clear",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.calendars"
+            ],
+            "supportsMediaUpload": false
+          },
+          "calendars.delete": {
+            "httpMethod": "DELETE",
+            "path": "calendars/{calendarId}",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.app.created",
+              "https://www.googleapis.com/auth/calendar.calendars"
+            ],
+            "supportsMediaUpload": false
+          },
+          "events.delete": {
+            "httpMethod": "DELETE",
+            "path": "calendars/{calendarId}/events/{eventId}",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "eventId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotifications": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendUpdates": {
+                "location": "query",
+                "type": "string",
+                "required": null,
+                "enum": [
+                  "all",
+                  "externalOnly",
+                  "none"
+                ],
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.app.created",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/calendar.events.owned"
+            ],
+            "supportsMediaUpload": false
+          },
+          "events.import": {
+            "httpMethod": "POST",
+            "path": "calendars/{calendarId}/events/import",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "conferenceDataVersion": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "eventLabelVersion": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "supportsAttachments": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Event",
+            "requestProperties": [
+              "anyoneCanAddSelf",
+              "attachments",
+              "attendees",
+              "attendeesOmitted",
+              "birthdayProperties",
+              "colorId",
+              "conferenceData",
+              "created",
+              "creator",
+              "description",
+              "end",
+              "endTimeUnspecified",
+              "etag",
+              "eventLabelId",
+              "eventType",
+              "extendedProperties",
+              "focusTimeProperties",
+              "gadget",
+              "guestsCanInviteOthers",
+              "guestsCanModify",
+              "guestsCanSeeOtherGuests",
+              "hangoutLink",
+              "htmlLink",
+              "iCalUID",
+              "id",
+              "kind",
+              "location",
+              "locked",
+              "organizer",
+              "originalStartTime",
+              "outOfOfficeProperties",
+              "privateCopy",
+              "recurrence",
+              "recurringEventId",
+              "reminders",
+              "sequence",
+              "source",
+              "start",
+              "status",
+              "summary",
+              "transparency",
+              "updated",
+              "visibility",
+              "workingLocationProperties"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.app.created",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/calendar.events.owned"
+            ],
+            "supportsMediaUpload": false
+          },
+          "events.insert": {
+            "httpMethod": "POST",
+            "path": "calendars/{calendarId}/events",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "conferenceDataVersion": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "eventLabelVersion": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "maxAttendees": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotifications": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendUpdates": {
+                "location": "query",
+                "type": "string",
+                "required": null,
+                "enum": [
+                  "all",
+                  "externalOnly",
+                  "none"
+                ],
+                "repeated": null
+              },
+              "supportsAttachments": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Event",
+            "requestProperties": [
+              "anyoneCanAddSelf",
+              "attachments",
+              "attendees",
+              "attendeesOmitted",
+              "birthdayProperties",
+              "colorId",
+              "conferenceData",
+              "created",
+              "creator",
+              "description",
+              "end",
+              "endTimeUnspecified",
+              "etag",
+              "eventLabelId",
+              "eventType",
+              "extendedProperties",
+              "focusTimeProperties",
+              "gadget",
+              "guestsCanInviteOthers",
+              "guestsCanModify",
+              "guestsCanSeeOtherGuests",
+              "hangoutLink",
+              "htmlLink",
+              "iCalUID",
+              "id",
+              "kind",
+              "location",
+              "locked",
+              "organizer",
+              "originalStartTime",
+              "outOfOfficeProperties",
+              "privateCopy",
+              "recurrence",
+              "recurringEventId",
+              "reminders",
+              "sequence",
+              "source",
+              "start",
+              "status",
+              "summary",
+              "transparency",
+              "updated",
+              "visibility",
+              "workingLocationProperties"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.app.created",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/calendar.events.owned"
+            ],
+            "supportsMediaUpload": false
+          },
+          "events.move": {
+            "httpMethod": "POST",
+            "path": "calendars/{calendarId}/events/{eventId}/move",
+            "parameters": {
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "destination": {
+                "location": "query",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "eventId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotifications": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendUpdates": {
+                "location": "query",
+                "type": "string",
+                "required": null,
+                "enum": [
+                  "all",
+                  "externalOnly",
+                  "none"
+                ],
+                "repeated": null
+              }
+            },
+            "request": null,
+            "requestProperties": [],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/calendar.events.owned"
+            ],
+            "supportsMediaUpload": false
+          },
+          "events.patch": {
+            "httpMethod": "PATCH",
+            "path": "calendars/{calendarId}/events/{eventId}",
+            "parameters": {
+              "alwaysIncludeEmail": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "conferenceDataVersion": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "eventId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "eventLabelVersion": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "maxAttendees": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotifications": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendUpdates": {
+                "location": "query",
+                "type": "string",
+                "required": null,
+                "enum": [
+                  "all",
+                  "externalOnly",
+                  "none"
+                ],
+                "repeated": null
+              },
+              "supportsAttachments": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Event",
+            "requestProperties": [
+              "anyoneCanAddSelf",
+              "attachments",
+              "attendees",
+              "attendeesOmitted",
+              "birthdayProperties",
+              "colorId",
+              "conferenceData",
+              "created",
+              "creator",
+              "description",
+              "end",
+              "endTimeUnspecified",
+              "etag",
+              "eventLabelId",
+              "eventType",
+              "extendedProperties",
+              "focusTimeProperties",
+              "gadget",
+              "guestsCanInviteOthers",
+              "guestsCanModify",
+              "guestsCanSeeOtherGuests",
+              "hangoutLink",
+              "htmlLink",
+              "iCalUID",
+              "id",
+              "kind",
+              "location",
+              "locked",
+              "organizer",
+              "originalStartTime",
+              "outOfOfficeProperties",
+              "privateCopy",
+              "recurrence",
+              "recurringEventId",
+              "reminders",
+              "sequence",
+              "source",
+              "start",
+              "status",
+              "summary",
+              "transparency",
+              "updated",
+              "visibility",
+              "workingLocationProperties"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.app.created",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/calendar.events.owned"
+            ],
+            "supportsMediaUpload": false
+          },
+          "events.update": {
+            "httpMethod": "PUT",
+            "path": "calendars/{calendarId}/events/{eventId}",
+            "parameters": {
+              "alwaysIncludeEmail": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "calendarId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "conferenceDataVersion": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "eventId": {
+                "location": "path",
+                "type": "string",
+                "required": true,
+                "enum": null,
+                "repeated": null
+              },
+              "eventLabelVersion": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "maxAttendees": {
+                "location": "query",
+                "type": "integer",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendNotifications": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              },
+              "sendUpdates": {
+                "location": "query",
+                "type": "string",
+                "required": null,
+                "enum": [
+                  "all",
+                  "externalOnly",
+                  "none"
+                ],
+                "repeated": null
+              },
+              "supportsAttachments": {
+                "location": "query",
+                "type": "boolean",
+                "required": null,
+                "enum": null,
+                "repeated": null
+              }
+            },
+            "request": "Event",
+            "requestProperties": [
+              "anyoneCanAddSelf",
+              "attachments",
+              "attendees",
+              "attendeesOmitted",
+              "birthdayProperties",
+              "colorId",
+              "conferenceData",
+              "created",
+              "creator",
+              "description",
+              "end",
+              "endTimeUnspecified",
+              "etag",
+              "eventLabelId",
+              "eventType",
+              "extendedProperties",
+              "focusTimeProperties",
+              "gadget",
+              "guestsCanInviteOthers",
+              "guestsCanModify",
+              "guestsCanSeeOtherGuests",
+              "hangoutLink",
+              "htmlLink",
+              "iCalUID",
+              "id",
+              "kind",
+              "location",
+              "locked",
+              "organizer",
+              "originalStartTime",
+              "outOfOfficeProperties",
+              "privateCopy",
+              "recurrence",
+              "recurringEventId",
+              "reminders",
+              "sequence",
+              "source",
+              "start",
+              "status",
+              "summary",
+              "transparency",
+              "updated",
+              "visibility",
+              "workingLocationProperties"
+            ],
+            "scopes": [
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/calendar.app.created",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/calendar.events.owned"
+            ],
+            "supportsMediaUpload": false
+          }
+        },
+        "resources": {
+          "acl": [
+            "delete",
+            "get",
+            "insert",
+            "list",
+            "patch",
+            "update",
+            "watch"
+          ],
+          "calendars": [
+            "clear",
+            "delete",
+            "get",
+            "insert",
+            "patch",
+            "transferOwnership",
+            "update"
+          ],
+          "events": [
+            "delete",
+            "get",
+            "import",
+            "insert",
+            "instances",
+            "list",
+            "move",
+            "patch",
+            "quickAdd",
+            "update",
+            "watch"
+          ]
+        }
+      }
+    }
+  ]
+}

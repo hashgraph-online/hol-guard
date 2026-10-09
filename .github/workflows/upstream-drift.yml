@@ -27,7 +27,7 @@ jobs:
       - name: Compare reviewed upstream pins with current releases
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python scripts/upstream_drift.py --json upstream-drift.json
+        run: python -m scripts.upstream_drift --json upstream-drift.json
       - name: Keep the drift report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

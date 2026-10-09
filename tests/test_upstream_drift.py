@@ -9,7 +9,18 @@ import pytest
 import yaml
 
 from scripts import upstream_drift
-from scripts.upstream_drift import NotFoundError, Pin, check, gauntlet_scenarios, pack_members, pins, summary
+from scripts.upstream_drift import (
+    NotFoundError,
+    Pin,
+    check,
+    discovery_pins,
+    discovery_projection,
+    gauntlet_scenarios,
+    pack_members,
+    pins,
+    refresh_discovery_pins,
+    summary,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 GWS_SHA = "705fb0ecac6f4249679958f6325b809b63fdde17"
@@ -121,6 +132,102 @@ def test_main_exits_nonzero_on_drift_and_writes_report(tmp_path, monkeypatch):
     assert "Stale proofs" in summary_file.read_text()
 
 
+GMAIL_URL = "https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"
+
+
+def gmail_document(**send_changes) -> dict:
+    send = {
+        "httpMethod": "POST",
+        "path": "gmail/v1/users/{userId}/messages/send",
+        "parameters": {"userId": {"location": "path", "type": "string", "required": True}},
+        "request": {"$ref": "Message"},
+        "scopes": ["https://www.googleapis.com/auth/gmail.send"],
+        "supportsMediaUpload": True,
+    } | send_changes
+    return {
+        "name": "gmail",
+        "version": "v1",
+        "revision": "1",
+        "schemas": {"Message": {"properties": {"raw": {}, "threadId": {}}}},
+        "resources": {"users": {"resources": {"messages": {"methods": {"send": send, "list": {}}}}}},
+    }
+
+
+def write_gmail_pins(repository: Path, document: dict) -> None:
+    folder = repository / "contributions/upstream-schemas"
+    folder.mkdir(parents=True)
+    projection = discovery_projection(document, ["users.messages.send"])
+    pins_file = {
+        "schema": "hol.guard.upstream-discovery-pins.v1",
+        "extension_id": "command.demo",
+        "apis": [{"name": "gmail", "version": "v1", "revision": "1", "projection": projection}],
+    }
+    (folder / "command.demo.json").write_text(json.dumps(pins_file), encoding="utf-8")
+
+
+def test_repository_discovery_pins_cover_gws_rule_routes():
+    found = {pin.project: dict(pin.expected) for pin in discovery_pins(ROOT)}
+    assert set(found) == {"gmail/v1", "drive/v3", "calendar/v3"}
+    assert "methods users.messages.send" in found["gmail/v1"]
+    assert "methods users.settings.updateAutoForwarding" in found["gmail/v1"]
+    assert "methods permissions.create" in found["drive/v3"]
+    assert "resources acl" in found["calendar/v3"]
+    sources = pins(ROOT)
+    assert any(pin.extension_id == "command.google-workspace.gws" for pin in sources)
+
+
+@pytest.mark.parametrize(
+    ("document", "changed"),
+    [
+        (gmail_document(), []),
+        (gmail_document(scopes=["https://mail.google.com/"]), ["methods users.messages.send"]),
+        (gmail_document(path="gmail/v2/send"), ["methods users.messages.send"]),
+    ],
+)
+def test_discovery_pin_reports_changed_method_shape(tmp_path, document, changed):
+    write_gmail_pins(tmp_path, gmail_document())
+    [pin] = discovery_pins(tmp_path)
+    [finding] = check([pin], fake_fetch({GMAIL_URL: document}), {"command.demo": ["business.demo"]}, {})
+    assert finding.status == ("drifted" if changed else "current")
+    if changed:
+        assert finding.detail == "changed: " + ", ".join(changed)
+        assert finding.affected_packs == ["business.demo"]
+
+
+def test_discovery_pin_reports_new_sibling_and_removed_method(tmp_path):
+    write_gmail_pins(tmp_path, gmail_document())
+    [pin] = discovery_pins(tmp_path)
+    added = gmail_document()
+    added["resources"]["users"]["resources"]["messages"]["methods"]["sendNow"] = {}
+    [finding] = check([pin], fake_fetch({GMAIL_URL: added}), {}, {})
+    assert (finding.status, finding.detail) == ("drifted", "changed: resources users.messages")
+    removed = gmail_document()
+    del removed["resources"]["users"]["resources"]["messages"]["methods"]["send"]
+    [finding] = check([pin], fake_fetch({GMAIL_URL: removed}), {}, {})
+    assert finding.status == "drifted"
+    assert "methods users.messages.send" in finding.detail
+
+
+def test_discovery_fetch_failure_is_unknown(tmp_path):
+    write_gmail_pins(tmp_path, gmail_document())
+    [pin] = discovery_pins(tmp_path)
+    [finding] = check([pin], fake_fetch({}), {}, {})
+    assert finding.status == "unknown"
+
+
+def test_refresh_discovery_pins_rewrites_reviewed_routes_only(tmp_path):
+    write_gmail_pins(tmp_path, gmail_document())
+    current = gmail_document(scopes=["https://mail.google.com/"])
+    current["revision"] = "2"
+    refresh_discovery_pins(tmp_path, fake_fetch({GMAIL_URL: current}))
+    [pin] = discovery_pins(tmp_path)
+    [finding] = check([pin], fake_fetch({GMAIL_URL: current}), {}, {})
+    assert finding.status == "current"
+    api = json.loads((tmp_path / "contributions/upstream-schemas/command.demo.json").read_text())["apis"][0]
+    assert api["revision"] == "2"
+    assert list(api["projection"]["methods"]) == ["users.messages.send"]
+
+
 def test_scheduled_workflow_only_reads():
     workflow = yaml.safe_load((ROOT / ".github/workflows/upstream-drift.yml").read_text())
     assert workflow["permissions"] == {}
@@ -128,3 +235,5 @@ def test_scheduled_workflow_only_reads():
     assert job["permissions"] == {"contents": "read"}
     checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["persist-credentials"] is False
+    # Run as a module: as a script, scripts/ci would shadow the top-level ci package.
+    assert any(step.get("run", "").startswith("python -m scripts.upstream_drift ") for step in job["steps"])
