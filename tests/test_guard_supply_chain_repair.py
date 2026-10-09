@@ -298,7 +298,10 @@ def test_local_recovery_without_cloud_access_does_not_install_new_managers(
             "step": "package_shims",
             "code": "paid_guard_cloud_required",
             "action": "check_access",
-            "message": "Existing package tools were repaired. Check Cloud access to protect additional detected tools: pip3.",
+            "message": (
+                "Existing package tools were repaired. "
+                "Check Cloud access to protect additional detected tools: pip3."
+            ),
         }
     ]
     assert (
