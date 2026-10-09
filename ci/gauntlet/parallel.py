@@ -188,7 +188,7 @@ class LoadGate:
         self,
         max_load: float,
         *,
-        max_wait: float = 600.0,
+        max_wait: float = 180.0,
         clock: Callable[[], float] = time.monotonic,
         load: Callable[[], tuple[float, float, float]] | None = None,
         notify: Callable[[str], None] | None = None,

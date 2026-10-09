@@ -302,7 +302,7 @@ def run_suite(
     host_slots: int | None = None,
     slot_dir: Path | None = None,
     max_load: float | None = None,
-    max_load_wait: float = 600.0,
+    max_load_wait: float = 180.0,
 ) -> dict[str, Any]:
     """Run the complete profile or explicitly label a targeted exploratory run."""
     if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:

@@ -77,7 +77,7 @@ def main() -> int:
         "--max-load-wait",
         type=float,
         default=os.environ.get("GUARD_GAUNTLET_MAX_LOAD_WAIT"),
-        help="Total seconds to wait on host load before proceeding anyway (default 600; requires --max-load)",
+        help="Total seconds to wait on host load before proceeding anyway (default 180; requires --max-load)",
     )
     run.add_argument("--omp", help="Path to the repository-pinned Oh My Pi executable")
     run.add_argument(
@@ -138,7 +138,7 @@ def main() -> int:
     qualify.add_argument(
         "--max-load-wait",
         type=float,
-        default=600.0,
+        default=180.0,
         help="Total seconds to wait on host load before proceeding anyway",
     )
     qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
@@ -302,7 +302,7 @@ def main() -> int:
                     host_slots=args.host_slots,
                     slot_dir=args.slot_dir,
                     max_load=args.max_load,
-                    max_load_wait=args.max_load_wait if args.max_load_wait is not None else 600.0,
+                    max_load_wait=args.max_load_wait if args.max_load_wait is not None else 180.0,
                 )
         print(
             json.dumps(
