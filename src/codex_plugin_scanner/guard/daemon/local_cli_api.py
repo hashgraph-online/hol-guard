@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 import time
@@ -89,6 +90,8 @@ from .mcp_registry_undo import RegistrySetupUndo
 
 if TYPE_CHECKING:
     from ..store import GuardStore
+
+_LOGGER = logging.getLogger(__name__)
 
 _VALID_STATES = frozenset({"allowed", "blocked", "unset"})
 _DISCOVERY_TTL_SECONDS = 30.0
@@ -496,6 +499,10 @@ class LocalCliApiService:
         """
         # Connector history and configured launch discovery are independent.
         discovery_issue = None
+        try:
+            _ = self._store.prune_inactive_local_cli_observations(throttle=True)
+        except sqlite3.Error:
+            _LOGGER.warning("observed record retention failed", exc_info=True)
         try:
             saturated = discover_observed_mcp_tools(self._store, seen_at=utc_now())
             if saturated:

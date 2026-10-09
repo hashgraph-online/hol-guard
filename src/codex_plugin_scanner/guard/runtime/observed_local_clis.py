@@ -5,6 +5,7 @@ could identify them (for example ``npx wrangler``) would otherwise only appear
 after the next run, so the Extensions refresh replays recent paused commands
 through the same identity rules. Replay never executes anything, never grants
 authority and never bumps the observed count of a CLI that is already listed.
+Each replayed CLI keeps the time of its paused request, so it can age out.
 """
 
 from __future__ import annotations
@@ -15,8 +16,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..store_local_cli_retention import later_timestamp
 from .custom_extension_suggestion import observation_path_class
 from .local_cli_compound import identify_unlisted_cli_identities
+from .time_support import parse_utc_timestamp
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -50,6 +53,7 @@ def discover_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
 
     known = {item.get("cli_id") for item in store.list_local_cli_items()}
     records = store.list_approval_requests(status=None, limit=MAX_OBSERVED_CLI_REQUESTS)
+    latest_seen = _latest_request_times(records)
     added = 0
     for command, workspace in commands_from_requests(records):
         if not workspace.is_dir():
@@ -57,9 +61,10 @@ def discover_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
         for identity in identify_unlisted_cli_identities(command, cwd=workspace, home_dir=home_dir):
             if identity.cli_id in known:
                 continue
+            # The store skips history older than retention or than a Forget.
             store.record_local_cli_observation(
                 identity,
-                seen_at=seen_at,
+                seen_at=latest_seen.get((command, str(workspace)), seen_at),
                 source_path=identity.path_class or observation_path_class(identity.source_path),
                 surface="cli",
                 only_if_missing=True,
@@ -67,6 +72,19 @@ def discover_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
             known.add(identity.cli_id)
             added += 1
     return added
+
+
+def _latest_request_times(records: Sequence[Mapping[str, object]]) -> dict[tuple[str, str], str]:
+    latest: dict[tuple[str, str], str] = {}
+    for record in records[:MAX_OBSERVED_CLI_REQUESTS]:
+        command, workspace, created_at = (record.get(key) for key in ("raw_command_text", "workspace", "created_at"))
+        if not all(isinstance(value, str) for value in (command, workspace, created_at)):
+            continue
+        if parse_utc_timestamp(created_at) is None:
+            continue
+        key = (str(command).strip(), str(Path(str(workspace))))
+        latest[key] = later_timestamp(latest.get(key), str(created_at))
+    return latest
 
 
 def backfill_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: Path | None) -> None:

@@ -190,3 +190,118 @@ def test_daemon_forget_maps_store_refusals_to_http_errors(tmp_path: Path) -> Non
     with pytest.raises(LocalCliApiError) as missing:
         service.forget({"cli_id": detected.cli_id, "identity_hash": detected.identity_hash})
     assert (missing.value.status, missing.value.code) == (404, "local_cli_not_found")
+
+
+def _authority_rows(store: GuardStore, cli_id: str) -> int:
+    with sqlite3.connect(store.path) as connection:
+        tool = connection.execute("select count(*) from local_mcp_tool_authority where cli_id = ?", (cli_id,))
+        provider = connection.execute("select count(*) from local_mcp_provider_authority where cli_id = ?", (cli_id,))
+        return int(tool.fetchone()[0]) + int(provider.fetchone()[0])
+
+
+def test_forget_clears_derived_authority_digests(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connection_identity = _observe_mcp(store, "local-cli.mcp-forget", ("server.ts",), days_ago=1)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "insert into local_mcp_tool_authority values (?, ?, ?, ?, ?)",
+            (connection_identity.cli_id, connection_identity.identity_hash, "read", 1, "d" * 64),
+        )
+        connection.execute(
+            "insert into local_mcp_provider_authority values (?, ?, ?)",
+            (connection_identity.cli_id, connection_identity.identity_hash, "e" * 64),
+        )
+
+    store.forget_local_cli_observation(connection_identity.cli_id, identity_hash=connection_identity.identity_hash)
+
+    assert _authority_rows(store, connection_identity.cli_id) == 0
+
+
+def test_history_replay_skips_forgotten_and_expired_identities(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    forgotten = _cli("forgotten-tool", "6")
+    _observe(store, forgotten, days_ago=1)
+    store.forget_local_cli_observation(forgotten.cli_id, identity_hash=forgotten.identity_hash)
+    recent = datetime.now(timezone.utc) - timedelta(days=2)
+    expired = datetime.now(timezone.utc) - timedelta(days=45)
+
+    assert store.local_cli_replay_allowed(forgotten.identity_hash, recent.isoformat()) is False
+    assert store.local_cli_replay_allowed("7" * 64, expired.isoformat()) is False
+    assert store.local_cli_replay_allowed("7" * 64, recent.isoformat()) is True
+    store.record_local_cli_observation(forgotten, seen_at=recent.isoformat(), surface="cli", only_if_missing=True)
+    assert forgotten.cli_id not in _ids(store)
+
+    later = datetime.now(timezone.utc) + timedelta(minutes=1)
+    assert store.local_cli_replay_allowed(forgotten.identity_hash, later.isoformat()) is True
+    store.record_local_cli_observation(forgotten, seen_at=later.isoformat(), surface="cli")
+    assert forgotten.cli_id in _ids(store)
+
+
+def test_replayed_mcp_history_never_moves_last_seen_backward(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    current = _observe_mcp(store, "local-cli.mcp-replayed", ("server.ts",), days_ago=1)
+    with sqlite3.connect(store.path) as connection:
+        server_hash, command, args_hash = connection.execute(
+            "select server_identity_hash, server_command, server_args_hash from local_cli_observation where cli_id = ?",
+            (current.cli_id,),
+        ).fetchone()
+
+    store.ensure_local_mcp_observation(
+        current,
+        seen_at=_stamp(20),
+        server_identity_hash=server_hash,
+        server_command=command,
+        server_args_hash=args_hash,
+        replayed=True,
+    )
+
+    listed = {str(item["cli_id"]): item for item in store.list_local_cli_items()}
+    assert listed[current.cli_id]["last_seen_at"] == _stamp(1)
+
+
+def test_refreshing_an_existing_record_prunes_at_most_once_a_day(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    expired = _cli("idle-tool", "8")
+    active = _cli("active-tool", "9")
+    _observe(store, expired, days_ago=40)
+    _observe(store, active, days_ago=40)
+
+    store.record_local_cli_observation(active, seen_at=_stamp(0), surface="cli")
+
+    assert _ids(store) == {active.cli_id}
+    stale_again = _cli("idle-again-tool", "0")
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """insert into local_cli_observation (
+                   cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface
+               ) values (?, ?, 'executable', 'idle', 'idle', 1, ?, 'cli')""",
+            (stale_again.cli_id, stale_again.identity_hash, _stamp(60)),
+        )
+    store.record_local_cli_observation(active, seen_at=(NOW + timedelta(hours=1)).isoformat(), surface="cli")
+    assert stale_again.cli_id in _ids(store)
+    store.record_local_cli_observation(active, seen_at=(NOW + timedelta(days=2)).isoformat(), surface="cli")
+    assert stale_again.cli_id not in _ids(store)
+
+
+def test_list_flags_siblings_kept_for_an_enrolled_server(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    enrolled = _observe_mcp(store, "local-cli.mcp-flag-enrolled", ("server.ts",), days_ago=1)
+    _enroll(store, enrolled)
+    with sqlite3.connect(store.path) as connection:
+        server_hash = connection.execute(
+            "select server_identity_hash from local_cli_observation where cli_id = ?", (enrolled.cli_id,)
+        ).fetchone()[0]
+        connection.execute(
+            """insert into local_cli_observation (
+                   cli_id, identity_hash, kind, name, example_label, observed_count, last_seen_at, surface,
+                   server_identity_hash, server_command, server_args_hash
+               ) values (
+                   'local-cli.mcp-flag-sibling', ?, 'executable', 'sibling', 'sibling', 1, ?, 'mcp', ?, 'node', 'x'
+               )""",
+            ("a1" * 32, _stamp(1), server_hash),
+        )
+
+    listed = {str(item["cli_id"]): item for item in store.list_local_cli_items()}
+
+    assert listed["local-cli.mcp-flag-sibling"].get("shares_enrolled_server") is True
+    assert "shares_enrolled_server" not in listed[enrolled.cli_id]

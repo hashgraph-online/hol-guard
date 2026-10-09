@@ -500,6 +500,7 @@ function normalizeLocalCliItem(value) {
     suggestion_score: optionalScore(value.suggestion_score),
     commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
     continuity: normalizeContinuity(value.continuity),
+    ...value.shares_enrolled_server === true ? { shares_enrolled_server: true } : {},
     ...catalog ? { mcp_catalog: catalog } : {},
     ...providerCatalog ? { provider_catalog: providerCatalog } : {},
     ...["configured-connection", "host-namespace", "legacy-device"].includes(String(value.permission_scope)) ? { permission_scope: value.permission_scope } : {},
@@ -4063,7 +4064,7 @@ function lastSeenCopy(lastSeenAt) {
   return `Last seen ${seen.toLocaleDateString(void 0, { year: "numeric", month: "short", day: "numeric" })}`;
 }
 function canForgetLocalCli(item) {
-  return item.state === "unset" && item.observed_count > 0;
+  return item.state === "unset" && item.observed_count > 0 && item.shares_enrolled_server !== true;
 }
 function ForgetLocalCliButton(props) {
   const { confirm, dialog } = useConfirmDialog();
@@ -4072,7 +4073,7 @@ function ForgetLocalCliButton(props) {
   const forget = reactExports.useCallback(async () => {
     const confirmed = await confirm({
       title: "Forget this connection?",
-      description: "Guard removes it from this list. If an agent uses it again, Guard detects it again.",
+      description: "Guard removes it from this list. If an agent uses it again or an app still configures it, Guard lists it again.",
       confirmLabel: "Forget"
     });
     if (!confirmed) return;
@@ -5320,13 +5321,13 @@ function LocalCliDetail(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-slate-600", children: continuityCopy(props.item)?.description })
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75", children: detailPolicyCopy(props.item.surface) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-3", children: added ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        props.item.state === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: props.item.surface === "mcp" ? mcpPermissionStatusLabel(props.nativePublication, props.item.permission_scope) : "Allowed on this device" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: props.item.surface === "mcp" ? "Enable tool permissions" : "Allow this extension's commands" }),
-        props.item.state === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Blocked" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", onClick: requestBlock, children: "Block this extension" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80", onClick: requestRemove, children: "Remove custom extension" })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAdd, children: "Add custom extension" }),
-        canForgetLocalCli(props.item) ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap gap-3", children: [
+        added ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          props.item.state === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: props.item.surface === "mcp" ? mcpPermissionStatusLabel(props.nativePublication, props.item.permission_scope) : "Allowed on this device" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: props.item.surface === "mcp" ? "Enable tool permissions" : "Allow this extension's commands" }),
+          props.item.state === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Blocked" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", onClick: requestBlock, children: "Block this extension" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80", onClick: requestRemove, children: "Remove custom extension" })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAdd, children: "Add custom extension" }) }),
+        canForgetLocalCli(props.item) && /* @__PURE__ */ jsxRuntimeExports.jsx(
           ForgetLocalCliButton,
           {
             item: props.item,
@@ -5336,8 +5337,8 @@ function LocalCliDetail(props) {
               await props.onRefresh();
             }
           }
-        ) : null
-      ] }) })
+        )
+      ] })
     ] }),
     props.item.surface === "mcp" && added ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-5 rounded-xl border border-slate-200 p-4", "aria-labelledby": "mcp-publication-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "mcp-publication-heading", className: "text-sm font-semibold text-brand-dark", children: props.item.permission_scope === "configured-connection" ? "Policy status" : "Enforcement status" }),

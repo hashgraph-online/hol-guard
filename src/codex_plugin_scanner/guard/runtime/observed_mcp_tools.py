@@ -7,7 +7,7 @@ endpoint. Catalog discovery never grants authority or invents a launch command.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import TYPE_CHECKING
@@ -15,9 +15,11 @@ from typing import TYPE_CHECKING
 from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
 from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS, NativePolicySnapshotError
+from ..store_local_cli_retention import later_timestamp
 from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, OTHER_COMMAND_ID, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
+from .time_support import parse_utc_timestamp
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -98,17 +100,37 @@ def observed_mcp_tool(harness: object, tool_name: object) -> ObservedMcpTool | N
     )
 
 
-def tools_from_receipts(receipts: Sequence[Mapping[str, object]]) -> tuple[ObservedMcpTool, ...]:
-    """Read only the tool label and harness from a bounded receipt batch."""
-
-    tools: dict[tuple[str, str], ObservedMcpTool] = {}
+def _receipt_tools(receipts: Sequence[Mapping[str, object]]) -> Iterator[tuple[ObservedMcpTool, Mapping[str, object]]]:
     for receipt in receipts[:MAX_OBSERVED_MCP_RECEIPTS]:
         label = receipt.get("raw_command_text")
         label = label[5:] if isinstance(label, str) and label.startswith("tool:") else receipt.get("artifact_name")
         tool = observed_mcp_tool(receipt.get("harness"), label)
         if tool is not None:
-            tools[(tool.harness, tool.qualified_name)] = tool
+            yield tool, receipt
+
+
+def tools_from_receipts(receipts: Sequence[Mapping[str, object]]) -> tuple[ObservedMcpTool, ...]:
+    """Read only the tool label and harness from a bounded receipt batch."""
+
+    tools: dict[tuple[str, str], ObservedMcpTool] = {}
+    for tool, _receipt in _receipt_tools(receipts):
+        tools[(tool.harness, tool.qualified_name)] = tool
     return tuple(tools.values())
+
+
+def _latest_seen_by_connector(
+    batches: Sequence[tuple[Sequence[Mapping[str, object]], str]],
+) -> dict[tuple[str, str], str]:
+    """Return the newest history timestamp for each harness connector."""
+
+    latest: dict[tuple[str, str], str] = {}
+    for records, time_key in batches:
+        for tool, record in _receipt_tools(records):
+            stamp = record.get(time_key)
+            if isinstance(stamp, str) and parse_utc_timestamp(stamp) is not None:
+                key = (tool.harness, tool.namespace)
+                latest[key] = later_timestamp(latest.get(key), stamp)
+    return latest
 
 
 def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
@@ -119,9 +141,11 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
     # retain the display label, so they are also a discovery source; resolving
     # a request must not make its connector disappear from the picker.
     records = store.list_approval_requests(status=None, limit=MAX_OBSERVED_MCP_RECEIPTS)
-    observed = tools_from_receipts(records) + tools_from_receipts(
-        store.list_receipts(limit=MAX_OBSERVED_MCP_RECEIPTS),
-    )
+    receipts = store.list_receipts(limit=MAX_OBSERVED_MCP_RECEIPTS)
+    observed = tools_from_receipts(records) + tools_from_receipts(receipts)
+    # Replay records each connector at its own history time, so it can age
+    # out and stays forgotten until the harness uses it again.
+    latest_seen = _latest_seen_by_connector(((records, "created_at"), (receipts, "timestamp")))
     for tool in observed:
         key = (tool.harness, tool.namespace)
         if key not in groups and len(groups) >= MAX_OBSERVED_MCP_SERVERS:
@@ -130,12 +154,16 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
         if tool not in group and len(group) < MAX_OBSERVED_MCP_TOOLS:
             group.append(tool)
     saturated = 0
-    for tools in groups.values():
+    for key, tools in groups.items():
         first = tools[0]
         server = first.server_identity
+        history_seen_at = latest_seen.get(key, seen_at)
+        if not store.local_cli_replay_allowed(first.identity.identity_hash, history_seen_at):
+            continue
         cli_id = store.ensure_local_mcp_observation(
             first.identity,
-            seen_at=seen_at,
+            seen_at=history_seen_at,
+            replayed=True,
             server_identity_hash=server.identity_hash,
             server_command=server.command,
             server_args_hash=server.args_hash,

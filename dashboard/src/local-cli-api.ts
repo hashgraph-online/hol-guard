@@ -61,6 +61,7 @@ export type LocalCliItem = {
   help_status: "ok" | "empty" | "failed" | null;
   surface: LocalCliSurface;
   server_identity_hash: string | null;
+  shares_enrolled_server?: boolean;
   source_label: string | null;
   state: LocalCliState;
   stale: boolean;

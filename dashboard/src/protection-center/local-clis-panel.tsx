@@ -230,11 +230,11 @@ export function LocalCliDetail(props: {
               <button type="button" className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestAdd}>
                 Add custom extension
               </button>
-              {canForgetLocalCli(props.item) ? (
-                <ForgetLocalCliButton item={props.item} disabled={busy}
-                  onForgotten={async () => { props.onBack(); await props.onRefresh(); }} />
-              ) : null}
             </>
+          )}
+          {canForgetLocalCli(props.item) && (
+            <ForgetLocalCliButton item={props.item} disabled={busy}
+              onForgotten={async () => { props.onBack(); await props.onRefresh(); }} />
           )}
         </div>
       </header>

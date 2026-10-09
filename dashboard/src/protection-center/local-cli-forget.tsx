@@ -11,7 +11,7 @@ export function lastSeenCopy(lastSeenAt: string | null): string | null {
 }
 
 export function canForgetLocalCli(item: LocalCliItem): boolean {
-  return item.state === "unset" && item.observed_count > 0;
+  return item.state === "unset" && item.observed_count > 0 && item.shares_enrolled_server !== true;
 }
 
 export function ForgetLocalCliButton(props: {
@@ -25,7 +25,7 @@ export function ForgetLocalCliButton(props: {
   const forget = useCallback(async () => {
     const confirmed = await confirm({
       title: "Forget this connection?",
-      description: "Guard removes it from this list. If an agent uses it again, Guard detects it again.",
+      description: "Guard removes it from this list. If an agent uses it again or an app still configures it, Guard lists it again.",
       confirmLabel: "Forget",
     });
     if (!confirmed) return;

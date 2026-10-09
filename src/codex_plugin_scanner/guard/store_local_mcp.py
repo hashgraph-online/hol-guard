@@ -20,7 +20,7 @@ from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity, resolved_package_launcher_executable
 from .runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .store_local_cli import _grant_from_row, _read_command_catalog, _read_command_states, _row_values
-from .store_local_cli_retention import prune_expired_local_cli_observations
+from .store_local_cli_retention import later_timestamp, prune_expired_local_cli_observations
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import read_mcp_skill_page, read_mcp_tool_authority
 from .store_mcp_provider_catalog import read_provider_actions, write_composio_metadata
@@ -215,8 +215,13 @@ class StoreLocalMcpMixin:
         server_args_hash: str,
         source_label: str | None = None,
         connection_identity_hash: str | None = None,
+        replayed: bool = False,
     ) -> str:
-        """Insert or refresh an MCP observation without incrementing observed_count."""
+        """Insert or refresh an MCP observation without incrementing observed_count.
+
+        ``replayed`` marks ``seen_at`` as a history timestamp: it never moves
+        ``last_seen_at`` backward and does not run retention pruning.
+        """
 
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
@@ -254,7 +259,8 @@ class StoreLocalMcpMixin:
                 if inserted is not None:
                     if legacy_deny:
                         _carry_legacy_mcp_denial(connection, inserted, identity.identity_hash, seen_at)
-                    _ = prune_expired_local_cli_observations(connection, now=seen_at)
+                    if not replayed:
+                        _ = prune_expired_local_cli_observations(connection, now=seen_at, throttle=True)
                     return inserted
                 existing = _observation_from_values(
                     connection.execute(
@@ -288,6 +294,12 @@ class StoreLocalMcpMixin:
             cli_id = str(existing["cli_id"])
             if legacy_deny and _same_mcp_observation(existing, identity, server_command, server_args_hash):
                 _carry_legacy_mcp_denial(connection, cli_id, identity.identity_hash, seen_at)
+            refreshed_at = seen_at
+            if replayed:
+                stored = connection.execute(
+                    "select last_seen_at from local_cli_observation where cli_id = ?", (cli_id,)
+                ).fetchone()
+                refreshed_at = later_timestamp(stored[0] if stored is not None else None, seen_at)
             _ = connection.execute(
                 """
                 update local_cli_observation
@@ -301,7 +313,7 @@ class StoreLocalMcpMixin:
                 (
                     identity.name,
                     identity.example_label,
-                    seen_at,
+                    refreshed_at,
                     server_identity_hash,
                     server_command,
                     server_args_hash,
@@ -309,6 +321,8 @@ class StoreLocalMcpMixin:
                     cli_id,
                 ),
             )
+            if not replayed:
+                _ = prune_expired_local_cli_observations(connection, now=seen_at, throttle=True)
             return cli_id
 
     def read_local_mcp_grant(

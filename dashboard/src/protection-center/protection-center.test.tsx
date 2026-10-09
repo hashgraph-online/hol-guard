@@ -334,5 +334,7 @@ assert.match(detectedDetail, /Forget this connection/);
 assert.match(detectedDetail, /Last seen /);
 assert.doesNotMatch(renderDetail({ ...baseCustomExtension, state: "allowed" }), /Forget this connection/);
 assert.doesNotMatch(renderDetail({ ...baseCustomExtension, state: "unset", observed_count: 0 }), /Forget this connection/);
+// Siblings kept for an enrolled connection on the same server cannot be forgotten.
+assert.doesNotMatch(renderDetail({ ...baseCustomExtension, surface: "mcp", state: "unset", shares_enrolled_server: true }), /Forget this connection/);
 
 console.log("protection-center.test.tsx: all assertions passed");
