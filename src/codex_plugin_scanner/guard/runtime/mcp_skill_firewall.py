@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..models import GuardArtifact
-from ..native_context import context_mcp_descriptor, context_sha256_digest, is_unbound_context_digest
+from ..native_context import (
+    context_mcp_descriptor,
+    context_sha256_digest,
+    is_unbound_context_digest,
+    native_context_failure_reason,
+)
 from .approval_context import build_configured_environment_hash
 from .mcp_protection import (
     McpServerIdentity,
@@ -39,7 +44,11 @@ _SENSITIVE_CLASS_PATTERN = re.compile(
 def _descriptor_digest(material: object) -> str:
     digest = context_sha256_digest(material, unbound_label="mcp-descriptor")
     if is_unbound_context_digest(digest):
-        raise ValueError("native_mcp_descriptor_digest_unavailable")
+        # Name the transport's real failure (for example a resident runtime
+        # identity mismatch) instead of an opaque "unavailable".
+        reason = native_context_failure_reason()
+        message = "native_mcp_descriptor_digest_unavailable"
+        raise ValueError(f"{message}:{reason}" if reason else message)
     return digest
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import signal
 import stat
 import struct
 import subprocess
@@ -31,6 +32,8 @@ logger = logging.getLogger(__name__)
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _STREAM_FRAME_HEADER_BYTES = 4
+_CLIENT_REAP_TIMEOUT_SECONDS = 2.0
+_CLEAN_EXIT_CODES = frozenset({0, -int(signal.SIGTERM), -int(getattr(signal, "SIGKILL", signal.SIGTERM))})
 _CLIENT_CLOSE_TIMEOUT_SECONDS = 0.5
 _MAX_DIAGNOSTIC_BYTES = 64 * 1024
 _NATIVE_DIAGNOSTIC_LINE = re.compile(
@@ -307,6 +310,24 @@ class _PersistentNativeClient:
             pass
         with suppress(Exception):
             responses.put_nowait(_StreamFailure())
+        self._reap_exited(process)
+
+    def _reap_exited(self, process: subprocess.Popen[bytes]) -> None:
+        """Reap a client that closed its stream and say why it exited.
+
+        Without this the child stays a zombie until the next request replaces
+        it, and an immediate exit (for example a resident identity mismatch)
+        leaves no trace in any log.
+        """
+
+        try:
+            code = process.wait(timeout=_CLIENT_REAP_TIMEOUT_SECONDS)
+        except (subprocess.TimeoutExpired, OSError):
+            return
+        if code in _CLEAN_EXIT_CODES or self._closing:
+            return
+        with suppress(Exception):
+            logger.warning("native_client_exited returncode=%s", code)
 
     @staticmethod
     def _write_frame(

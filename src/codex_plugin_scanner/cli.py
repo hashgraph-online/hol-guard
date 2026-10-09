@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -460,6 +461,9 @@ def main(argv: list[str] | None = None) -> int:
             run_guard = getattr(cli_module, "run_guard_command", None) or _guard_cli("run_guard_command")
             return run_guard(args)
         except ValueError as exc:
+            native_exit = _report_native_unavailable(parser, exc)
+            if native_exit is not None:
+                return native_exit
             parser.error(str(exc))
         except Exception as exc:
             print(str(exc), file=sys.stderr)
@@ -471,6 +475,28 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "diff_base", None):
         parser.error("--diff-base is not implemented yet. Remove the flag and rerun without diff-aware gating.")
     return _dispatch_scanner_command(args, parser)
+
+
+_NATIVE_UNAVAILABLE_PATTERN = re.compile(r"native_[a-z0-9_]+_unavailable(?::[A-Za-z0-9_:= .-]+)?")
+
+
+def _report_native_unavailable(parser: argparse.ArgumentParser, exc: ValueError) -> int | None:
+    """Report a native-runtime failure as a runtime error, not a usage error.
+
+    Argparse's ``parser.error`` prints the usage banner and reads like a bad
+    command line, which hid a stale update marker behind every command.
+    """
+
+    message = str(exc)
+    if _NATIVE_UNAVAILABLE_PATTERN.fullmatch(message) is None:
+        return None
+    print(f"{parser.prog}: error: {message}", file=sys.stderr)
+    if "native_resident_runtime_identity_mismatch" in message or "native_resident_update" in message:
+        print(
+            f"{parser.prog}: hint: run `hol-guard daemon repair` to recover an interrupted runtime update.",
+            file=sys.stderr,
+        )
+    return 1
 
 
 def _dispatch_scanner_command(
@@ -491,6 +517,9 @@ def _dispatch_scanner_command(
         try:
             return _guard_cli("run_guard_command")(args)
         except ValueError as exc:
+            native_exit = _report_native_unavailable(parser, exc)
+            if native_exit is not None:
+                return native_exit
             parser.error(str(exc))
         except Exception as exc:
             print(str(exc), file=sys.stderr)
