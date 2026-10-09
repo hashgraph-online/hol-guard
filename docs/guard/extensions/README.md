@@ -154,7 +154,7 @@ Protection model meanings:
 | `command.mcp-reaper` | Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, clearing every tempo marker, and multi-step undo. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-run` | Reviews and gates task execution tools for the run polyglot task runner and MCP server. | 0 | External opt-in |
 | `command.mcp-setup-doctor` | Read-only audit and usage-summary tools for AI coding agent setups (CLAUDE.md, skills, MCP servers, session logs). Never writes files or sends data over the network. Off until you turn it on. | 0 | External opt-in |
-| `command.mcp-tether` | Reviews tether memory writes: remember, link, forget, and the association updates recall makes. Off until you turn it on. | 0 | External opt-in |
+| `command.mcp-tether` | Adds the tether memory server: remember, recall, link and forget. Each tool keeps your existing approval policy until you change it. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-vome-home-assistant` | Reviews Home Assistant, ESPHome and Node-RED tools that control devices, change configuration, install third-party code, manage users, read cameras, flash firmware or switch a hosted home's failover. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-x-reader` | Reviews x-reader external/local content reads. Off until enabled. | 0 | External opt-in |
 | `command.mcp-xahau-mcp` | Reviews Xahau MCP tools that read public Xahau JSON-RPC endpoints or emit unsigned transactions and Hook source a user could sign or deploy. Offline codec, Hook WASM analysis, and local VM tools are allowed. The server never signs, submits, or holds keys. Off until you turn it on. | 0 | External opt-in |
