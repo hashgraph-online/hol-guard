@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..runtime.secret_sensitivity import classify_secret_path
-from .hook_request_parsing import pre_tool_command, pre_tool_input, runtime_hook_event_name
+from .hook_request_parsing import pre_tool_command, runtime_hook_event_name
 
 EMERGENCY_SAFE_REASON_CODE = "native_degraded_emergency_safe"
 EMERGENCY_SAFE_REASON = (
@@ -299,7 +299,7 @@ def _payload_command(payload: Mapping[str, object]) -> str | None:
 
 def _payload_paths(payload: Mapping[str, object]) -> list[str]:
     paths: list[str] = []
-    candidates: list[object] = [payload, pre_tool_input(payload), payload.get("arguments")]
+    candidates: list[object] = [payload, payload.get("tool_input"), payload.get("arguments")]
     for nested_key in ("tool_call", "preToolUse"):
         nested = payload.get(nested_key)
         if isinstance(nested, Mapping):
