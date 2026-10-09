@@ -183,17 +183,48 @@ fn requires_business_context(
     };
     // Unresolved extraction/parsing cannot prove execution stays outside
     // business operations. No inference covers renamed binaries or HTTP.
-    Ok(parsed
-        .segments
-        .iter()
-        .filter_map(|segment| segment.executable.as_deref())
-        .any(|program| {
-            let basename = program.rsplit(['/', '\\']).next().unwrap_or(program);
-            matches!(
-                basename.to_ascii_lowercase().as_str(),
-                "gws" | "gws.exe" | "gog" | "gog.exe"
-            )
-        }))
+    Ok(parsed.segments.iter().any(|segment| {
+        let Some(program) = segment.executable.as_deref() else {
+            return false;
+        };
+        if is_business_cli(program) {
+            return true;
+        }
+        // Package launchers run the CLI as an argument; any argument naming
+        // it counts, so launcher option parsing cannot hide it.
+        is_package_launcher(program)
+            && segment.arguments.iter().any(|argument| {
+                let spec = argument.rsplit(['/', '\\']).next().unwrap_or(argument);
+                is_business_cli(spec.split('@').next().unwrap_or(spec))
+            })
+    }))
+}
+
+fn executable_basename(program: &str) -> String {
+    program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program)
+        .to_ascii_lowercase()
+}
+
+fn is_business_cli(program: &str) -> bool {
+    matches!(
+        executable_basename(program).as_str(),
+        "gws" | "gws.exe" | "gws.cmd" | "gog" | "gog.exe" | "gog.cmd"
+    )
+}
+
+fn is_package_launcher(program: &str) -> bool {
+    let name = executable_basename(program);
+    let name = name
+        .strip_suffix(".cmd")
+        .or_else(|| name.strip_suffix(".exe"))
+        .unwrap_or(&name);
+    matches!(
+        name,
+        "npx" | "pnpx" | "bunx" | "npm" | "pnpm" | "yarn" | "bun" | "uvx" | "pipx"
+    )
 }
 
 pub(super) fn guard_untrusted_business_context(
