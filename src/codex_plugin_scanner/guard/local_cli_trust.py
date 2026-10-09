@@ -8,13 +8,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from .local_cli_grant_decision import GRANT_REFINABLE_ACTIONS, decide_local_cli_grant
 from .models import GuardAction, GuardArtifact
 from .native_local_cli_identity import LocalCliIdentityUnavailableError, track_local_cli_identity_failures
 from .runtime.local_cli_commands import (
     OTHER_COMMAND_ID,
-    ROOT_COMMAND_ID,
     LocalCliCommand,
-    resolve_command_id_for_text,
     slug_local_cli_command_id,
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
@@ -46,7 +45,7 @@ def matching_local_cli_grant(
     derived, so callers can fail closed instead of treating it as no grant.
     """
 
-    if current_action not in {"allow", "review", "require-reapproval", "warn"}:
+    if current_action not in GRANT_REFINABLE_ACTIONS:
         return None
     with track_local_cli_identity_failures() as failures:
         identity = identify_package_json_scripts(command, cwd=cwd, home_dir=home_dir)
@@ -57,48 +56,17 @@ def matching_local_cli_grant(
         raise LocalCliIdentityUnavailableError(failures[0])
     if identity is None:
         return None
-    lookup = getattr(store, "read_local_cli_grant", None)
-    if not callable(lookup):
-        return None
-    grant = lookup(identity.cli_id)
-    if not isinstance(grant, Mapping):
-        return None
-    raw_state = grant.get("state")
-    identity_hash = grant.get("identity_hash")
-    if raw_state != "allowed" and raw_state != "blocked":
-        return None
-    state: LocalCliGrantState = "allowed" if raw_state == "allowed" else "blocked"
-    if identity_hash != identity.identity_hash:
-        return None
-    if state == "blocked":
-        return identity, "blocked"
-    command_state = _command_state_for_grant(
-        store,
+    # The resident reads the grant rows and decides; this raises
+    # ``LocalCliIdentityUnavailableError`` when it gives no answer.
+    outcome = decide_local_cli_grant(
+        store=store,
         identity=identity,
         command=command,
         cwd=cwd,
         home_dir=home_dir,
+        current_action=current_action,
     )
-    if command_state == "block":
-        return identity, "blocked"
-    # A registry fetch runs whatever the registry serves, so only blocks bind.
-    if identity.is_registry_package:
-        return None
-    if command_state == "allow":
-        return identity, "allowed"
-    if (
-        state == "allowed"
-        and command_state == "inherit"
-        and _package_script_inherit_allows(
-            store,
-            identity,
-            command=command,
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-    ):
-        return identity, "allowed"
-    return None
+    return None if outcome is None else (identity, outcome)
 
 
 def apply_local_mcp_extension_decision(
@@ -310,79 +278,6 @@ def _mcp_tool_name(artifact: GuardArtifact) -> str:
     if isinstance(name, str) and ":" in name:
         return name.rsplit(":", 1)[-1].strip()
     return name.strip() if isinstance(name, str) else ""
-
-
-def _command_state_for_grant(
-    store: object,
-    *,
-    identity: UnlistedCliIdentity,
-    command: str,
-    cwd: Path,
-    home_dir: Path | None,
-) -> str:
-    catalog_lookup = getattr(store, "read_local_cli_command_catalog", None)
-    states_lookup = getattr(store, "read_local_cli_command_states", None)
-    commands: list[LocalCliCommand] = []
-    if callable(catalog_lookup):
-        loaded = catalog_lookup(identity.cli_id)
-        if isinstance(loaded, list):
-            commands = [item for item in loaded if isinstance(item, LocalCliCommand)]
-    if not commands:
-        return "allow"
-    command_id = resolve_command_id_for_text(
-        command,
-        cwd=cwd,
-        home_dir=home_dir,
-        identity=identity,
-        commands=commands,
-    )
-    states = states_lookup(identity.cli_id) if callable(states_lookup) else {}
-    if not isinstance(states, dict):
-        return "inherit"
-    raw_state = states.get(command_id, "inherit")
-    return raw_state if raw_state in {"inherit", "allow", "block"} else "inherit"
-
-
-def _package_script_inherit_allows(
-    store: object,
-    identity: UnlistedCliIdentity,
-    *,
-    command: str,
-    cwd: Path,
-    home_dir: Path | None,
-) -> bool:
-    if _observation_surface(store, identity.cli_id) != "package-scripts":
-        return False
-    catalog_lookup = getattr(store, "read_local_cli_command_catalog", None)
-    commands: list[LocalCliCommand] = []
-    if callable(catalog_lookup):
-        loaded = catalog_lookup(identity.cli_id)
-        if isinstance(loaded, list):
-            commands = [item for item in loaded if isinstance(item, LocalCliCommand)]
-    if not commands:
-        return False
-    command_id = resolve_command_id_for_text(
-        command,
-        cwd=cwd,
-        home_dir=home_dir,
-        identity=identity,
-        commands=commands,
-    )
-    return command_id not in {ROOT_COMMAND_ID, OTHER_COMMAND_ID}
-
-
-def _observation_surface(store: object, cli_id: str) -> str:
-    lister = getattr(store, "list_local_cli_items", None)
-    if not callable(lister):
-        return "cli"
-    raw = lister()
-    if not isinstance(raw, list):
-        return "cli"
-    for item in raw:
-        if isinstance(item, dict) and item.get("cli_id") == cli_id:
-            surface = item.get("surface")
-            return surface if isinstance(surface, str) else "cli"
-    return "cli"
 
 
 def utc_now() -> str:

@@ -24,6 +24,7 @@ from .sqlite_profile import (
 )
 from .sqlite_quarantine_forensics import (
     quarantine_file_stats,
+    sqlite_header_diagnosis,
     update_quarantine_forensics_outcome,
     write_quarantine_forensics,
 )
@@ -404,6 +405,7 @@ class StoreConnectionSchemaMixin:
                     error=error,
                     probe=probe_detail,
                     files=quarantine_file_stats(self.path),
+                    header=sqlite_header_diagnosis(self.path),
                 )
             except Exception as forensics_error:
                 _store_logger.warning(
@@ -1248,6 +1250,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_approval_column(connection, "desktop_notified_at", "text")
             self._ensure_approval_column(connection, "raw_command_text", "text")
             self._ensure_approval_column(connection, "continuation_snapshot_json", "text")
+            self._ensure_approval_column(connection, "extension_allow_hint_json", "text")
             ensure_watch_only_approval_schema(connection, schema=self)
             if not self._schema_version_applied(connection, version=3):
                 _backfill_approval_queue_columns_compat(connection)
@@ -1370,6 +1373,7 @@ class StoreConnectionSchemaMixin:
                         "last_seen_guard_version",
                         "watch_only_observation",
                         "continuation_snapshot_json",
+                        "extension_allow_hint_json",
                     }
                     return (
                         row is not None

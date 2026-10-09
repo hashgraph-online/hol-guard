@@ -230,6 +230,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::GitExecutionSafety(request) => {
                 crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
             }
+            ResidentOperationV1::LocalCliGrantDecide(request) => {
+                crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
+            }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
             }
@@ -331,6 +334,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ShimAdmin(request) => Some(&request.guard_home),
         ResidentOperationV1::McpStdioProbe(request) => Some(&request.guard_home),
         ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
+        ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
         _ => None,
     }
 }
@@ -344,6 +348,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.store_path),
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.store_path),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
+        ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
         _ => None,
     }
 }
