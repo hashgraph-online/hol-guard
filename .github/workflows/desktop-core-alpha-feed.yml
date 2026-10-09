@@ -14,6 +14,7 @@ on:
       - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/authorize_macos_core_source.sh
+      - scripts/release/notarize_core_archives.sh
       - scripts/release/read_publish_attestation_commit.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
@@ -28,6 +29,7 @@ on:
       - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/authorize_macos_core_source.sh
+      - scripts/release/notarize_core_archives.sh
       - scripts/release/read_publish_attestation_commit.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
@@ -487,29 +489,10 @@ jobs:
           python3 -I scripts/release/verify_pyinstaller_macos_signing.py \
             --binary "$BINARY" --team-id "$APPLE_TEAM_ID"
           ditto -c -k --keepParent "$BINARY" "$RUNNER_TEMP/core-update-notary.zip"
-          ONEDIR_ZIP="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.onedir.zip"
-          notarize() {
-            xcrun notarytool submit "$1" \
-              --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
-              --wait --output-format json > "$2"
-          }
-          # The archives are independent, so Apple reviews both at once; each must be accepted.
-          notarize "$RUNNER_TEMP/core-update-notary.zip" "$RUNNER_TEMP/notary-result.json" &
-          ONEFILE_NOTARY=$!
-          notarize "$ONEDIR_ZIP" "$RUNNER_TEMP/notary-result-onedir.json" &
-          ONEDIR_NOTARY=$!
-          ONEFILE_STATUS=0
-          wait "$ONEFILE_NOTARY" || ONEFILE_STATUS=$?
-          ONEDIR_STATUS=0
-          wait "$ONEDIR_NOTARY" || ONEDIR_STATUS=$?
-          for result in "$RUNNER_TEMP/notary-result.json" "$RUNNER_TEMP/notary-result-onedir.json"; do
-            jq -e '.status == "Accepted"' "$result" >/dev/null || {
-              cat "$result" >&2
-              exit 1
-            }
-          done
-          test "$ONEFILE_STATUS" -eq 0
-          test "$ONEDIR_STATUS" -eq 0
+          bash scripts/release/notarize_core_archives.sh \
+            "$RUNNER_TEMP/core-update-notary.zip" "$RUNNER_TEMP/notary-result.json" \
+            "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.onedir.zip" \
+            "$RUNNER_TEMP/notary-result-onedir.json"
       - name: Onedir activation under onefile load
         if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true' && steps.existing.outputs.mode == 'build'
         env:
