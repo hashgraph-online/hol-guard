@@ -68,6 +68,7 @@ def discover_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
                 source_path=identity.path_class or observation_path_class(identity.source_path),
                 surface="cli",
                 only_if_missing=True,
+                replayed_at=seen_at,
             )
             known.add(identity.cli_id)
             added += 1

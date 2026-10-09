@@ -235,6 +235,9 @@ def test_history_replay_skips_forgotten_and_expired_identities(tmp_path: Path) -
 
     assert store.local_cli_replay_allowed(forgotten.identity_hash, recent.isoformat()) is False
     assert store.local_cli_replay_allowed("7" * 64, expired.isoformat()) is False
+    # The cutoff is relative to the replaying discovery's own time.
+    replay_time = (expired + timedelta(days=1)).isoformat()
+    assert store.local_cli_replay_allowed("7" * 64, expired.isoformat(), now=replay_time) is True
     assert store.local_cli_replay_allowed("7" * 64, recent.isoformat()) is True
     store.record_local_cli_observation(forgotten, seen_at=recent.isoformat(), surface="cli", only_if_missing=True)
     assert forgotten.cli_id not in _ids(store)

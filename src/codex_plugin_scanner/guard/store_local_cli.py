@@ -55,6 +55,7 @@ class StoreLocalCliMixin:
         server_command: str | None = None,
         server_args_hash: str | None = None,
         only_if_missing: bool = False,
+        replayed_at: str | None = None,
     ) -> None:
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
@@ -67,7 +68,7 @@ class StoreLocalCliMixin:
             ).fetchone()
             if current is not None and only_if_missing:
                 return
-            if only_if_missing and not replay_allowed(connection, identity.identity_hash, seen_at):
+            if only_if_missing and not replay_allowed(connection, identity.identity_hash, seen_at, now=replayed_at):
                 return
             if current is None:
                 _ = connection.execute(

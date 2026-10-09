@@ -158,7 +158,7 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
         first = tools[0]
         server = first.server_identity
         history_seen_at = latest_seen.get(key, seen_at)
-        if not store.local_cli_replay_allowed(first.identity.identity_hash, history_seen_at):
+        if not store.local_cli_replay_allowed(first.identity.identity_hash, history_seen_at, now=seen_at):
             continue
         cli_id = store.ensure_local_mcp_observation(
             first.identity,

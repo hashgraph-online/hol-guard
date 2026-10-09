@@ -87,12 +87,12 @@ class StoreLocalCliRetentionMixin:
                 raise LocalCliForgetError("local_cli_shared_server_enrolled")
             _delete_observations(connection, ((cli_id, identity_hash),), forgotten_at=_utc_now())
 
-    def local_cli_replay_allowed(self, identity_hash: str, seen_at: str) -> bool:
+    def local_cli_replay_allowed(self, identity_hash: str, seen_at: str, *, now: str | None = None) -> bool:
         """Return whether a history entry may restore or refresh this identity."""
 
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            return replay_allowed(connection, identity_hash, seen_at)
+            return replay_allowed(connection, identity_hash, seen_at, now=now)
 
     def prune_inactive_local_cli_observations(
         self,
@@ -150,12 +150,19 @@ def prune_expired_local_cli_observations(
     return [cli_id for cli_id, _identity_hash in expired]
 
 
-def replay_allowed(connection: sqlite3.Connection, identity_hash: str, seen_at: str) -> bool:
+def replay_allowed(
+    connection: sqlite3.Connection,
+    identity_hash: str,
+    seen_at: str,
+    *,
+    now: str | None = None,
+) -> bool:
     """Return whether a history entry seen at ``seen_at`` may restore this identity.
 
     A listed identity may always be refreshed. Otherwise entries older than
-    the retention window, or no later than when the user forgot the identity
-    (or retention pruned it), are skipped.
+    the retention window before ``now`` (the replaying discovery's time), or
+    no later than when the user forgot the identity (or retention pruned it),
+    are skipped.
     """
 
     listed = connection.execute(
@@ -164,7 +171,8 @@ def replay_allowed(connection: sqlite3.Connection, identity_hash: str, seen_at: 
     if listed is not None:
         return True
     seen = parse_utc_timestamp(seen_at)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=LOCAL_CLI_OBSERVATION_RETENTION_DAYS)
+    current = parse_utc_timestamp(now) or datetime.now(timezone.utc)
+    cutoff = current - timedelta(days=LOCAL_CLI_OBSERVATION_RETENTION_DAYS)
     if seen is not None and seen < cutoff:
         return False
     return not _forgotten_since(connection, identity_hash, seen)
