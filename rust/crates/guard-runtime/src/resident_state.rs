@@ -117,6 +117,18 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
         .clone()
 }
 
+/// Report whether this process's executable no longer holds the runtime it
+/// loaded, which is how an update that replaced or removed the binary shows up
+/// to processes still running the old image. Unreadable paths count as
+/// superseded so the caller fails closed.
+pub(crate) fn runtime_superseded(loaded_digest: &str) -> bool {
+    std::env::current_exe()
+        .and_then(fs::canonicalize)
+        .ok()
+        .and_then(|executable| executable_digest(&executable).ok())
+        .is_none_or(|digest| digest != loaded_digest)
+}
+
 pub(crate) use crate::resident_process_identity::{
     parent_process_id, process_is_definitively_gone, process_start_marker,
     validate_package_process_identity, validate_process_start_marker,
