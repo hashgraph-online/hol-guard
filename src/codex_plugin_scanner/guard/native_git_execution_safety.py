@@ -114,6 +114,10 @@ def git_execution_safety_native(
         return None
     try:
         home = str(Path.home())
+        # The resident resolves relative paths against its own directory, so
+        # the caller's cwd must be made absolute here (as the retired Python
+        # implementation did) before it is sent.
+        request_cwd = str(cwd.resolve()) if cwd is not None else home
     except (OSError, RuntimeError):
         return None
     _request_counter += 1
@@ -121,7 +125,7 @@ def git_execution_safety_native(
         "schema": _REQUEST_SCHEMA,
         "request_id": f"ges-{os.getpid()}-{_request_counter}",
         "check": check,
-        "cwd": str(cwd) if cwd is not None else home,
+        "cwd": request_cwd,
         "home": home,
         "groups": _process_groups(),
         "environment": _environment_snapshot(),
