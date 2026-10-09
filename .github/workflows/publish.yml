@@ -860,13 +860,13 @@ jobs:
           fi
           release_dir=$(mktemp -d)
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$release_dir" --pattern "hol_guard-*" --pattern "*.intoto.jsonl"
-          bundle="$release_dir/hol-guard-v${VERSION}.intoto.jsonl"
-          [[ -s "$bundle" ]] || { echo "Release ${tag} has no provenance bundle; refusing to publish unverified wheels" >&2; exit 1; }
+          provenance_bundle="$release_dir/hol-guard-v${VERSION}.intoto.jsonl"
+          [[ -s "$provenance_bundle" ]] || { echo "Release ${tag} has no provenance bundle; refusing to publish unverified wheels" >&2; exit 1; }
           shopt -s nullglob
           release_files=("$release_dir"/hol_guard-*)
           for release_file in "${release_files[@]}"; do
             gh attestation verify "$release_file" --repo "$GITHUB_REPOSITORY" \
-              --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null || {
+              --bundle "$provenance_bundle" --source-digest "$SOURCE_SHA" >/dev/null || {
               echo "Release asset $(basename "$release_file") failed attestation verification" >&2
               exit 1
             }
