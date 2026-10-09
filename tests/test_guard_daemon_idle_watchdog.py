@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import http.client
 import time
+import urllib.error
+import urllib.request
 
 import pytest
 
@@ -63,5 +66,22 @@ def test_releasing_a_request_restarts_the_idle_clock(tmp_path, monkeypatch: pyte
         assert server.active_requests == 0
         assert time.monotonic() - server.last_activity_monotonic < 5.0
         assert not daemon._shutdown_started.wait(timeout=1.5)
+    finally:
+        daemon.stop()
+
+
+def test_admission_refuses_requests_once_idle_shutdown_is_claimed(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    daemon = _started_daemon(tmp_path, monkeypatch)
+    server = daemon._server
+    try:
+        with server.request_capacity_lock:
+            server.idle_shutdown_claimed = True
+            rejected_before = server.rejected_requests
+        with pytest.raises((urllib.error.URLError, ConnectionError, http.client.HTTPException)):
+            urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/healthz", timeout=5)
+        with server.request_capacity_lock:
+            assert server.active_requests == 0
+            assert server.rejected_requests == rejected_before + 1
+            server.idle_shutdown_claimed = False
     finally:
         daemon.stop()
