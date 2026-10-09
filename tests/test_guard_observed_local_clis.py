@@ -51,7 +51,16 @@ class _Store:
         assert status is None
         return self.requests[:limit]
 
-    def record_local_cli_observation(self, identity, *, seen_at: str, source_path: str | None, surface: str) -> None:
+    def record_local_cli_observation(
+        self,
+        identity,
+        *,
+        seen_at: str,
+        source_path: str | None,
+        surface: str,
+        only_if_missing: bool = False,
+    ) -> None:
+        assert only_if_missing
         self.recorded.append((identity.cli_id, source_path, surface))
 
 
