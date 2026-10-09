@@ -24,6 +24,7 @@ from .sqlite_profile import (
 )
 from .sqlite_quarantine_forensics import (
     quarantine_file_stats,
+    sqlite_header_diagnosis,
     update_quarantine_forensics_outcome,
     write_quarantine_forensics,
 )
@@ -404,6 +405,7 @@ class StoreConnectionSchemaMixin:
                     error=error,
                     probe=probe_detail,
                     files=quarantine_file_stats(self.path),
+                    header=sqlite_header_diagnosis(self.path),
                 )
             except Exception as forensics_error:
                 _store_logger.warning(

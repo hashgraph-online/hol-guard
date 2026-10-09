@@ -1409,6 +1409,12 @@ def _remove_guard_home_destination(path: Path) -> None:
 
 def _copy_guard_database(*, source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
+    # Replacing the main file under a live WAL/rollback journal lets a
+    # checkpoint of the old log write stale pages into the new database.
+    for suffix in ("-wal", "-journal"):
+        companion = destination.with_name(f"{destination.name}{suffix}")
+        if companion.exists() and companion.stat().st_size > 0:
+            raise GuardHomeMigrationError("guard.db migration failed")
     temporary_destination = destination.with_name(f"{destination.name}.migrating")
     deadline = time.monotonic() + GUARD_DB_BACKUP_TIMEOUT_SECONDS
     try:
