@@ -25,13 +25,13 @@ def _disable_isolated_python(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _blocking_cursor_hooks(command: str) -> dict[str, list[dict[str, str]]]:
+def _blocking_cursor_hooks(command: str) -> dict[str, list[dict[str, object]]]:
     entry = [{"command": command}]
     return {
         "beforeShellExecution": entry,
         "beforeMCPExecution": entry,
         "beforeReadFile": entry,
-        "preToolUse": entry,
+        "preToolUse": [{"command": command, "failClosed": True}],
     }
 
 
