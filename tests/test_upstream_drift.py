@@ -152,7 +152,12 @@ def gmail_document(**send_changes) -> dict:
         "revision": "1",
         "schemas": {
             "Message": {"properties": {"raw": {"type": "string"}, "payload": {"$ref": "MessagePart"}}},
-            "MessagePart": {"properties": {"filename": {"type": "string", "description": "Name."}}},
+            "MessagePart": {
+                "properties": {
+                    "filename": {"type": "string", "description": "Name."},
+                    "description": {"type": "string", "description": "Body."},
+                }
+            },
         },
         "resources": {"users": {"resources": {"messages": {"methods": {"send": send, "batchDelete": {}}}}}},
     }
@@ -225,6 +230,12 @@ def nested_change() -> dict:
     return document
 
 
+def description_property_change() -> dict:
+    document = gmail_document()
+    document["schemas"]["MessagePart"]["properties"]["description"]["type"] = "integer"
+    return document
+
+
 @pytest.mark.parametrize(
     ("document", "changed"),
     [
@@ -233,6 +244,7 @@ def nested_change() -> dict:
         (gmail_document(scopes=["https://mail.google.com/"]), ["methods users.messages.send"]),
         (gmail_document(path="gmail/v2/send"), ["methods users.messages.send"]),
         (nested_change(), ["schemas MessagePart"]),
+        (description_property_change(), ["schemas MessagePart"]),
     ],
 )
 def test_discovery_pin_reports_changed_method_shape(tmp_path, document, changed):

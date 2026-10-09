@@ -104,7 +104,11 @@ def _child(mapping: dict[str, Any] | None, name: str) -> Any:
 
 def _without_descriptions(value: Any) -> Any:
     if isinstance(value, dict):
-        return {key: _without_descriptions(item) for key, item in sorted(value.items()) if key != "description"}
+        return {
+            key: _without_descriptions(item)
+            for key, item in sorted(value.items())
+            if not (key == "description" and isinstance(item, str))
+        }
     if isinstance(value, list):
         return [_without_descriptions(item) for item in value]
     return value
