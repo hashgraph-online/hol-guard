@@ -15868,7 +15868,7 @@ function remainingStep(candidate) {
   const step = stringValue$2(candidate.step);
   const message = stringValue$2(candidate.message);
   const action = stringValue$2(candidate.action);
-  if (step === "intelligence_sync" && action === "connect" && message !== null) {
+  if ((step === "intelligence_sync" && action === "connect" || step === "package_shims" && action === "check_access") && message !== null) {
     return { step, message, action };
   }
   return null;
