@@ -16,8 +16,7 @@ from ..runtime.local_cli_commands import (
     LocalCliCommand,
     merge_discovered_commands,
 )
-from ..runtime.local_mcp_probe import is_package_mcp_launcher
-from ..runtime.mcp_protection import build_mcp_server_identity
+from ..runtime.local_cli_runner import runner_name, runner_target
 
 SEEDED_PROFILE_PREFIX = "local-cli.profile-"
 
@@ -40,24 +39,22 @@ def merge_profile_commands(tool_name: str, discovered: Sequence[LocalCliCommand]
 
 
 def profiled_cli_package_launch(tokens: Sequence[str]) -> bool:
-    """Return True when a package launcher runs a CLI with a curated profile.
+    """Return True when a package runner directly launches a profiled CLI.
 
     ``npx wrangler`` is a CLI call, not an MCP server; probing it over stdio
     would spawn the CLI and then reject the paste as a built-in launcher.
+    Selector forms (``npx --package wrangler other``) and scoped packages
+    (``@other/wrangler``) are not the profiled CLI, so they keep MCP discovery.
     """
 
-    if not is_package_mcp_launcher(tokens):
+    if not tokens:
         return False
-    package_name = build_mcp_server_identity(
-        config_path="",
-        command=tokens[0],
-        args=tuple(tokens[1:]),
-        transport="stdio",
-    ).package_name
-    if not package_name:
+    runner = runner_name(tokens[0])
+    target = runner_target(runner, tuple(tokens[1:])) if runner is not None else None
+    if target is None:
         return False
-    target = package_name.rsplit("/", 1)[-1]
-    return profile_for_executable(target) is not None
+    package_name = target.rpartition("@")[0] if target.rfind("@") > 0 else target
+    return profile_for_executable(package_name) is not None
 
 
 _MCP_CLI_ID_PREFIX = "local-cli.mcp-"

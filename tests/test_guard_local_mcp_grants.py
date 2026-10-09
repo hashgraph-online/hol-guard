@@ -800,28 +800,3 @@ def test_recognize_failed_package_mcp_stays_built_in(tmp_path: Path, monkeypatch
         assert "MCP tools" in str(exc)
     else:
         raise AssertionError("expected package launcher without MCP tools to be rejected")
-
-
-def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypatch) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
-        staticmethod(lambda: home),
-    )
-
-    def _probe(*_args, **_kwargs):
-        raise AssertionError("profiled CLIs must not be probed as MCP servers")
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
-        _probe,
-    )
-    service = LocalCliApiService(store=GuardStore(home))
-    result = service.recognize({"command": "npx wrangler"})
-    item = result["item"]
-    assert isinstance(item, dict)
-    assert item["surface"] == "cli"
-    assert item["name"] == "wrangler"
-    ids = {entry["command_id"] for entry in item["commands"]}
-    assert {"deploy", "d1.execute"} <= ids

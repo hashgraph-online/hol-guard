@@ -25,6 +25,8 @@ _SECTION_HEADER = re.compile(
     re.IGNORECASE,
 )
 _ARGPARSE_SET = re.compile(r"\{([A-Za-z][A-Za-z0-9_-]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_-]*)+)\}")
+_YARGS_GROUP_HEADER = re.compile(r"^[A-Z][A-Z0-9 &/-]{0,40}$")
+_NON_COMMAND_GROUP = re.compile(r"EXAMPLE|OPTION|FLAG|POSITIONAL|ARGUMENT|USAGE")
 _SKIP_NAMES = frozenset({"help", "completion", "completions"})
 _HELP_TIMEOUT_SECONDS = 2.5
 _HELP_OUTPUT_LIMIT = 8192
@@ -42,13 +44,15 @@ def parse_cli_help_text(
 
     ``invocation`` is the program and parent command path (for example
     ``("wrangler", "d1")``). Yargs-style help repeats it at the start of every
-    row, so it is stripped, and such rows count even under unrecognised
-    section headings.
+    indented row and groups commands under uppercase headings such as
+    ``ACCOUNT``. Under those headings only invocation-prefixed rows count;
+    prose, examples, options and positionals never do.
     """
 
     found: list[LocalCliCommand] = []
     seen: set[str] = set()
     in_section = False
+    prefixed_only = False
     for raw_line in text.splitlines():
         line = raw_line.rstrip()
         stripped = line.strip()
@@ -58,16 +62,23 @@ def parse_cli_help_text(
             continue
         if _SECTION_HEADER.fullmatch(stripped):
             in_section = True
+            prefixed_only = False
             for name in _argparse_names(stripped):
                 _append_command(found, seen, name, parent_id=parent_id)
             continue
-        prefixed = _strip_invocation(stripped, invocation)
+        if invocation and raw_line == stripped and _YARGS_GROUP_HEADER.fullmatch(stripped):
+            in_section = not _NON_COMMAND_GROUP.search(stripped)
+            prefixed_only = True
+            continue
+        if not in_section:
+            continue
+        prefixed = _strip_invocation(stripped, invocation) if raw_line[:1].isspace() else None
         if prefixed is not None:
             parsed = _row_command(prefixed)
             if parsed is not None:
                 _append_command(found, seen, parsed[0], description=parsed[1], parent_id=parent_id)
             continue
-        if not in_section:
+        if prefixed_only:
             continue
         for name in _argparse_names(stripped):
             _append_command(found, seen, name, parent_id=parent_id)

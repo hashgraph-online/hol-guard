@@ -69,6 +69,9 @@ COMPUTE & AI
 GLOBAL FLAGS
   -c, --config  Path to Wrangler configuration file  [string]
   -h, --help    Show help  [boolean]
+
+EXAMPLES
+  wrangler tail my-worker         Stream logs
 """
 
 YARGS_WRANGLER_D1_HELP = """
@@ -85,6 +88,25 @@ def test_parse_yargs_rows_strip_program_name() -> None:
     assert [command.command_id for command in commands] == ["docs", "init", "login", "whoami", "d1"]
     nested = parse_cli_help_text(YARGS_WRANGLER_D1_HELP, invocation=("wrangler", "d1"))
     assert [command.command_id for command in nested] == ["list", "execute"]
+
+
+KUBECTL_STYLE_HELP = """
+kubectl controls the Kubernetes cluster manager.
+
+Commands:
+  get           Display one or many resources
+
+Examples:
+  # List all pods
+  kubectl get pods -o wide
+"""
+
+
+def test_program_prefixed_prose_and_examples_are_not_commands() -> None:
+    commands = parse_cli_help_text(KUBECTL_STYLE_HELP, invocation=("kubectl",))
+    assert [command.command_id for command in commands] == ["get"]
+    nested = parse_cli_help_text(KUBECTL_STYLE_HELP, invocation=("kubectl", "get"))
+    assert [command.command_id for command in nested] == ["get"]
 
 
 def test_discover_yargs_help_has_no_program_named_commands() -> None:
