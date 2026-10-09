@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
 from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS, NativePolicySnapshotError
-from ..store_local_cli_retention import later_timestamp
+from ..store_local_cli_retention import LocalCliReplaySkippedError, later_timestamp
 from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, OTHER_COMMAND_ID, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
@@ -119,14 +119,15 @@ def tools_from_receipts(receipts: Sequence[Mapping[str, object]]) -> tuple[Obser
 
 
 def _latest_seen_by_connector(
-    batches: Sequence[tuple[Sequence[Mapping[str, object]], str]],
+    batches: Sequence[tuple[Sequence[Mapping[str, object]], tuple[str, ...]]],
 ) -> dict[tuple[str, str], str]:
     """Return the newest history timestamp for each harness connector."""
 
     latest: dict[tuple[str, str], str] = {}
-    for records, time_key in batches:
+    for records, time_keys in batches:
         for tool, record in _receipt_tools(records):
-            stamp = record.get(time_key)
+            # A retried request refreshes last_seen_at, not created_at.
+            stamp = next((value for key in time_keys if (value := record.get(key))), None)
             if isinstance(stamp, str) and parse_utc_timestamp(stamp) is not None:
                 key = (tool.harness, tool.namespace)
                 latest[key] = later_timestamp(latest.get(key), stamp)
@@ -145,7 +146,7 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
     observed = tools_from_receipts(records) + tools_from_receipts(receipts)
     # Replay records each connector at its own history time, so it can age
     # out and stays forgotten until the harness uses it again.
-    latest_seen = _latest_seen_by_connector(((records, "created_at"), (receipts, "timestamp")))
+    latest_seen = _latest_seen_by_connector(((records, ("last_seen_at", "created_at")), (receipts, ("timestamp",))))
     for tool in observed:
         key = (tool.harness, tool.namespace)
         if key not in groups and len(groups) >= MAX_OBSERVED_MCP_SERVERS:
@@ -158,17 +159,19 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
         first = tools[0]
         server = first.server_identity
         history_seen_at = latest_seen.get(key, seen_at)
-        if not store.local_cli_replay_allowed(first.identity.identity_hash, history_seen_at, now=seen_at):
+        try:
+            cli_id = store.ensure_local_mcp_observation(
+                first.identity,
+                seen_at=history_seen_at,
+                replayed=True,
+                replay_now=seen_at,
+                server_identity_hash=server.identity_hash,
+                server_command=server.command,
+                server_args_hash=server.args_hash,
+                source_label=f"{first.harness.title()} · observed tools",
+            )
+        except LocalCliReplaySkippedError:
             continue
-        cli_id = store.ensure_local_mcp_observation(
-            first.identity,
-            seen_at=history_seen_at,
-            replayed=True,
-            server_identity_hash=server.identity_hash,
-            server_command=server.command,
-            server_args_hash=server.args_hash,
-            source_label=f"{first.harness.title()} · observed tools",
-        )
         catalog = [
             LocalCliCommand(
                 command_id=tool.command_id,

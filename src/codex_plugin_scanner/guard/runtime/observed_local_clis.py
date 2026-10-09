@@ -78,13 +78,15 @@ def discover_observed_local_clis(store: GuardStore, *, seen_at: str, home_dir: P
 def _latest_request_times(records: Sequence[Mapping[str, object]]) -> dict[tuple[str, str], str]:
     latest: dict[tuple[str, str], str] = {}
     for record in records[:MAX_OBSERVED_CLI_REQUESTS]:
-        command, workspace, created_at = (record.get(key) for key in ("raw_command_text", "workspace", "created_at"))
-        if not all(isinstance(value, str) for value in (command, workspace, created_at)):
+        command, workspace = record.get("raw_command_text"), record.get("workspace")
+        # A retried request refreshes last_seen_at, not created_at.
+        stamp = record.get("last_seen_at") or record.get("created_at")
+        if not all(isinstance(value, str) for value in (command, workspace, stamp)):
             continue
-        if parse_utc_timestamp(created_at) is None:
+        if parse_utc_timestamp(stamp) is None:
             continue
         key = (str(command).strip(), str(Path(str(workspace))))
-        latest[key] = later_timestamp(latest.get(key), str(created_at))
+        latest[key] = later_timestamp(latest.get(key), str(stamp))
     return latest
 
 

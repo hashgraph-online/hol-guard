@@ -20,7 +20,12 @@ from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity, resolved_package_launcher_executable
 from .runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .store_local_cli import _grant_from_row, _read_command_catalog, _read_command_states, _row_values
-from .store_local_cli_retention import later_timestamp, prune_expired_local_cli_observations
+from .store_local_cli_retention import (
+    LocalCliReplaySkippedError,
+    later_timestamp,
+    prune_expired_local_cli_observations,
+    replay_allowed,
+)
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import read_mcp_skill_page, read_mcp_tool_authority
 from .store_mcp_provider_catalog import read_provider_actions, write_composio_metadata
@@ -216,11 +221,14 @@ class StoreLocalMcpMixin:
         source_label: str | None = None,
         connection_identity_hash: str | None = None,
         replayed: bool = False,
+        replay_now: str | None = None,
     ) -> str:
         """Insert or refresh an MCP observation without incrementing observed_count.
 
         ``replayed`` marks ``seen_at`` as a history timestamp: it never moves
-        ``last_seen_at`` backward and does not run retention pruning.
+        ``last_seen_at`` backward and does not run retention pruning. The
+        replay check runs in the write transaction, so a concurrent Forget is
+        not undone; a skipped entry raises ``LocalCliReplaySkippedError``.
         """
 
         if not is_local_cli_id(identity.cli_id):
@@ -240,9 +248,11 @@ class StoreLocalMcpMixin:
         guard_home = cast("GuardStore", self).guard_home if legacy_candidate else None
         with _notify_legacy_mcp_denial(guard_home), self._connect() as connection:
             ensure_local_cli_schema(connection)
-            if legacy_candidate:
+            if legacy_candidate or replayed:
                 connection.commit()
                 connection.execute("begin immediate")
+            if replayed and not replay_allowed(connection, identity.identity_hash, seen_at, now=replay_now):
+                raise LocalCliReplaySkippedError(identity.cli_id)
             legacy_deny = legacy_candidate and _matching_legacy_mcp_denial(
                 connection, server_identity_hash, server_command, server_args_hash
             )

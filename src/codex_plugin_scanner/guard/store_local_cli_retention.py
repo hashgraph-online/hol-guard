@@ -53,6 +53,10 @@ class LocalCliForgetError(ValueError):
     """Raised when an observed record cannot be forgotten."""
 
 
+class LocalCliReplaySkippedError(Exception):
+    """Raised when a history entry may not restore a forgotten or expired identity."""
+
+
 class StoreLocalCliRetentionMixin:
     if TYPE_CHECKING:
 
@@ -146,7 +150,8 @@ def prune_expired_local_cli_observations(
         if _seen_before(last_seen_at, cutoff)
     )
     if expired:
-        _delete_observations(connection, expired, forgotten_at=current.isoformat())
+        # Expiry is not a Forget: recent history may still restore the record.
+        _delete_observations(connection, expired)
     return [cli_id for cli_id, _identity_hash in expired]
 
 
@@ -161,8 +166,7 @@ def replay_allowed(
 
     A listed identity may always be refreshed. Otherwise entries older than
     the retention window before ``now`` (the replaying discovery's time), or
-    no later than when the user forgot the identity (or retention pruned it),
-    are skipped.
+    no later than when the user forgot the identity, are skipped.
     """
 
     listed = connection.execute(
@@ -241,11 +245,13 @@ def _delete_observations(
     connection: sqlite3.Connection,
     records: tuple[tuple[str, str], ...],
     *,
-    forgotten_at: str,
+    forgotten_at: str | None = None,
 ) -> None:
     _ensure_retention_tables(connection)
     for table in _OBSERVATION_TABLES:
         connection.executemany(f"delete from {table} where cli_id = ?", [(cli_id,) for cli_id, _ in records])
+    if forgotten_at is None:
+        return
     connection.executemany(
         "insert into local_cli_forgotten (identity_hash, forgotten_at) values (?, ?) "
         "on conflict(identity_hash) do update set forgotten_at = excluded.forgotten_at",

@@ -10,8 +10,9 @@ import pytest
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
+from codex_plugin_scanner.guard.runtime.observed_local_clis import _latest_request_times
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_local_cli_retention import LocalCliForgetError
+from codex_plugin_scanner.guard.store_local_cli_retention import LocalCliForgetError, LocalCliReplaySkippedError
 
 NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
 
@@ -268,6 +269,62 @@ def test_replayed_mcp_history_never_moves_last_seen_backward(tmp_path: Path) -> 
 
     listed = {str(item["cli_id"]): item for item in store.list_local_cli_items()}
     assert listed[current.cli_id]["last_seen_at"] == _stamp(1)
+
+
+def test_pruned_record_returns_from_recent_history_but_forgotten_one_does_not(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    pruned = _cli("pruned-tool", "a")
+    forgotten = _cli("forgotten-again-tool", "b")
+    _observe(store, pruned, days_ago=40)
+    # Inserting a new record runs the daily prune, which drops the idle one.
+    _observe(store, forgotten, days_ago=1)
+    assert pruned.cli_id not in _ids(store)
+    store.forget_local_cli_observation(forgotten.cli_id, identity_hash=forgotten.identity_hash)
+
+    # Expiry is not a Forget: a receipt newer than the stale last_seen_at
+    # restores the record on the next history replay.
+    assert store.local_cli_replay_allowed(pruned.identity_hash, _stamp(2), now=_stamp(0)) is True
+    store.record_local_cli_observation(
+        pruned, seen_at=_stamp(2), surface="cli", only_if_missing=True, replayed_at=_stamp(0)
+    )
+    assert pruned.cli_id in _ids(store)
+
+
+def test_replayed_mcp_entry_is_checked_inside_the_write_transaction(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    current = _observe_mcp(store, "local-cli.mcp-forget-race", ("server.ts",), days_ago=0)
+    with sqlite3.connect(store.path) as connection:
+        server_hash, command, args_hash = connection.execute(
+            "select server_identity_hash, server_command, server_args_hash from local_cli_observation where cli_id = ?",
+            (current.cli_id,),
+        ).fetchone()
+    store.forget_local_cli_observation(current.cli_id, identity_hash=current.identity_hash)
+    history_seen_at = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+
+    with pytest.raises(LocalCliReplaySkippedError):
+        store.ensure_local_mcp_observation(
+            current,
+            seen_at=history_seen_at,
+            server_identity_hash=server_hash,
+            server_command=command,
+            server_args_hash=args_hash,
+            replayed=True,
+        )
+
+    assert current.cli_id not in _ids(store)
+
+
+def test_history_times_use_the_latest_retry_of_a_request(tmp_path: Path) -> None:
+    workspace = str(tmp_path)
+    records = [
+        {"raw_command_text": "tool run", "workspace": workspace, "created_at": _stamp(40), "last_seen_at": _stamp(2)},
+        {"raw_command_text": "other run", "workspace": workspace, "created_at": _stamp(5)},
+    ]
+
+    latest = _latest_request_times(records)
+
+    assert latest[("tool run", workspace)] == _stamp(2)
+    assert latest[("other run", workspace)] == _stamp(5)
 
 
 def test_refreshing_an_existing_record_prunes_at_most_once_a_day(tmp_path: Path) -> None:
