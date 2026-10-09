@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
 import type { BulkGateCredentials } from "./approval-gate-utils";
+import { retryCannotReuseApproval } from "./approval-center-utils";
 import type { GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import {
   bulkApproveActionCount,
@@ -173,9 +174,11 @@ export function useQueueBulkApprove(props: {
     let highActionCount = 0;
     let elevatedActionCount = 0;
     let lowActionCount = 0;
+    let retryBlockedActionCount = 0;
     for (const group of selectedBulkGroups) {
       const tier = bulkApprovalRiskTier(group);
       const count = 1 + group.duplicateCount;
+      if (retryCannotReuseApproval(group.primary)) retryBlockedActionCount += count;
       if (tier === "high") highActionCount += count;
       else if (tier === "elevated") elevatedActionCount += count;
       else if (tier === "low") lowActionCount += count;
@@ -189,6 +192,7 @@ export function useQueueBulkApprove(props: {
       highActionCount,
       elevatedActionCount,
       lowActionCount,
+      retryBlockedActionCount,
     };
   }, [selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
 

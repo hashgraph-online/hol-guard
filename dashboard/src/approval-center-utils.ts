@@ -141,11 +141,17 @@ export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness
 /**
  * Receipts are looked up by harness and artifact id. For native tool calls that id names
  * the tool (for example `omp:native-pretool:bash`), so only a receipt for the same action
- * hash describes this request.
+ * hash or the same command text describes this request.
  */
-export function receiptDescribesRequest(item: GuardApprovalRequest, receipt: { artifact_hash: string }): boolean {
+export function receiptDescribesRequest(
+  item: GuardApprovalRequest,
+  receipt: { artifact_hash: string; raw_command_text?: string | null },
+): boolean {
   if (!item.artifact_id.includes(":native-pretool:")) return true;
-  return receipt.artifact_hash === item.artifact_hash;
+  if (receipt.artifact_hash === item.artifact_hash) return true;
+  // Unbound reviews get a fresh hash per request, so a repeat of the same command matches by its text.
+  const receiptCommand = receipt.raw_command_text?.trim();
+  return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
 }
 
 export function buildRetryAfterApprovalCopy(

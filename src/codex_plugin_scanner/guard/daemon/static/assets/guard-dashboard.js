@@ -14907,7 +14907,9 @@ function retryCannotReuseApprovalHint(item, harness) {
 }
 function receiptDescribesRequest(item, receipt) {
   if (!item.artifact_id.includes(":native-pretool:")) return true;
-  return receipt.artifact_hash === item.artifact_hash;
+  if (receipt.artifact_hash === item.artifact_hash) return true;
+  const receiptCommand = receipt.raw_command_text?.trim();
+  return Boolean(receiptCommand) && receiptCommand === item.raw_command_text?.trim();
 }
 function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false) {
   const harness = harnessDisplayName(item.harness);
@@ -28513,6 +28515,16 @@ function QueueBulkGatePrompt(props) {
     )
   ] }) });
 }
+function BulkLineDetail(props) {
+  const { line } = props;
+  if (line.path !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path });
+  }
+  if (line.command !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block break-all font-mono text-[11px] text-brand-dark/60", title: line.command, children: line.command });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title });
+}
 function QueueBulkDrawer(props) {
   if (!props.open) return null;
   if (props.step === "completed") {
@@ -28545,17 +28557,15 @@ function QueueBulkDrawer(props) {
   const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
   const unit = props.selectedActionCount === 1 ? "action" : "actions";
   const submitLabel = props.step === "submitting" ? "Approving…" : `Approve once (${props.selectedActionCount} ${unit})`;
-  const PREVIEW_LIMIT = 8;
   const shownGroups = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
-    for (const line of riskLines.slice(0, PREVIEW_LIMIT)) {
+    for (const line of riskLines) {
       const bucket = map.get(line.categoryLabel) ?? [];
       bucket.push(line);
       map.set(line.categoryLabel, bucket);
     }
     return Array.from(map.entries());
   }, [riskLines]);
-  const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
   const actionFooter = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-end gap-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -28665,36 +28675,21 @@ function QueueBulkDrawer(props) {
               unit
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3", children: [
-            shownGroups.map(([categoryLabel, lines]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-semibold text-brand-dark/70", children: [
-                categoryLabel,
-                " ",
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-muted-foreground", children: [
-                  "(",
-                  lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0),
-                  ")"
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-1.5 space-y-1.5", children: [
-                lines.slice(0, 3).map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
-                  line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path }) : line.command !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", title: line.command, children: line.command }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title })
-                ] }, line.requestId)),
-                lines.length > 3 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-[11px] text-muted-foreground", children: [
-                  "+ ",
-                  lines.length - 3,
-                  " more"
-                ] })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2.5 max-h-72 space-y-3 overflow-y-auto rounded-xl bg-slate-50/80 px-4 py-3", children: shownGroups.map(([categoryLabel, lines]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-semibold text-brand-dark/70", children: [
+              categoryLabel,
+              " ",
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-muted-foreground", children: [
+                "(",
+                lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0),
+                ")"
               ] })
-            ] }, categoryLabel)),
-            hiddenCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-muted-foreground", children: [
-              "and ",
-              hiddenCount,
-              " more selected ",
-              unit
-            ] })
-          ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-1.5 space-y-1.5", children: lines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(BulkLineDetail, { line })
+            ] }, line.requestId)) })
+          ] }, categoryLabel)) })
         ] }),
         props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-[11px] leading-5 text-brand-attention", children: [
           props.sensitiveFileReadCount,
@@ -28867,6 +28862,12 @@ function buildBulkRiskDisclosure(stats) {
       `${stats.elevatedActionCount} of the selected ${pluralActions(stats.actionCount)} ${stats.elevatedActionCount === 1 ? "is an elevated-risk action" : "are elevated-risk actions"} (shell, file edits, network, or similar). Confirm you expected each one.`
     );
   }
+  const retryBlocked = stats.retryBlockedActionCount ?? 0;
+  if (retryBlocked > 0) {
+    bullets.push(
+      `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${retryBlocked === 1 ? "is a command the agent" : "are commands the agent"} will still be blocked on after approval. Approving records your decision only; use "Always allow exact action" or an Extensions pattern to let the agent run ${retryBlocked === 1 ? "it" : "them"}.`
+    );
+  }
   if (stats.duplicateActionCount > 0) {
     bullets.push(
       `${stats.duplicateActionCount} duplicate ${stats.duplicateActionCount === 1 ? "retry is" : "retries are"} included — make sure the repeats are expected, not a loop.`
@@ -28947,9 +28948,11 @@ function useQueueBulkApprove(props) {
     let highActionCount = 0;
     let elevatedActionCount = 0;
     let lowActionCount = 0;
+    let retryBlockedActionCount = 0;
     for (const group of selectedBulkGroups) {
       const tier = bulkApprovalRiskTier(group);
       const count = 1 + group.duplicateCount;
+      if (retryCannotReuseApproval(group.primary)) retryBlockedActionCount += count;
       if (tier === "high") highActionCount += count;
       else if (tier === "elevated") elevatedActionCount += count;
       else if (tier === "low") lowActionCount += count;
@@ -28962,7 +28965,8 @@ function useQueueBulkApprove(props) {
       sensitiveSamplePaths: sensitiveSummary.samplePaths,
       highActionCount,
       elevatedActionCount,
-      lowActionCount
+      lowActionCount,
+      retryBlockedActionCount
     };
   }, [selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
   const riskDisclosure = reactExports.useMemo(
@@ -29737,7 +29741,8 @@ function ReviewScopeControls(props) {
       ExactActionPersistenceChoice,
       {
         checked: props.rememberExactAction,
-        onChange: props.onRememberExactActionChange
+        onChange: props.onRememberExactActionChange,
+        oneTimeRetryBlocked: props.oneTimeRetryBlocked === true
       }
     ),
     props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
@@ -29804,7 +29809,7 @@ function ExactActionPersistenceChoice(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "This time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Retry within 15 minutes." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: props.oneTimeRetryBlocked ? "Records your decision; the agent stays blocked." : "Retry within 15 minutes." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -30504,7 +30509,7 @@ function ReviewDecisionCard(props) {
       ] }),
       !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
-      resolved === null && retryCannotReuseApproval(item) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: retryCannotReuseApprovalHint(item, harnessName) }) : null,
+      resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: retryCannotReuseApprovalHint(item, harnessName) }) : null,
       item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -30556,6 +30561,7 @@ function ReviewDecisionCard(props) {
           taskCapabilityCopy,
           exactActionPersistenceEligible: item.exact_action_persistence_eligible === true,
           rememberExactAction,
+          oneTimeRetryBlocked: retryCannotReuseApproval(item),
           allowScope,
           blockScope,
           onAllowScopeChange: setAllowScope,

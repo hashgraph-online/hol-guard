@@ -491,7 +491,7 @@ export function ReviewDecisionCard(props: {
 
         {!nativeDisplayOnly && <PrimaryActionCard item={item} />}
         {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
-        {resolved === null && retryCannotReuseApproval(item) ? (
+        {resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             {retryCannotReuseApprovalHint(item, harnessName)}
           </p>
@@ -565,6 +565,7 @@ export function ReviewDecisionCard(props: {
             taskCapabilityCopy={taskCapabilityCopy}
             exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
             rememberExactAction={rememberExactAction}
+            oneTimeRetryBlocked={retryCannotReuseApproval(item)}
             allowScope={allowScope}
             blockScope={blockScope}
             onAllowScopeChange={setAllowScope}

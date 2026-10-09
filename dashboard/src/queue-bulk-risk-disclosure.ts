@@ -23,6 +23,8 @@ export type BulkSelectionStats = {
   elevatedActionCount: number;
   /** Selected actions classified as low risk (file reads, docs edits). */
   lowActionCount: number;
+  /** Selected actions whose one-time approval never lets the agent's next call through. */
+  retryBlockedActionCount?: number;
   /**
    * Sensitive file-read groups currently in the queue. These are never approved
    * by bulk approval — they stay in the queue for individual review — but their
@@ -170,6 +172,15 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
       `${stats.elevatedActionCount} of the selected ${pluralActions(stats.actionCount)} ${
         stats.elevatedActionCount === 1 ? "is an elevated-risk action" : "are elevated-risk actions"
       } (shell, file edits, network, or similar). Confirm you expected each one.`,
+    );
+  }
+
+  const retryBlocked = stats.retryBlockedActionCount ?? 0;
+  if (retryBlocked > 0) {
+    bullets.push(
+      `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${
+        retryBlocked === 1 ? "is a command the agent" : "are commands the agent"
+      } will still be blocked on after approval. Approving records your decision only; use "Always allow exact action" or an Extensions pattern to let the agent run ${retryBlocked === 1 ? "it" : "them"}.`,
     );
   }
 

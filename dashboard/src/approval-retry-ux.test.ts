@@ -8,7 +8,11 @@ import {
 } from "./approval-center-utils";
 import { GuardRequestResolutionError } from "./guard-api";
 import { bulkApprovalRiskTier, groupDuplicates } from "./queue-state";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-card";
+import { ReviewScopeControls } from "./review-scope-controls";
+import { buildBulkRiskDisclosure } from "./queue-bulk-risk-disclosure";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -121,6 +125,64 @@ assert(
 assert(
   receiptDescribesRequest({ ...unbound, artifact_id: "omp:mcp:server" }, { artifact_hash: "other" }),
   "non-native artifacts keep the existing artifact-level receipt",
+);
+
+// Review feedback: the same command text matches a prior receipt even with a fresh per-request hash.
+assert(
+  receiptDescribesRequest(unbound, { artifact_hash: "fresh-hash", raw_command_text: pythonChain }),
+  "repeat of the same command keeps its Last time receipt",
+);
+assert(
+  !receiptDescribesRequest(otherGit, { artifact_hash: "fresh-hash", raw_command_text: pythonChain }),
+  "a different command's receipt still does not describe this request",
+);
+
+// Review feedback: "This time" never promises a retry when the agent stays blocked.
+const scopeControls = (oneTimeRetryBlocked: boolean) =>
+  renderToStaticMarkup(
+    createElement(ReviewScopeControls, {
+      commonScopeOptions: [],
+      broaderScopeOptions: [],
+      advancedScopeOptions: [],
+      blockScopeOptions: [],
+      hasAllowScope: true,
+      taskCapabilityCopy: null,
+      exactActionPersistenceEligible: true,
+      rememberExactAction: false,
+      oneTimeRetryBlocked,
+      allowScope: "artifact",
+      blockScope: "artifact",
+      onAllowScopeChange: () => undefined,
+      onBlockScopeChange: () => undefined,
+      onRememberExactActionChange: () => undefined,
+    }),
+  );
+assert(
+  scopeControls(true).includes("the agent stays blocked") && !scopeControls(true).includes("Retry within 15 minutes"),
+  "restricted requests describe This time without a retry promise",
+);
+assert(scopeControls(false).includes("Retry within 15 minutes"), "reusable requests keep the retry window");
+
+// Review feedback: bulk approval warns when selected commands stay blocked for the agent.
+const bulkStats = {
+  actionCount: 2,
+  groupCount: 2,
+  duplicateActionCount: 0,
+  highActionCount: 0,
+  elevatedActionCount: 2,
+  lowActionCount: 0,
+  sensitiveCount: 0,
+  sensitiveSamplePaths: [],
+};
+assert(
+  buildBulkRiskDisclosure({ ...bulkStats, retryBlockedActionCount: 2 }).bullets.some((bullet) =>
+    bullet.includes("will still be blocked on after approval"),
+  ),
+  "bulk disclosure warns about commands the agent stays blocked on",
+);
+assert(
+  !buildBulkRiskDisclosure(bulkStats).bullets.some((bullet) => bullet.includes("still be blocked")),
+  "bulk disclosure stays unchanged without restricted commands",
 );
 
 // #3840: uncategorized commands are not counted as file reads, and the dialog can show the command.
