@@ -26,6 +26,7 @@ def run_guard_self_uninstall(
     current_version = _current_version()
     installer = _installer_kind()
     command = _uninstall_command(installer)
+    frozen_package_skip = _frozen_package_uninstall_unsupported(installer)
     managed_installs, managed_install_error = _active_managed_installs(store)
     notes: list[str] = []
     if managed_install_error is not None:
@@ -43,6 +44,7 @@ def run_guard_self_uninstall(
         "installer": installer,
         "dry_run": dry_run,
         "command": command,
+        "package_uninstall_skipped": frozen_package_skip,
         "guard_home": str(context.guard_home),
         "planned_managed_harnesses": [str(item.get("harness") or "unknown") for item in managed_installs],
         "planned_package_shim_managers": planned_managers,
@@ -89,7 +91,11 @@ def run_guard_self_uninstall(
                     "changed": bool(removed_managed_installs),
                     "managed_installs": removed_managed_installs,
                     "daemon_cleanup": daemon_cleanup,
-                    "message": "HOL Guard removal stopped before the package uninstall command ran.",
+                    "message": _stopped_message(
+                        failed=f"harness {harness or 'unknown'}",
+                        removed=[str(item.get("harness") or "unknown") for item in removed_managed_installs],
+                    ),
+                    "failed_harness": harness or "unknown",
                     "error": _clean_output(str(error)),
                     "notes": [_clean_output(note) for note in notes],
                 }
@@ -108,7 +114,10 @@ def run_guard_self_uninstall(
                 "changed": bool(removed_managed_installs),
                 "managed_installs": removed_managed_installs,
                 "daemon_cleanup": daemon_cleanup,
-                "message": "HOL Guard removal stopped before the package uninstall command ran.",
+                "message": _stopped_message(
+                    failed="package-manager shims",
+                    removed=[str(item.get("harness") or "unknown") for item in removed_managed_installs],
+                ),
                 "error": _clean_output(str(error)),
                 "notes": [_clean_output(note) for note in notes],
             }
@@ -120,6 +129,29 @@ def run_guard_self_uninstall(
     except OSError as error:
         profile_cleanup = {"changed": False, "error": _clean_output(str(error))}
         notes.append(f"Could not remove Guard PATH entries from shell profiles: {error}")
+
+    if frozen_package_skip:
+        notes.append(_FROZEN_PACKAGE_NOTE)
+        payload.update(
+            {
+                "status": "removed",
+                "managed_installs": removed_managed_installs,
+                "package_shim_uninstall": package_shim_uninstall,
+                "daemon_cleanup": daemon_cleanup,
+                "profile_cleanup": profile_cleanup,
+                "package_removed": False,
+                "guard_home_removed": False,
+                "changed": _self_uninstall_changed(
+                    removed_managed_installs=removed_managed_installs,
+                    package_shim_uninstall=package_shim_uninstall,
+                    profile_cleanup=profile_cleanup,
+                    package_removed=False,
+                ),
+                "message": "Removed Guard protection from this environment; the Guard desktop core was kept.",
+                "notes": [_clean_output(note) for note in notes],
+            }
+        )
+        return payload, 0
 
     try:
         result = subprocess.run(
@@ -213,6 +245,21 @@ def run_guard_self_uninstall(
     if notes:
         payload["notes"] = [_clean_output(note) for note in notes]
     return payload, 0
+
+
+_FROZEN_PACKAGE_NOTE = (
+    "Skipped the pip uninstall step because this Guard is a self-contained desktop binary, not a pip package. "
+    "Remove the app with the Guard desktop uninstaller; ~/.hol-guard was kept because it holds the running core."
+)
+
+
+def _frozen_package_uninstall_unsupported(installer: str) -> bool:
+    return bool(getattr(sys, "frozen", False)) and installer not in {"uv", "pipx"}
+
+
+def _stopped_message(*, failed: str, removed: list[str]) -> str:
+    done = f" Already removed: {', '.join(removed)}." if removed else " Nothing had been removed yet."
+    return f"HOL Guard removal stopped at {failed} before the package uninstall command ran.{done}"
 
 
 def _uninstall_command(installer: str) -> list[str]:

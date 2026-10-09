@@ -51,9 +51,11 @@ _FORWARD = {
 
 
 class TransitionError(RuntimeError):
-    def __init__(self, reason: str):
-        super().__init__(f"Runtime transition requires recovery: {reason}")
+    def __init__(self, reason: str, detail: str | None = None):
+        suffix = f" ({detail})" if detail else ""
+        super().__init__(f"Runtime transition requires recovery: {reason}{suffix}")
         self.reason = reason
+        self.detail = detail
 
 
 def _check_inverse_deadline() -> None:
@@ -216,6 +218,36 @@ def _unsafe_file_mode(mode: int, artifact_identity: object) -> bool:
     return bool(mode & ~0o777 or (os.name != "nt" and (mode & 0o002 or (mode & 0o020 and not artifact_role))))
 
 
+def _publishes_user_file(
+    *,
+    before: object,
+    after: object,
+    before_mode: int,
+    after_mode: int,
+    expected_digest: object,
+    artifact_identity: object,
+) -> bool:
+    """Whether a change rewrites a file whose published mode may be normalized.
+
+    Dependency pins (digest/artifact identity) are never rewritten, and unchanged
+    content with an unchanged mode is never published, so neither is normalized.
+    """
+    if expected_digest is not None or artifact_identity is not None:
+        return False
+    return before != after or before_mode != after_mode
+
+
+def _normalized_after_mode(after_mode: int) -> int:
+    """Clear group/world-write from a published mode (e.g. umask 0002 dotfiles at 0664).
+
+    Setuid/setgid/sticky bits and world-writable *inputs* stay rejected by the
+    validators; this only drops write bits Guard must never publish.
+    """
+    if os.name == "nt" or after_mode & ~0o777:
+        return after_mode
+    return after_mode & ~0o022
+
+
 def _artifact_digest(target: Path, identity: Mapping[str, object], mode: int) -> str:
     """Hash the signed size through one owned descriptor with bounded working memory."""
     active = _ACTIVE_TRANSITION.get()
@@ -289,6 +321,16 @@ def _artifact_digest(target: Path, identity: Mapping[str, object], mode: int) ->
         os.close(descriptor)
 
 
+def _recorded_noop(change: Mapping[str, object]) -> bool:
+    """An unchanged, unpinned file is never published, so its mode is not validated."""
+    return (
+        change.get("expected_digest") is None
+        and change.get("artifact_identity") is None
+        and change["before"] == change["after"]
+        and change["before_mode"] == change["after_mode"]
+    )
+
+
 def _record_files(payload: Mapping[str, object]) -> list[dict[str, object]]:
     changes = _record_objects(payload, "files", maximum=128)
     paths = []
@@ -312,8 +354,12 @@ def _record_files(payload: Mapping[str, object]) -> list[dict[str, object]]:
                 raise TransitionError("file_mode_invalid")
             if recorded_mode & ~0o777:
                 raise TransitionError("file_mode_invalid")
-            if generation == "after" and _unsafe_file_mode(recorded_mode, change.get("artifact_identity")):
-                raise TransitionError("file_mode_invalid")
+            if (
+                generation == "after"
+                and _unsafe_file_mode(recorded_mode, change.get("artifact_identity"))
+                and not _recorded_noop(change)
+            ):
+                raise TransitionError("file_mode_invalid", path)
             encoded = change[generation]
             if encoded is not None and not isinstance(encoded, str):
                 raise TransitionError("files_invalid")
@@ -539,16 +585,32 @@ class TransitionFile:
             raise TransitionError("file_kind_invalid")
         for mode in (self.before_mode, self.after_mode):
             if isinstance(mode, bool) or bool(mode & ~0o777):
-                raise TransitionError("file_mode_invalid")
+                raise TransitionError("file_mode_invalid", str(self.path))
+        after_mode = self.after_mode
+        pinned = self.expected_digest is not None or self.artifact_identity is not None
+        publishes = _publishes_user_file(
+            before=self.before,
+            after=self.after,
+            before_mode=self.before_mode,
+            after_mode=after_mode,
+            expected_digest=self.expected_digest,
+            artifact_identity=self.artifact_identity,
+        )
+        if publishes:
+            # A world-writable source is genuinely unsafe to carry forward; group-write
+            # (umask 0002) is merely normalized away from the published mode.
+            if os.name != "nt" and self.before is not None and self.before_mode & 0o002:
+                raise TransitionError("file_mode_invalid", f"{self.path} is world-writable")
+            after_mode = _normalized_after_mode(after_mode)
         # The previous mode is the user's file. Only the published mode must be private.
-        if _unsafe_file_mode(self.after_mode, self.artifact_identity):
-            raise TransitionError("file_mode_invalid")
+        if (publishes or pinned) and _unsafe_file_mode(after_mode, self.artifact_identity):
+            raise TransitionError("file_mode_invalid", str(self.path))
         payload: dict[str, object] = {
             "path": str(self.path.resolve(strict=False)),
             "before": _encode(self.before),
             "after": _encode(self.after),
             "before_mode": self.before_mode,
-            "after_mode": self.after_mode,
+            "after_mode": after_mode,
             "kind": self.kind,
             "no_follow": self.no_follow,
         }

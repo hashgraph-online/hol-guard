@@ -365,6 +365,10 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
         from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(requested_argv[1:])
+    if requested_argv[:1] == ["__guard-claude-hook"]:
+        from .guard.adapters.claude_frozen_hook import run_frozen_claude_hook
+
+        return run_frozen_claude_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
 
     frozen_shim_path = resolve_frozen_package_shim_path(requested_argv)
