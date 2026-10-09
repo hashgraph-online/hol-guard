@@ -220,10 +220,12 @@ def _use_reader(monkeypatch: pytest.MonkeyPatch, reader: Callable[..., NativeCat
     )
 
 
-def _get(daemon: SimpleNamespace, path: str, headers: dict[str, str]) -> tuple[int, dict[str, str], bytes]:
+def _get(
+    daemon: SimpleNamespace, path: str, headers: dict[str, str], *, timeout: float = 10.0
+) -> tuple[int, dict[str, str], bytes]:
     request = urllib.request.Request(f"http://127.0.0.1:{daemon.port}{path}", headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status, dict(response.headers), response.read()
     except urllib.error.HTTPError as error:
         return error.code, dict(error.headers), error.read()
@@ -364,11 +366,21 @@ def test_real_native_read_model_traverses_index_and_revalidates(
     guard_home = daemon.guard_home
     token = daemon.token
     try:
+        # A cold debug resident can exceed the Rust client's fixed 9s start
+        # window while it also builds the snapshot; warm it before measuring.
+        warm_status = None
+        for _ in range(3):
+            warm_status, _, _ = _get(
+                daemon, "/v2/extension-controls/catalog/index?limit=1", {"X-Guard-Token": token}, timeout=60.0
+            )
+            if warm_status == 200:
+                break
+        assert warm_status == 200
         seen: list[str] = []
         path = "/v2/extension-controls/catalog/index?limit=100"
         first_etag = None
         while True:
-            status, headers, body = _get(daemon, path, {"X-Guard-Token": token})
+            status, headers, body = _get(daemon, path, {"X-Guard-Token": token}, timeout=60.0)
             assert status == 200, body
             page = json.loads(body)
             assert page["native_catalog_digest"] == DIGEST

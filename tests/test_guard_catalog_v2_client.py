@@ -273,7 +273,15 @@ def native_daemon(
         token = load_guard_daemon_auth_token(store.guard_home)
         assert token is not None
         client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{daemon.port}", token)
-        CatalogV2Client(client, timeout=60.0).get("index")  # warm the debug-build snapshot
+        # A cold debug resident can miss the Rust client's fixed 9s start window
+        # while it also builds the snapshot; warm it with a bounded retry.
+        for attempt in range(3):
+            try:
+                CatalogV2Client(client, timeout=60.0).get("index")
+                break
+            except CatalogV2UnsupportedError:
+                if attempt == 2:
+                    raise
         yield SimpleNamespace(client=client, guard_home=store.guard_home, native=native_hook_force)
     finally:
         daemon.stop()
@@ -298,22 +306,45 @@ def test_real_native_v2_reproduces_every_v1_extension_exactly(native_daemon: Sim
         assert reads.v1_extension_from_v2(reader, extension_id) == legacy, extension_id
 
 
-def test_real_native_cli_patterns_match_v1_rows(native_daemon: SimpleNamespace) -> None:
-    client = native_daemon.client
-    v1 = [
-        {key: extension[key] for key in ("extension_id", "name", "permissions")}
-        for extension in client.extension_control_catalog()["extensions"]  # type: ignore[union-attr]
-    ]
-    assert reads.pattern_extensions(client, None) == v1
-    assert reads.pattern_extensions(client, "command.git") == [
-        row for row in v1 if row["extension_id"] == "command.git"
-    ]
-    assert reads.pattern_extensions(client, "command.missing") == []
+def _patterns_output(client: GuardSurfaceDaemonClient, query: str, tool: str | None) -> dict[str, object]:
     output = io.StringIO()
+    args = argparse.Namespace(query=query, tool=tool, json=True)
+    assert extension_controls_commands._patterns(client, args, output) == 0
+    return json.loads(output.getvalue())
+
+
+@pytest.mark.parametrize(
+    ("query", "tool"),
+    [("", None), ("push", None), ("git push", None), ("FORCE", None), ("zz-none", None), ("", "command.git")],
+)
+def test_real_native_cli_patterns_output_matches_v1(
+    native_daemon: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, query: str, tool: str | None
+) -> None:
+    client = native_daemon.client
+    v2 = _patterns_output(client, query, tool)
+    with monkeypatch.context() as patch:
+        patch.setattr(reads, "catalog_reader", lambda _client: None)
+        v1 = _patterns_output(client, query, tool)
+    assert v2 == v1
+    if query == "push":
+        count = v2["count"]
+        assert isinstance(count, int) and count > 0
+
+
+def test_real_native_patterns_search_is_bounded_and_rust_filtered(native_daemon: SimpleNamespace) -> None:
+    requests: list[str] = []
+    original = CatalogV2Client._request
+
+    def counting(self: CatalogV2Client, route: str, query: str, *, if_none_match: str | None):
+        requests.append(f"{route}?{query}")
+        return original(self, route, query, if_none_match=if_none_match)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(CatalogV2Client, "_request", counting)
+        rows = reads.pattern_extensions(native_daemon.client, None, "git push")
+    assert len(requests) <= 4, requests
+    assert any(route.startswith("permissions?") and "q=git+push" in route for route in requests)
+    assert rows and all(row["permissions"] for row in rows)
+    assert reads.pattern_extensions(native_daemon.client, "command.missing") == []
     with pytest.raises(ValueError, match="unknown extension target"):
-        reads.catalog_show(client, "command.missing")
-    assert (
-        extension_controls_commands._patterns(client, argparse.Namespace(query="push", tool=None, json=True), output)
-        == 0
-    )
-    assert json.loads(output.getvalue())["count"] > 0
+        reads.catalog_show(native_daemon.client, "command.missing")

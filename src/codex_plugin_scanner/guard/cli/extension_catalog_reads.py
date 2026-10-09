@@ -19,6 +19,8 @@ from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 
 CATALOG_LIST_SCHEMA = "guard.cli.extension-catalog-list.v2"
 _NOT_FOUND = {"catalog_extension_not_found", "catalog_route_not_found"}
+# Mirrors the native read model's search-text bound; longer text is not sent.
+_MAX_SEARCH_CHARS = 256
 
 
 def catalog_reader(client: object) -> CatalogV2Client | None:
@@ -71,13 +73,19 @@ def catalog_show(client: GuardSurfaceDaemonClient, target_id: str) -> dict[str, 
     raise ValueError(f"unknown extension target: {target_id}")
 
 
-def pattern_extensions(client: GuardSurfaceDaemonClient, tool: str | None) -> list[dict[str, object]]:
-    """Extensions with ``extension_id``, ``name`` and complete ``permissions``."""
+def pattern_extensions(client: GuardSurfaceDaemonClient, tool: str | None, query: str = "") -> list[dict[str, object]]:
+    """Extensions with ``extension_id``, ``name`` and candidate ``permissions``.
+
+    Without ``tool``, the native read model's permission search narrows the
+    candidates to permissions containing every term of ``query``. That is a
+    superset of the CLI's own phrase match, which the caller still applies, so
+    output is unchanged; only fewer permissions cross the wire.
+    """
 
     reader = catalog_reader(client)
     if reader is not None:
         try:
-            return _v2_pattern_extensions(reader, tool)
+            return _v2_pattern_extensions(reader, tool, query)
         except CatalogV2UnsupportedError:
             pass
     return [
@@ -87,28 +95,41 @@ def pattern_extensions(client: GuardSurfaceDaemonClient, tool: str | None) -> li
     ]
 
 
-def _v2_pattern_extensions(reader: CatalogV2Client, tool: str | None) -> list[dict[str, object]]:
-    if tool is not None:
-        try:
-            detail = reader.get(extension_route(tool)).get("extension")
-        except GuardDaemonRequestError as error:
-            if error.code in _NOT_FOUND:
-                return []
-            raise
-        summaries = [detail] if isinstance(detail, dict) else []
-    else:
-        summaries = reader.traverse("index", item_key="extension_id").items
+def _v2_pattern_extensions(reader: CatalogV2Client, tool: str | None, query: str) -> list[dict[str, object]]:
+    if tool is None:
+        return _v2_permission_search(reader, query)
+    try:
+        detail = reader.get(extension_route(tool)).get("extension")
+    except GuardDaemonRequestError as error:
+        if error.code in _NOT_FOUND:
+            return []
+        raise
+    if not isinstance(detail, dict) or not isinstance(detail.get("extension_id"), str):
+        return []
+    extension_id = detail["extension_id"]
+    permissions = (
+        reader.traverse(extension_route(extension_id, "permissions"), item_key="permission_id").items
+        if detail.get("permission_count") != 0
+        else []
+    )
+    return [{"extension_id": extension_id, "name": detail.get("name", ""), "permissions": permissions}]
+
+
+def _v2_permission_search(reader: CatalogV2Client, query: str) -> list[dict[str, object]]:
+    index = reader.traverse("index", item_key="extension_id").items
+    text = query.strip()
+    sendable = text and len(text) <= _MAX_SEARCH_CHARS and text.isprintable()
+    matches = reader.traverse("permissions", item_key="permission_id", params={"q": text} if sendable else None).items
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for permission in matches:
+        grouped.setdefault(str(permission.get("extension_id", "")), []).append(permission)
     extensions: list[dict[str, object]] = []
-    for summary in summaries:
+    for summary in index:
         extension_id = summary.get("extension_id")
-        if not isinstance(extension_id, str):
-            continue
-        permissions = (
-            reader.traverse(extension_route(extension_id, "permissions"), item_key="permission_id").items
-            if summary.get("permission_count") != 0
-            else []
-        )
-        extensions.append({"extension_id": extension_id, "name": summary.get("name", ""), "permissions": permissions})
+        if isinstance(extension_id, str) and extension_id in grouped:
+            extensions.append(
+                {"extension_id": extension_id, "name": summary.get("name", ""), "permissions": grouped[extension_id]}
+            )
     return extensions
 
 

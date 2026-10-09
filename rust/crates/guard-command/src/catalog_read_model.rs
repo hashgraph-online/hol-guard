@@ -25,6 +25,10 @@ use crate::catalog_read_query::{
 };
 use crate::native_command_catalog::{embedded_catalog_bytes, packaged_command_catalog};
 
+#[path = "catalog_read_search.rs"]
+mod search;
+use search::matches_filter;
+
 pub const CATALOG_READ_CAPABILITY: &str = "catalog-read-model-v1";
 pub const CATALOG_READ_REQUEST_SCHEMA: &str = "guard-catalog-read-request.v1";
 pub const CATALOG_READ_RESULT_SCHEMA: &str = "guard-catalog-read-result.v1";
@@ -33,6 +37,7 @@ pub const CATALOG_EXTENSION_SCHEMA: &str = "guard.daemon.catalog-extension.v2";
 pub const CATALOG_PERMISSIONS_SCHEMA: &str = "guard.daemon.catalog-permissions.v2";
 pub const CATALOG_RULES_SCHEMA: &str = "guard.daemon.catalog-rules.v2";
 pub const CATALOG_MCP_TOOLS_SCHEMA: &str = "guard.daemon.catalog-mcp-tools.v2";
+pub const CATALOG_PERMISSION_SEARCH_SCHEMA: &str = "guard.daemon.catalog-permission-search.v2";
 /// Uncompressed bytes per response, envelope included, counted after
 /// HTML-safe escaping — the exact bytes the daemon writes.
 pub const MAX_CATALOG_PAGE_BYTES: usize = 262_144;
@@ -42,7 +47,7 @@ pub const MAX_CATALOG_SNAPSHOT_ENCODED_BYTES: usize = 16_000_000;
 const MAX_CATALOG_EXTENSIONS: usize = 512;
 /// Changes to projections, envelopes or page limits must change this so
 /// snapshot IDs, cursors and ETags from older layouts stop validating.
-const READ_MODEL_VERSION: &str = "catalog-read-model-v1;page=50/100/262144";
+const READ_MODEL_VERSION: &str = "catalog-read-model-v1;page=50/100/262144;index=2;search=1";
 const SNAPSHOT_DOMAIN: &[u8] = b"guard-catalog-read-snapshot-v1\0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,6 +192,15 @@ impl CatalogReadSnapshot {
         if extensions.windows(2).any(|pair| pair[0].id == pair[1].id) {
             return Err("catalog_read_model_duplicate_extension");
         }
+        // Permission IDs are control targets, so they are unique catalog-wide.
+        let mut permission_ids = std::collections::BTreeSet::new();
+        if !extensions
+            .iter()
+            .flat_map(|entry| &entry.permission_ids)
+            .all(|id| permission_ids.insert(id.as_str()))
+        {
+            return Err("catalog_read_model_duplicate_permission");
+        }
         let encoded_bytes = extensions.iter().map(ExtensionEntry::encoded_bytes).sum();
         if encoded_bytes > MAX_CATALOG_SNAPSHOT_ENCODED_BYTES {
             return Err("catalog_read_model_snapshot_budget_exceeded");
@@ -255,6 +269,7 @@ impl CatalogReadSnapshot {
         let query = CatalogQuery::parse(&route, &request.query)?;
         match &route {
             CatalogRoute::Index => self.index_page(&route, &query),
+            CatalogRoute::PermissionSearch => self.permission_search_page(&route, &query),
             CatalogRoute::Extension(id) => self.detail(self.extension(id)?),
             CatalogRoute::Permissions(id) => {
                 let entry = self.extension(id)?;
@@ -425,29 +440,6 @@ impl CatalogReadSnapshot {
         }
         Ok(body)
     }
-}
-
-fn matches_filter(entry: &ExtensionEntry, filter: &CatalogFilter) -> bool {
-    filter
-        .source
-        .as_ref()
-        .is_none_or(|value| *value == entry.source)
-        && filter
-            .surface
-            .as_ref()
-            .is_none_or(|value| entry.surface.as_ref() == Some(value))
-        && filter
-            .trust_class
-            .as_ref()
-            .is_none_or(|value| *value == entry.trust_class)
-        && filter
-            .risk_class
-            .as_ref()
-            .is_none_or(|value| entry.risk_classes.contains(value))
-        && filter
-            .q
-            .as_ref()
-            .is_none_or(|text| entry.search_text.contains(text.as_str()))
 }
 
 fn snapshot_id_for(catalog_digest: &str) -> String {

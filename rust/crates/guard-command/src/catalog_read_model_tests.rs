@@ -174,7 +174,8 @@ fn index_traversal_returns_every_extension_once_in_stable_order() {
     for absent in [
         "permissions",
         "rules",
-        "description",
+        "mcp_tools",
+        "delegated_protection",
         "enabled",
         "activation",
     ] {
@@ -204,6 +205,11 @@ fn index_and_detail_values_match_source_catalog() {
             "trust_class",
             "required",
             "permission_count",
+            "action_classes",
+            "aliases",
+            "description",
+            "ecosystem_ids",
+            "executables",
         ] {
             assert_eq!(item[key], source[key], "{id} {key}");
         }
@@ -582,3 +588,6 @@ fn pages_respect_byte_budget_and_reject_unrepresentable_items() {
         "catalog_item_exceeds_page_budget"
     );
 }
+
+#[path = "catalog_read_search_tests.rs"]
+mod search_tests;

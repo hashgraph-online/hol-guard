@@ -24,6 +24,19 @@ The legacy `GET /v1/extension-controls/catalog` returns every extension, permiss
 - **Status crossing.** Rust returns `guard-catalog-read-result.v1`, which holds `outcome` (`ok`, `not_modified` or `error`), `http_status`, `etag` and `body`. The body is a JSON text string that is already HTML-safe. Python writes `body` verbatim, sends a bodyless 304 for `not_modified`, and maps `error` to its HTTP status with the Rust error code.
 - **Unavailable native.** If the native runtime or capability is unavailable, `/v2/` returns 501 `catalog_read_model_unavailable`. Clients treat that response, or a 404 from an older daemon, as protocol absence and fall back to v1. Auth errors, 413, 429 and 5xx never trigger fallback.
 - **Authentication.** `/v2/extension-controls/` routes pass the same daemon token, session, origin and CORS checks as `/v1/` before any ETag comparison or metadata disclosure.
+- **Index contents.** Index summaries carry the fields that list rows, area filters and alias resolution need: identity, publisher, counts, risk and trust classes, `description`, `action_classes`, `aliases`, `ecosystem_ids`, `executables`, `catalog_defaults` and `content_revision`. Permissions, rules, MCP tools and delegated protection stay behind per-extension detail and collection routes.
+- **Permission search.** `GET /v2/extension-controls/catalog/permissions?q=&limit=&cursor=` (`guard.daemon.catalog-permission-search.v2`) pages permissions across the whole catalog in index order: extension ID, then source order. Rust lowercases the query and splits it on whitespace. Every term must occur in one of these fields:
+  - the permission's `label`, `example_command`, `permission_id`, `description` or `family`
+  - the owning extension's `name`, `extension_id` or `executables`
+
+  The match text is built once, with the snapshot. `extension-controls patterns` uses this route rather than reading every extension. It applies its narrower phrase filter on top of the result, so its output matches v1.
+- **Unique permissions.** A permission ID that appears twice anywhere in the catalog fails snapshot construction with `catalog_read_model_duplicate_permission`. This keeps search results and per-permission references unambiguous.
+- **Codec.** v2 bodies are JSON. A benchmark compared JSON and Protobuf on the same pages.
+  - Size: compressed with gzip, the two are within 3% on index pages. On permission pages Protobuf is 21% smaller.
+  - Speed: the Python client decodes and validates Protobuf several times more slowly, about 4x on permission pages.
+  - Cost: Protobuf would also add a runtime dependency and a second schema to keep in step.
+
+  Protobuf is not used in production. Revisit only with a new measured decision.
 - **Separation.** The read model is static catalog metadata. It never reads or changes effective control state, trust classes, managed revisions or hook decisions. `catalog_defaults.enabled` is the packaged default, not effective protection.
 
 ## Retired later

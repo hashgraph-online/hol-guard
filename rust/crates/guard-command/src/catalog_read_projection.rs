@@ -15,7 +15,15 @@ const MAX_MCP_TOOLS_PER_EXTENSION: usize = 4096;
 const MAX_STRING_CHARS: usize = 8192;
 const MAX_VALUE_DEPTH: usize = 6;
 
+/// Index summaries carry what list views filter, route and label by
+/// (aliases, executables, description, ecosystems, action classes) so a list
+/// never needs every detail.
 const INDEX_FIELDS: &[&str] = &[
+    "action_classes",
+    "aliases",
+    "description",
+    "ecosystem_ids",
+    "executables",
     "extension_id",
     "icon",
     "name",
@@ -117,6 +125,10 @@ pub(crate) struct ExtensionEntry {
     pub(crate) permissions: Vec<Box<[u8]>>,
     pub(crate) rules: Vec<Box<[u8]>>,
     pub(crate) mcp_tools: Vec<Box<[u8]>>,
+    /// Permission IDs in collection order, for catalog-wide uniqueness.
+    pub(crate) permission_ids: Vec<String>,
+    /// Lowercased search text per permission, aligned with `permissions`.
+    pub(crate) permission_search: Vec<String>,
     /// Whether the source declares `mcp_tools`, so detail can mirror it exactly.
     pub(crate) has_mcp_tools: bool,
 }
@@ -129,6 +141,11 @@ impl ExtensionEntry {
             + collection(&self.permissions)
             + collection(&self.rules)
             + collection(&self.mcp_tools)
+            + self
+                .permission_search
+                .iter()
+                .map(String::len)
+                .sum::<usize>()
     }
 }
 
@@ -169,6 +186,8 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
             .unwrap_or_default()
     };
     let permissions = collection(source, "permissions", "permission_id", PERMISSION_FIELDS)?;
+    let (permission_ids, permission_search) =
+        permission_search(source, &id, &text("name")?, &strings("executables"));
     let rules = collection(source, "rules", "rule_id", RULE_FIELDS)?;
     let has_mcp_tools = source.contains_key("mcp_tools");
     let mcp_tools = if has_mcp_tools {
@@ -212,9 +231,48 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
         permissions,
         rules,
         mcp_tools,
+        permission_ids,
+        permission_search,
         has_mcp_tools,
         id,
     })
+}
+
+/// Per-permission search text: the permission's label, example, permission
+/// ID, description and family plus its extension's name, ID and executables.
+/// Field order is irrelevant: queries match whitespace-free terms.
+fn permission_search(
+    source: &Map<String, Value>,
+    extension_id: &str,
+    extension_name: &str,
+    executables: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let extension_text = [extension_name, extension_id]
+        .into_iter()
+        .chain(executables.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join("\n");
+    source
+        .get("permissions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        .map(|permission| {
+            let field = |key: &str| permission.get(key).and_then(Value::as_str).unwrap_or("");
+            let text = [
+                field("label"),
+                field("example_command"),
+                field("permission_id"),
+                field("description"),
+                field("family"),
+                &extension_text,
+            ]
+            .join("\n")
+            .to_lowercase();
+            (field("permission_id").to_owned(), text)
+        })
+        .unzip()
 }
 
 /// Items in source order (the order v1 consumers see); duplicate IDs fail closed.

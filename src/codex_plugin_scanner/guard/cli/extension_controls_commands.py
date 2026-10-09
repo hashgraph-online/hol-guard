@@ -246,7 +246,7 @@ def _patterns(client: GuardSurfaceDaemonClient, args: argparse.Namespace, output
     query = str(getattr(args, "query", "") or "").strip().lower()
     tool = str(getattr(args, "tool", "") or "").strip().lower() or None
     rows: list[dict[str, object]] = []
-    for extension in pattern_extensions(client, tool):
+    for extension in pattern_extensions(client, tool, query):
         extension_id = str(extension.get("extension_id", ""))
         permissions = extension.get("permissions")
         if not isinstance(permissions, list):

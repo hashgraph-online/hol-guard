@@ -24,6 +24,8 @@ const CURSOR_DOMAIN: &[u8] = b"guard-catalog-read-cursor-v1\0";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CatalogRoute {
     Index,
+    /// Catalog-wide permission search across every extension.
+    PermissionSearch,
     Extension(String),
     Permissions(String),
     Rules(String),
@@ -38,6 +40,7 @@ impl CatalogRoute {
         let parts: Vec<&str> = route.split('/').collect();
         match parts.as_slice() {
             ["index"] => Ok(Self::Index),
+            ["permissions"] => Ok(Self::PermissionSearch),
             ["extensions", id] => Ok(Self::Extension(extension_id(id)?)),
             ["extensions", id, "permissions"] => Ok(Self::Permissions(extension_id(id)?)),
             ["extensions", id, "rules"] => Ok(Self::Rules(extension_id(id)?)),
@@ -50,6 +53,7 @@ impl CatalogRoute {
     pub(crate) fn resource_key(&self) -> String {
         match self {
             Self::Index => "index".to_owned(),
+            Self::PermissionSearch => "permission-search".to_owned(),
             Self::Extension(id) => format!("extension:{id}"),
             Self::Permissions(id) => format!("permissions:{id}"),
             Self::Rules(id) => format!("rules:{id}"),
@@ -68,6 +72,7 @@ impl CatalogRoute {
                 "risk_class",
                 "surface",
             ],
+            Self::PermissionSearch => &["limit", "cursor", "q"],
             Self::Extension(_) => &[],
             Self::Permissions(_) | Self::Rules(_) | Self::McpTools(_) => &["limit", "cursor"],
         }
