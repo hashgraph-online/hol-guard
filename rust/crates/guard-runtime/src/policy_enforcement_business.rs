@@ -190,14 +190,66 @@ fn requires_business_context(
         if is_business_cli(program) {
             return true;
         }
-        // Package launchers run the CLI as an argument; any argument naming
-        // it counts, so launcher option parsing cannot hide it.
-        is_package_launcher(program)
-            && segment.arguments.iter().any(|argument| {
-                let spec = argument.rsplit(['/', '\\']).next().unwrap_or(argument);
+        is_package_launcher(program) && launcher_runs_business_cli(program, &segment.arguments)
+    }))
+}
+
+/// Package launchers run the CLI as an argument or inside a shell string
+/// (`npx -c 'gws …'`, `pnpm exec sh -c 'gog …'`). Every word of every
+/// argument counts, so launcher option parsing cannot hide the CLI. Only a
+/// bare package name given to an install-style subcommand is not a call.
+fn launcher_runs_business_cli(program: &str, arguments: &[String]) -> bool {
+    let installs = installs_packages(program, arguments);
+    arguments.iter().any(|argument| {
+        let shell_string =
+            argument.contains(|c: char| c.is_whitespace() || SHELL_SEPARATORS.contains(&c));
+        if installs && !shell_string {
+            return false;
+        }
+        argument
+            .split(|c: char| c.is_whitespace() || SHELL_SEPARATORS.contains(&c) || c == '=')
+            .filter(|word| !word.is_empty())
+            .any(|word| {
+                let spec = word.rsplit(['/', '\\']).next().unwrap_or(word);
                 is_business_cli(spec.split('@').next().unwrap_or(spec))
             })
-    }))
+    })
+}
+
+const SHELL_SEPARATORS: &[char] = &[';', '&', '|', '`', '$', '(', ')', '<', '>', '\'', '"'];
+
+fn installs_packages(program: &str, arguments: &[String]) -> bool {
+    let name = executable_basename(program);
+    let name = name
+        .strip_suffix(".cmd")
+        .or_else(|| name.strip_suffix(".exe"))
+        .unwrap_or(&name);
+    if !matches!(name, "npm" | "pnpm" | "yarn" | "bun") {
+        return false;
+    }
+    let Some(subcommand) = arguments.iter().find(|argument| !argument.starts_with('-')) else {
+        return false;
+    };
+    matches!(
+        subcommand.as_str(),
+        "install"
+            | "i"
+            | "add"
+            | "ci"
+            | "uninstall"
+            | "remove"
+            | "rm"
+            | "update"
+            | "up"
+            | "upgrade"
+            | "outdated"
+            | "view"
+            | "info"
+            | "why"
+            | "list"
+            | "ls"
+            | "audit"
+    )
 }
 
 fn executable_basename(program: &str) -> String {

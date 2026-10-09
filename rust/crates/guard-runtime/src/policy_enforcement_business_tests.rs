@@ -291,6 +291,11 @@ fn workspace_local_paths_and_windows_shims_cannot_skip_business_context() {
         "npx -y @example/gws@1.2.0 gmail users messages send",
         "pnpm exec gog gmail send",
         "bunx gws gmail users messages send",
+        "npx -c 'gws gmail users messages send'",
+        "npm exec --call='gws gmail users messages send'",
+        "pnpm exec sh -c 'gog gmail send'",
+        "yarn exec bash -c \"cd /tmp && gws gmail users messages send\"",
+        "npm install -c 'gws gmail users messages send'",
     ] {
         let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
         let result = super::super::tests::generic_result("allow");
@@ -302,7 +307,13 @@ fn workspace_local_paths_and_windows_shims_cannot_skip_business_context() {
             "{command}"
         );
     }
-    for command in ["npx prettier --check gws.md", "./gwsync status"] {
+    for command in [
+        "npx prettier --check gws.md",
+        "./gwsync status",
+        "npm install gws",
+        "pnpm add -D @example/gws@1.2.0",
+        "yarn remove gog",
+    ] {
         let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
         let result = super::super::tests::generic_result("allow");
         let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
