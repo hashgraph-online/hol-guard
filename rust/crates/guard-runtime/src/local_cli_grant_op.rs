@@ -217,25 +217,37 @@ fn grant_decision(
 
 const STORE_UNAVAILABLE: &str = "native_local_cli_grant_store_unavailable";
 
-/// A store written by a newer Guard stays unreadable rather than guessed at.
+/// A store written by a newer Guard stays unreadable rather than guessed at,
+/// and a marker whose checksum does not match its version is treated as
+/// damage, the same way the store's own schema validator treats it.
 fn require_supported_schema(connection: &Connection) -> Result<(), &'static str> {
     if !table_exists(connection, "local_cli_schema_migration")? {
         return Ok(());
     }
-    let version: Option<i64> = connection
+    let marker: Option<(i64, String)> = connection
         .query_row(
-            "select version from local_cli_schema_migration where singleton = 1",
+            "select version, checksum from local_cli_schema_migration where singleton = 1",
             [],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
         .map_err(|_| STORE_UNAVAILABLE)?;
-    match version {
-        Some(version) if version > SUPPORTED_SCHEMA_VERSION => {
-            Err("native_local_cli_grant_schema_unsupported")
-        }
-        _ => Ok(()),
+    let Some((version, checksum)) = marker else {
+        return Ok(());
+    };
+    if version > SUPPORTED_SCHEMA_VERSION {
+        return Err("native_local_cli_grant_schema_unsupported");
     }
+    if version < 1 || checksum != schema_checksum(version) {
+        return Err("native_local_cli_grant_schema_invalid");
+    }
+    Ok(())
+}
+
+pub(crate) fn schema_checksum(version: i64) -> String {
+    guard_policy_snapshot::digest_bytes(
+        format!("hol-guard.local-cli-allowlist.schema.v{version}").as_bytes(),
+    )
 }
 
 fn table_exists(connection: &Connection, table: &str) -> Result<bool, &'static str> {

@@ -79,8 +79,8 @@ impl Fixture {
         connection.execute_batch(SCHEMA).unwrap();
         connection
             .execute(
-                "insert into local_cli_schema_migration values (1, 11, 'checksum')",
-                [],
+                "insert into local_cli_schema_migration values (1, 11, ?1)",
+                [super::schema_checksum(11)],
             )
             .unwrap();
         Self { home, connection }
@@ -424,6 +424,33 @@ fn newer_schema_fails_instead_of_guessing() {
     assert_eq!(reply["status"], "error");
     assert_eq!(reply["code"], "native_local_cli_grant_schema_unsupported");
     assert_eq!(reply["payload"], Value::Null);
+}
+
+#[test]
+fn damaged_schema_marker_fails_instead_of_authorizing() {
+    let fixture = Fixture::new();
+    let identity = script();
+    fixture.grant(&identity, "allowed", None);
+    assert_eq!(state(&fixture, &identity, "review", None), "allowed");
+    for (version, checksum) in [
+        (11, "checksum".to_owned()),
+        (11, super::schema_checksum(10)),
+        (0, super::schema_checksum(0)),
+    ] {
+        fixture
+            .connection
+            .execute(
+                "update local_cli_schema_migration set version = ?1, checksum = ?2",
+                rusqlite::params![version, checksum],
+            )
+            .unwrap();
+        let request = fixture.request(&identity.source, "review", None);
+        let reply: Value =
+            serde_json::from_slice(&evaluate_local_cli_grant_request(&request).unwrap()).unwrap();
+        assert_eq!(reply["status"], "error", "{version} {checksum}");
+        assert_eq!(reply["code"], "native_local_cli_grant_schema_invalid");
+        assert_eq!(reply["payload"], Value::Null);
+    }
 }
 
 #[test]
