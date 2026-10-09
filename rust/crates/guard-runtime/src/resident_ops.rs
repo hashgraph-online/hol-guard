@@ -275,6 +275,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::McpStdioSessionClose(request) => {
                 crate::mcp_stdio_session_op::session_close(&request)
             }
+            ResidentOperationV1::McpRuntimeEvidence(request) => {
+                crate::mcp_runtime_evidence_op::evaluate_mcp_runtime_evidence(&request)
+            }
             ResidentOperationV1::PromptAnalyze(request) => {
                 crate::prompt_analyze_op::evaluate_prompt_analyze(&request)
             }
@@ -328,6 +331,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ShimAdmin(request) => Some(&request.guard_home),
         ResidentOperationV1::McpStdioProbe(request) => Some(&request.guard_home),
         ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
         _ => None,
     }
 }

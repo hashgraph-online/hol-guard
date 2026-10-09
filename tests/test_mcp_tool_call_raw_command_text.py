@@ -178,3 +178,27 @@ class TestReceiptToDictIncludesRawCommandText:
         )
         payload = receipt.to_dict()
         assert payload["raw_command_text"] is None
+
+
+def test_block_still_records_when_native_evidence_is_unavailable(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard import mcp_tool_calls
+    from codex_plugin_scanner.guard.native_mcp_runtime_evidence import NativeMcpRuntimeEvidenceError
+
+    def unavailable(*_args: object, **_kwargs: object) -> str:
+        raise NativeMcpRuntimeEvidenceError("native_mcp_runtime_evidence_unavailable")
+
+    monkeypatch.setattr(mcp_tool_calls, "extract_mcp_command_text", unavailable)
+    store = _make_store(tmp_path)
+    receipt = block_tool_call(
+        store=store,
+        artifact=_make_artifact(),
+        artifact_hash="sha256:blocked",
+        decision_source="policy-evaluation",
+        now="2026-07-18T00:00:00+00:00",
+        signals=(),
+        arguments={"command": "rm -rf /"},
+    )
+
+    assert receipt.policy_decision == "block"
+    assert receipt.raw_command_text is None
+    assert [item["receipt_id"] for item in store.list_receipts(limit=10)] == [receipt.receipt_id]

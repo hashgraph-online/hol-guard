@@ -95,6 +95,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_package_authority.py",
         # Decodes the bounded resident approval-reuse response envelope.
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
+        # Decodes the bounded resident MCP runtime-evidence response envelope.
+        "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_context.py",
     }
