@@ -983,6 +983,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.normal_connections.discard(id(request))
             if was_active:
                 self.active_requests -= 1
+                # The idle clock starts when the last request finishes, not when it started.
+                self.last_activity_monotonic = time.monotonic()
             capacity_kind = self.request_capacity_kinds.pop(id(request), None)
         if capacity_kind is not None:
             self._request_capacity_for_kind(capacity_kind).release()
@@ -9454,6 +9456,12 @@ class GuardDaemonServer:
         while not self._shutdown_started.is_set():
             with self._server.active_stream_clients_lock:
                 active_stream_clients = self._server.active_stream_clients
+            with self._server.request_capacity_lock:
+                in_flight_requests = self._server.active_requests
+            if in_flight_requests > 0:
+                # A request that outlives the idle window is activity, not idleness.
+                time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
+                continue
             try:
                 pending_review_requests = self._server.store.list_approval_requests(
                     status="pending",
