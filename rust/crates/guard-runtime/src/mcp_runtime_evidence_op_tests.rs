@@ -245,9 +245,26 @@ fn schema_subop_and_scope_failures_are_typed_errors() {
 fn oversized_request_is_rejected_before_evaluation() {
     let mut large = request("runtime_action");
     large.tool_description = Some("x".repeat(MCP_RUNTIME_EVIDENCE_MAX_BYTES));
+    let result = run(&large);
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_mcp_runtime_evidence_request_too_large");
+    assert_eq!(result.request_id, "t-1");
+    assert!(result.payload.is_none());
+}
+
+#[test]
+fn receipt_evidence_returns_both_values_in_one_reply() {
+    let mut request = request("receipt_evidence");
+    request.tool_description = Some("d".to_owned());
+    request.arguments = entries(&[("command", Some("ls")), ("file_path", Some("/a/b.txt"))]);
+    request.risk_categories = strings(&["credential"]);
+    let payload = run(&request).payload.unwrap();
+    assert_eq!(payload["command_text"], "ls");
+    // Call arguments never feed the receipt runtimeAction record.
+    assert_eq!(payload["runtime_action"]["filesTouched"], json!([]));
     assert_eq!(
-        evaluate_mcp_runtime_evidence(&large).unwrap_err(),
-        "native_mcp_runtime_evidence_request_too_large"
+        payload["runtime_action"]["claimedCapabilities"],
+        json!(["tool_description"])
     );
 }
 

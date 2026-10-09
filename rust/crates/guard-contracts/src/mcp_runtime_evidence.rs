@@ -17,6 +17,36 @@ pub const MCP_RUNTIME_EVIDENCE_RESULT_SCHEMA: &str = "guard-mcp-runtime-evidence
 /// Capability advertised by the runtime when this operation is available.
 pub const MCP_RUNTIME_EVIDENCE_FEATURE: &str = "mcp-runtime-evidence-v1";
 
+/// Argument keys whose string values `command_text` reads, in priority order.
+/// Mirrored by `_COMMAND_ARGUMENT_KEYS` in the Python transport; a test keeps
+/// the two in lockstep.
+pub const MCP_RUNTIME_EVIDENCE_COMMAND_ARGUMENT_KEYS: &[&str] = &[
+    "command",
+    "cmd",
+    "shell_command",
+    "shellCommand",
+    "script",
+    "expression",
+    "code",
+    "query",
+];
+/// Argument keys `command_text` falls back to for a `"<tool> <path>"` string.
+pub const MCP_RUNTIME_EVIDENCE_PATH_ARGUMENT_KEYS: &[&str] = &[
+    "path",
+    "file_path",
+    "filePath",
+    "filepath",
+    "directory",
+    "dir",
+    "cwd",
+    "working_dir",
+    "workingDir",
+    "url",
+    "uri",
+];
+/// Lowercased key substrings whose values `runtime_action` records as touched files.
+pub const MCP_RUNTIME_EVIDENCE_PATH_TOKENS: &[&str] = &["path", "file", "target", "source"];
+
 /// Largest canonical request serialization the op will accept.
 pub const MCP_RUNTIME_EVIDENCE_MAX_BYTES: usize = 256 * 1024;
 
@@ -51,7 +81,9 @@ pub struct McpRuntimeEvidenceRequestV1 {
     pub schema: String,
     /// Caller correlation id; echoed back in the result.
     pub request_id: String,
-    /// `runtime_action` or `command_text`.
+    /// `runtime_action`, `command_text`, or `receipt_evidence` (both in one reply:
+    /// `command_text` from `arguments`, `runtime_action` from description,
+    /// risk categories, and envelope only).
     pub subop: String,
     /// Resolved guard home the request is scoped to.
     pub guard_home: String,
@@ -81,7 +113,7 @@ pub struct McpRuntimeEvidenceResultV1 {
     pub status: String,
     /// `ok`, or one of the `native_mcp_runtime_evidence_*` failure codes.
     pub code: String,
-    /// `{"runtime_action": <object|null>}` or `{"command_text": <string|null>}`.
+    /// `{"runtime_action": ..}`, `{"command_text": ..}`, or both keys for `receipt_evidence`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }

@@ -9,30 +9,11 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
-const COMMAND_ARGUMENT_KEYS: [&str; 8] = [
-    "command",
-    "cmd",
-    "shell_command",
-    "shellCommand",
-    "script",
-    "expression",
-    "code",
-    "query",
-];
-const PATH_ARGUMENT_KEYS: [&str; 11] = [
-    "path",
-    "file_path",
-    "filePath",
-    "filepath",
-    "directory",
-    "dir",
-    "cwd",
-    "working_dir",
-    "workingDir",
-    "url",
-    "uri",
-];
-const ARGUMENT_PATH_TOKENS: [&str; 4] = ["path", "file", "target", "source"];
+use guard_contracts::{
+    MCP_RUNTIME_EVIDENCE_COMMAND_ARGUMENT_KEYS as COMMAND_ARGUMENT_KEYS,
+    MCP_RUNTIME_EVIDENCE_PATH_ARGUMENT_KEYS as PATH_ARGUMENT_KEYS,
+    MCP_RUNTIME_EVIDENCE_PATH_TOKENS as ARGUMENT_PATH_TOKENS,
+};
 
 /// One ordered argument entry: stringified key, string value (else `None`).
 pub type ArgumentEntry = (String, Option<String>);
@@ -75,7 +56,7 @@ pub fn extract_command_text(
     arguments: Option<&[ArgumentEntry]>,
 ) -> Option<String> {
     let entries = arguments?;
-    for key in COMMAND_ARGUMENT_KEYS {
+    for key in COMMAND_ARGUMENT_KEYS.iter().copied() {
         if let Some(value) = argument_value(entries, key) {
             let stripped = py_strip(value);
             if !stripped.is_empty() {
@@ -83,7 +64,7 @@ pub fn extract_command_text(
             }
         }
     }
-    for key in PATH_ARGUMENT_KEYS {
+    for key in PATH_ARGUMENT_KEYS.iter().copied() {
         if let Some(value) = argument_value(entries, key) {
             let stripped = py_strip(value);
             if !stripped.is_empty() {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
@@ -15,6 +14,7 @@ from .collections_support import dedupe_preserving_order
 from .config import GuardConfig
 from .local_cli_trust import apply_local_mcp_extension_decision
 from .mcp_fresh_approval import fresh_local_tool_approval_matches, fresh_lookup_preserves_claim
+from .mcp_tool_call_evidence import receipt_evidence_for_mcp_tool_call
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .native_context import (
     context_mcp_tool_approval_hash,
@@ -22,7 +22,7 @@ from .native_context import (
     context_mcp_tool_risk,
     context_opaque_digest,
 )
-from .native_mcp_runtime_evidence import NativeMcpRuntimeEvidenceError, argument_entries, native_command_text
+from .native_mcp_runtime_evidence import argument_entries, native_command_text
 from .receipts import build_receipt
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -52,7 +52,7 @@ from .runtime.mcp_protection import (
     mcp_server_identity_metadata,
     mcp_tool_identity_metadata,
 )
-from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
+from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
@@ -89,8 +89,6 @@ _APPROVAL_REUSE_DECISION_IDENTITY_KEYS = (
     "updated_at",
     "workspace",
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 
 def approval_reuse_decisions_match(
@@ -191,9 +189,11 @@ def resolve_tool_call_policy_action(
 def extract_mcp_command_text(
     artifact: GuardArtifact,
     arguments: object,
+    *,
+    guard_home: Path | None = None,
 ) -> str | None:
     """Return the native-owned display text for an MCP tool call (command or path)."""
-    return native_command_text(artifact.name, argument_entries(arguments, mapping_type=Mapping))
+    return native_command_text(artifact.name, argument_entries(arguments, mapping_type=Mapping), guard_home=guard_home)
 
 
 def build_tool_call_artifact(
@@ -804,10 +804,6 @@ def allow_tool_call(
     policy_action: GuardAction = "allow",
     emit_runtime_evidence: bool = True,
 ) -> GuardReceipt:
-    # Native evidence is authority: resolve it before any policy/inventory write
-    # so an unavailable resident aborts the allow without persisting state.
-    raw_command_text = extract_mcp_command_text(artifact, arguments)
-    firewall_evidence = scanner_evidence_for_mcp_skill_firewall(artifact, risk_categories=risk_categories)
     if remember:
         if composio_requires_action_review(artifact.command or ""):
             raise ValueError("verified_account_required_for_remembered_provider_action")
@@ -834,6 +830,10 @@ def allow_tool_call(
             now=now,
             approved=policy_action in {"allow", "warn"},
         )
+    # Display-only evidence; failure degrades it, never the receipt or event.
+    raw_command_text, firewall_evidence = receipt_evidence_for_mcp_tool_call(
+        artifact, arguments=arguments, risk_categories=risk_categories, guard_home=store.guard_home
+    )
     receipt = build_receipt(
         harness=artifact.harness,
         artifact_id=artifact.artifact_id,
@@ -883,15 +883,6 @@ def block_tool_call(
         event_name, provenance_action = _NON_EXECUTED_TOOL_CALL_TAXONOMY[policy_action]
     except KeyError as exc:
         raise ValueError(f"block_tool_call cannot record executing action {policy_action!r}.") from exc
-    try:
-        raw_command_text = extract_mcp_command_text(artifact, arguments)
-        firewall_evidence = scanner_evidence_for_mcp_skill_firewall(artifact, risk_categories=risk_categories)
-    except NativeMcpRuntimeEvidenceError:
-        # The verdict is already final; a missing resident only drops the
-        # display text and evidence, never the block receipt itself.
-        _LOGGER.warning("native MCP runtime evidence unavailable for a non-executed call", exc_info=True)
-        raw_command_text = None
-        firewall_evidence = {"runtimeEvidence": "native_unavailable"}
     store.record_inventory_artifact(
         artifact=artifact,
         artifact_hash=artifact_hash,
@@ -899,6 +890,9 @@ def block_tool_call(
         changed=False,
         now=now,
         approved=False,
+    )
+    raw_command_text, firewall_evidence = receipt_evidence_for_mcp_tool_call(
+        artifact, arguments=arguments, risk_categories=risk_categories, guard_home=store.guard_home
     )
     receipt = build_receipt(
         harness=artifact.harness,

@@ -14,7 +14,7 @@ from ..native_context import (
     is_unbound_context_digest,
     native_context_failure_reason,
 )
-from ..native_mcp_runtime_evidence import argument_entries, native_runtime_action_record
+from ..native_mcp_runtime_evidence import argument_entries, native_runtime_action_record, runtime_action_key
 from .approval_context import build_configured_environment_hash
 from .mcp_protection import (
     McpServerIdentity,
@@ -195,7 +195,7 @@ def build_runtime_action_record(
     description = artifact.metadata.get("tool_description")
     return native_runtime_action_record(
         tool_description=description if isinstance(description, str) else None,
-        arguments=argument_entries(arguments, mapping_type=dict),
+        arguments=argument_entries(arguments, mapping_type=dict, relevant=runtime_action_key),
         risk_categories=risk_categories,
         envelope=None
         if action_envelope is None
