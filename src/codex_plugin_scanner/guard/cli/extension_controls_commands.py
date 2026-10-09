@@ -208,6 +208,11 @@ def _recover_authority(
             "revision": view.revision,
             "catalog_digest": view.catalog_digest,
         }
+        recovery_warnings = getattr(store, "extension_control_recovery_warnings", ())
+        if recovery_warnings:
+            response["warnings"] = list(recovery_warnings)
+            for warning in recovery_warnings:
+                print(f"Warning: {warning}", file=sys.stderr)
     else:
         from ..daemon.manager import ensure_guard_daemon
 

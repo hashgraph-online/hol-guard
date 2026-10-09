@@ -18,7 +18,7 @@ const PACKAGE_SCRIPT_SURFACE: &str = "package-scripts";
 const PACKAGE_SCRIPT_KINDS: [&str; 1] = ["bun-package-script"];
 const INLINE_KINDS: [&str; 4] = ["python-c", "python-m", "node-eval", "inline-script"];
 
-pub(super) fn local_cli_identity(
+pub(crate) fn local_cli_identity(
     source: &LocalCliIdentitySourceV1,
 ) -> Result<Option<LocalCliIdentityV1>, &'static str> {
     match source {
