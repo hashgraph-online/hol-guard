@@ -7,6 +7,7 @@ import hashlib
 import os
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,7 @@ import fcntl
 import hashlib
 import os
 import sys
+import types
 
 lock_path, expected_digest = sys.argv[1:]
 descriptor = os.open(lock_path, os.O_RDWR)
@@ -413,3 +415,67 @@ def test_marker_write_never_truncates_before_writing(tmp_path: Path, monkeypatch
         os.close(descriptor)
     assert truncations == [0]  # only shrinking, after the in-place overwrite
     assert marker.read_bytes() == b""
+
+
+def test_marker_fsync_failure_restores_empty_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    marker = tmp_path / "marker"
+    descriptor = os.open(marker, os.O_RDWR | os.O_CREAT, 0o600)
+    real_fsync = os.fsync
+    calls = {"count": 0}
+
+    def failing_fsync(fd: int) -> None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise OSError(errno.EIO, "I/O error")
+        real_fsync(fd)
+
+    monkeypatch.setattr(lock_module.os, "fsync", failing_fsync)
+    try:
+        with pytest.raises(NativeResidentUpdateLockError, match="update_native_resident_lock_write_failed"):
+            lock_module._write_marker(descriptor, "b" * 64)
+    finally:
+        os.close(descriptor)
+    assert marker.read_bytes() == b""  # previous length restored, not just its bytes
+
+
+def _runtime_status(*, compatible: bool, path: Path | None, reason: str) -> object:
+    identity = None if path is None else types.SimpleNamespace(path=path)
+    return types.SimpleNamespace(compatible=compatible, identity=identity, reason=reason)
+
+
+def test_daemon_repair_uses_the_admitted_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+    from codex_plugin_scanner.guard.cli import commands_support_service
+
+    override = _runtime_file(tmp_path, "override", b"override-runtime")
+    seen: list[Path] = []
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda: _runtime_status(compatible=True, path=override, reason="native_ready"),
+    )
+    monkeypatch.setattr(
+        lock_module,
+        "repair_stale_resident_update_marker",
+        lambda _home, executable: (seen.append(executable), {"status": "current"})[1],
+    )
+    assert commands_support_service._repair_resident_update_marker(tmp_path / "guard-home") == {"status": "current"}
+    assert seen == [override]
+
+
+def test_daemon_repair_never_blesses_a_rejected_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+    from codex_plugin_scanner.guard.cli import commands_support_service
+
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda: _runtime_status(compatible=False, path=tmp_path / "bundled", reason="native_manifest_missing"),
+    )
+    monkeypatch.setattr(
+        lock_module,
+        "repair_stale_resident_update_marker",
+        lambda *_args: pytest.fail("a runtime admission rejects must not be published"),
+    )
+    result = commands_support_service._repair_resident_update_marker(tmp_path / "guard-home")
+    assert result == {"status": "unavailable", "reason_code": "native_manifest_missing"}

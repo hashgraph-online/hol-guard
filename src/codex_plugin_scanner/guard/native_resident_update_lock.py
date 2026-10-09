@@ -173,8 +173,8 @@ def _write_marker(descriptor: int, digest: str) -> None:
     detach the barrier from every process holding the old inode. Instead the
     new value overwrites the old one in place, in one write, and the file is
     only shrunk afterwards (shrinking cannot hit ENOSPC). A failed write
-    restores the previous bytes so a full disk cannot leave an empty or torn
-    marker behind.
+    restores the previous bytes and length so a full disk cannot leave an
+    empty or torn marker behind.
     """
 
     encoded = f"{digest}\n".encode("ascii") if digest else b""
@@ -189,6 +189,7 @@ def _write_marker(descriptor: int, digest: str) -> None:
         if previous is not None and len(previous) <= _MAX_MARKER_BYTES:
             try:
                 _pwrite_all(descriptor, previous)
+                os.ftruncate(descriptor, len(previous))
                 os.fsync(descriptor)
             except OSError:
                 pass

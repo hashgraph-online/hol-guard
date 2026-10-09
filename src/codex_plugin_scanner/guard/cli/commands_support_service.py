@@ -248,9 +248,14 @@ def _repair_resident_update_marker(guard_home: Path) -> dict[str, object] | None
 
     try:
         from ..native_resident_update_lock import repair_stale_resident_update_marker
-        from ..native_runtime import _bundled_runtime_candidate
+        from ..native_runtime import native_runtime_status
 
-        return repair_stale_resident_update_marker(guard_home, _bundled_runtime_candidate())
+        # Point the marker at the runtime resident requests actually select (an
+        # override included), and only once ordinary admission accepts it.
+        status = native_runtime_status()
+        if not status.compatible or status.identity is None:
+            return {"status": "unavailable", "reason_code": status.reason}
+        return repair_stale_resident_update_marker(guard_home, status.identity.path)
     except Exception:  # repair must not block daemon repair
         return {"status": "unavailable", "reason_code": "update_native_resident_lock_failed"}
 

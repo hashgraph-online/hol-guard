@@ -44,11 +44,8 @@ _SENSITIVE_CLASS_PATTERN = re.compile(
 def _descriptor_digest(material: object) -> str:
     digest = context_sha256_digest(material, unbound_label="mcp-descriptor")
     if is_unbound_context_digest(digest):
-        # Name the transport's real failure (for example a resident runtime
-        # identity mismatch) instead of an opaque "unavailable".
-        reason = native_context_failure_reason()
-        message = "native_mcp_descriptor_digest_unavailable"
-        raise ValueError(f"{message}:{reason}" if reason else message)
+        reason = native_context_failure_reason()  # name the real transport failure
+        raise ValueError("native_mcp_descriptor_digest_unavailable" + (f":{reason}" if reason else ""))
     return digest
 
 
