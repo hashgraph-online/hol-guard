@@ -43,6 +43,11 @@ pub(crate) fn plain_get_content_operands(
     ) {
         return None;
     }
+    // POSIX double-quote escapes collapse `\\` and `\"`, while PowerShell
+    // keeps every backslash, so Guard would check a different path.
+    if segment_text.contains("\\\\") || segment_text.contains("\\\"") {
+        return None;
+    }
     let mut operands = Vec::new();
     let mut expecting_path = false;
     let mut end_of_parameters = false;
@@ -93,14 +98,26 @@ fn home_variable_expands(segment_text: &str, variable: &str) -> bool {
         .all(|(index, _)| matches!(lowered[..index].chars().next_back(), Some('"' | ' ' | '\t')))
 }
 
-/// Rejects PowerShell expressions, arrays and wildcard patterns.
+/// Rejects PowerShell expressions, arrays, wildcard patterns, UNC paths and
+/// any colon outside a drive prefix: `Env:`, `Variable:` and other provider
+/// paths, plus alternate data streams, are not ordinary file reads.
 fn plain_text(value: &str) -> bool {
-    !value.chars().any(|character| {
-        matches!(
-            character,
-            '$' | '`' | '(' | ')' | '@' | '{' | '}' | ',' | '*' | '?' | '[' | ']'
-        )
-    })
+    let bytes = value.as_bytes();
+    let drive_prefix = bytes.len() > 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    !value.starts_with("//")
+        && !value.starts_with("\\\\")
+        && value
+            .char_indices()
+            .all(|(index, character)| character != ':' || (index == 1 && drive_prefix))
+        && !value.chars().any(|character| {
+            matches!(
+                character,
+                '$' | '`' | '(' | ')' | '@' | '{' | '}' | ',' | '*' | '?' | '[' | ']'
+            )
+        })
 }
 
 #[cfg(test)]
@@ -120,6 +137,7 @@ mod tests {
             ("Get-Content -Raw -LiteralPath 'src/a.ts'", "src/a.ts"),
             ("Get-Content -Path README.md -Raw", "README.md"),
             ("gc -Raw -- 'aliases/ordinary.txt'", "aliases/ordinary.txt"),
+            ("Get-Content C:/work/notes.md", "C:/work/notes.md"),
             (
                 "Get-Content -Raw \"$HOME/.hol-support/SAFETY.md\"",
                 "~/.hol-support/SAFETY.md",
@@ -156,6 +174,13 @@ mod tests {
             "Get-Content \"`$HOME/.hol-support/SAFETY.md\"",
             "Get-Content \"$HOMEDRIVE/notes.md\"",
             "Get-Content \"$HOME/$name\"",
+            "Get-Content Env:DATABASE_URL",
+            "Get-Content -LiteralPath Variable:/token",
+            "Get-Content notes.md:hidden",
+            "Get-Content C:notes.md",
+            "Get-Content \"\\\\server\\share\\notes.md\"",
+            "Get-Content //server/share/notes.md",
+            "Get-Content \"a\\\"b.md\"",
             "Set-Content notes.md",
             "Get-ChildItem notes.md",
         ] {

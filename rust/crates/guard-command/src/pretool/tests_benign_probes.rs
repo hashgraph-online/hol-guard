@@ -183,3 +183,46 @@ fn windows_get_content_reads_match_cat() {
     .unwrap();
     assert_ne!(posix.minimum_action, "allow");
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_get_content_reads_use_native_paths() {
+    let home = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/pretool-get-content")
+        .join(format!("home-{}", std::process::id()));
+    for file in [
+        ".hol-support/SAFETY.md",
+        ".ssh/id_rsa",
+        "project/README.md",
+        "project/.env",
+    ] {
+        let path = home.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "fixture\n").unwrap();
+    }
+    // Agents see the ordinary drive path, not the verbatim canonical form.
+    let canonical = home.canonicalize().unwrap();
+    let home_str = canonical.to_str().unwrap().trim_start_matches(r"\\?\");
+    let project_str = format!(r"{home_str}\project");
+    let action = |command: &str| {
+        evaluate_pre_tool_with_context(&request(command), Some(home_str), Some(project_str.as_str()))
+            .unwrap()
+            .minimum_action
+    };
+    for command in [
+        format!(r"Get-Content -Raw '{home_str}\.hol-support\SAFETY.md'"),
+        format!(r"Get-Content -LiteralPath '{home_str}\.hol-support\SAFETY.md'"),
+        r#"Get-Content -LiteralPath "$env:USERPROFILE\.hol-support\SAFETY.md" -Raw"#.to_owned(),
+        r"Get-Content -Raw -LiteralPath 'README.md'".to_owned(),
+    ] {
+        assert_eq!(action(&command), "allow", "{command}");
+    }
+    for command in [
+        r"Get-Content .env".to_owned(),
+        format!(r"Get-Content -Raw '{home_str}\.ssh\id_rsa'"),
+        r#"Get-Content "$HOME\.ssh\id_rsa""#.to_owned(),
+        r"Get-Content Env:USERPROFILE".to_owned(),
+    ] {
+        assert_ne!(action(&command), "allow", "{command}");
+    }
+}
