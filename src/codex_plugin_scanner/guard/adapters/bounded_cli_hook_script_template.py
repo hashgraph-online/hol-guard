@@ -143,7 +143,8 @@ def _stamp_hook_input(text: str) -> str:
         "git_pager_disabled": pager_ok(os.environ.get("GIT_PAGER", "-")) is not None,
         "pager_disabled": pager_ok(os.environ.get("PAGER", "-")) is not None,
     }
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    stamped = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    return stamped if len(stamped) <= 1_000_000 else text
 
 
 def _compact(event_name: str) -> str:

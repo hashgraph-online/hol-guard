@@ -439,7 +439,8 @@ def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float, rpc_de
         return hinted
     # Keep a near-limit request forwardable; the edge then treats context as unavailable.
     payload.pop(_CODEX_EXECUTION_ENVIRONMENT_KEY)
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    fallback = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    return fallback if len(fallback) <= _CODEX_HOOK_MAX_INPUT_BYTES else data
 
 
 def _codex_daemon_identity(state_path: str) -> tuple[dict[str, object], str, str] | None:

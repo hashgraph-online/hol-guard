@@ -82,10 +82,19 @@ def test_python_senders_agree_on_default_equivalent_pagers(
     assert frozen["pager_disabled"] is frozen["git_pager_disabled"] is expected
 
 
-def test_stamp_keeps_near_limit_input_forwardable() -> None:
+def test_stamp_keeps_near_limit_input_forwardable(tmp_path: Path) -> None:
     text = json.dumps({"hook_event_name": "PreToolUse", "tool_input": {"command": "x" * 999_800}})
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    script = guard_home / "zcode.py"
+    script.write_text(
+        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
+        encoding="utf-8",
+    )
+    generated = _load(script, "generated_zcode_size_hook")
 
     assert stamp_hook_input_text(text) == text
+    assert generated._stamp_hook_input(text) == text
 
 
 def test_frozen_bridge_drops_context_rather_than_exceed_request_limit() -> None:
@@ -98,3 +107,13 @@ def test_frozen_bridge_drops_context_rather_than_exceed_request_limit() -> None:
     assert HOOK_EXECUTION_ENVIRONMENT_KEY not in json.loads(hinted)
     small = entry._codex_hint_hook_data("{}", event_name="PostToolUse", deadline=1e12, rpc_deadline=1e12)
     assert HOOK_EXECUTION_ENVIRONMENT_KEY in json.loads(small)
+
+
+def test_frozen_bridge_forwards_original_input_when_hints_leave_no_room() -> None:
+    entry = _load(FROZEN_ENTRYPOINT, "hol_guard_entry_hint_room_test")
+    text = json.dumps({"hook_event_name": "PostToolUse", "tool_response": "x" * 999_930})
+
+    hinted = entry._codex_hint_hook_data(text, event_name="PostToolUse", deadline=1e12, rpc_deadline=1e12)
+
+    assert len(text) <= entry._CODEX_HOOK_MAX_INPUT_BYTES
+    assert hinted == text
