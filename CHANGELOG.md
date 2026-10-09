@@ -91,6 +91,21 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.36.1](https://github.com/hashgraph-online/hol-guard/compare/v3.36.0...v3.36.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** reject missing authored trust before preparation ([4ca519d](https://github.com/hashgraph-online/hol-guard/commit/4ca519d37aeb890d0834a010143db3c07d913761))
+* honor verified exact approval for native OMP launch ([#3778](https://github.com/hashgraph-online/hol-guard/issues/3778)) ([8eb477e](https://github.com/hashgraph-online/hol-guard/commit/8eb477ede17aec341998c26a2ced6f248f514849))
+* **release:** compare cached and cold builds under the same compiler wrapper ([#3786](https://github.com/hashgraph-online/hol-guard/issues/3786)) ([1f6bb79](https://github.com/hashgraph-online/hol-guard/commit/1f6bb79f1d47c19156ce642e7626dc6304a78ac6))
+* **runtime:** keep hooks working when two Guard installs share a home ([#3791](https://github.com/hashgraph-online/hol-guard/issues/3791)) ([0eac18e](https://github.com/hashgraph-online/hol-guard/commit/0eac18eb043ebd814ca6daeeaf29880c75864b73))
+
+
+### Performance Improvements
+
+* **release:** cross-compile Intel macOS binaries on Apple silicon ([#3783](https://github.com/hashgraph-online/hol-guard/issues/3783)) ([08a84ee](https://github.com/hashgraph-online/hol-guard/commit/08a84ee34f5d004fec3babf3a39f1df224391745))
+
 ## [3.36.0](https://github.com/hashgraph-online/hol-guard/compare/v3.35.0...v3.36.0) (2026-10-08)
 
 
