@@ -52,6 +52,7 @@ import {
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
@@ -84,7 +85,11 @@ export function ReviewDecisionCard(props: {
   const [allowScope, setAllowScope] = useState<DecisionScope>("artifact");
   const [blockScope, setBlockScope] = useState<DecisionScope>("artifact");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
-  const [resolved, setResolved] = useState<{ action: "allow" | "block"; persistedExactAction: boolean } | null>(null);
+  const [resolved, setResolved] = useState<{
+    action: "allow" | "block";
+    persistedExactAction: boolean;
+    message?: string;
+  } | null>(null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
@@ -375,6 +380,10 @@ export function ReviewDecisionCard(props: {
     setApprovalTotpCode(event.target.value);
   }, []);
 
+  const handleExtensionApproved = useCallback((message: string) => {
+    setResolved({ action: "allow", persistedExactAction: false, message });
+  }, []);
+
   const handleUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setUseCooldown(event.target.checked);
   }, []);
@@ -448,7 +457,7 @@ export function ReviewDecisionCard(props: {
             aria-hidden="true"
           />
           <p className={`text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
+            {resolved.message ?? resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
           </p>
         </div>
       )}
@@ -526,6 +535,17 @@ export function ReviewDecisionCard(props: {
               </div>
             )}
           </div>
+        )}
+
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionRecommendationCard
+            item={item}
+            approvalGate={approvalGate}
+            allowScope={allowScope}
+            disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
+            onResolve={props.onResolve}
+            onApproved={handleExtensionApproved}
+          />
         )}
 
         {resolutionBlockReason === null && resolved === null && (

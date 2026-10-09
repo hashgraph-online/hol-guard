@@ -267,6 +267,7 @@ def approval_schema_statement() -> str:
           desktop_notified_at text,
           raw_command_text text,
           continuation_snapshot_json text,
+          extension_allow_hint_json text,
           guard_version text,
           first_seen_guard_version text,
           last_seen_guard_version text,
@@ -344,7 +345,7 @@ def list_approval_requests(
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
                 fallback_cli_command, scanner_evidence_json, watch_only_observation,
-                browser_intent_json, continuation_snapshot_json,
+                browser_intent_json, continuation_snapshot_json, extension_allow_hint_json,
                 review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
                 raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
@@ -383,6 +384,7 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 {_column_expr(columns, "watch_only_observation", "0")},
                 {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
                 {_column_expr(columns, "continuation_snapshot_json", "NULL")},
+                {_column_expr(columns, "extension_allow_hint_json", "NULL")},
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         where request_id = ?
@@ -576,6 +578,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
         "browser_intent": _json_object(row["browser_intent_json"]),
         "continuation_snapshot": _json_object(row["continuation_snapshot_json"]),
+        "extension_allow_hint": _json_object(row["extension_allow_hint_json"]),
         "review_command": str(row["review_command"]),
         "approval_url": str(row["approval_url"]),
         "status": str(row["status"]),
