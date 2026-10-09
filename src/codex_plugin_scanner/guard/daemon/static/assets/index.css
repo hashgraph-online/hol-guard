@@ -1131,6 +1131,10 @@
     max-height: calc(var(--spacing) * 48);
   }
 
+  .max-h-72 {
+    max-height: calc(var(--spacing) * 72);
+  }
+
   .max-h-80 {
     max-height: calc(var(--spacing) * 80);
   }
