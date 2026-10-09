@@ -165,12 +165,21 @@ def edit_pyproject(content: str, metadata: Metadata) -> str:
         lines[index] += newline
     insertion = index + 1
     for source, destination in _artifact_mappings(metadata):
+        if any(
+            existing_source != source and existing_destination == destination
+            for existing_source, existing_destination in mapping.items()
+        ):
+            raise conflict("Another wheel inclusion already owns this contribution destination.")
         if source in mapping:
             if mapping[source] != destination:
                 raise conflict("An existing wheel inclusion points this contribution at a different destination.")
             continue
-        if destination in mapping.values():
-            raise conflict("Another wheel inclusion already owns this contribution destination.")
+        source_directory = source.rsplit("/", 1)[0]
+        destination_directory = destination.rsplit("/", 1)[0]
+        if source_directory in mapping:
+            if mapping[source_directory] != destination_directory:
+                raise conflict("An existing wheel directory inclusion points at a different destination.")
+            continue
         lines.insert(insertion, f"{json.dumps(source)} = {json.dumps(destination)}{newline}")
         insertion += 1
     updated = "".join(lines)

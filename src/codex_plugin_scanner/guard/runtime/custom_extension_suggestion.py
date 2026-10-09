@@ -70,7 +70,9 @@ _PACKAGE_STORE_MARKERS = (
     "/nvm/versions/",
 )
 _SYSTEM_BIN_PREFIXES = ("/bin/", "/usr/bin/", "/usr/sbin/", "/sbin/")
-_PATH_CLASSES = frozenset({"unknown", "package-store", "system-bin", "user-tool"})
+# ``project-tool`` is a project's own ``node_modules/.bin`` CLI launched through a
+# package runner; ``registry-package`` is a runner fetch without a local bin.
+_PATH_CLASSES = frozenset({"unknown", "package-store", "system-bin", "user-tool", "project-tool", "registry-package"})
 _WINDOWS_SYSTEM_PREFIXES = ("/windows/system32/", "/windows/syswow64/", "/windows/system/")
 _SCRIPT_SUFFIXES = frozenset({"py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rb", "sh"})
 COMMON_SHELL_UTILITIES = frozenset(
@@ -246,7 +248,7 @@ def suggestion_score(
         if kind == "script":
             score += 5
     path_class = _path_class(source_path)
-    if path_class == "user-tool":
+    if path_class in {"user-tool", "project-tool"}:
         score += 5
     if path_class == "system-bin":
         score -= 20

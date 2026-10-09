@@ -208,6 +208,15 @@ class StoreLocalCliMixin:
             ).fetchone()
         return None if row is None else _grant_from_row(row)
 
+    def has_local_cli_block_rules(self) -> bool:
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            row = connection.execute(
+                "select exists(select 1 from local_cli_grant where state = 'blocked')"
+                " or exists(select 1 from local_cli_command_grant where state = 'block')"
+            ).fetchone()
+        return bool(row and row[0])
+
     def read_local_cli_revision(self) -> int:
         with self._connect() as connection:
             ensure_local_cli_schema(connection)

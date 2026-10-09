@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
 from ..runtime.actions import normalize_harness_payload
+from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_review_binding import (
     native_review_claimed_allow,
     native_review_matching_allow,
@@ -129,7 +130,17 @@ def pause_native_pre_tool_for_approval(
         native_receipt,
         workspace,
     )
-    # A saved exact-action block must win over any pending once approval.
+    # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
+    custom = native_local_cli_grant_response(
+        store,
+        harness=harness,
+        payload=payload,
+        native_result=native_result,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    if custom is not None and custom[0]:
+        return custom[1]
     saved = native_saved_review_response(
         store,
         harness=harness,
@@ -143,6 +154,8 @@ def pause_native_pre_tool_for_approval(
     )
     if saved is not None:
         return saved
+    if custom is not None:
+        return custom[1]
     if claimed_saved_allow_hash is not None and native_review_claimed_allow(
         store,
         harness=harness,

@@ -147,6 +147,11 @@ impl Lease {
         if authority.record_digest != self.authority_digest {
             return Err("native_business_dispatch_authority_changed".into());
         }
+        // One claim releases one provider call, so it can only carry one
+        // record. A multi-record batch would need per-record outcomes.
+        if input.facts().volume.record_count != 1 {
+            return Err("native_business_dispatch_batch_unsupported".into());
+        }
         // Budget declarations remain refused until a verified actor registry
         // and reservations are integrated. An approval cannot waive them.
         crate::policy_enforcement::ensure_business_review_permitted(

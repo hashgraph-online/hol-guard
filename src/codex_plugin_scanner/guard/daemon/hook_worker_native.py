@@ -28,6 +28,8 @@ from .hook_availability_policy import (
     availability_harness_response,
     recording_only_pre_tool_response,
 )
+from .hook_native_cli_observer import observe_native_pre_tool_cli
+from .hook_native_local_cli import native_local_cli_block_response
 from .hook_native_review_approval import (
     pause_native_pre_tool_for_approval,
     record_claude_permission_notice_for_native_review,
@@ -636,6 +638,8 @@ class HookWorkerNativeMixin:
                     response = _claude_native_prompt_brand(response, native_result)
             return (response, True)
         if native_event == "PreToolUse":
+            with suppress(Exception):
+                observe_native_pre_tool_cli(self.store, payload=payload, workspace=workspace, home_dir=home_dir)
             if recording_only:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
@@ -677,6 +681,25 @@ class HookWorkerNativeMixin:
                             guard_home=guard_home,
                         )
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
+            custom_block = native_local_cli_block_response(
+                self.store,
+                harness=native_harness,
+                payload=payload,
+                native_result=native_result,
+                workspace=workspace,
+                home_dir=home_dir,
+            )
+            if custom_block is not None:
+                if recording_only:
+                    custom_block = recording_only_pre_tool_response(
+                        native_harness,
+                        reason_code="local_cli_extension_blocked",
+                        reason="Watch recorded this action without stopping it.",
+                    )
+                return (
+                    _record_native_pre_activity(self, native_harness, payload, custom_block, accepted_receipt),
+                    True,
+                )
             repaired_result = apply_command_policy_repair(
                 self.store,
                 native_result,
