@@ -18,7 +18,7 @@ READY = {
     "port": 40123,
     "adapter": ADAPTER_ID,
     "provider": "openai-codex",
-    "model": "gpt-5.6-luna",
+    "model": "gpt-6-luna",
     "thinking": "medium",
 }
 
@@ -86,7 +86,7 @@ def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monk
     assert provider["base_url"] == "http://127.0.0.1:40123/v1"
     assert provider["allow_loopback"] is True and bool(provider["api_key"])
     assert provider["reasoning_effort"] == effort
-    assert f"openai-codex/gpt-5.6-luna/{effort} via" in provider["identity"]
+    assert f"openai-codex/gpt-6-luna/{effort} via" in provider["identity"]
 
 
 def test_route_rejects_unsupported_effort(tmp_path, monkeypatch):
