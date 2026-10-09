@@ -12,6 +12,7 @@ on:
       - scripts/release/wait_for_core_publication.py
       - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py
+      - scripts/release/discover_core_release.sh
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
       - scripts/release/verify_*.py
@@ -22,6 +23,7 @@ on:
       - scripts/release/wait_for_core_publication.py
       - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py
+      - scripts/release/discover_core_release.sh
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
       - scripts/release/verify_*.py
@@ -43,6 +45,7 @@ permissions:
 jobs:
   validate:
     name: Validate workflow
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -68,7 +71,8 @@ jobs:
       group: desktop-core-stable-feed-linux-x64
       cancel-in-progress: false
       queue: max
-    if: github.event_name != 'pull_request'
+    # Dispatches run the main workflow file, already linted by its push run.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.validate.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.validate.result == 'skipped')) }}
     needs: validate
     # Keep libpython compatible with Pop!_OS 22.04.
     # Move this build baseline into a container before runner retirement on 2027-04-17.
@@ -112,19 +116,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_CORE_VERSION: ${{ inputs.core_version || '' }}
         shell: bash
-        run: |
-          set -euo pipefail
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | select(.draft == false and .prerelease == false) | {tag: .tag_name, assets: [.assets[] | select(.state == "uploaded") | .name]}' \
-            > "$RUNNER_TEMP/release-inventory.jsonl"
-          python3 -I scripts/release/ready_core_releases.py \
-            --inventory "$RUNNER_TEMP/release-inventory.jsonl" --platform 'manylinux_.*_x86_64' \
-            > "$RUNNER_TEMP/release-tags.txt"
-          ARGS=(--tags "$RUNNER_TEMP/release-tags.txt")
-          if [[ -n "$REQUESTED_CORE_VERSION" ]]; then
-            ARGS+=(--version "$REQUESTED_CORE_VERSION")
-          fi
-          python3 -I scripts/release/desktop_core_alpha_feed.py discover-release "${ARGS[@]}" >> "$GITHUB_OUTPUT"
+        run: bash scripts/release/discover_core_release.sh 'manylinux_.*_x86_64' >> "$GITHUB_OUTPUT"
       - name: Stop when no stable Core release is published
         if: steps.release.outputs.available != 'true'
         run: echo "No published stable HOL Guard Core release is available yet."

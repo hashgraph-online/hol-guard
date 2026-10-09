@@ -60,7 +60,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     plan_action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))
     plan_steps = plan_action["runs"]["steps"]
     collector = next(step["run"] for step in plan_steps if "build_pytest_shard_plan.py" in step.get("run", ""))
-    assert "cancel-in-progress: true" in workflow
+    # Main queues its runs; PRs still cancel stale in-flight runs.
+    assert "cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}" in workflow
     assert "CI_UV_CACHE_DEPENDENCY_GLOB" in workflow
     assert "actions: read" in workflow
     assert "**/pyproject.toml" not in workflow
