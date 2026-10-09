@@ -36,6 +36,15 @@ runs:
       'tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-960-four-client-8]' 'tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]' tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner
       tests/test_guard_daemon_cli.py::TestDaemonStatusCommand::test_status_does_not_wait_for_guard_database_writer
       tests/test_codex_hook_repair_native_binding.py::test_real_configured_hook_native_protection_commits_repair
+      tests/test_guard_gauntlet_parallel.py::test_interrupt_during_spawn_still_reaps_the_started_worker
+      tests/test_guard_gauntlet_parallel.py::test_signal_during_cleanup_grace_still_force_kills
+      'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[artifact]'
+      'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[workspace]'
+      'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[publisher]'
+      'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[harness]'
+      'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[global]'
+      tests/test_guard_runtime.py::test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow
+      'tests/test_guard_surface_server.py::TestGuardSurfaceServer::test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload'
       tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources --tb=short
     shell: bash
   - name: Run extended reconnect soak without tracing

@@ -142,6 +142,15 @@ from .managed_controls_sync import (
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
+from .receipt_sync_privacy import (
+    cloud_sync_command_display_part as _cloud_sync_command_display_part,
+)
+from .receipt_sync_privacy import (
+    cloud_sync_sanitize_text as _cloud_sync_sanitize_text,
+)
+from .receipt_sync_privacy import (
+    cloud_sync_scrub_envelope_commands as _cloud_sync_scrub_envelope_commands,
+)
 from .signals import RiskSignalV2
 from .supply_chain_bundle import (
     SupplyChainBundleError,
@@ -5959,10 +5968,6 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     return local_receipt_redaction_level(store.guard_home)
 
 
-def _cloud_sync_command_display_part(value: str) -> str:
-    return " ".join(_cloud_sync_sanitize_text(value, fallback="").split())
-
-
 def _cloud_sync_transport_encode_text(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
 
@@ -6051,7 +6056,7 @@ def _cloud_sync_receipt_payload(
     if isinstance(redacted_envelope, dict) and redacted_envelope:
         full_envelope = receipt.get("action_envelope_json")
         if isinstance(full_envelope, dict):
-            enriched = dict(redacted_envelope)
+            enriched = _cloud_sync_scrub_envelope_commands(redacted_envelope, redaction_level=redaction_level)
             command = _cloud_sync_receipt_action_command(full_envelope, redaction_level=redaction_level)
             if command is not None:
                 enriched.pop("command", None)
@@ -6069,7 +6074,10 @@ def _cloud_sync_receipt_payload(
                     enriched["package_name"] = package_name
             payload["envelopeRedacted"] = enriched
         else:
-            payload["envelopeRedacted"] = redacted_envelope
+            payload["envelopeRedacted"] = _cloud_sync_scrub_envelope_commands(
+                redacted_envelope,
+                redaction_level=redaction_level,
+            )
     return payload
 
 
@@ -6329,34 +6337,6 @@ def _cloud_sync_recommendation(policy_decision: str) -> str:
     if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
         return "review"
     return "monitor"
-
-
-def _cloud_sync_sanitize_text(value: str, *, fallback: str) -> str:
-    redacted = redact_sensitive_text(value).strip()
-    if not redacted:
-        return fallback
-    if _looks_like_source_excerpt(redacted):
-        return fallback
-    if len(redacted) > 320:
-        return f"{redacted[:317]}..."
-    return redacted
-
-
-def _looks_like_source_excerpt(value: str) -> bool:
-    lowered = value.lower()
-    suspicious_tokens = (
-        "function ",
-        "def ",
-        "class ",
-        "import ",
-        "from ",
-        " => ",
-        "console.log(",
-        "<script",
-        "#!/bin/",
-    )
-    has_structured_code_shape = "\n" in value and ("{" in value or "}" in value or ";" in value)
-    return has_structured_code_shape or any(token in lowered for token in suspicious_tokens)
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:

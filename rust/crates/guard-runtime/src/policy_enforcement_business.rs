@@ -210,14 +210,31 @@ fn launcher_runs_business_cli(program: &str, arguments: &[String]) -> bool {
         if installs && !shell_string {
             return false;
         }
-        argument
-            .split(|c: char| c.is_whitespace() || SHELL_SEPARATORS.contains(&c) || c == '=')
-            .filter(|word| !word.is_empty())
-            .any(|word| {
-                let spec = word.rsplit(['/', '\\']).next().unwrap_or(word);
-                is_business_cli(spec.split('@').next().unwrap_or(spec))
-            })
+        words_name_business_cli(argument)
     })
+}
+
+fn words_name_business_cli(text: &str) -> bool {
+    text.split(|c: char| c.is_whitespace() || SHELL_SEPARATORS.contains(&c) || c == '=')
+        .filter(|word| !word.is_empty())
+        .any(|word| {
+            let spec = word.rsplit(['/', '\\']).next().unwrap_or(word);
+            is_business_cli(spec.split('@').next().unwrap_or(spec))
+        })
+}
+
+/// Whether the payload positively names a business operation, including a business
+/// CLI inside a shell string the parser cannot model (`sh -c 'gws …'`).
+fn names_business_operation(payload: &Value) -> bool {
+    guard_command::pretool::generic::extract_untrusted_command_context(payload).is_ok_and(
+        |context| {
+            context.business_action_present
+                || context
+                    .command
+                    .as_deref()
+                    .is_some_and(words_name_business_cli)
+        },
+    )
 }
 
 const SHELL_SEPARATORS: &[char] = &[';', '&', '|', '`', '$', '(', ')', '<', '>', '\'', '"'];
@@ -299,7 +316,14 @@ pub(super) fn guard_untrusted_business_context(
     let intrinsic = ActionFloor::parse(&result.minimum_action)
         .ok_or_else(|| "native_policy_action_invalid".to_owned())?;
     let floor = policy.floor(intrinsic, None);
-    if floor.action > intrinsic {
+    // A failed extension evaluation blocks without naming a finding. Commands the
+    // parser cannot model, such as `sh -c 'gws …'`, land there; when the payload
+    // names a business operation, the missing business facts are the actionable
+    // reason. Unrelated opaque commands keep the extension diagnostic.
+    let unattributed_business_block = result.reason_code
+        == "native_command_extension_evaluation_failed"
+        && names_business_operation(payload);
+    if floor.action > intrinsic || unattributed_business_block {
         result.reason_code = "native_business_context_unavailable".into();
         result.reason = "HOL Guard requires authenticated account, audience and content facts for this business operation.".into();
     }

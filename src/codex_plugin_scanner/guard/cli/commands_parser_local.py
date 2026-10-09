@@ -199,12 +199,12 @@ def _configure_guard_local_parsers(
 
     package_shims_parser = guard_subparsers.add_parser(
         "package-shims",
-        help="Install, repair, inspect, or remove package-manager PATH shims routed through Guard protect",
+        help="Install, repair, inspect, test, or remove package-manager PATH shims routed through Guard protect",
     )
     package_shims_parser.add_argument(
         "package_shims_command",
         nargs="?",
-        choices=("install", "repair", "status", "uninstall"),
+        choices=("install", "repair", "status", "test", "uninstall"),
         default="status",
     )
     package_shims_parser.add_argument(

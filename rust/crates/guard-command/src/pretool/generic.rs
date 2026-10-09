@@ -165,10 +165,21 @@ fn evaluate_envelope(
         && signals.tool_name.as_deref() == Some("Grep")
         && signals.url_values.is_empty()
         && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd);
+    // Codex sends an edit as `apply_patch` with the patch body in `command`.
+    // That body is an edit description, not shell, so it has its own proof.
+    let apply_patch_proven = event == "PreToolUse"
+        && harness == "codex"
+        && signals.tool_name.as_deref() == Some("apply_patch")
+        && signals.url_values.is_empty()
+        && signals.path_values.is_empty()
+        && !signals.independent_sensitive_target
+        && signals.command.as_deref().is_some_and(|patch| {
+            super::apply_patch_writes::routine_apply_patch(patch, home_dir, cwd)
+        });
     if let Some(projection) = signals
         .command
         .as_deref()
-        .filter(|_| project_redirects && !search_scope_proven)
+        .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
         .and_then(|command| redirect_projection::project(command, context))
     {
         let projected_payload = payload_with_command(
@@ -209,7 +220,7 @@ fn evaluate_envelope(
     let command_decision = signals
         .command
         .as_deref()
-        .filter(|_| !search_scope_proven)
+        .filter(|_| !search_scope_proven && !apply_patch_proven)
         .map(|command| {
             evaluate_pre_tool_with_execution_context(
                 &CommandModelRequestV1 {
@@ -246,6 +257,20 @@ fn evaluate_envelope(
             "allow",
             "native_bounded_search_scope",
             "The Rust authority proved this directory search cannot reach a sensitive file.",
+        )
+    } else if apply_patch_proven {
+        generic_result(
+            generic_action(
+                harness,
+                event,
+                PreToolActionTypeV1::FileWrite,
+                PreToolOperationV1::Write,
+                true,
+                false,
+            ),
+            "allow",
+            "native_exact_safe_file_write",
+            "The Rust authority proved every file this patch adds or updates is an ordinary workspace file that clears sensitive-path checks.",
         )
     } else if task_metadata {
         generic_result(

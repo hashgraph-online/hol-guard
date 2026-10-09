@@ -53,6 +53,21 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_cloud_review_runtime_recovery.py::"
         "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
         "tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources",
+        "tests/test_guard_gauntlet_parallel.py::test_interrupt_during_spawn_still_reaps_the_started_worker",
+        "tests/test_guard_gauntlet_parallel.py::test_signal_during_cleanup_grace_still_force_kills",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[artifact]",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[workspace]",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[publisher]",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[harness]",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[global]",
+        "tests/test_guard_runtime.py::test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow",
+        "tests/test_guard_surface_server.py::TestGuardSurfaceServer::"
+        "test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload",
     }
 )
 

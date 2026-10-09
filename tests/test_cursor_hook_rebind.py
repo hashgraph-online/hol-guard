@@ -386,7 +386,7 @@ def test_rebind_rewrites_frozen_control_plane_when_script_is_current(
                     "beforeShellExecution": [{"command": frozen_command}],
                     "beforeMCPExecution": [{"command": frozen_command}],
                     "beforeReadFile": [{"command": frozen_command}],
-                    "beforeWriteFile": [{"command": frozen_command}],
+                    "preToolUse": [{"command": frozen_command}],
                 },
             }
         ),

@@ -4400,6 +4400,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 context,
                 managers=managers,
                 workspace_dir=context.workspace_dir,
+                project_shell_profile=True,
             )
         if operation == "audit":
             if context.workspace_dir is None:
