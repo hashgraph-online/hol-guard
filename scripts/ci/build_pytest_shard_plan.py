@@ -82,14 +82,6 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_codex_daemon_hook_bridge.py::test_bridge_real_daemon_denies_unproven_github_content_reads",
         "tests/test_guard_update_artifact.py::"
         "test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat",
-    }
-)
-
-# Whole files routed to the scheduling-sensitive lane. File paths (no "::") cover
-# every node, including parametrized ids whose argv-hostile text cannot be a
-# single --deselect operand.
-SCHEDULING_ONLY_FILES = frozenset(
-    {
         "tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms",
     }
 )
@@ -192,7 +184,6 @@ def build_affinity_node_shards(
         for node_id in node_ids
         if node_id not in SCHEDULING_ONLY_NODE_IDS
         and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
-        and node_file(node_id) not in SCHEDULING_ONLY_FILES
     ]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")
