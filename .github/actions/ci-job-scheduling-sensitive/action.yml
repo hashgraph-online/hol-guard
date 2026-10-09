@@ -36,7 +36,6 @@ runs:
       'tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-960-four-client-8]' 'tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]' tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner
       tests/test_guard_daemon_cli.py::TestDaemonStatusCommand::test_status_does_not_wait_for_guard_database_writer
       tests/test_codex_hook_repair_native_binding.py::test_real_configured_hook_native_protection_commits_repair
-      tests/test_guard_command_corpus.py::test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences
       tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources --tb=short
     shell: bash
   - name: Run extended reconnect soak without tracing

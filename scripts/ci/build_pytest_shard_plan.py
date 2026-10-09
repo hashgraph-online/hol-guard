@@ -53,7 +53,6 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_cloud_review_runtime_recovery.py::"
         "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
         "tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources",
-        "tests/test_guard_command_corpus.py::test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences",
     }
 )
 

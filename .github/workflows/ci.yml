@@ -386,7 +386,6 @@ jobs:
             --deselect 'tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]' \
             --deselect tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner \
             --deselect tests/test_guard_cloud_review_runtime_recovery.py::test_cloud_review_worker_survives_ten_thousand_recurring_disconnects \
-            --deselect tests/test_guard_command_corpus.py::test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences \
             --deselect tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources \
             "${coverage_args[@]}"
       - name: Upload pytest coverage data artifact
