@@ -71,3 +71,11 @@ The dashboard reads the same v2 routes. Its first page loads only index pages: 1
 ## Rollout and rollback
 
 The v2 read path is on by default. Setting `HOL_GUARD_CATALOG_READ_V2=off` (also `0`, `false` or `disabled`) in the daemon's environment makes every v2 route answer 501 `catalog_read_model_unavailable` without calling the native read model. The CLI and dashboard treat that as protocol absence and read the legacy v1 catalog. Rollback leaves the stage A limits, Cloud v1 metadata, authority records and native enforcement unchanged. It also restores the whole-catalog cost on every load and the older-client limit described above.
+
+- **Diagnostics.** An authenticated `GET /v2/extension-controls/catalog/index` shows which path is active:
+  - 200 with `snapshot_id` and `native_catalog_digest`: v2 is served.
+  - 501 `catalog_read_model_unavailable`: the switch is off, or the native runtime or its `catalog-read-model-v1` capability is missing.
+  - 503 `catalog_read_model_unavailable`: the resident accepted the read but could not build a trusted snapshot. Clients surface this response and do not fall back.
+  - 503 `catalog_snapshot_mismatch`: the daemon registry and the native catalog differ, so the wheel's daemon and runtime are mismatched. Clients do not fall back.
+- **Downgrade.** A daemon from before v2 answers `/v2/` with 404 `not_found`, and upgraded clients read v1. Downgrading the client leaves the daemon unchanged, and the older client keeps reading v1. Cursors and ETags do not survive a runtime change; clients restart from the first page.
+- **Cloud.** This change adds no Cloud protocol version. Any later changed-record Cloud sync must ship receiver-first: the receiver accepts the new version before any daemon sends it, and v1 stays accepted throughout.
