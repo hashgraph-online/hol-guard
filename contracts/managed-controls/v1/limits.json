@@ -1,6 +1,6 @@
 {
   "max_catalog_extensions": 512,
-  "max_catalog_payload_bytes": 1000000,
+  "max_catalog_payload_bytes": 8000000,
   "max_control_layers": 2,
   "max_control_set_rules": 1024,
   "max_control_set_targets": 1024,

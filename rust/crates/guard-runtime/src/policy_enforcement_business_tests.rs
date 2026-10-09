@@ -279,6 +279,55 @@ fn complete_nonmatches_use_default_without_weakening_intrinsic_secret_floors() {
 }
 
 #[test]
+fn workspace_local_paths_and_windows_shims_cannot_skip_business_context() {
+    let installed = snapshot(Some(binding("allow", "allow")), "enforce");
+    for command in [
+        "./gws gmail users messages send --json '{}'",
+        "./node_modules/.bin/gws gmail users messages send",
+        "/tmp/workspace/bin/gog gmail send",
+        "gws.cmd gmail users messages send",
+        "GOG.CMD gmail send",
+        "npx gws gmail users messages send",
+        "npx -y @example/gws@1.2.0 gmail users messages send",
+        "pnpm exec gog gmail send",
+        "bunx gws gmail users messages send",
+        "npx -c 'gws gmail users messages send'",
+        "npm exec --call='gws gmail users messages send'",
+        "pnpm exec sh -c 'gog gmail send'",
+        "yarn exec bash -c \"cd /tmp && gws gmail users messages send\"",
+        "npm install -c 'gws gmail users messages send'",
+        "npm --prefix install exec gws gmail users messages send",
+        "pnpm -C install exec gog gmail send",
+        "yarn --cwd install exec gws gmail users messages send",
+    ] {
+        let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
+        let result = super::super::tests::generic_result("allow");
+        let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
+        assert_eq!(output.minimum_action, "block", "{command}");
+        assert_eq!(output.decision, "deny", "{command}");
+        assert_eq!(
+            output.reason_code, "native_business_context_unavailable",
+            "{command}"
+        );
+    }
+    for command in [
+        "npx prettier --check gws.md",
+        "./gwsync status",
+        "npm install gws",
+        "pnpm add -D @example/gws@1.2.0",
+        "yarn remove gog",
+    ] {
+        let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
+        let result = super::super::tests::generic_result("allow");
+        let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
+        assert_ne!(
+            output.reason_code, "native_business_context_unavailable",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn ordinary_hook_business_claims_and_google_cli_calls_require_native_context_even_in_observe() {
     for mode in ["enforce", "observe"] {
         let installed = snapshot(Some(binding("allow", "allow")), mode);
