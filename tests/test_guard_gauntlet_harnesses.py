@@ -399,3 +399,8 @@ def test_codex_config_home_is_pinned_inside_the_fixture(tmp_path):
     assert adapter("codex").home_environment(tmp_path) == {"CODEX_HOME": str(tmp_path / ".codex")}
     assert adapter("claude-code").home_environment(tmp_path) == {}
     assert adapter("cursor").home_environment(tmp_path) == {}
+    from ci.gauntlet.harness_case import harness_environment
+
+    environment = harness_environment(adapter("codex"), tmp_path, tmp_path / "agent", "canary", {})
+    assert environment["CODEX_HOME"] == str(tmp_path / ".codex")
+    assert environment["USERPROFILE"] == str(tmp_path)
