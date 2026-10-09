@@ -127,7 +127,6 @@ from .extension_catalog_handshake import (
 )
 from .extension_catalog_sync import build_builtin_extension_catalog_wire
 from .extension_control_authority import ExtensionControlAuthorityView
-from .local_request_snapshots import _cloud_scrub_text
 from .local_runtime_fallbacks import best_effort_access_token, local_receipt_redaction_level
 from .managed_controls_sync import (
     apply_custom_extension_continuity_from_sync,
@@ -142,6 +141,15 @@ from .managed_controls_sync import (
 )
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
+)
+from .receipt_sync_privacy import (
+    cloud_sync_command_display_part as _cloud_sync_command_display_part,
+)
+from .receipt_sync_privacy import (
+    cloud_sync_sanitize_text as _cloud_sync_sanitize_text,
+)
+from .receipt_sync_privacy import (
+    cloud_sync_scrub_envelope_commands as _cloud_sync_scrub_envelope_commands,
 )
 from .signals import RiskSignalV2
 from .supply_chain_bundle import (
@@ -5960,29 +5968,8 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     return local_receipt_redaction_level(store.guard_home)
 
 
-def _cloud_sync_command_display_part(value: str) -> str:
-    # Same CLI credential-argument scrub as Cloud review events.
-    return " ".join(_cloud_sync_sanitize_text(_cloud_scrub_text(value), fallback="").split())
-
-
 def _cloud_sync_transport_encode_text(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
-
-
-def _cloud_sync_scrub_envelope_commands(envelope: dict[str, object], *, redaction_level: str) -> dict[str, object]:
-    # Stored receipt envelopes keep locally redacted command text, which can still
-    # carry CLI credential flags. Re-scrub at the sync boundary, and drop the text
-    # when the current redaction level withholds commands.
-    safe = dict(envelope)
-    for key in ("command", "redacted_command"):
-        value = safe.get(key)
-        if not isinstance(value, str):
-            continue
-        if redaction_level == "full":
-            safe.pop(key)
-        else:
-            safe[key] = _cloud_sync_command_display_part(value)
-    return safe
 
 
 def _cloud_sync_receipt_action_command(envelope: dict[str, object], *, redaction_level: str) -> str | None:
@@ -6350,34 +6337,6 @@ def _cloud_sync_recommendation(policy_decision: str) -> str:
     if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
         return "review"
     return "monitor"
-
-
-def _cloud_sync_sanitize_text(value: str, *, fallback: str) -> str:
-    redacted = redact_sensitive_text(value).strip()
-    if not redacted:
-        return fallback
-    if _looks_like_source_excerpt(redacted):
-        return fallback
-    if len(redacted) > 320:
-        return f"{redacted[:317]}..."
-    return redacted
-
-
-def _looks_like_source_excerpt(value: str) -> bool:
-    lowered = value.lower()
-    suspicious_tokens = (
-        "function ",
-        "def ",
-        "class ",
-        "import ",
-        "from ",
-        " => ",
-        "console.log(",
-        "<script",
-        "#!/bin/",
-    )
-    has_structured_code_shape = "\n" in value and ("{" in value or "}" in value or ";" in value)
-    return has_structured_code_shape or any(token in lowered for token in suspicious_tokens)
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:

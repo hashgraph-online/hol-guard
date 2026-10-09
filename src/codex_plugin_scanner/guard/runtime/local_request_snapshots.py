@@ -454,7 +454,7 @@ def _local_request_snapshot_routing_metadata(
 
 
 _CLOUD_SPACED_SECRET_ARGUMENT_RE = re.compile(
-    r'(?P<prefix>(?:^|\s)--?(?:[\w-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[\w-]*)\s+)(?:"[^"]*"|\'[^\']*\'|\S+)',
+    r'(?P<prefix>(?:^|\s)--?(?:[\w-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[\w-]*)(?:\s+|=))(?:"[^"]*"|\'[^\']*\'|\S+)',
     re.IGNORECASE,
 )
 

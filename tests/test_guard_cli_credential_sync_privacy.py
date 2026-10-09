@@ -30,6 +30,7 @@ CREDENTIAL_COMMANDS = (
     f"GOOGLE_WORKSPACE_CLI_TOKEN={ACCESS_VALUE} gws gmail +send --to team@example.com",
     f"GOOGLE_WORKSPACE_CLI_CLIENT_SECRET={CLIENT_SECRET_VALUE} gws drive files list",
     f"gws auth login --credentials-file {CREDENTIALS_FILE}",
+    f"gws auth login --credentials-file={CREDENTIALS_FILE}",
     f"gws gmail +send --refresh-token {REFRESH_VALUE}",
     f"GOG_ACCESS_TOKEN={ACCESS_VALUE} gog gmail send --to team@example.com",
     f"GOG_KEYRING_PASSWORD={KEYRING_VALUE} gog drive ls",
@@ -59,10 +60,12 @@ def _assert_no_secret(text: str) -> None:
 @pytest.mark.parametrize("redaction_level", REDACTION_LEVELS)
 @pytest.mark.parametrize("command", CREDENTIAL_COMMANDS)
 @pytest.mark.parametrize("has_full_envelope", (True, False))
+@pytest.mark.parametrize("stored_key", ("command", "redacted_command"))
 def test_receipt_sync_payload_never_carries_cli_credentials(
     command: str,
     redaction_level: str,
     has_full_envelope: bool,
+    stored_key: str,
 ) -> None:
     receipt: dict[str, object] = {
         "receipt_id": "guard-receipt-1",
@@ -72,7 +75,7 @@ def test_receipt_sync_payload_never_carries_cli_credentials(
         "timestamp": "2026-10-09T00:00:00Z",
         "raw_command_text": command,
         # Receipts written at partial or none keep the locally redacted command.
-        "envelope_redacted_json": {"tool_name": "Bash", "command": command},
+        "envelope_redacted_json": {"tool_name": "Bash", stored_key: command},
     }
     if has_full_envelope:
         receipt["action_envelope_json"] = {"tool_name": "Bash", "command": command}
@@ -89,6 +92,7 @@ def test_receipt_sync_payload_never_carries_cli_credentials(
     assert isinstance(envelope, dict)
     if redaction_level == "full":
         assert "command" not in envelope
+        assert "redacted_command" not in envelope
 
 
 @pytest.mark.parametrize("redaction_level", REDACTION_LEVELS)
