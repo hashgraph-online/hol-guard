@@ -69,8 +69,9 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
         python=tmp_path / "candidate" / ".venv" / "bin" / "python",
         effort="medium",
         sdk_root=tmp_path / "sdk",
-        jobs=6,
+        jobs=4,
         host_slots=8,
+        max_load=32.0,
         sha=SHA,
         candidate_sha="b" * 40,
         evidence=tmp_path / "evidence" / "attempt-1",
@@ -79,8 +80,9 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
         max_rounds=32,
     )
     assert argv[1:3] == ["-m", "ci.gauntlet"]
-    for flag in ("--native-luna-route", "--fail-fast", "--host-slots", "--expected-source-sha"):
+    for flag in ("--native-luna-route", "--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
         assert flag in argv
+    assert argv[argv.index("--max-load") + 1] == "32.0"
     assert "low" not in argv
     assert argv[argv.index("--candidate-sha") + 1] == "b" * 40
 
@@ -113,20 +115,21 @@ def test_sdk_cache_installs_once_per_lock_digest(tmp_path: Path, monkeypatch: py
     )
     calls: list[list[str]] = []
 
-    def fake_run(argv: list[str], *, cwd: Path | None = None, **_kw: Any) -> None:
+    def fake_logged(argv: list[str], *, cwd: Path, log: Path, **_kw: Any) -> None:
         calls.append(argv)
-        assert argv[0] == "npm" and cwd is not None
+        assert argv[0] == "npm" and log.name == "setup.log"
         package_dir = cwd / "node_modules" / "@oh-my-pi" / "pi-coding-agent"
         package_dir.mkdir(parents=True)
         (package_dir / "package.json").write_text('{"version": "18.1.18"}')
 
-    monkeypatch.setattr(qualify_setup, "run", fake_run)
-    first = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA)
+    monkeypatch.setattr(qualify_setup, "run_logged", fake_logged)
+    setup_log = tmp_path / "run" / "logs" / "setup.log"
+    first = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA, setup_log)
     assert first["lock_sha256"] == hashlib.sha256(lock).hexdigest()
     assert first["omp_version"] == "18.1.18"
     assert len(calls) == 1
     # A second driver reuses the completed prefix without another npm install.
-    second = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA)
+    second = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA, setup_log)
     assert second["root"] == first["root"] and len(calls) == 1
 
 
@@ -139,23 +142,24 @@ def test_wheel_cache_requires_a_matching_digest(tmp_path: Path, monkeypatch: pyt
     wheel_bytes = b"fake wheel bytes"
     (store / f"hol_guard-1.0.0-{tag}.whl").write_bytes(wheel_bytes)
     calls: list[list[str]] = []
-    monkeypatch.setattr(qualify_setup, "git", lambda *a, **k: "")
-    monkeypatch.setattr(qualify_setup, "run", lambda argv, **kw: calls.append(argv))
 
-    def fake_build(argv: list[str], *, cwd: Path, log: Path, **_kw: Any) -> None:
+    def fake_logged(argv: list[str], *, cwd: Path, log: Path, **_kw: Any) -> None:
         calls.append(argv)
-        dist = cwd / "native-dist"
-        dist.mkdir(parents=True, exist_ok=True)
-        (dist / f"hol_guard-1.0.0-{tag}.whl").write_bytes(b"new wheel bytes")
+        if argv[:3] == ["nice", "-n", "10"]:
+            dist = cwd / "native-dist"
+            dist.mkdir(parents=True, exist_ok=True)
+            (dist / f"hol_guard-1.0.0-{tag}.whl").write_bytes(b"new wheel bytes")
 
-    monkeypatch.setattr(qualify_setup, "run_logged", fake_build)
+    monkeypatch.setattr(qualify_setup, "run_logged", fake_logged)
 
     # A stale digest record rebuilds; the cache stores and digests the new wheel.
     (store / "wheel.sha256").write_text("0" * 64 + "\n")
     result = qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run")
     digest = hashlib.sha256(b"new wheel bytes").hexdigest()
     assert result == {"path": str(store / f"hol_guard-1.0.0-{tag}.whl"), "sha256": digest, "cached": False}
-    assert any(argv[0] == "bash" for argv in calls)
+    assert any(
+        argv[:3] == ["nice", "-n", "10"] and argv[-1].endswith("build-native-wheel-macos.sh") for argv in calls
+    )
     assert (store / "wheel.sha256").read_text().strip() == digest
 
     calls.clear()
@@ -168,8 +172,9 @@ def _args(tmp_path: Path, **overrides: Any) -> SimpleNamespace:
         "sha": SHA,
         "candidate_sha": None,
         "attempts": 2,
-        "jobs": 6,
+        "jobs": 4,
         "host_slots": 8,
+        "max_load": 32.0,
         "effort": "medium",
         "cache_root": tmp_path / "cache",
         "run_root": tmp_path / "run",
@@ -277,6 +282,16 @@ def test_product_outcomes_stop_without_retry(tmp_path: Path, monkeypatch: pytest
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
     assert len(result["attempts"]) == 1 and result["qualified"] is False
     assert not verify_calls
+
+
+def test_driver_stdout_is_exactly_one_json_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    cases = [{"id": "a", "outcome": "pass", "reason": "ok"}]
+    _fake_setup(monkeypatch, tmp_path, [_summary(cases, True)])
+    assert qualify.main(_args(tmp_path)) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out.rstrip("\n"))["qualified"] is True
+    assert len(captured.out.splitlines()) == 1
+    assert all(line.startswith("qualify:") for line in captured.err.splitlines())
 
 
 def test_a_missing_summary_or_failed_verification_never_qualifies(

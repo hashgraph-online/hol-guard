@@ -27,20 +27,15 @@ GNU_SED_DIRS = (
 LOCK_DIR = "ci/pi-exact-continuation"
 
 
-def run(argv: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
-    """Run one setup command, failing on any nonzero exit."""
-    subprocess.run(argv, cwd=cwd, env=env, check=True, timeout=3600)
-
-
-def run_logged(argv: list[str], *, cwd: Path, env: dict[str, str], log: Path) -> None:
-    """Capture a long build's output; surface only its tail on failure."""
+def run_logged(argv: list[str], *, cwd: Path, log: Path, env: dict[str, str] | None = None) -> None:
+    """Append one setup command's output to the run log; surface only its tail on failure."""
     log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("wb") as stream:
+    with log.open("ab") as stream:
         result = subprocess.run(argv, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=7200)
     if result.returncode:
         tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-20:]
         for line in tail:
-            print("qualify: build | " + line, file=sys.stderr)
+            print("qualify: setup | " + line, file=sys.stderr)
         raise RuntimeError(f"setup command failed ({result.returncode}); full log at {log}")
 
 
@@ -141,7 +136,7 @@ def ensure_commit(repo: Path, sha: str) -> None:
         git(repo, "fetch", "-q", "origin", sha)
 
 
-def ensure_sdk(cache_root: Path, repo: Path, sha: str) -> dict[str, Any]:
+def ensure_sdk(cache_root: Path, repo: Path, sha: str, log: Path) -> dict[str, Any]:
     """One pinned Oh My Pi dependency tree per candidate lock digest, built under flock."""
     package = git_show(repo, sha, f"{LOCK_DIR}/package.json")
     lock = git_show(repo, sha, f"{LOCK_DIR}/package-lock.json")
@@ -154,7 +149,7 @@ def ensure_sdk(cache_root: Path, repo: Path, sha: str) -> dict[str, Any]:
             root.mkdir(parents=True)
             (root / "package.json").write_bytes(package)
             (root / "package-lock.json").write_bytes(lock)
-            run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=root)
+            run_logged(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=root, log=log)
             installed = json.loads(
                 (root / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json").read_text()
             ).get("version")
@@ -191,21 +186,35 @@ def _cached_wheel(store: Path) -> dict[str, Any] | None:
 def _build_wheel(store: Path, repo: Path, sha: str, tag: str, target: str, deployment: str, run_root: Path) -> None:
     """Build the tested commit's wheel in the persistent warm worktree."""
     cache_root = store.parent.parent
+    setup_log = run_root / "logs" / "setup.log"
+    git_env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}
     with file_lock(cache_root / "locks" / "build.lock"):
         cached = _cached_wheel(store)
         if cached is not None:
             return
+        print("qualify: building wheel (cold builds take several minutes)", file=sys.stderr, flush=True)
         worktree = cache_root / "build-worktree"
         if not (worktree / ".git").exists():
-            git(repo, "worktree", "add", "--detach", str(worktree), sha)
+            run_logged(
+                ["git", "worktree", "add", "--detach", str(worktree), sha],
+                cwd=repo,
+                env=git_env,
+                log=setup_log,
+            )
         else:
-            git(worktree, "checkout", "--detach", "--force", sha)
-            git(worktree, "clean", "-ffdx", "-e", "rust/target", "-e", ".venv")
+            run_logged(["git", "checkout", "--detach", "--force", sha], cwd=worktree, env=git_env, log=setup_log)
+            run_logged(
+                ["git", "clean", "-ffdx", "-e", "rust/target", "-e", ".venv"],
+                cwd=worktree,
+                env=git_env,
+                log=setup_log,
+            )
         env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
-        run(
+        run_logged(
             ["uv", "sync", "--frozen", "--no-dev", "--group", "ci-test", "--no-install-project", "--python", "3.12"],
             cwd=worktree,
             env=env,
+            log=setup_log,
         )
         cargo = Path.home() / ".cargo" / "bin"
         build_env = {
@@ -218,8 +227,9 @@ def _build_wheel(store: Path, repo: Path, sha: str, tag: str, target: str, deplo
                 [str(worktree / ".venv" / "bin"), str(cargo) if cargo.is_dir() else "", env.get("PATH", "")]
             ).strip(os.pathsep),
         }
+        # nice keeps a cold Rust build from starving live Gauntlet cases on this host.
         run_logged(
-            ["bash", "scripts/ci/build-native-wheel-macos.sh"],
+            ["nice", "-n", "10", "bash", "scripts/ci/build-native-wheel-macos.sh"],
             cwd=worktree,
             env=build_env,
             log=run_root / "logs" / "wheel-build.log",

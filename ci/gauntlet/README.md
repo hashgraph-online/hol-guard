@@ -130,8 +130,9 @@ python -m ci.gauntlet run --jobs 4 \
 - SIGINT, SIGTERM and SIGHUP cancel every in-flight worker: each worker unwinds its own agent process group, daemon and resident, and the runner then force-terminates the process group of any worker that has not exited within 90 seconds. A worker also unwinds itself if the runner dies. Processes are only ever terminated through handles the runner started, never by name. If a runner or worker is killed with SIGKILL, check for leftover processes under the work root before the next run.
 - `--jobs` is rejected with `--profile contained-bun-vitest`.
 - Ordinary (allow) cases are scheduled before the short single-attempt protection cases so the run's tail stays short; evidence is still written in catalog order.
-- `--fail-fast` stops scheduling new cases and cancels in-flight workers after the first non-pass outcome, keeping partial evidence. A stopped run reports `stopped_early: true` and can never pass: `pass` requires every selected case.
+- `--fail-fast` stops scheduling new cases after the first non-pass outcome; in-flight cases finish normally and keep complete evidence. A stopped run reports `stopped_early: true` and can never pass: `pass` requires every selected case.
 - `--host-slots N` (or `GUARD_GAUNTLET_HOST_SLOTS`) caps running cases host-wide through flock'd slot files under `~/.cache/hol-guard-gauntlet/slots` (`--slot-dir` or `GUARD_GAUNTLET_SLOT_DIR` relocates them). It bounds several Gauntlet processes on one machine, not just this run's `--jobs`. The kernel frees a lease when its process dies. POSIX only; rejected on Windows, with the contained profile and with `--harness`.
+- `--max-load F` (or `GUARD_GAUNTLET_MAX_LOAD`) starts a new case only while the host's 1-minute load average is at or below F; running cases are never slowed or cancelled. POSIX only; same rejections as `--host-slots`.
 - `summary.json` reports informational `inference_usage` totals (prompt/cached/output/reasoning tokens and round counts) summed from the per-round usage each relay stored in the case evidence. Providers that do not report usage simply contribute zero. Verification does not read it.
 
 A local live inference server can be selected with `--provider-url http://127.0.0.1:PORT/v1 --allow-loopback-provider --model MODEL --provider-identity ID`. The identity must truthfully describe the actual backend. Do not label an opaque helper as DeepSeek, Codex or another model whose identity was not verified.
@@ -162,13 +163,13 @@ python -m ci.gauntlet run \
 
 ```sh
 python -m ci.gauntlet qualify --sha FULL_TESTED_SOURCE_SHA \
-  [--candidate-sha FULL_PR_HEAD_SHA] [--attempts 2] [--jobs 6]
+  [--candidate-sha FULL_PR_HEAD_SHA] [--attempts 2] [--jobs 4]
 ```
 
-- Caches under `--cache-root` (default `~/.cache/hol-guard-gauntlet`): one SDK prefix per candidate `package-lock.json` digest, and one native wheel per tested SHA and platform, built in a persistent `build-worktree` so `rust/target` stays warm. Builds serialize on a flock'd lock. Pass `--sdk-root` to skip the SDK cache or `--wheel` to skip the build (required off macOS).
-- Each attempt is a complete fresh `run --native-luna-route --fail-fast` in a pristine detached worktree under `--run-root` with its own evidence and work directories; no results are stitched. A retry happens only while attempts remain **and** every failed case is `not-exercised`, `inference-error` or `harness-error` — product outcomes (`false-positive`, `false-negative`, `task-incomplete`) always stop the loop.
+- Caches under `--cache-root` (default `~/.cache/hol-guard-gauntlet`): one SDK prefix per candidate `package-lock.json` digest, and one native wheel per tested SHA and platform, built in a persistent `build-worktree` so `rust/target` stays warm. Builds serialize on a flock'd lock and run under `nice`; all setup output lands in `run_root/logs/setup.log`. Pass `--sdk-root` to skip the SDK cache or `--wheel` to skip the build (required off macOS).
+- Each attempt is a complete fresh `run --native-luna-route --fail-fast` in a pristine detached worktree under `--run-root` with its own evidence and work directories; no results are stitched. `--max-load` (default `2 * os.cpu_count()`) gates new cases on host load. A retry happens only while attempts remain **and** every failed case is `not-exercised`, `inference-error` or `harness-error` — product outcomes (`false-positive`, `false-negative`, `task-incomplete`) always stop the loop.
 - A passing attempt is verified in-process by the driver checkout's own verifier with `--source-root` on the candidate worktree. That verification is independent only when the reported `trusted_verifier` is true (driver checkout clean and an ancestor of `origin/main`); otherwise treat the result as provisional.
-- It prints one JSON line (also written to `run_root/qualification.json`) with the sha binding, wheel/SDK identity, per-attempt records, cleanup results and the verify report, and exits 0 only when the evidence verified **and** the report is merge-qualified.
+- It prints exactly one JSON line to stdout (also written to `run_root/qualification.json`; progress lines go to stderr) with the sha binding, wheel/SDK identity, jobs/host_slots/max_load, per-attempt records, cleanup results and the verify report, and exits 0 only when the evidence verified **and** the report is merge-qualified.
 
 ### Other harnesses (`--harness`, never merge-qualifying)
 

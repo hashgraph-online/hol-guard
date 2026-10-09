@@ -41,7 +41,7 @@ from .input_evidence import (
     public_native_receipt,
 )
 from .latency import summarize_hook_latency
-from .parallel import HostSlots, run_scheduled, validate_jobs
+from .parallel import HostSlots, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
@@ -301,6 +301,7 @@ def run_suite(
     fail_fast: bool = False,
     host_slots: int | None = None,
     slot_dir: Path | None = None,
+    max_load: float | None = None,
 ) -> dict[str, Any]:
     """Run the complete profile or explicitly label a targeted exploratory run."""
     if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:
@@ -354,12 +355,14 @@ def run_suite(
         "jobs": jobs,
         "fail_fast": fail_fast,
         "host_slots": host_slots,
+        "max_load": max_load,
     }
     slot_pool = (
         HostSlots(slot_dir or Path.home() / ".cache" / "hol-guard-gauntlet" / "slots", host_slots)
         if host_slots is not None
         else None
     )
+    gate = LoadGate(max_load) if max_load is not None else None
     completed: dict[str, dict[str, Any]] = {}
 
     def record(scenario: Scenario, case: dict[str, Any]) -> None:
@@ -383,6 +386,8 @@ def run_suite(
 
     if jobs == 1:
         for scenario in selected:
+            while gate is not None and not gate():
+                time.sleep(1)
             with slot_pool.acquire() if slot_pool is not None else contextlib.nullcontext():
                 case = run_case(
                     scenario,
@@ -429,6 +434,7 @@ def run_suite(
             on_complete=lambda index, result: record(selected[index], result),
             order=order,
             should_stop=((lambda _index, result: result["assessment"]["outcome"] != "pass") if fail_fast else None),
+            admit=gate,
             slots=slot_pool,
         )
     report["finished_at"] = datetime.now(timezone.utc).isoformat()

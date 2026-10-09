@@ -56,6 +56,7 @@ def attempt_argv(
     sdk_root: Path,
     jobs: int,
     host_slots: int,
+    max_load: float,
     sha: str,
     candidate_sha: str | None,
     evidence: Path,
@@ -78,6 +79,8 @@ def attempt_argv(
         str(jobs),
         "--host-slots",
         str(host_slots),
+        "--max-load",
+        str(max_load),
         "--fail-fast",
         "--expected-source-sha",
         sha,
@@ -162,16 +165,23 @@ def run_attempt(argv: list[str], *, cwd: Path, env: dict[str, str], log: Path) -
 def prepare_candidate(repo: Path, sha: str, run_root: Path, wheel: Path) -> Path:
     """Create a pristine detached worktree and install the exact-source wheel into it."""
     candidate = run_root / "candidate"
-    qualify_setup.git(repo, "worktree", "add", "--detach", str(candidate), sha)
+    setup_log = run_root / "logs" / "setup.log"
+    qualify_setup.run_logged(
+        ["git", "worktree", "add", "--detach", str(candidate), sha],
+        cwd=repo,
+        env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1"},
+        log=setup_log,
+    )
     env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
-    qualify_setup.run(
+    qualify_setup.run_logged(
         ["uv", "sync", "--frozen", "--no-dev", "--group", "ci-test", "--no-install-project", "--python", "3.12"],
         cwd=candidate,
         env=env,
+        log=setup_log,
     )
     umask = os.umask(0o077)
     try:
-        qualify_setup.run(
+        qualify_setup.run_logged(
             [
                 "uv",
                 "pip",
@@ -184,6 +194,7 @@ def prepare_candidate(repo: Path, sha: str, run_root: Path, wheel: Path) -> Path
             ],
             cwd=candidate,
             env=env,
+            log=setup_log,
         )
     finally:
         os.umask(umask)
@@ -244,6 +255,8 @@ def main(args: Any) -> int:
         raise ValueError("--jobs must be from 1 to 8")
     if not 1 <= args.host_slots <= 64:
         raise ValueError("--host-slots must be from 1 to 64")
+    if not args.max_load > 0:
+        raise ValueError("--max-load must be positive")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_root = (args.run_root or Path("/tmp/hol-guard-gauntlet") / f"{sha[:12]}-{stamp}").resolve()
     if run_root.exists():
@@ -276,7 +289,7 @@ def main(args: Any) -> int:
                     ).get("version"),
                 }
             else:
-                sdk_info = qualify_setup.ensure_sdk(args.cache_root, REPO, sha)
+                sdk_info = qualify_setup.ensure_sdk(args.cache_root, REPO, sha, run_root / "logs" / "setup.log")
             progress(f"sdk {sdk_info['omp_version']} {sdk_info['lock_sha256'][:12]}")
             wheel_info = qualify_setup.ensure_wheel(args.cache_root, REPO, sha, run_root, wheel=args.wheel)
             progress(f"wheel {wheel_info['sha256'][:12]} cached={wheel_info['cached']}")
@@ -290,6 +303,7 @@ def main(args: Any) -> int:
                     sdk_root=Path(sdk_info["root"]),
                     jobs=args.jobs,
                     host_slots=args.host_slots,
+                    max_load=args.max_load,
                     sha=sha,
                     candidate_sha=args.candidate_sha,
                     evidence=evidence,
@@ -359,6 +373,7 @@ def main(args: Any) -> int:
             "effort": args.effort,
             "jobs": args.jobs,
             "host_slots": args.host_slots,
+            "max_load": args.max_load,
             "attempts": attempts,
             "verify": verify_result,
             "elapsed_seconds": round(time.monotonic() - started, 3),

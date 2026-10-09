@@ -117,20 +117,49 @@ def test_order_must_be_a_permutation_of_item_indices(order: Any) -> None:
         parallel.run_scheduled(["a", "b"], jobs=1, spawn=lambda n: FakeWorker(n, [], 1), order=order)
 
 
-def test_should_stop_cancels_inflight_and_returns_none_for_unrun() -> None:
+def test_should_stop_drains_inflight_and_returns_none_for_unrun() -> None:
     log: list[str] = []
-    workers = {"a": FakeWorker("a", log, 1), "b": FakeWorker("b", log, 99), "c": FakeWorker("c", log, 99)}
+    workers = {"a": FakeWorker("a", log, 1), "b": FakeWorker("b", log, 3), "c": FakeWorker("c", log, 99)}
+    spawned: list[str] = []
+
+    def spawn(name: str) -> FakeWorker:
+        spawned.append(name)
+        return workers[name]
+
     results = parallel.run_scheduled(
         list(workers),
         jobs=2,
-        spawn=lambda n: workers[n],
+        spawn=spawn,
         sleep=_no_sleep,
         grace=0.0,
         should_stop=lambda _index, result: result == "a",
     )
-    assert results == ["a", None, None]
-    assert {"terminate:b", "kill:b"} <= set(log)
-    assert "terminate:c" not in log
+    # c never starts; b finishes naturally instead of being terminated.
+    assert results == ["a", "b", None]
+    assert spawned == ["a", "b"]
+    assert not any(line.startswith(("terminate:", "kill:")) for line in log)
+
+
+def test_admit_gate_defers_spawn_until_load_drops() -> None:
+    loads = iter([10.0, 10.0, 1.0, 1.0, 1.0])
+    notes: list[str] = []
+    gate = parallel.LoadGate(4.0, load=lambda: (next(loads, 1.0), 0.0, 0.0), notify=notes.append)
+    results = parallel.run_scheduled(["a"], jobs=1, spawn=lambda n: FakeWorker(n, [], 1), admit=gate, sleep=_no_sleep)
+    assert results == ["a"]
+    assert notes == ["gauntlet: waiting for host load 10 <= 4", "gauntlet: host load 1 <= 4; resuming"]
+
+
+def test_load_gate_reports_once_per_wait_episode() -> None:
+    lines: list[str] = []
+    values = iter([9.0, 9.0, 3.0, 8.0, 8.0, 2.0])
+    gate = parallel.LoadGate(4.0, load=lambda: (next(values), 0.0, 0.0), notify=lines.append)
+    assert [gate() for _ in range(6)] == [False, False, True, False, False, True]
+    assert lines == [
+        "gauntlet: waiting for host load 9 <= 4",
+        "gauntlet: host load 3 <= 4; resuming",
+        "gauntlet: waiting for host load 8 <= 4",
+        "gauntlet: host load 2 <= 4; resuming",
+    ]
 
 
 @pytest.mark.skipif(os.name != "posix", reason="flock host slots")

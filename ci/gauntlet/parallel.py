@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 import threading
 import time
 from collections import deque
@@ -175,6 +176,35 @@ class HostSlots:
         return lease
 
 
+class LoadGate:
+    """Admit new work only while the host's one-minute load average is within budget."""
+
+    def __init__(
+        self,
+        max_load: float,
+        *,
+        load: Callable[[], tuple[float, float, float]] | None = None,
+        notify: Callable[[str], None] | None = None,
+    ):
+        self.max_load = max_load
+        self._load = load or os.getloadavg
+        self._notify = notify or (lambda line: print(line, file=sys.stderr, flush=True))
+        self._waiting = False
+
+    def __call__(self) -> bool:
+        """One notify line per wait episode: when it starts and when it ends."""
+        current = self._load()[0]
+        if current <= self.max_load:
+            if self._waiting:
+                self._waiting = False
+                self._notify(f"gauntlet: host load {current:g} <= {self.max_load:g}; resuming")
+            return True
+        if not self._waiting:
+            self._waiting = True
+            self._notify(f"gauntlet: waiting for host load {current:g} <= {self.max_load:g}")
+        return False
+
+
 def run_scheduled(
     items: Sequence[T],
     *,
@@ -183,6 +213,7 @@ def run_scheduled(
     on_complete: Callable[[int, Any], None] | None = None,
     order: Sequence[int] | None = None,
     should_stop: Callable[[int, Any], bool] | None = None,
+    admit: Callable[[], bool] | None = None,
     slots: HostSlots | None = None,
     poll_interval: float = 0.2,
     grace: float = CANCEL_GRACE_SECONDS,
@@ -192,9 +223,10 @@ def run_scheduled(
     """Run every item with at most ``jobs`` concurrent workers; results follow input order.
 
     ``order`` is the spawn order as item indices and must be a permutation of them.
-    When ``slots`` is given a worker starts only while a host slot is held, without
-    ever blocking the scheduling loop. A true ``should_stop`` result ends scheduling
-    and cancels in-flight workers; unrun items come back as ``None``.
+    When ``admit`` is given a worker starts only while it returns true, and when
+    ``slots`` is given a worker starts only while a host slot is held, without
+    ever blocking the scheduling loop. A true ``should_stop`` result stops new
+    spawns; in-flight workers finish normally and unrun items come back as ``None``.
     """
     validate_jobs(jobs)
     if order is None:
@@ -210,6 +242,8 @@ def run_scheduled(
             stop = False
             while pending or running:
                 while pending and len(running) < jobs:
+                    if admit is not None and not admit():
+                        break
                     lease = slots.try_acquire() if slots is not None else None
                     if slots is not None and lease is None:
                         # Every host slot is held; keep polling workers this tick.
@@ -235,7 +269,9 @@ def run_scheduled(
                     if should_stop is not None and should_stop(index, results[index]):
                         stop = True
                 if stop:
-                    break
+                    # Drain: already-running workers finish their own cleanup and
+                    # keep complete evidence; only never-started items are skipped.
+                    pending.clear()
                 if not finished:
                     sleep(poll_interval)
         finally:
