@@ -18,7 +18,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function permittedWatchInput(toolName: string, input: unknown, cwd = process.env.GAUNTLET_WATCH_WORKSPACE): boolean {
   if (toolName !== "bash" || !isRecord(input)) return false;
   const args = input;
-  if (args.command !== WATCH_COMMAND || Object.keys(args).some(key => !["command", "timeout", "cwd", "env", "pty", "async"].includes(key))) return false;
+  if (args.command !== WATCH_COMMAND || Object.keys(args).some(key => !["command", "timeout", "cwd", "env", "pty", "async", "i", "intent"].includes(key))) return false;
+  // The SDK may attach a plain-text intent label; it never reaches the shell.
+  if (["i", "intent"].some(key => args[key] !== undefined && typeof args[key] !== "string")) return false;
   // The pinned bash schema may emit these defaults even when no override was requested.
   if (args.env !== undefined && (!isRecord(args.env) || Object.keys(args.env).length !== 0)) return false;
   if (args.pty !== undefined && args.pty !== false) return false;

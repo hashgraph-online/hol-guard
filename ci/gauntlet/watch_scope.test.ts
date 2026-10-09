@@ -22,11 +22,16 @@ test("Watch scope accepts inert bash defaults without allowing execution overrid
   expect(permittedWatchInput("bash", {
     command: WATCH_COMMAND, timeout: 30, cwd: "/fixture", env: {}, pty: false, async: false,
   }, "/fixture")).toBe(true);
+  expect(permittedWatchInput("bash", {
+    i: "Running requested fixture command", command: WATCH_COMMAND, timeout: 120, pty: false, async: false,
+  })).toBe(true);
+  expect(permittedWatchInput("bash", { intent: "Run fixture", command: WATCH_COMMAND, timeout: 120 })).toBe(true);
   for (const overrides of [
     { env: { PYTHONPATH: "/other" } }, { env: [] }, { env: null },
     { pty: true }, { pty: 0 }, { pty: "false" },
     { async: true }, { async: 0 }, { async: "false" },
     { unknown: false }, { stdin: "print('substituted')" },
+    { i: 1 }, { i: { command: "echo substituted" } }, { intent: ["label"] },
   ]) {
     expect(permittedWatchInput("bash", { command: WATCH_COMMAND, timeout: 120, ...overrides })).toBe(false);
   }
