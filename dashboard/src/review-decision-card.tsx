@@ -487,8 +487,9 @@ export function ReviewDecisionCard(props: {
         {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
         {resolved === null && retryCannotReuseApproval(item) ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
-            Guard cannot match a retry of this exact command to an approval. Approving records your decision,
-            but {harnessName} may be blocked again. To run it now, copy the command and run it yourself.
+            Approving records your decision but does not let {harnessName} run this command; it will be blocked
+            again. To let {harnessName} run commands like this, set the matching command pattern to Allow in
+            Extensions, or copy the command and run it yourself.
           </p>
         ) : null}
         {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (

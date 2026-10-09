@@ -64,7 +64,8 @@ assert(retryCannotReuseApproval(unbound), "unbound native review is flagged as n
 assert(!retryCannotReuseApproval(bound), "bound native review is not flagged");
 const unboundCopy = buildRetryAfterApprovalCopy(unbound, "allow");
 assert(!unboundCopy.includes("within 15 minutes"), "unbound approval copy drops the retry window");
-assert(unboundCopy.includes("may be blocked again"), "unbound approval copy says the retry may be blocked");
+assert(unboundCopy.includes("will still be blocked"), "unbound approval copy says the agent stays blocked");
+assert(unboundCopy.includes("Allow in Extensions"), "unbound approval copy points to the extension pattern");
 assert(
   buildRetryAfterApprovalCopy(bound, "allow").includes("retry within 15 minutes"),
   "bound approval copy keeps the retry instruction",

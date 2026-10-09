@@ -158,7 +158,7 @@ export function buildRetryAfterApprovalCopy(
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) {
-      return `Approved. Guard cannot match a retry of this command to this approval, so ${harness} may be blocked again. Run the command yourself if you still need it.`;
+      return `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
     }
     return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }

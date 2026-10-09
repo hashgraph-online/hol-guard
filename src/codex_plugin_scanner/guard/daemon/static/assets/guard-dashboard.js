@@ -14919,7 +14919,7 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) {
-      return `Approved. Guard cannot match a retry of this command to this approval, so ${harness} may be blocked again. Run the command yourself if you still need it.`;
+      return `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
     }
     return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }
@@ -30495,9 +30495,11 @@ function ReviewDecisionCard(props) {
       !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
       resolved === null && retryCannotReuseApproval(item) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: [
-        "Guard cannot match a retry of this exact command to an approval. Approving records your decision, but ",
+        "Approving records your decision but does not let ",
         harnessName,
-        " may be blocked again. To run it now, copy the command and run it yourself."
+        " run this command; it will be blocked again. To let ",
+        harnessName,
+        " run commands like this, set the matching command pattern to Allow in Extensions, or copy the command and run it yourself."
       ] }) : null,
       item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
