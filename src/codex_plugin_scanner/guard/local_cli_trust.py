@@ -103,16 +103,37 @@ def _contributed_mcp_decision(
     artifact: GuardArtifact,
     current_action: GuardAction,
 ) -> tuple[GuardAction, str, str] | None:
+    """Return the resident's contributed decision.
+
+    The resident owns it. With no answer, an otherwise allowed call is held for
+    review rather than guessed at or allowed.
+    """
+
     from .runtime.mcp_server_grants import apply_contributed_mcp_decision
 
-    contributed = apply_contributed_mcp_decision(store, artifact, current_action)
-    if contributed is not None:
-        return contributed
-    if current_action == "review":
-        reasserted = apply_contributed_mcp_decision(store, artifact, "allow")
-        if reasserted is not None and reasserted[0] == "review":
-            return reasserted
+    try:
+        contributed = apply_contributed_mcp_decision(store, artifact, current_action)
+        if contributed is not None:
+            return contributed
+        if current_action == "review":
+            reasserted = apply_contributed_mcp_decision(store, artifact, "allow")
+            if reasserted is not None and reasserted[0] == "review":
+                return reasserted
+    except LocalCliIdentityUnavailableError:
+        return _hold_unverified_contributed_decision(current_action)
     return None
+
+
+def _hold_unverified_contributed_decision(
+    current_action: GuardAction,
+) -> tuple[GuardAction, str, str] | None:
+    if current_action not in {"allow", "warn"}:
+        return None
+    return (
+        "review",
+        "catalog-mcp-extension",
+        "This device's catalog MCP defaults could not be verified. Review this tool call before execution.",
+    )
 
 
 def _hold_unverified_mcp_decision(

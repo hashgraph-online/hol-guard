@@ -9,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner.guard.local_cli_trust import apply_local_mcp_extension_decision
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
-from codex_plugin_scanner.guard.runtime import mcp_server_grants as grants
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
@@ -20,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     validate_mcp_contribution,
 )
 
+from . import mcp_grants_python_oracle as grants
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 from .test_native_source_program import build as build

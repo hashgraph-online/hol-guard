@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime import mcp_server_grants
+
+from . import mcp_grants_python_oracle as mcp_server_grants
 
 
 def test_remote_instapods_matches_server_name_without_runtime_endpoint_identity(

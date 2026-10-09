@@ -16,7 +16,8 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     normalized_remote_mcp_url,
     validate_mcp_contribution,
 )
-from codex_plugin_scanner.guard.runtime.mcp_server_grants import matching_mcp_contribution
+
+from .mcp_grants_python_oracle import matching_mcp_contribution
 
 
 def _remote_payload(url: str) -> dict[str, object]:

@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
-from codex_plugin_scanner.guard.runtime import mcp_server_grants as grants
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.mcp_server_catalog import _values_for_payload
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
@@ -17,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     validate_mcp_contribution,
 )
 
+from . import mcp_grants_python_oracle as grants
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 
 _ROOT = Path(__file__).resolve().parents[1]

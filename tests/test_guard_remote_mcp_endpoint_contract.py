@@ -21,7 +21,8 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     normalized_remote_mcp_url,
     remote_mcp_endpoint_identity,
 )
-from codex_plugin_scanner.guard.runtime.mcp_server_grants import (
+
+from .mcp_grants_python_oracle import (
     _matches_remote_http_contribution,
     matching_mcp_contribution,
 )

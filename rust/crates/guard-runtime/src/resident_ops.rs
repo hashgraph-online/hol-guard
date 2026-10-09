@@ -224,6 +224,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::LocalMcpGrantDecide(request) => {
                 crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
             }
+            ResidentOperationV1::ContributedMcpDecide(request) => {
+                crate::contributed_mcp_decision_op::evaluate_contributed_mcp_decision_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
             }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import replace
 from pathlib import Path
 
@@ -84,11 +85,16 @@ def _layer(
     )
 
 
+_SHARED_HOME = Path(tempfile.mkdtemp(prefix="contributed-mcp-"))
+
+
 class _AuthorityStore:
     """Synthetic authenticated controls, never written to production state."""
 
     def __init__(self, layers: tuple[ExtensionControlLayer, ...] = ()) -> None:
         self.layers = layers
+        self.guard_home = _SHARED_HOME
+        self.path = _SHARED_HOME / "guard.db"
 
     def read_local_mcp_grant(self, *_args: object, **_kwargs: object) -> None:
         return None

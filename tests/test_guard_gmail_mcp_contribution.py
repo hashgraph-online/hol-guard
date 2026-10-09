@@ -9,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime import mcp_server_grants as grants
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
@@ -19,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     validate_mcp_contribution,
 )
 
+from . import mcp_grants_python_oracle as grants
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 from .test_native_source_program import build as build
 from .test_native_source_program import canonical

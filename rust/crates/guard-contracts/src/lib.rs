@@ -33,6 +33,8 @@ mod local_cli_identity;
 pub use local_cli_identity::*;
 mod local_cli_grant;
 pub use local_cli_grant::*;
+mod contributed_mcp_decision;
+pub use contributed_mcp_decision::*;
 mod local_mcp_grant;
 pub use local_mcp_grant::*;
 mod browser_mcp_intent;
