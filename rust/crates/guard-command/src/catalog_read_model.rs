@@ -405,16 +405,21 @@ impl CatalogReadSnapshot {
         )
         .into_bytes();
         body.extend_from_slice(&entry.detail);
-        body.extend_from_slice(
-            format!(
-                ",\"collections\":{{\"permissions\":{{\"total_count\":{}}},\
-                 \"rules\":{{\"total_count\":{}}},\"mcp_tools\":{{\"total_count\":{}}}}}}}",
-                entry.permissions.len(),
-                entry.rules.len(),
-                entry.mcp_tools.len()
-            )
-            .as_bytes(),
+        let mut collections = format!(
+            ",\"collections\":{{\"permissions\":{{\"total_count\":{}}},\
+             \"rules\":{{\"total_count\":{}}}",
+            entry.permissions.len(),
+            entry.rules.len(),
         );
+        // Mirror whether the source declares `mcp_tools` at all.
+        if entry.has_mcp_tools {
+            collections.push_str(&format!(
+                ",\"mcp_tools\":{{\"total_count\":{}}}",
+                entry.mcp_tools.len()
+            ));
+        }
+        collections.push_str("}}");
+        body.extend_from_slice(collections.as_bytes());
         if body.len() > MAX_CATALOG_PAGE_BYTES {
             return Err(CatalogReadError::ItemExceedsPageBudget);
         }

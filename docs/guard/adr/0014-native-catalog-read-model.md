@@ -10,7 +10,7 @@ The legacy `GET /v1/extension-controls/catalog` returns every extension, permiss
 
 - **Ownership.** The new catalog read model lives in Rust: `guard-command` module `catalog_read_model`. It owns these pieces:
   - immutable snapshot construction
-  - stable ID ordering and filtering
+  - stable ordering (index by extension ID; collections in catalog source order, which v1 consumers already see) and filtering
   - byte-aware pagination, with the envelope counted in HTML-safe escaped bytes
   - snapshot-bound cursor encoding and verification
   - per-representation ETags and `If-None-Match` evaluation

@@ -117,6 +117,8 @@ pub(crate) struct ExtensionEntry {
     pub(crate) permissions: Vec<Box<[u8]>>,
     pub(crate) rules: Vec<Box<[u8]>>,
     pub(crate) mcp_tools: Vec<Box<[u8]>>,
+    /// Whether the source declares `mcp_tools`, so detail can mirror it exactly.
+    pub(crate) has_mcp_tools: bool,
 }
 
 impl ExtensionEntry {
@@ -168,7 +170,8 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
     };
     let permissions = collection(source, "permissions", "permission_id", PERMISSION_FIELDS)?;
     let rules = collection(source, "rules", "rule_id", RULE_FIELDS)?;
-    let mcp_tools = if source.contains_key("mcp_tools") {
+    let has_mcp_tools = source.contains_key("mcp_tools");
+    let mcp_tools = if has_mcp_tools {
         collection(source, "mcp_tools", "name", MCP_TOOL_FIELDS)?
     } else {
         Vec::new()
@@ -209,11 +212,12 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
         permissions,
         rules,
         mcp_tools,
+        has_mcp_tools,
         id,
     })
 }
 
-/// Items sorted by their stable ID; duplicate IDs fail closed.
+/// Items in source order (the order v1 consumers see); duplicate IDs fail closed.
 fn collection(
     source: &Map<String, Value>,
     key: &str,
@@ -224,7 +228,8 @@ fn collection(
         .get(key)
         .and_then(Value::as_array)
         .ok_or("catalog_read_model_collection_shape")?;
-    let mut keyed = items
+    let mut seen = BTreeSet::new();
+    items
         .iter()
         .map(|item| {
             let object = item
@@ -233,16 +238,13 @@ fn collection(
             let id = object
                 .get(id_key)
                 .and_then(Value::as_str)
-                .ok_or("catalog_read_model_collection_shape")?
-                .to_owned();
-            Ok((id, encode(&Value::Object(project(object, fields, &[])?))?))
+                .ok_or("catalog_read_model_collection_shape")?;
+            if !seen.insert(id) {
+                return Err("catalog_read_model_duplicate_collection_id");
+            }
+            encode(&Value::Object(project(object, fields, &[])?))
         })
-        .collect::<Result<Vec<_>, &'static str>>()?;
-    keyed.sort_by(|left, right| left.0.cmp(&right.0));
-    if keyed.windows(2).any(|pair| pair[0].0 == pair[1].0) {
-        return Err("catalog_read_model_duplicate_collection_id");
-    }
-    Ok(keyed.into_iter().map(|(_, bytes)| bytes).collect())
+        .collect()
 }
 
 /// Explicit allowlist projection; a missing required field fails closed.

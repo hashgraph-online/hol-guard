@@ -222,21 +222,22 @@ fn index_and_detail_values_match_source_catalog() {
             permissions.len()
         );
         assert_eq!(detail["collections"]["rules"]["total_count"], rules.len());
-        let mut expected_permissions = permissions.clone();
-        expected_permissions.sort_by_key(|item| item["permission_id"].as_str().unwrap().to_owned());
+        let expected_permissions = permissions.clone();
         let route = format!("extensions/{id}/permissions");
         assert_eq!(traverse(snapshot, &route, "limit=3"), expected_permissions);
-        let mut expected_rules = rules.clone();
-        expected_rules.sort_by_key(|item| item["rule_id"].as_str().unwrap().to_owned());
+        let expected_rules = rules.clone();
         assert_eq!(
             traverse(snapshot, &format!("extensions/{id}/rules"), ""),
             expected_rules
         );
-        let mut expected_tools = source["mcp_tools"].as_array().cloned().unwrap_or_default();
-        expected_tools.sort_by_key(|item| item["name"].as_str().unwrap().to_owned());
+        let expected_tools = source["mcp_tools"].as_array().cloned().unwrap_or_default();
         assert_eq!(
-            detail["collections"]["mcp_tools"]["total_count"],
-            expected_tools.len()
+            detail["collections"]
+                .get("mcp_tools")
+                .map(|collection| collection["total_count"].clone()),
+            source
+                .get("mcp_tools")
+                .map(|_| serde_json::json!(expected_tools.len()))
         );
         let tools_route = format!("extensions/{id}/mcp-tools");
         assert_eq!(traverse(snapshot, &tools_route, "limit=10"), expected_tools);
