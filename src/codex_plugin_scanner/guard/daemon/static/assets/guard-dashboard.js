@@ -31276,6 +31276,7 @@ function ApprovalExtensionRecommendationCard(props) {
   const recommendation = props.item.extension_recommendation;
   const [confirmOpen, setConfirmOpen] = reactExports.useState(false);
   const [busy, setBusy] = reactExports.useState(false);
+  const inFlight = reactExports.useRef(false);
   const [error, setError] = reactExports.useState(null);
   const [savedMessage, setSavedMessage] = reactExports.useState(null);
   const copy = reactExports.useMemo(
@@ -31301,7 +31302,8 @@ function ApprovalExtensionRecommendationCard(props) {
   }, [busy]);
   const confirm = reactExports.useCallback(
     (credentials) => {
-      if (!recommendation || !copy) return;
+      if (!recommendation || !copy || inFlight.current) return;
+      inFlight.current = true;
       setBusy(true);
       setError(null);
       void (async () => {
@@ -31334,6 +31336,7 @@ function ApprovalExtensionRecommendationCard(props) {
         } catch (caught) {
           setError(extensionAllowFailureMessage(caught));
         } finally {
+          inFlight.current = false;
           setBusy(false);
         }
       })();

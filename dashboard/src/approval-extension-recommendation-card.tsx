@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiMiniArrowTopRightOnSquare, HiMiniExclamationTriangle, HiMiniSparkles } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import { approvalExtensionRecommendationCopy } from "./approval-extension-recommendation";
@@ -34,6 +34,8 @@ export function ApprovalExtensionRecommendationCard(props: {
   const recommendation = props.item.extension_recommendation;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Set synchronously so a second submit before the re-render cannot start another save.
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const copy = useMemo(
@@ -61,7 +63,8 @@ export function ApprovalExtensionRecommendationCard(props: {
 
   const confirm = useCallback(
     (credentials: ExtensionAllowCredentials) => {
-      if (!recommendation || !copy) return;
+      if (!recommendation || !copy || inFlight.current) return;
+      inFlight.current = true;
       setBusy(true);
       setError(null);
       void (async () => {
@@ -94,6 +97,7 @@ export function ApprovalExtensionRecommendationCard(props: {
         } catch (caught) {
           setError(extensionAllowFailureMessage(caught));
         } finally {
+          inFlight.current = false;
           setBusy(false);
         }
       })();

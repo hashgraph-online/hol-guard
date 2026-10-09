@@ -265,6 +265,11 @@ async function run(): Promise<void> {
     cardSource.includes("onDialogActiveChange={setExtensionDialogActive}") && cardSource.includes("extensionDialogActive ||"),
     "decision shortcuts pause while the always-allow dialog is open",
   );
+  const recommendationCardSource = readFileSync(new URL("./approval-extension-recommendation-card.tsx", import.meta.url), "utf8");
+  assert(
+    recommendationCardSource.includes("inFlight.current) return;") && recommendationCardSource.includes("inFlight.current = false;"),
+    "a second confirm cannot start while a save is in flight",
+  );
   console.log("approval-extension-recommendation tests passed");
 }
 
