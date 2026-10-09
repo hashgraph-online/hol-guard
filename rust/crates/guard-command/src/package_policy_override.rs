@@ -358,7 +358,7 @@ pub fn package_policy_override_evaluation(
         );
     }
     let packages = rewritten_package_decisions(map, decision);
-    let reasons = prepend_reason(map, Value::Object(reason), reason_code);
+    let reasons = prepend_reason_unless_equal(map, Value::Object(reason));
     let user_copy = Value::Object(eval.supply_chain_user_copy(
         title,
         summary,
@@ -438,16 +438,24 @@ fn package_label(map: &Map<String, Value>) -> String {
     }
     let raw = primary
         .get("requestedVersion")
-        .filter(|v| {
-            !matches!(v, Value::Null | Value::Bool(false))
-                && v.as_str() != Some("")
-                && v.as_u64() != Some(0)
-        })
+        .filter(|v| python_truthy(v))
         .or_else(|| primary.get("resolvedVersion"));
     let version = raw.and_then(Value::as_str);
     match version {
         Some(v) if !v.is_empty() => format!("`{name}@{v}`"),
         _ => format!("`{name}`"),
+    }
+}
+
+/// Python truthiness for a JSON value (`x or y` selection).
+fn python_truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(flag) => *flag,
+        Value::Number(number) => number.as_f64().is_some_and(|n| n != 0.0),
+        Value::String(text) => !text.is_empty(),
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(items) => !items.is_empty(),
     }
 }
 
@@ -464,6 +472,17 @@ fn prepend_reason(map: &Map<String, Value>, reason: Value, code_to_drop: &str) -
                 out.push(item.clone());
             }
         }
+    }
+    out
+}
+
+/// `_package_policy_override_evaluation` keeps every existing reason that is
+/// not *equal* to the new one (`item != reason`), unlike the code-keyed
+/// filter used by the current-policy and rejected-reuse rewrites.
+fn prepend_reason_unless_equal(map: &Map<String, Value>, reason: Value) -> Vec<Value> {
+    let mut out = vec![reason.clone()];
+    if let Some(reasons) = map.get("reasons").and_then(Value::as_array) {
+        out.extend(reasons.iter().filter(|item| **item != reason).cloned());
     }
     out
 }

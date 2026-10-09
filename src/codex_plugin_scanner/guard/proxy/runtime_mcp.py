@@ -36,11 +36,11 @@ from ..daemon.manager import load_guard_daemon_auth_token
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
     _package_evaluation_requires_external_archive_binding,
-    _package_policy_override_evaluation,
     _resolve_stored_package_policy_override,
     _verified_external_archive_replacements,
     compose_current_package_policy_action,
     evaluate_package_request_artifact,
+    package_external_archive_override,
     package_request_policy_hash,
 )
 from ..mcp_fresh_approval import fresh_claim_allows_reapproval
@@ -2380,15 +2380,9 @@ class RuntimeMcpGuardProxy:
             evaluation=fresh_package_resolution.evaluation,
         )
         if bound_request is None:
-            binding_failure = _package_policy_override_evaluation(
+            binding_failure = package_external_archive_override(
                 fresh_package_resolution.evaluation,
-                decision="block",
-                policy_action="block",
-                title="External archive blocked",
-                summary="The inspected external archive could not be bound to the forwarded installer request.",
-                harness_message="HOL Guard blocked an external archive whose digest-bound blob was unavailable.",
-                reason_code="external_archive_digest_mismatch",
-                reason_message="The inspected external archive changed or was absent from the forwarded request.",
+                variant="mcp_unbound",
             )
             response = self._terminal_package_response(
                 message_id=message.get("id"),

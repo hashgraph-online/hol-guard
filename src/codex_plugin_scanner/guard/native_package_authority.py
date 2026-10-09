@@ -57,6 +57,7 @@ def _resident_request(
     guard_home: Path,
     timeout_seconds: float,
     deadline_monotonic: float | None = None,
+    required_features: tuple[str, ...] = (_PACKAGE_AUTHORITY_FEATURE,),
 ) -> dict[str, object] | None:
     """Transport shared by package-authority operations; callers own failure handling."""
     if deadline_monotonic is not None:
@@ -68,7 +69,7 @@ def _resident_request(
     if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
         return None
     features = set(status.capabilities.features)
-    if _RESIDENT_PROTOCOL_FEATURE not in features or _PACKAGE_AUTHORITY_FEATURE not in features:
+    if _RESIDENT_PROTOCOL_FEATURE not in features or any(item not in features for item in required_features):
         return None
     remaining_seconds = timeout_seconds if deadline_monotonic is None else deadline_monotonic - time.monotonic()
     if remaining_seconds <= 0:
