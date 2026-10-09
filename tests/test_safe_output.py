@@ -109,28 +109,57 @@ class _SharingViolationApi:
         raise AssertionError("an accepted directory handle must stay open")
 
 
-def _fake_sharing_violation(monkeypatch, wait_seconds: float) -> None:
+class _FakeClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+def _fake_windows_errors(monkeypatch, error_code: int) -> _FakeClock:
     from codex_plugin_scanner import safe_output_windows
 
-    monkeypatch.setattr(safe_output_windows.ctypes, "get_last_error", lambda: 32, raising=False)
+    clock = _FakeClock()
+    monkeypatch.setattr(safe_output_windows, "time", clock)
+    monkeypatch.setattr(safe_output_windows.ctypes, "get_last_error", lambda: error_code, raising=False)
     monkeypatch.setattr(safe_output_windows.ctypes, "FormatError", lambda code: "in use", raising=False)
-    monkeypatch.setattr(safe_output_windows, "_SHARING_VIOLATION_WAIT_SECONDS", wait_seconds)
+    return clock
 
 
 def test_windows_directory_lock_waits_out_a_short_lived_writer(tmp_path: Path, monkeypatch):
     from codex_plugin_scanner import safe_output_windows
 
-    _fake_sharing_violation(monkeypatch, 3.0)
+    _fake_windows_errors(monkeypatch, 32)
     api = _SharingViolationApi(busy_opens=3)
     assert safe_output_windows._open_locked_directory(api, tmp_path) == 7
     assert api.opens == 4
 
 
-def test_windows_directory_lock_gives_up_on_a_held_writer(tmp_path: Path, monkeypatch):
+def test_windows_directory_lock_gives_up_once_the_wait_is_spent(tmp_path: Path, monkeypatch):
     from codex_plugin_scanner import safe_output_windows
 
-    _fake_sharing_violation(monkeypatch, 0.0)
+    clock = _fake_windows_errors(monkeypatch, 32)
+    api = _SharingViolationApi(busy_opens=1_000)
+    with pytest.raises(OSError, match="unable to lock output directory"):
+        safe_output_windows._open_locked_directory(api, tmp_path)
+    wait = safe_output_windows._SHARING_VIOLATION_WAIT_SECONDS
+    assert wait <= clock.now < wait + 0.1
+    assert max(clock.sleeps) == 0.1
+    assert api.opens == len(clock.sleeps) + 1
+
+
+def test_windows_directory_lock_does_not_retry_other_errors(tmp_path: Path, monkeypatch):
+    from codex_plugin_scanner import safe_output_windows
+
+    clock = _fake_windows_errors(monkeypatch, 5)
     api = _SharingViolationApi(busy_opens=1_000)
     with pytest.raises(OSError, match="unable to lock output directory"):
         safe_output_windows._open_locked_directory(api, tmp_path)
     assert api.opens == 1
+    assert clock.sleeps == []
