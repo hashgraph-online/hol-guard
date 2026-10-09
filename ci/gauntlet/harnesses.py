@@ -279,7 +279,11 @@ class CredentialSeed:
             if refreshed == original or not refreshed.strip():
                 continue
             with _login_lock(source):
-                if source.read_bytes() != original:
+                try:
+                    current = source.read_bytes()
+                except FileNotFoundError:
+                    continue  # the operator logged out during the case; do not recreate the login
+                if current != original:
                     continue
                 descriptor, name = tempfile.mkstemp(prefix=f".{source.name}.", suffix=".gauntlet", dir=source.parent)
                 temporary = Path(name)

@@ -60,7 +60,9 @@ def _request(payload: dict[str, Any]) -> tuple[str | None, str | None]:
     """The shell command and file path a hook request names, in any harness's shape."""
     tool_input = payload.get("tool_input")
     fields = tool_input if isinstance(tool_input, dict) else {}
-    command = fields.get("command", payload.get("command"))
+    command = next(
+        (v for v in (fields.get("command"), fields.get("cmd"), payload.get("command")) if v is not None), None
+    )
     if str(payload.get("tool_name", "")).lower() == "apply_patch":
         command = None
     path = next(

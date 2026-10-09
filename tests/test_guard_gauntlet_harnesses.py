@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from ci.gauntlet.catalog import load_catalog
-from ci.gauntlet.harness_judge import assess_harness_case, effective_decision
+from ci.gauntlet.harness_judge import assess_harness_case, effective_decision, guard_decisions
 from ci.gauntlet.harnesses import CredentialSeed, adapter, read_transcript
 from ci.gauntlet.proofs import required_checks
 
@@ -297,6 +297,24 @@ def test_credential_seed_writes_back_only_when_the_operator_copy_is_unchanged(tm
     (fixture / ".codex" / "auth.json").write_text("stale-refresh")
     second.write_back()
     assert login.read_text() == "operator-relogin"
+
+
+def test_logout_during_a_case_is_not_undone_by_write_back(tmp_path):
+    source, fixture = tmp_path / "real", tmp_path / "fixture"
+    login = source / ".codex" / "auth.json"
+    login.parent.mkdir(parents=True)
+    login.write_text("old")
+    seed = CredentialSeed(adapter("codex"), source, fixture)
+    (fixture / ".codex" / "auth.json").write_text("refreshed")
+    login.unlink()
+    seed.write_back()
+    assert not login.exists()
+
+
+def test_shell_text_under_cmd_counts_as_the_reviewed_command():
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "exec_command", "tool_input": {"cmd": "git status"}}
+    rows = [{"payload": payload, "response": {}, "receipt": {"event_name": "PreToolUse", "decision": "allow"}}]
+    assert guard_decisions(rows)[0]["command"] == "git status"
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
