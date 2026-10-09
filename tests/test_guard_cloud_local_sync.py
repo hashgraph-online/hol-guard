@@ -183,10 +183,12 @@ def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
-    workspace_script = tmp_path / "workspace" / "workspace.js"
-    workspace_script.parent.mkdir(parents=True, exist_ok=True)
-    workspace_script.write_text("console.log('ok');\n", encoding="utf-8")
-    artifact = _artifact(tmp_path)
+    # Graph queueing does not depend on the host Node installation or repo cwd.
+    # Keep real native launch identity, using the owned launcher pattern below.
+    launcher = tmp_path / "mcp-launcher"
+    launcher.write_text("#!/bin/sh\nexit 0\n")
+    launcher.chmod(0o700)
+    artifact = replace(_artifact(tmp_path), command=str(launcher), args=())
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
     evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)

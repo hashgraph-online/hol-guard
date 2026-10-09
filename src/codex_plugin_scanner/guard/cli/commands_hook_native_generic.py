@@ -149,7 +149,6 @@ from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
     build_approval_context_token,
     build_runtime_launch_identity,
-    parse_approval_context_token,
 )
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
@@ -607,20 +606,15 @@ def _generic_hook_approval_reuse(
             saved_action = "allow"
             saved_present = True
             validation_reason = cast(ApprovalReuseValidationFailure, diagnosed_reason)
-    durable_exact_approval = (
-        validation_reason is None
-        and decision is not None
-        and decision.get("action") == "allow"
-        and decision.get("source") == "approval-gate"
-        and decision.get("scope") == "artifact"
-        and decision.get("expires_at") is None
-        and parse_approval_context_token(decision.get("artifact_hash")) is not None
-    )
+    # Qualification is produced by native authenticated store lookup.
+    fresh_local_approval = decision is not None and decision.get("fresh_local_approval") is True
+    durable_exact_approval = decision is not None and decision.get("durable_exact_approval") is True
     reuse_native = evaluate_approval_reuse(
         current_action,
         saved_action,
         saved_decision_present=saved_present,
         validation_reason=validation_reason,
+        fresh_local_approval=fresh_local_approval,
         durable_exact_approval=durable_exact_approval,
     )
     reuse = with_saved_artifact_hash_provenance(
@@ -718,9 +712,10 @@ def run_native_generic_payload(
     payload: Mapping[str, object],
     runtime_workspace: Path | None,
     store: GuardStore,
-    post_claim_revalidator: Callable[[str], int | None] | None = None,
+    post_claim_revalidator: Callable[[str, Mapping[str, object]], int | None] | None = None,
     runtime_artifact_checked: bool = False,
     _claimed_saved_allow_hash: str | None = None,
+    _claimed_saved_approval: Mapping[str, object] | None = None,
     _claim_saved_approval: bool = True,
     _post_claim_refresh_failed: bool = False,
     native_edge_result: Mapping[str, object] | None = None,
@@ -985,7 +980,10 @@ def run_native_generic_payload(
             # racing with it) cannot inherit the stale pre-claim allow.
             if post_claim_revalidator is not None:
                 try:
-                    refreshed_result = post_claim_revalidator(runtime_artifact_hash)
+                    refreshed_result = post_claim_revalidator(
+                        runtime_artifact_hash,
+                        stored_policy_decision,
+                    )
                 except Exception:
                     refreshed_result = None
                 if refreshed_result is not None:
@@ -1003,6 +1001,7 @@ def run_native_generic_payload(
                 post_claim_revalidator=None,
                 runtime_artifact_checked=runtime_artifact_checked,
                 _claimed_saved_allow_hash=runtime_artifact_hash,
+                _claimed_saved_approval=stored_policy_decision,
                 _claim_saved_approval=False,
                 _post_claim_refresh_failed=_post_claim_refresh_failed,
             )
@@ -1031,6 +1030,20 @@ def run_native_generic_payload(
         )
         if ignored_integrity is not None:
             claimed_validation_reason = "approval_reuse_integrity_failure"
+        # Native lookup re-authenticates the row. Unrelated authority writes
+        # advance global revision and integrity ledger counters, not the grant.
+        if _claimed_saved_approval is None or (
+            store.approval_reuse_claim_disposition(_claimed_saved_approval) != "consumed"
+            and (
+                stored_policy_decision is None
+                or any(
+                    stored_policy_decision.get(key) != value
+                    for key, value in _claimed_saved_approval.items()
+                    if key not in {"_approval_authority_revision", "integrity_generation"}
+                )
+            )
+        ):
+            claimed_validation_reason = APPROVAL_REUSE_CLAIM_FAILED
 
         # An unclaimed allow found by the fresh lookup is evidence only. The
         # already-claimed exact row may satisfy a freshly recomputed review;
@@ -1048,14 +1061,8 @@ def run_native_generic_payload(
             "allow",
             saved_decision_present=True,
             validation_reason=claimed_validation_reason,
-            durable_exact_approval=(
-                claimed_validation_reason is None
-                and stored_policy_decision is not None
-                and stored_policy_decision.get("source") == "approval-gate"
-                and stored_policy_decision.get("scope") == "artifact"
-                and stored_policy_decision.get("expires_at") is None
-                and parse_approval_context_token(stored_policy_decision.get("artifact_hash")) is not None
-            ),
+            fresh_local_approval=(_claimed_saved_approval or {}).get("fresh_local_approval") is True,
+            durable_exact_approval=(_claimed_saved_approval or {}).get("durable_exact_approval") is True,
         )
         approval_reuse = with_saved_artifact_hash_provenance(
             post_claim_reuse

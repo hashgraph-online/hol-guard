@@ -60,6 +60,13 @@ def snapshot(tmp_path, monkeypatch):
     return root, output
 
 
+def test_snapshot_leaves_scripts_directory_off_the_import_path(snapshot, tmp_path):
+    root, _output = snapshot
+    scripts_dir = str((ROOT / "scripts").resolve())
+    bundle.create_bundle(root, tmp_path / "again", SHA)
+    assert scripts_dir not in sys.path
+
+
 def test_snapshot_is_deterministic_and_source_bound(snapshot, tmp_path):
     root, output = snapshot
     second = tmp_path / "second"

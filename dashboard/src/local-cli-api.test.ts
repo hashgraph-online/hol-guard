@@ -360,7 +360,7 @@ assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
 {
   const observed = { ...item, cli_id: "local-cli.mcp-observed", name: "Observed connector", surface: "mcp" as const,
     source_label: "Synthetic host", state: "unset" as const, suggestable: true, last_seen_at: "2026-09-27T12:00:00Z" };
-  const hidden = { ...observed, cli_id: "local-cli.hidden", surface: "cli" as const };
+  const hidden = { ...observed, cli_id: "local-cli.hidden", surface: "cli" as const, suggestable: false };
   const before = JSON.stringify([item, observed, hidden]);
   const workspace = connectorWorkspaceItems([item, observed, hidden]);
   assert.equal(workspace[0]?.cli_id, observed.cli_id);

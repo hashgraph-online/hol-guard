@@ -14,6 +14,8 @@ use crate::{
     SERVER_PROOF_LABEL,
 };
 
+use crate::resident_diagnostics::{observe, Phase};
+
 pub(crate) struct ExpectedProcessIdentity<'a> {
     pub(crate) process_id: u32,
     pub(crate) start_marker: &'a str,
@@ -316,13 +318,17 @@ pub(crate) fn send_request_for_digest_detailed(
     identity: &ExpectedProcessIdentity<'_>,
 ) -> Result<Vec<u8>, ResidentClientError> {
     let started = std::time::Instant::now();
-    let mut stream =
-        connect(transport, endpoint, timeout, identity).map_err(ResidentClientError::fatal)?;
+    let mut stream = observe(Phase::ClientConnect, || {
+        connect(transport, endpoint, timeout, identity)
+    })
+    .map_err(ResidentClientError::fatal)?;
     let remaining = timeout.saturating_sub(started.elapsed());
     if remaining.is_zero() {
         return Err("native_client_deadline_exceeded".to_owned().into());
     }
-    let nonce = authenticate(&mut *stream, token, remaining)?;
+    let nonce = observe(Phase::ClientAuthenticate, || {
+        authenticate(&mut *stream, token, remaining)
+    })?;
     let remaining = timeout.saturating_sub(started.elapsed());
     if remaining.is_zero() {
         return Err("native_client_deadline_exceeded".to_owned().into());
@@ -333,11 +339,15 @@ pub(crate) fn send_request_for_digest_detailed(
     stream
         .set_resident_write_timeout(Some(remaining))
         .map_err(|_| "native_client_timeout_failed".to_owned())?;
-    let request_id = write_request(&mut *stream, token, &nonce, payload)?;
+    let request_id = observe(Phase::ClientRequestWrite, || {
+        write_request(&mut *stream, token, &nonce, payload)
+    })?;
     if started.elapsed() >= timeout {
         return Err("native_client_deadline_exceeded".to_owned().into());
     }
-    read_committed_response(&mut *stream, &request_id)
+    observe(Phase::ClientResponseRead, || {
+        read_committed_response(&mut *stream, &request_id)
+    })
 }
 
 pub(crate) fn send_request_for_digest(

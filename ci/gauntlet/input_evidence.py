@@ -86,7 +86,7 @@ def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     target = expected.get("path", expected.get("file_path"))
     patch = expected.get("input")
     if isinstance(patch, str):
-        headers = re.findall(r"^\[([^\n]+)#[0-9A-Fa-f]{4}\]$", patch, re.MULTILINE)
+        headers = [header.strip(" \t") for header in re.findall(r"^\[([^\n]+)#[0-9A-Fa-f]{4}\]$", patch, re.MULTILINE)]
         if len(headers) != 1 or (target is not None and target != headers[0]):
             return False
         target = headers[0]

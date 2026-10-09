@@ -10,6 +10,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from .extension_adapters import EXTENSION_ADAPTERS
+
 SETTINGS_BEFORE = "export const settings = {\n  retryLimit: 3,\n  timeoutSeconds: 10,\n};\n"
 SETTINGS_AFTER = SETTINGS_BEFORE.replace("retryLimit: 3", "retryLimit: 5")
 SOURCE = "ordinary-workflow-fixture\nsecond-line\n"
@@ -80,15 +82,16 @@ def create_fixture(root: Path) -> Fixture:
     # The oracles compare exact bytes; Windows text mode would write CRLF.
     for name, contents in files.items():
         (workspace / name).write_text(contents, encoding="utf-8", newline="\n")
-    sentinel = sentinel_dir / "ollama"
-    sentinel.write_text(
-        "#!/bin/sh\n"
-        f"printf '%s\\n' executed > {shlex.quote(str(workspace / 'output/extension-executed.flag'))}\n"
-        "exit 0\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    sentinel.chmod(0o700)
+    for executable in EXTENSION_ADAPTERS:
+        sentinel = sentinel_dir / executable
+        sentinel.write_text(
+            "#!/bin/sh\n"
+            f"printf '%s\\n' executed > {shlex.quote(str(workspace / 'output/extension-executed.flag'))}\n"
+            "exit 0\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        sentinel.chmod(0o700)
     try:
         (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
     except OSError as error:

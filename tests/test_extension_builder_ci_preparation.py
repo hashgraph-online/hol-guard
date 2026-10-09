@@ -236,6 +236,24 @@ def test_stale_contributor_branch_prepares_on_merge_without_rebase(checkout):
     assert json.loads(contribution.read_bytes()) == {"id": "mcp.new-server"}
 
 
+def test_trust_binding_parser_imports_without_installed_dependencies():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            "import sys; sys.path.insert(0, 'src'); "
+            "from codex_plugin_scanner.guard.runtime.extension_trust import trust_binding_index; "
+            "assert 'codex_plugin_scanner.scanner' not in sys.modules",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_builder_stages_trust_before_dependency_install_and_native_build():
     workflow = yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text())
     events = workflow.get("on", workflow.get(True))
