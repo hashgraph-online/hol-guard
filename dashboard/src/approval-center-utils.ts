@@ -130,6 +130,14 @@ export function retryCannotReuseApproval(item: GuardApprovalRequest): boolean {
   return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 
+/** Explain, before approval, what actually lets the agent run a command whose one-time approval cannot. */
+export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
+  const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
+  return item.exact_action_persistence_eligible === true
+    ? `${base} To let ${harness} run this exact command, choose "Always allow exact action".`
+    : `${base} To let ${harness} run commands like this, set the matching command pattern to Allow in Extensions, or copy the command and run it yourself.`;
+}
+
 /**
  * Receipts are looked up by harness and artifact id. For native tool calls that id names
  * the tool (for example `omp:native-pretool:bash`), so only a receipt for the same action
@@ -158,7 +166,9 @@ export function buildRetryAfterApprovalCopy(
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) {
-      return `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
+      return item.exact_action_persistence_eligible === true
+        ? `Decision recorded. ${harness} will still be blocked on this command. To let it run this exact command, approve it with "Always allow exact action", or run it yourself.`
+        : `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
     }
     return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }

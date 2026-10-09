@@ -17,6 +17,7 @@ import {
   receiptDescribesRequest,
   requestResolutionBlockReason,
   retryCannotReuseApproval,
+  retryCannotReuseApprovalHint,
 } from "./approval-center-utils";
 import { GuardRequestResolutionError } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
@@ -56,6 +57,13 @@ import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
+
+/** Lock and missing-code errors mean the gate snapshot is stale; refresh it before retrying. */
+export function approvalGateRefreshNeeded(err: unknown): boolean {
+  if (!(err instanceof GuardRequestResolutionError)) return false;
+  const code = err.payload?.["error"];
+  return (err.status === 423 && code === "approval_gate_locked") || code === "approval_gate_totp_required";
+}
 
 /** A decision only describes the request it was made on, never the request shown after it. */
 export function resolvedStateForItem<T extends { requestId: string }>(
@@ -226,11 +234,7 @@ export function ReviewDecisionCard(props: {
       } catch (err) {
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
-        if (
-          err instanceof GuardRequestResolutionError &&
-          err.status === 423 &&
-          err.payload?.["error"] === "approval_gate_locked"
-        ) {
+        if (approvalGateRefreshNeeded(err)) {
           setSubmitting(null);
           try {
             const refreshedGate = await fetchResolvedApprovalGate();
@@ -303,6 +307,8 @@ export function ReviewDecisionCard(props: {
           void handleResolve(action);
           return;
         }
+        // The dialog renders from this state; keep the fresh gate so it asks for a code.
+        if (fresh) setEffectiveApprovalGate(fresh);
         setPendingAction(action);
         setPendingContractKey(decisionContractKey);
       })();
@@ -487,9 +493,7 @@ export function ReviewDecisionCard(props: {
         {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
         {resolved === null && retryCannotReuseApproval(item) ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
-            Approving records your decision but does not let {harnessName} run this command; it will be blocked
-            again. To let {harnessName} run commands like this, set the matching command pattern to Allow in
-            Extensions, or copy the command and run it yourself.
+            {retryCannotReuseApprovalHint(item, harnessName)}
           </p>
         ) : null}
         {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (

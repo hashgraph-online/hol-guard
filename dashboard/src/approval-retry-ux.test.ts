@@ -3,10 +3,12 @@ import {
   buildRetryAfterApprovalCopy,
   receiptDescribesRequest,
   retryCannotReuseApproval,
+  retryCannotReuseApprovalHint,
   summarizeBulkApproveSelection,
 } from "./approval-center-utils";
+import { GuardRequestResolutionError } from "./guard-api";
 import { bulkApprovalRiskTier, groupDuplicates } from "./queue-state";
-import { resolvedStateForItem } from "./review-decision-card";
+import { approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-card";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -70,6 +72,36 @@ assert(
   buildRetryAfterApprovalCopy(bound, "allow").includes("retry within 15 minutes"),
   "bound approval copy keeps the retry instruction",
 );
+
+// #3838: where "Always allow exact action" is offered, point to it instead of extension patterns.
+const alwaysEligible = { ...unbound, exact_action_persistence_eligible: true };
+assert(
+  buildRetryAfterApprovalCopy(alwaysEligible, "allow").includes("Always allow exact action"),
+  "eligible approval copy points to Always allow exact action",
+);
+assert(
+  retryCannotReuseApprovalHint(alwaysEligible, "Oh My Pi").includes("Always allow exact action"),
+  "eligible pre-approval hint points to Always allow exact action",
+);
+assert(
+  retryCannotReuseApprovalHint(unbound, "Oh My Pi").includes("Allow in Extensions"),
+  "ineligible pre-approval hint points to extension patterns",
+);
+
+// #3855: a missing-code error refreshes the stale gate snapshot, like a lock does.
+assert(
+  approvalGateRefreshNeeded(new GuardRequestResolutionError(403, { error: "approval_gate_totp_required" }, "x")),
+  "missing TOTP code refreshes the gate",
+);
+assert(
+  approvalGateRefreshNeeded(new GuardRequestResolutionError(423, { error: "approval_gate_locked" }, "x")),
+  "locked gate still refreshes",
+);
+assert(
+  !approvalGateRefreshNeeded(new GuardRequestResolutionError(409, { error: "already_resolved" }, "x")),
+  "unrelated errors do not refresh the gate",
+);
+assert(!approvalGateRefreshNeeded(new Error("network")), "non-resolution errors do not refresh the gate");
 
 // #3835: a decision made on one request never applies to the request shown after it.
 const decided = { requestId: unbound.request_id, action: "allow" as const, persistedExactAction: false };
