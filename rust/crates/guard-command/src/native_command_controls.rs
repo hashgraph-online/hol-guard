@@ -399,7 +399,12 @@ impl CompiledNativeCommandControls {
             reason = "native_command_extension_evaluation_failed";
         }
         strengthen(&mut result, floor, reason);
-        add_authority_repair_hint(&mut result, &self.binding.health);
+        let global_lockdown = self
+            .binding
+            .layers
+            .iter()
+            .any(|layer| layer.global_lockdown);
+        add_authority_repair_hint(&mut result, &self.binding.health, global_lockdown);
         result
     }
 

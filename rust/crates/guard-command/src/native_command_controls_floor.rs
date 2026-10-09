@@ -58,19 +58,23 @@ pub(super) fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &st
 }
 
 /// Tell the user how to restore protection when an unhealthy local authority,
-/// not an administrator lockdown, is what blocks every command.
-pub(super) fn add_authority_repair_hint(result: &mut PreToolResultV1, health: &str) {
-    if result.reason_code != "native_command_control_authority_block" {
+/// not an administrator lockdown, is what blocks every command. Acknowledging
+/// a degraded authority keeps the block, so only recovery is suggested.
+pub(super) fn add_authority_repair_hint(
+    result: &mut PreToolResultV1,
+    health: &str,
+    global_lockdown: bool,
+) {
+    if global_lockdown || result.reason_code != "native_command_control_authority_block" {
         return;
     }
-    let hint = match health {
-        "degraded-unacknowledged" => {
-            " Review the warning and run `hol-guard command controls acknowledge-degraded`, or run `hol-guard command controls recover-authority` in a terminal to restore protection."
-        }
-        "degraded-acknowledged" | "tampered" | "recovery-required" => {
-            " Run `hol-guard command controls recover-authority` in a terminal to restore protection."
-        }
-        _ => return,
-    };
-    result.reason.push_str(hint);
+    if !matches!(
+        health,
+        "degraded-unacknowledged" | "degraded-acknowledged" | "tampered" | "recovery-required"
+    ) {
+        return;
+    }
+    result.reason.push_str(
+        " Run `hol-guard command controls recover-authority` in a terminal to restore protection.",
+    );
 }

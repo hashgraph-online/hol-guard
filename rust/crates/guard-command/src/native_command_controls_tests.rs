@@ -50,7 +50,18 @@ fn test_containment_requirement_cannot_override_lockdown() {
                 .ends_with("readonly_containment_required"),
             "{command}"
         );
+        assert!(!result.reason.contains("recover-authority"), "{command}");
     }
+    // An administrator lockdown is not repaired by local recovery.
+    binding.health = "tampered".into();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let result = evaluate(&binding, "python3 -m pytest -q");
+    assert_eq!(result.minimum_action, "block");
+    assert!(
+        !result.reason.contains("recover-authority"),
+        "{}",
+        result.reason
+    );
 }
 
 #[test]
@@ -252,7 +263,12 @@ fn diagnostic_shell_commands_preserve_an_approvable_review() {
     let payload = serde_json::json!({"tool_name": "Bash", "tool_input": {
         "command": "timeout 120 ~/.local/bin/hol-guard doctor 2>&1 | tail -45"
     }});
-    for health in ["degraded-unacknowledged", "tampered", "recovery-required"] {
+    for health in [
+        "degraded-unacknowledged",
+        "degraded-acknowledged",
+        "tampered",
+        "recovery-required",
+    ] {
         let mut degraded = binding.clone();
         degraded.health = health.into();
         degraded.effective_digest = degraded.compute_effective_digest().unwrap();
@@ -276,9 +292,8 @@ fn diagnostic_shell_commands_preserve_an_approvable_review() {
             "{health}: {}",
             result.reason
         );
-        assert_eq!(
-            result.reason.contains("acknowledge-degraded"),
-            health == "degraded-unacknowledged",
+        assert!(
+            !result.reason.contains("acknowledge-degraded"),
             "{health}: {}",
             result.reason
         );

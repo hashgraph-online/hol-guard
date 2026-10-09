@@ -16,7 +16,7 @@ from ..approval_gate import (
     public_config,
     require_extension_control,
 )
-from ..daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
+from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
 from ..daemon.runtime_peer import load_guard_daemon_endpoint
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -137,6 +137,30 @@ def _enroll(guard_home: Path, actor: str, output_stream: TextIO | None) -> int:
     return 0
 
 
+def _install_recovered_authority_in_daemon(guard_home: Path) -> None:
+    """Hand recovered authority to a running daemon.
+
+    Recovery can reset the authority revision, which a plain refresh rejects as
+    moving backwards. The daemon's recovery route replaces a tampered snapshot
+    with the recovered store without another approval, so a failure there means
+    the live runtime is still blocking and must not be reported as success.
+    """
+
+    try:
+        client = _client(guard_home)
+    except GuardDaemonRequestError:
+        return
+    try:
+        _ = client.recover_extension_control_authority({})
+    except GuardDaemonTransportError:
+        return
+    except GuardDaemonRequestError as error:
+        if error.code != "authority_not_recoverable":
+            raise
+        with contextlib.suppress(GuardDaemonRequestError):
+            _ = client.refresh_extension_controls()
+
+
 def _recover_authority(
     guard_home: Path,
     *,
@@ -178,8 +202,7 @@ def _recover_authority(
             catalog_digest=catalog_digest,
             migration_registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         )
-        with contextlib.suppress(GuardDaemonRequestError):
-            _ = _client(guard_home).refresh_extension_controls()
+        _install_recovered_authority_in_daemon(guard_home)
         response: dict[str, object] = {
             "health": view.health.value,
             "revision": view.revision,
