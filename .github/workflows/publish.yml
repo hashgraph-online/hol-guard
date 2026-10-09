@@ -126,7 +126,9 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          # Full commit and tag history for ancestry checks; blobs only for the checked-out tree.
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       - name: Retain workflow wheel-size policy before source checkout
         shell: bash
@@ -1150,6 +1152,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
       - name: Reserve exact alpha tag
         env:
@@ -1285,6 +1288,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
@@ -1461,6 +1465,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
@@ -1570,6 +1575,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
       - name: Bind stable tag to the exact main source
         env:
@@ -1638,6 +1644,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
@@ -1840,6 +1847,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ github.sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -1907,6 +1915,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
       - name: Checkout trusted release validation tooling
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -2142,6 +2151,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:

@@ -31,3 +31,36 @@ def test_platform_feed_writer_queue_retains_pending_versions(name: str, publishe
     assert "gh release upload" in commands
     assert "gh release edit" not in commands
     assert "gh release create" not in commands
+
+
+@pytest.mark.parametrize(
+    ("name", "publisher"),
+    [
+        ("desktop-core-alpha-feed.yml", "publish-macos-arm64"),
+        ("desktop-core-linux-feed.yml", "publish-linux-x64"),
+    ],
+)
+def test_trusted_dispatch_skips_relint_but_other_events_require_it(name: str, publisher: str) -> None:
+    workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / name
+    config = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+    assert config["jobs"]["validate"]["if"] == "github.event_name != 'workflow_dispatch'"
+    job = config["jobs"][publisher]
+    assert job["needs"] == "validate"
+    condition = job["if"]
+    assert condition.startswith("${{ !cancelled() && github.event_name != 'pull_request' &&")
+    assert "needs.validate.result == 'success' ||" in condition
+    assert "(github.event_name == 'workflow_dispatch' && needs.validate.result == 'skipped')" in condition
+
+
+@pytest.mark.parametrize("name", ["desktop-core-alpha-feed.yml", "desktop-core-linux-feed.yml"])
+def test_named_core_version_discovers_one_release(name: str) -> None:
+    workflow = Path(__file__).resolve().parents[1] / ".github" / "workflows" / name
+    config = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+    publisher = next(job for job_name, job in config["jobs"].items() if job_name != "validate")
+    step = next(step for step in publisher["steps"] if step.get("id") == "release")
+    script = step["run"]
+    assert '[[ "$REQUESTED_CORE_VERSION" =~ ^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$ ]]' in script
+    assert 'gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v${REQUESTED_CORE_VERSION}"' in script
+    assert 'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"' in script
+    assert script.index("ready_core_releases.py") > script.index("fi\n")
+    assert "--version \"$REQUESTED_CORE_VERSION\"" in script

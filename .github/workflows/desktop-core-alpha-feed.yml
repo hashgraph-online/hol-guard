@@ -52,6 +52,7 @@ permissions:
 jobs:
   validate:
     name: Validate workflow
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -77,7 +78,8 @@ jobs:
       group: desktop-core-stable-feed-macos-arm64
       cancel-in-progress: false
       queue: max
-    if: github.event_name != 'pull_request'
+    # Dispatches run the main workflow file, already linted by its push run.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.validate.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.validate.result == 'skipped')) }}
     needs: validate
     runs-on: macos-15
     timeout-minutes: 90
@@ -138,9 +140,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | select(.draft == false and .prerelease == false) | {tag: .tag_name, assets: [.assets[] | select(.state == "uploaded") | .name]}' \
-            > "$RUNNER_TEMP/release-inventory.jsonl"
+          RELEASE_FILTER='select(.draft == false and .prerelease == false) | {tag: .tag_name, assets: [.assets[] | select(.state == "uploaded") | .name]}'
+          if [[ -n "$REQUESTED_CORE_VERSION" ]]; then
+            [[ "$REQUESTED_CORE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+            gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v${REQUESTED_CORE_VERSION}" \
+              --jq "$RELEASE_FILTER" > "$RUNNER_TEMP/release-inventory.jsonl"
+          else
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq ".[] | $RELEASE_FILTER" > "$RUNNER_TEMP/release-inventory.jsonl"
+          fi
           python3 -I scripts/release/ready_core_releases.py \
             --inventory "$RUNNER_TEMP/release-inventory.jsonl" --platform 'macosx_.*_arm64' \
             > "$RUNNER_TEMP/release-tags.txt"
