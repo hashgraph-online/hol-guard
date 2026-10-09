@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import pi_extension_source
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _render_bounded_hook_script
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
@@ -151,3 +155,49 @@ def test_all_senders_keep_present_but_empty_pager_names(
     monkeypatch.delenv("GIT_PAGER")
     unset = json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY]
     assert "GIT_PAGER" not in unset["environment_names"]
+
+
+def _pi_execution_environment(tmp_path: Path, env: dict[str, str]) -> dict[str, object]:
+    source = pi_extension_source.managed_extension_source(
+        guard_home=tmp_path / "guard-home",
+        home_dir=tmp_path / "home",
+        settings_path=tmp_path / "settings.json",
+        harness="omp",
+        display_name="Oh My Pi",
+    )
+    start = source.index("  const activeEnvironment = Object.create(null);")
+    end = source.index("  let serializedPayload = '';", start)
+    script = tmp_path / "pi-environment.mjs"
+    script.write_text(
+        'import { createHash } from "node:crypto";\n'
+        "const payload = {};\n"
+        f"{source[start:end]}"
+        "console.log(JSON.stringify(payloadToSend.guard_execution_environment));\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(["node", str(script)], env=env, capture_output=True, text=True, timeout=30, check=True)
+    return json.loads(result.stdout)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="the Pi extension runs under node")
+def test_pi_sender_keeps_present_but_empty_pager_names(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GIT_PAGER", "")
+    monkeypatch.setenv("PAGER", "delta")
+    env = dict(os.environ)
+
+    pi = _pi_execution_environment(tmp_path, env)
+    python = json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY]
+
+    assert "GIT_PAGER" in pi["environment_names"]
+    assert pi["git_pager_disabled"] is True
+    assert pi["pager_disabled"] is False
+    assert pi["environment_names"] == python["environment_names"]
+    assert pi["environment_digest"] == python["environment_digest"]
+
+    del env["GIT_PAGER"]
+    unset = _pi_execution_environment(tmp_path, env)
+    assert "GIT_PAGER" not in unset["environment_names"]
+    assert unset["git_pager_disabled"] is False
