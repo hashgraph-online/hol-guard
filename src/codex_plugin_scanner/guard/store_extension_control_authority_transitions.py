@@ -177,7 +177,13 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
                 connection.execute("select * from extension_control_authority_transition order by revision").fetchall(),
             )
         committed = [row for row in rows if _row_str(row, "phase") == AuthorityPhase.COMMITTED.value]
-        if [_row_int(row, "revision") for row in committed] != list(range(1, revision + 1)):
+        committed_revisions = [_row_int(row, "revision") for row in committed]
+        first_revision = committed_revisions[0] if committed_revisions else revision + 1
+        if committed_revisions != list(range(first_revision, revision + 1)) or (
+            revision > 0 and not committed_revisions
+        ):
+            raise ExtensionControlAuthorityError("extension control transition gap")
+        if first_revision > 1 and not self._is_restored_baseline(committed[0], key=key):
             raise ExtensionControlAuthorityError("extension control transition gap")
         prior_snapshot_digest: str | None = None
         for row in committed:
@@ -233,6 +239,19 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             prior_snapshot_digest = _row_str(row, "snapshot_digest")
         if prior_snapshot_digest is not None and prior_snapshot_digest != current_snapshot_digest:
             raise ExtensionControlAuthorityError("extension control transition head mismatch")
+
+    @staticmethod
+    def _is_restored_baseline(row: sqlite3.Row, *, key: bytes) -> bool:
+        """True when a row is the authenticated head restored from the last-good export."""
+
+        payload = verify_authenticated_record(
+            _row_str(row, "transition_json"),
+            expected_digest=_row_str(row, "transition_digest"),
+            expected_mac=_row_str(row, "transition_mac"),
+            key=key,
+            purpose=TRANSITION_PURPOSE,
+        )
+        return payload.get("restored_baseline") is True
 
     def list_extension_control_authority_history(
         self,

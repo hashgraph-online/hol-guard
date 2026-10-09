@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import replace
 from typing import cast
 
@@ -268,6 +269,16 @@ class ExtensionControlAuthorityReadsMixin:
             return self._degraded_view(catalog_digest)
         if row is None and anchor is None:
             return ExtensionControlAuthorityView(AuthorityHealth.UNENROLLED, 0, catalog_digest, ())
+        if row is None and key is not None and anchor is not None:
+            # The database was re-created but the vault still holds the key and
+            # anchor. Restore the exact committed snapshot only when the
+            # authenticated last-good export matches the anchor.
+            with suppress(Exception):
+                if self._restore_last_good_authority(anchor, key=key):
+                    with self._connect() as connection:
+                        row = connection.execute(
+                            "select * from extension_control_authority_snapshot where singleton = 1"
+                        ).fetchone()
         if row is None or key is None or anchor is None:
             return self._tampered_view(catalog_digest)
         try:
