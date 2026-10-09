@@ -302,6 +302,8 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
         ("bunx wrangler", True),
         ("npx --package wrangler some-mcp", False),
         ("npx @other/wrangler", False),
+        ("npx wrangler@npm:other-mcp", False),
+        ("npx wrangler@latest", True),
         ("npx cowsay", False),
         ("wrangler", False),
     ],

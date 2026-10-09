@@ -102,6 +102,12 @@ Examples:
 """
 
 
+def test_colon_terminated_yargs_group_heading() -> None:
+    text = "ACCOUNT:\n  wrangler login   Login\n  wrangler whoami  Show user\n"
+    commands = parse_cli_help_text(text, invocation=("wrangler",))
+    assert [command.command_id for command in commands] == ["login", "whoami"]
+
+
 def test_program_prefixed_prose_and_examples_are_not_commands() -> None:
     commands = parse_cli_help_text(KUBECTL_STYLE_HELP, invocation=("kubectl",))
     assert [command.command_id for command in commands] == ["get"]

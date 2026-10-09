@@ -25,7 +25,7 @@ _SECTION_HEADER = re.compile(
     re.IGNORECASE,
 )
 _ARGPARSE_SET = re.compile(r"\{([A-Za-z][A-Za-z0-9_-]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_-]*)+)\}")
-_YARGS_GROUP_HEADER = re.compile(r"^[A-Z][A-Z0-9 &/-]{0,40}$")
+_YARGS_GROUP_HEADER = re.compile(r"^[A-Z][A-Z0-9 &/-]{0,40}:?$")
 _NON_COMMAND_GROUP = re.compile(r"EXAMPLE|OPTION|FLAG|POSITIONAL|ARGUMENT|USAGE")
 _SKIP_NAMES = frozenset({"help", "completion", "completions"})
 _HELP_TIMEOUT_SECONDS = 2.5
