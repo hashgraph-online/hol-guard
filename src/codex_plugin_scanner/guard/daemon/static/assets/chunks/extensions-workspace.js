@@ -4678,7 +4678,7 @@ function AddCustomExtensionWorkspace(props) {
   }, []);
   const markRecognized = reactExports.useCallback((item, nextSummary) => {
     setRecognized(item);
-    setCommands(item.commands);
+    setCommands(prefillSuggestedStates(item));
     setSummary(nextSummary);
     setPending("allowed");
     setReviewingScripts(item.surface === "mcp");

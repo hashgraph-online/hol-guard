@@ -52,7 +52,7 @@ import { CustomExtensionCommandList, withCommandState } from "./custom-extension
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
 import { McpRegistrySearch } from "./mcp-registry-search";
-import { initialAddCommand } from "./custom-extension-profile";
+import { initialAddCommand, prefillSuggestedStates } from "./custom-extension-profile";
 import type { LocalCliDiscoveryOutcome } from "./use-local-cli-catalog";
 
 function randomToken(): string {
@@ -128,7 +128,7 @@ export function AddCustomExtensionWorkspace(props: {
   }, []);
   const markRecognized = useCallback((item: LocalCliItem, nextSummary: string | null) => {
     setRecognized(item);
-    setCommands(item.commands);
+    setCommands(prefillSuggestedStates(item));
     setSummary(nextSummary);
     setPending("allowed");
     setReviewingScripts(item.surface === "mcp");
