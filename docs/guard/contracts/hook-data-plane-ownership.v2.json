@@ -406,6 +406,7 @@
     "src/codex_plugin_scanner/guard/native_runtime_admission.py",
     "src/codex_plugin_scanner/guard/native_execution.py",
     "src/codex_plugin_scanner/guard/native_prompt.py",
+    "src/codex_plugin_scanner/guard/native_data_flow.py",
     "src/codex_plugin_scanner/guard/native_route_receipt.py",
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
     "src/codex_plugin_scanner/guard/native_context.py",

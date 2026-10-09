@@ -10447,6 +10447,7 @@ def test_hook_runtime_artifact_binds_compound_approval_to_effective_cwd(tmp_path
     assert first.artifact_id != second.artifact_id
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 def test_hook_runtime_artifact_combines_package_tool_and_data_flow_findings(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

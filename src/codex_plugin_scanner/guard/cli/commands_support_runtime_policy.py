@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 from ..action_lattice import coerce_guard_action
 from ..models import GuardAction
 from ..native_context import is_unbound_context_digest
+from ..native_data_flow import detect_data_flow_exfiltration
 from ..proxy._env import _build_scrubbed_env
 from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
