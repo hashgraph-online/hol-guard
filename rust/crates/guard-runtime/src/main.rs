@@ -31,6 +31,7 @@ mod local_cli_grant_op;
 mod local_once_store;
 mod managed_resident;
 mod mcp_probe_op;
+mod mcp_runtime_evidence_op;
 mod mcp_stdio_session_op;
 mod native_hook_receipt;
 mod native_runtime_admission;

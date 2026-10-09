@@ -38,3 +38,15 @@ def test_authorization_names_only_generated_fixture_scope(tmp_path):
     text = fixture_authorization(fixture, collector)
     assert str(fixture.home) in text and str(fixture.workspace) in text and collector in text
     assert fixture.canary not in text
+
+
+def test_watch_context_omits_typed_paths_so_bash_uses_its_default_cwd(tmp_path):
+    """Watch scope rejects a mistyped cwd before Guard runs, so the case never asks for one."""
+    fixture = create_fixture(tmp_path / "disposable")
+    collector = "http://127.0.0.1:12345/"
+    watch = next(item for item in load_catalog() if item.oracle == "watch-command")
+    text = fixture_authorization(fixture, collector, watch)
+    assert str(fixture.home) not in text and str(fixture.workspace) not in text
+    assert "needs no cwd argument" in text and collector in text
+    other = next(item for item in load_catalog() if item.oracle != "watch-command")
+    assert str(fixture.workspace) in fixture_authorization(fixture, collector, other)
