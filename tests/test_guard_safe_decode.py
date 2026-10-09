@@ -191,6 +191,55 @@ def test_timeout_preserves_signals_from_materialized_layers(monkeypatch: pytest.
     assert result.timed_out and result.eval_signals
 
 
+def _fresh_decode_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE", {})
+    monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE_ORDER", [])
+
+
+def test_repeated_payloads_use_versioned_decode_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fresh_decode_cache(monkeypatch)
+    payload = _b64("exec('cached payload')")
+    calls = 0
+    original = safe_decode_module._find_encoded_candidate
+
+    def wrapped(text: str) -> tuple[safe_decode_module.EncodingType, str] | None:
+        nonlocal calls
+        calls += 1
+        return original(text)
+
+    monkeypatch.setattr(safe_decode_module, "_find_encoded_candidate", wrapped)
+
+    first = decode_layers(payload)
+    after_first = calls
+    second = decode_layers(payload)
+
+    assert after_first > 0
+    assert calls == after_first
+    assert first is not second
+    assert first.layers == second.layers
+    assert first.final_text == second.final_text
+
+
+def test_decode_cache_access_marks_entry_recent(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fresh_decode_cache(monkeypatch)
+    monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE_LIMIT", 2)
+    first = _b64("exec('first')")
+    second = _b64("exec('second')")
+    third = _b64("exec('third')")
+    first_key = safe_decode_module.decode_cache_key(first)
+    second_key = safe_decode_module.decode_cache_key(second)
+    third_key = safe_decode_module.decode_cache_key(third)
+
+    decode_layers(first)
+    decode_layers(second)
+    decode_layers(first)
+    decode_layers(third)
+
+    assert first_key in safe_decode_module._DECODE_CACHE
+    assert second_key not in safe_decode_module._DECODE_CACHE
+    assert third_key in safe_decode_module._DECODE_CACHE
+
+
 def test_decode_cache_key_changes_with_detector_version() -> None:
     payload = _b64("exec('versioned payload')")
 
