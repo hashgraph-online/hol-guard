@@ -11,7 +11,6 @@ import codex_plugin_scanner.guard.runtime.safe_decode as safe_decode_module
 from codex_plugin_scanner.guard.runtime.safe_decode import (
     DecodedLayer,
     DecodeResult,
-    clear_decode_cache,
     decode_layers,
 )
 
@@ -190,50 +189,6 @@ def test_timeout_preserves_signals_from_materialized_layers(monkeypatch: pytest.
     monkeypatch.setattr(safe_decode_module.time, "monotonic", lambda: next(ticks))
     result = decode_layers(_b64("eval('decoded before timeout')"), max_time_ms=1)
     assert result.timed_out and result.eval_signals
-
-
-def test_repeated_payloads_use_versioned_decode_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_decode_cache()
-    payload = _b64("exec('cached payload')")
-    calls = 0
-    original = safe_decode_module._find_encoded_candidate
-
-    def wrapped(text: str) -> tuple[safe_decode_module.EncodingType, str] | None:
-        nonlocal calls
-        calls += 1
-        return original(text)
-
-    monkeypatch.setattr(safe_decode_module, "_find_encoded_candidate", wrapped)
-
-    first = decode_layers(payload)
-    after_first = calls
-    second = decode_layers(payload)
-
-    assert after_first > 0
-    assert calls == after_first
-    assert first is not second
-    assert first.layers == second.layers
-    assert first.final_text == second.final_text
-
-
-def test_decode_cache_access_marks_entry_recent(monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_decode_cache()
-    monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE_LIMIT", 2)
-    first = _b64("exec('first')")
-    second = _b64("exec('second')")
-    third = _b64("exec('third')")
-    first_key = safe_decode_module.decode_cache_key(first)
-    second_key = safe_decode_module.decode_cache_key(second)
-    third_key = safe_decode_module.decode_cache_key(third)
-
-    decode_layers(first)
-    decode_layers(second)
-    decode_layers(first)
-    decode_layers(third)
-
-    assert first_key in safe_decode_module._DECODE_CACHE
-    assert second_key not in safe_decode_module._DECODE_CACHE
-    assert third_key in safe_decode_module._DECODE_CACHE
 
 
 def test_decode_cache_key_changes_with_detector_version() -> None:

@@ -418,11 +418,6 @@ def _capture_native_deadline(request: HookReviewRequest) -> tuple[float, int]:
     return deadline, budget_ms
 
 
-def _deadline_budget_ms(request: HookReviewRequest) -> int:
-    """Return a bounded budget for compatibility with existing callers."""
-    return _capture_native_deadline(request)[1]
-
-
 def native_runtime_health(guard_home: Path) -> NativeRuntimeHealthSnapshot:
     status = native_runtime_status()
     return native_runtime_health_snapshot(_identity_key(status), guard_home)

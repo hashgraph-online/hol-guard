@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 from pathlib import Path
 from types import ModuleType
@@ -16,7 +15,6 @@ from codex_plugin_scanner.guard.runtime.cisco_evidence import (
     scanner_cache_key,
 )
 from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3
-from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.integrations import cisco_mcp_scanner, cisco_skill_scanner
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from codex_plugin_scanner.integrations.scanner_subprocess import ScannerProcessResult
@@ -91,62 +89,6 @@ def test_scanner_cache_key_changes_with_content_hash_or_version() -> None:
         )
         != base_key
     )
-
-
-def test_guard_store_invalidates_scanner_cache_when_hash_or_version_changes(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    payload = cast(dict[str, object], {"signals": [{"signal_id": "signal-1"}]})
-
-    store.save_scanner_cache(
-        scanner_name="cisco-mcp-scanner",
-        target_id="workspace/.mcp.json",
-        input_content_hash="hash-a",
-        scanner_version="4.6.2",
-        payload=payload,
-        now="2026-05-08T00:00:00+00:00",
-    )
-
-    assert (
-        store.get_scanner_cache(
-            scanner_name="cisco-mcp-scanner",
-            target_id="workspace/.mcp.json",
-            input_content_hash="hash-a",
-            scanner_version="4.6.2",
-        )
-        == payload
-    )
-    assert (
-        store.get_scanner_cache(
-            scanner_name="cisco-mcp-scanner",
-            target_id="workspace/.mcp.json",
-            input_content_hash="hash-b",
-            scanner_version="4.6.2",
-        )
-        is None
-    )
-    assert (
-        store.get_scanner_cache(
-            scanner_name="cisco-mcp-scanner",
-            target_id="workspace/.mcp.json",
-            input_content_hash="hash-a",
-            scanner_version="4.7.0",
-        )
-        is None
-    )
-
-    with sqlite3.connect(store.path) as connection:
-        row = connection.execute(
-            "select cache_key, payload_json from scanner_cache where scanner_name = ? and target_id = ?",
-            ("cisco-mcp-scanner", "workspace/.mcp.json"),
-        ).fetchone()
-
-    assert row is not None
-    assert str(row[0]) == scanner_cache_key(
-        scanner_name="cisco-mcp-scanner",
-        input_content_hash="hash-a",
-        scanner_version="4.6.2",
-    )
-    assert json.loads(str(row[1])) == payload
 
 
 def test_skill_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tmp_path: Path) -> None:

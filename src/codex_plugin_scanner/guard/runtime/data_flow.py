@@ -196,18 +196,6 @@ def extract_command_segments(command: str) -> tuple[str, ...]:
     return _split_top_level_commands(command)
 
 
-def extract_http_methods(command: str) -> tuple[str, ...]:
-    """Return explicit or strongly implied HTTP methods referenced by shell text."""
-
-    methods: list[str] = []
-    for pattern in (_CURL_METHOD_PATTERN, _FETCH_METHOD_PATTERN, _REQUESTS_METHOD_PATTERN):
-        for match in pattern.finditer(command):
-            _append_http_method(methods, match.group("method"))
-    if _CURL_DATA_PATTERN.search(command):
-        _append_http_method(methods, "POST")
-    return _dedupe(methods)
-
-
 def extract_urls(command: str) -> tuple[str, ...]:
     """Return HTTP(S) URLs while preserving first-seen order."""
 
@@ -222,12 +210,6 @@ def extract_url_ranges(command: str) -> tuple[tuple[int, int], ...]:
         (match.start(), match.start() + len(_strip_url_suffix(match.group(0))))
         for match in _URL_PATTERN.finditer(command)
     )
-
-
-def _append_http_method(methods: list[str], method: str) -> None:
-    normalized = method.upper()
-    if normalized in _HTTP_METHODS:
-        methods.append(normalized)
 
 
 def _dedupe(values: Iterable[str]) -> tuple[str, ...]:

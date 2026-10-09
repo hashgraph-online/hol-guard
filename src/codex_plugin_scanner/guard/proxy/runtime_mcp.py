@@ -20,7 +20,6 @@ from typing import IO, Any, Literal, TextIO, cast
 from uuid import uuid4
 
 from ..action_lattice import (
-    GuardActionNormalization,
     most_restrictive_guard_action,
     normalize_guard_action,
 )
@@ -228,22 +227,6 @@ def _most_restrictive_package_policy_action(stored_action: object | None, curren
     if stored_action is None:
         return normalize_guard_action(current_action)
     return most_restrictive_guard_action(stored_action, current_action)
-
-
-def _guard_action_normalization_evidence(
-    source: str,
-    normalization: GuardActionNormalization,
-) -> dict[str, object] | None:
-    if normalization.recognized:
-        return None
-    return {
-        "source": "guard_action_normalizer",
-        "input_source": source,
-        "reason_code": normalization.reason_code,
-        "original_action": normalization.original_action,
-        "original_type": normalization.original_type,
-        "normalized_action": normalization.action,
-    }
 
 
 def _tool_decision_after_runtime_allow(decision: ToolCallDecision, *, source: str) -> ToolCallDecision:
@@ -879,28 +862,6 @@ class RuntimeMcpGuardProxy:
         self._buffered_client_responses.clear()
         self._child_output_queue = None
         self._active_child_stdout = None
-
-    def _activate_child_output_pump(self, child_stdout: IO[str] | _NativeMcpChildIo) -> None:
-        output_queue: queue.Queue[_ChildOutputFrame] = queue.Queue()
-        self._child_output_queue = output_queue
-        self._active_child_stdout = child_stdout
-
-        def pump() -> None:
-            try:
-                while True:
-                    line = child_stdout.readline()
-                    if not line:
-                        output_queue.put(_ChildOutputFrame())
-                        return
-                    output_queue.put(_ChildOutputFrame(line=line))
-            except BaseException as exc:  # pragma: no cover - surfaced by the synchronous consumer
-                output_queue.put(_ChildOutputFrame(error=exc))
-
-        threading.Thread(
-            target=pump,
-            name=f"guard-mcp-child-output-{self.harness}-{self.server_name}",
-            daemon=True,
-        ).start()
 
     def _prepare_launch(self) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
         """Compute launch identity/env shared by the Popen and native paths.

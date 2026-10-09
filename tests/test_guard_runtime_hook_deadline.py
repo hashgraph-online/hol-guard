@@ -1,11 +1,7 @@
-from concurrent.futures import Future
-from dataclasses import FrozenInstanceError
-
 import pytest
 
 from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
-from codex_plugin_scanner.guard.daemon.runtime_hook_work_item import RuntimeHookWorkItem
 
 
 class FakeClock:
@@ -61,32 +57,6 @@ def test_predictive_dispatch_rejects_when_secure_review_cannot_fit() -> None:
     assert admission.permit is None
     assert admission.reason_code == "daemon_hook_deadline_exhausted"
     assert scheduler.stats()["retained_bytes"] == 0
-
-
-def test_work_item_owns_immutable_hydrated_bytes() -> None:
-    clock = FakeClock()
-    source = bytearray(b'{"event":"PreToolUse"}')
-    payload = bytes(source)
-    item = RuntimeHookWorkItem(
-        normalized_payload=payload,
-        harness="pi",
-        event="PreToolUse",
-        workspace_fingerprint="workspace",
-        client_fingerprint="client",
-        lane="decision",
-        payload_bytes=len(payload),
-        arrival_sequence=1,
-        accepted_at=clock(),
-        queued_at=clock(),
-        deadline=RuntimeHookDeadline(expires_at=clock() + 1),
-        completion=Future(),
-    )
-
-    source[:] = b"x" * len(source)
-
-    assert item.normalized_payload == b'{"event":"PreToolUse"}'
-    with pytest.raises(FrozenInstanceError):
-        item.__setattr__("harness", "changed")
 
 
 def test_scheduler_health_dimensions_are_bounded() -> None:

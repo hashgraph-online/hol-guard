@@ -290,46 +290,6 @@ def package_authority_decide_native(
     return payload if isinstance(payload, dict) else None
 
 
-def apply_stored_package_policy_native(
-    evaluation: Mapping[str, object],
-    artifact: Mapping[str, object],
-    *,
-    store_path: Path,
-    guard_home: Path,
-    artifact_hash: str,
-    workspace_dir: Path,
-    now: str,
-    current_action: object | None = None,
-    claim_saved_approval: bool = True,
-    timeout_seconds: float = 10.0,
-) -> dict[str, object] | None:
-    """``apply_stored_package_policy`` op — returns the updated evaluation dict."""
-    request: dict[str, object] = {
-        "schema": _REQUEST_SCHEMA,
-        "request_id": _request_id(),
-        "store_path": str(store_path),
-        "guard_home": str(guard_home),
-        "evaluation": dict(evaluation),
-        "artifact": dict(artifact),
-        "artifact_hash": artifact_hash,
-        "workspace_dir": str(workspace_dir),
-        "now": now,
-        "claim_saved_approval": bool(claim_saved_approval),
-    }
-    if current_action is not None:
-        request["current_action"] = current_action
-    response = _resident_request(
-        operation="apply_stored_package_policy",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
-    )
-    if response is None:
-        return None
-    payload = response.get("payload")
-    return payload if isinstance(payload, dict) else None
-
-
 class NativePackageAdvisoryAuthorityError(RuntimeError):
     """No authoritative native cached-feed result was available."""
 

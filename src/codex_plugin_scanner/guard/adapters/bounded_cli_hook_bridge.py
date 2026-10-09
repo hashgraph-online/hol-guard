@@ -210,11 +210,6 @@ def _read_bounded_stdin(deadline_monotonic: float) -> tuple[str | None, str]:
     return text, text
 
 
-def _bounded_stdin(deadline_monotonic: float) -> str | None:
-    text, _prefix = _read_bounded_stdin(deadline_monotonic)
-    return text
-
-
 def _validated_frozen_cli_args(
     cli_args: Sequence[str],
     *,
