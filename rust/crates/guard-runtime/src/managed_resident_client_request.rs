@@ -98,6 +98,16 @@ fn try_home_states(
             timeout,
             &identity,
         ) {
+            // A foreign resident that rejects this runtime's policy snapshot
+            // never will admit it; replace it with a resident of our runtime.
+            Ok(response)
+                if handoff::retire_foreign_resident_rejecting_policy(
+                    &scope,
+                    &state,
+                    &runtime_digest,
+                    &response,
+                    deadline,
+                ) => {}
             Ok(response) => return Ok(Some(response)),
             Err(error)
                 if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
