@@ -200,3 +200,23 @@ fn which_on_path_uses_windows_separator_and_launcher_extensions() {
     assert_eq!(which_on_path("missing", &path), None);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[cfg(unix)]
+#[test]
+fn path_for_resolution_keeps_unix_entries_and_anchors_relative_ones() {
+    let cwd = Path::new("/work");
+    assert_eq!(
+        path_for_resolution("/usr/bin::bin", Some(cwd)),
+        "/usr/bin:/work/.:/work/bin"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn path_for_resolution_keeps_windows_drive_letter_entries() {
+    let cwd = Path::new(r"C:\work");
+    assert_eq!(
+        path_for_resolution(r"C:\tools\node;D:\bin", Some(cwd)),
+        r"C:\tools\node;D:\bin"
+    );
+}
