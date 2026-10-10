@@ -30,6 +30,7 @@ from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
+from .native_resident_client import native_resident_client_failure_code
 from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
@@ -130,7 +131,8 @@ def _round_trip(query: Mapping[str, object], facts: Mapping[str, object], home: 
     )
     if response is None:
         # ``_resident_request`` already recorded the failure; do not count it twice.
-        raise _fail("native_daemon_lifecycle_unavailable")
+        detail = native_resident_client_failure_code() or "no_client_code"
+        raise _fail(f"native_daemon_lifecycle_unavailable:{detail}")
     if (
         response.get("schema") != _RESULT_SCHEMA
         or response.get("request_id") != request["request_id"]
